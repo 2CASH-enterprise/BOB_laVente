@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.analytics.routes import router as analytics_router
 from app.api.auth.routes import router as auth_router
 from app.api.catalog.categories import router as categories_router
+from app.api.catalog.complements import router as complements_router
 from app.api.catalog.import_ import router as catalog_import_router
 from app.api.catalog.products import router as products_router
 from app.api.conversations.routes import router as conversations_router
@@ -37,6 +38,7 @@ app.include_router(whatsapp_router)
 app.include_router(messages_router)
 app.include_router(products_router)
 app.include_router(categories_router)
+app.include_router(complements_router)
 app.include_router(catalog_import_router)
 app.include_router(orders_router)
 app.include_router(conversations_router)

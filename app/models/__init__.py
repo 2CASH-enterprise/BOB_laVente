@@ -10,6 +10,7 @@ from app.models.order import Order, OrderItem  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.ecommerce_connection import EcommerceConnection  # noqa: F401
 from app.models.knowledge_entry import KnowledgeEntry  # noqa: F401
+from app.models.product_complement import ProductComplement  # noqa: F401
 
 __all__ = [
     "Tenant",
@@ -27,4 +28,5 @@ __all__ = [
     "AuditLog",
     "EcommerceConnection",
     "KnowledgeEntry",
+    "ProductComplement",
 ]

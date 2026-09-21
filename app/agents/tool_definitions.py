@@ -70,6 +70,20 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "suggest_complementary_products",
+        "description": (
+            "Suggère jusqu'à 2 produits complémentaires configurés par l'entreprise pour un produit "
+            "donné (section 22, upselling). À utiliser une fois que le client a montré un intérêt "
+            "clair pour un produit ou vient de le commander — jamais plus de 1 à 2 propositions, "
+            "jamais de manière insistante. S'il n'y a aucun complémentaire configuré, ne rien proposer."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"product_id": {"type": "string", "description": "UUID du produit principal"}},
+            "required": ["product_id"],
+        },
+    },
+    {
         "name": "create_order",
         "description": (
             "Crée réellement une commande. N'appelle CET OUTIL QU'APRÈS que le client a confirmé "

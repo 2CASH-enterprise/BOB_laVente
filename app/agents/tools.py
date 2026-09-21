@@ -12,6 +12,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
+from app.repositories.product_complement_repository import ProductComplementRepository
 from app.repositories.product_repository import ProductRepository
 from app.services.order_service import OrderCreationError, create_order
 
@@ -23,6 +24,7 @@ class ToolExecutor:
         self.conversation = conversation
         self.customer_id = customer_id or conversation.customer_id
         self.product_repo = ProductRepository(db)
+        self.complement_repo = ProductComplementRepository(db)
         self.handoff_requested: bool = False
         self.handoff_reason: str | None = None
 
@@ -96,6 +98,19 @@ class ToolExecutor:
         if not top3:
             return {"results": [], "message": "Aucun produit ne correspond à ce besoin dans le catalogue."}
         return {"results": [await self._product_to_dict(p) for p in top3]}
+
+    async def _tool_suggest_complementary_products(self, tool_input: dict) -> dict:
+        product_id = tool_input.get("product_id")
+        try:
+            complements = await self.complement_repo.list_for_product(
+                tenant_id=self.tenant_id, product_id=uuid.UUID(product_id), limit=2
+            )
+        except (ValueError, TypeError):
+            return {"error": "Identifiant produit invalide"}
+
+        if not complements:
+            return {"results": [], "message": "Aucun produit complémentaire configuré pour cet article."}
+        return {"results": [await self._product_to_dict(p) for p in complements]}
 
     async def _tool_handoff_to_human(self, tool_input: dict) -> dict:
         reason = tool_input.get("reason", "Non précisé")

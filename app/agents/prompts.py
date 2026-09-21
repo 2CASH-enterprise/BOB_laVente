@@ -22,7 +22,11 @@ BASE_RULES = """RÈGLES
 11. Si un outil ne renvoie aucun résultat, le dire clairement au client plutôt que d'improviser.
 12. Pour les horaires, l'adresse, la livraison, les retours, la garantie, les moyens de
     paiement et les objections courantes, t'appuyer sur la base de connaissances ci-dessous
-    si elle contient une réponse pertinente — jamais improviser sur ces sujets non plus."""
+    si elle contient une réponse pertinente — jamais improviser sur ces sujets non plus.
+13. Une fois qu'un produit principal intéresse le client ou vient d'être commandé, tu peux
+    utiliser suggest_complementary_products pour proposer 1 à 2 produits complémentaires
+    configurés par l'entreprise (section 22) — jamais plus, jamais de manière insistante,
+    et jamais si l'outil ne renvoie aucun résultat."""
 
 CATEGORY_LABELS = {
     "HORAIRES": "Horaires",

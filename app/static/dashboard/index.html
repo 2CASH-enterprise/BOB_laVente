@@ -136,7 +136,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th></tr></thead>
+        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th><th>Upsell</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
     </section>
@@ -339,18 +339,82 @@ async function release() {
   openConversation(currentConversationId);
 }
 
+let allProducts = [];
+
 async function loadProducts() {
   const rows = document.getElementById("product-rows");
-  rows.innerHTML = "<tr><td colspan='5'>Chargement…</td></tr>";
-  const products = await api("/api/v1/products");
-  rows.innerHTML = products
+  rows.innerHTML = "<tr><td colspan='6'>Chargement…</td></tr>";
+  allProducts = await api("/api/v1/products");
+  rows.innerHTML = allProducts
     .map(
       (p) => `<tr>
         <td>${p.name}</td><td>${p.sku}</td><td>${Number(p.price).toLocaleString()} ${p.currency}</td>
         <td>${p.stock_quantity}</td><td>${p.active ? "✅" : "❌"}</td>
-      </tr>`
+        <td><button class="action secondary" onclick="toggleUpsellPanel('${p.id}')">Gérer</button></td>
+      </tr>
+      <tr id="upsell-row-${p.id}" class="hidden"><td colspan="6"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
     )
-    .join("") || "<tr><td colspan='5'>Aucun produit</td></tr>";
+    .join("") || "<tr><td colspan='6'>Aucun produit</td></tr>";
+}
+
+async function toggleUpsellPanel(productId) {
+  const row = document.getElementById(`upsell-row-${productId}`);
+  const wasHidden = row.classList.contains("hidden");
+  document.querySelectorAll("[id^='upsell-row-']").forEach((r) => r.classList.add("hidden"));
+  if (wasHidden) {
+    row.classList.remove("hidden");
+    await renderUpsellPanel(productId);
+  }
+}
+
+async function renderUpsellPanel(productId) {
+  const panel = document.getElementById(`upsell-panel-${productId}`);
+  panel.innerHTML = "Chargement…";
+  const links = await api(`/api/v1/products/${productId}/complements`);
+
+  const options = allProducts
+    .filter((p) => p.id !== productId)
+    .map((p) => `<option value="${p.id}">${p.name} (${p.sku})</option>`)
+    .join("");
+
+  const linksHtml = links.length
+    ? links
+        .map(
+          (l) => `<span class="badge ACTIVE" style="margin: 0 6px 6px 0; display: inline-flex; align-items: center; gap: 6px;">
+            ${l.complement_name} — ${Number(l.complement_price).toLocaleString()} ${l.complement_currency}
+            <a onclick="removeComplement('${l.id}', '${productId}')" style="cursor: pointer; color: var(--danger); font-weight: 700;">✕</a>
+          </span>`
+        )
+        .join("")
+    : `<p style="color: var(--muted); font-size: 13px; margin: 0 0 8px;">Aucun produit complémentaire configuré.</p>`;
+
+  panel.innerHTML = `
+    <div style="margin-bottom: 10px;">${linksHtml}</div>
+    <div style="display: flex; gap: 8px; max-width: 420px;">
+      <select id="upsell-select-${productId}" class="input">${options}</select>
+      <button class="action" onclick="addComplement('${productId}')" style="white-space: nowrap;">Ajouter</button>
+    </div>
+  `;
+}
+
+async function addComplement(productId) {
+  const select = document.getElementById(`upsell-select-${productId}`);
+  const complementId = select.value;
+  try {
+    await api(`/api/v1/products/${productId}/complements`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product_id: productId, complement_product_id: complementId }),
+    });
+    renderUpsellPanel(productId);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function removeComplement(linkId, productId) {
+  await api(`/api/v1/products/complements/${linkId}`, { method: "DELETE" });
+  renderUpsellPanel(productId);
 }
 
 async function createProduct() {
