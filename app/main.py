@@ -1,5 +1,9 @@
-from fastapi import FastAPI
+from pathlib import Path
 
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from app.api.analytics.routes import router as analytics_router
 from app.api.auth.routes import router as auth_router
 from app.api.catalog.categories import router as categories_router
 from app.api.catalog.import_ import router as catalog_import_router
@@ -30,6 +34,11 @@ app.include_router(categories_router)
 app.include_router(catalog_import_router)
 app.include_router(orders_router)
 app.include_router(conversations_router)
+app.include_router(analytics_router)
+
+_static_dir = Path(__file__).parent / "static" / "dashboard"
+if _static_dir.exists():
+    app.mount("/dashboard", StaticFiles(directory=str(_static_dir), html=True), name="dashboard")
 
 
 @app.get("/health", tags=["system"])

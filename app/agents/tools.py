@@ -11,7 +11,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.conversation import Conversation, ConversationStatus
+from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
 from app.repositories.product_repository import ProductRepository
 from app.services.order_service import OrderCreationError, create_order
 
@@ -102,6 +102,15 @@ class ToolExecutor:
         self.conversation.status = ConversationStatus.WAITING_HUMAN
         self.handoff_requested = True
         self.handoff_reason = reason
+        self.db.add(
+            Message(
+                tenant_id=self.tenant_id,
+                conversation_id=self.conversation.id,
+                sender=MessageSender.SYSTEM,
+                message_type="handoff",
+                content=f"Transfert vers un humain : {reason}",
+            )
+        )
         await self.db.flush()
         return {"status": "handoff_registered", "reason": reason}
 

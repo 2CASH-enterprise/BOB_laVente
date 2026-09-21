@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
-from app.models.conversation import Conversation, ConversationStatus, Message
+from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
 from app.repositories.conversation_repository import ConversationRepository
 from app.schemas.conversation import ConversationDetailResponse, ConversationResponse
 
@@ -66,6 +66,15 @@ async def takeover_conversation(
 
     conversation.status = ConversationStatus.WAITING_HUMAN
     conversation.assigned_agent = current_user.user_id
+    db.add(
+        Message(
+            tenant_id=current_user.tenant_id,
+            conversation_id=conversation.id,
+            sender=MessageSender.SYSTEM,
+            message_type="takeover",
+            content="Un conseiller a pris le contrôle de la conversation.",
+        )
+    )
     await db.commit()
     await db.refresh(conversation)
     return conversation
@@ -90,6 +99,15 @@ async def release_conversation(
 
     conversation.status = ConversationStatus.ACTIVE
     conversation.assigned_agent = None
+    db.add(
+        Message(
+            tenant_id=current_user.tenant_id,
+            conversation_id=conversation.id,
+            sender=MessageSender.SYSTEM,
+            message_type="release",
+            content="La conversation a été rendue à l'IA.",
+        )
+    )
     await db.commit()
     await db.refresh(conversation)
     return conversation

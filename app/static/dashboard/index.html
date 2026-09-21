@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bob — Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --border: #262b36; --text: #e6e8ec;
+    --muted: #8b92a3; --accent: #4f7cff; --success: #34c07a; --danger: #ef5b5b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 18px; margin: 0; }
+  header .tag { color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 4px; padding: 12px 24px 0; border-bottom: 1px solid var(--border); }
+  nav button { background: none; border: none; color: var(--muted); padding: 10px 14px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card .value { font-size: 26px; font-weight: 600; }
+  .card .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { color: var(--muted); font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: #1c2029; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+  .badge.ACTIVE { background: #16351f; color: var(--success); }
+  .badge.WAITING_HUMAN { background: #3a2a12; color: #e8a33d; }
+  .badge.CLOSED { background: #2a2d35; color: var(--muted); }
+  .badge.PENDING { background: #3a2a12; color: #e8a33d; }
+  .badge.PAID { background: #16351f; color: var(--success); }
+  .badge.CANCELLED { background: #3a1616; color: var(--danger); }
+  button.action { background: var(--accent); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  button.action.secondary { background: #2a2d35; }
+  #login-screen { max-width: 360px; margin: 80px auto; }
+  #login-screen input { width: 100%; padding: 10px; margin-bottom: 10px; background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 6px; }
+  #login-screen button { width: 100%; padding: 10px; background: var(--accent); border: none; color: white; border-radius: 6px; cursor: pointer; }
+  #login-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .msg { padding: 8px 12px; margin-bottom: 6px; border-radius: 8px; font-size: 14px; max-width: 70%; }
+  .msg.CUSTOMER { background: #1c2029; }
+  .msg.AI { background: #1a2740; margin-left: auto; }
+  .msg.HUMAN { background: #1a2740; margin-left: auto; border: 1px solid var(--accent); }
+  .msg.SYSTEM { background: none; color: var(--muted); font-style: italic; font-size: 12px; text-align: center; max-width: 100%; }
+  #conv-detail { display: none; }
+  a.back { color: var(--accent); cursor: pointer; font-size: 13px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h2>Bob — Connexion</h2>
+  <input id="login-email" type="email" placeholder="Email">
+  <input id="login-password" type="password" placeholder="Mot de passe">
+  <button onclick="login()">Se connecter</button>
+  <div id="login-error"></div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>Bob — Dashboard</h1>
+    <span class="tag" id="tenant-tag"></span>
+  </header>
+  <nav>
+    <button class="active" data-tab="overview" onclick="showTab('overview')">Vue d'ensemble</button>
+    <button data-tab="conversations" onclick="showTab('conversations')">Conversations</button>
+    <button data-tab="products" onclick="showTab('products')">Produits</button>
+    <button data-tab="orders" onclick="showTab('orders')">Commandes</button>
+  </nav>
+  <main>
+    <section id="tab-overview">
+      <div class="grid" id="analytics-grid"></div>
+    </section>
+
+    <section id="tab-conversations" class="hidden">
+      <div id="conv-list">
+        <table>
+          <thead><tr><th>Client</th><th>Statut</th><th>Dernier message</th></tr></thead>
+          <tbody id="conv-rows"></tbody>
+        </table>
+      </div>
+      <div id="conv-detail">
+        <a class="back" onclick="backToList()">&larr; Retour</a>
+        <h3 id="conv-detail-title"></h3>
+        <div id="conv-messages" style="margin: 16px 0;"></div>
+        <button class="action" id="btn-takeover" onclick="takeover()">Prendre le contrôle</button>
+        <button class="action secondary hidden" id="btn-release" onclick="release()">Rendre à l'IA</button>
+      </div>
+    </section>
+
+    <section id="tab-products" class="hidden">
+      <table>
+        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th></tr></thead>
+        <tbody id="product-rows"></tbody>
+      </table>
+    </section>
+
+    <section id="tab-orders" class="hidden">
+      <table>
+        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th></tr></thead>
+        <tbody id="order-rows"></tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<script>
+let token = localStorage.getItem("bob_token") || null;
+let currentConversationId = null;
+
+function api(path, options = {}) {
+  options.headers = Object.assign({}, options.headers, token ? { Authorization: "Bearer " + token } : {});
+  return fetch(path, options).then(async (r) => {
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    return r.json();
+  });
+}
+
+async function login() {
+  const email = document.getElementById("login-email").value;
+  const password = document.getElementById("login-password").value;
+  document.getElementById("login-error").textContent = "";
+  try {
+    const body = new URLSearchParams({ username: email, password });
+    const res = await fetch("/api/v1/auth/login", { method: "POST", body }).then((r) => {
+      if (!r.ok) throw new Error("Email ou mot de passe incorrect");
+      return r.json();
+    });
+    token = res.access_token;
+    localStorage.setItem("bob_token", token);
+    enterApp();
+  } catch (e) {
+    document.getElementById("login-error").textContent = e.message;
+  }
+}
+
+function enterApp() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  loadTenant();
+  loadOverview();
+}
+
+function showTab(name) {
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  ["overview", "conversations", "products", "orders"].forEach((t) =>
+    document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
+  );
+  if (name === "overview") loadOverview();
+  if (name === "conversations") loadConversations();
+  if (name === "products") loadProducts();
+  if (name === "orders") loadOrders();
+}
+
+async function loadTenant() {
+  try {
+    const t = await api("/api/v1/tenants/me");
+    document.getElementById("tenant-tag").textContent = t.name;
+  } catch (e) {}
+}
+
+async function loadOverview() {
+  const a = await api("/api/v1/analytics");
+  const grid = document.getElementById("analytics-grid");
+  const cur = a.currency || "";
+  grid.innerHTML = `
+    <div class="card"><div class="value">${a.total_conversations}</div><div class="label">Conversations</div></div>
+    <div class="card"><div class="value">${a.qualified_prospects}</div><div class="label">Prospects qualifiés</div></div>
+    <div class="card"><div class="value">${a.total_orders}</div><div class="label">Commandes</div></div>
+    <div class="card"><div class="value">${a.revenue.toLocaleString()} ${cur}</div><div class="label">Chiffre d'affaires</div></div>
+    <div class="card"><div class="value">${a.conversion_rate_pct}%</div><div class="label">Conversion</div></div>
+    <div class="card"><div class="value">${a.human_handoffs}</div><div class="label">Transferts humains</div></div>
+  `;
+}
+
+async function loadConversations() {
+  document.getElementById("conv-list").style.display = "block";
+  document.getElementById("conv-detail").style.display = "none";
+  const rows = document.getElementById("conv-rows");
+  rows.innerHTML = "<tr><td colspan='3'>Chargement…</td></tr>";
+  const conversations = await api("/api/v1/conversations");
+  rows.innerHTML = conversations
+    .map(
+      (c) => `<tr class="clickable" onclick="openConversation('${c.id}')">
+        <td>${c.customer_id.slice(0, 8)}…</td>
+        <td><span class="badge ${c.status}">${c.status}</span></td>
+        <td>${c.last_message_at ? new Date(c.last_message_at).toLocaleString() : "—"}</td>
+      </tr>`
+    )
+    .join("") || "<tr><td colspan='3'>Aucune conversation</td></tr>";
+}
+
+async function openConversation(id) {
+  currentConversationId = id;
+  document.getElementById("conv-list").style.display = "none";
+  document.getElementById("conv-detail").style.display = "block";
+  const c = await api("/api/v1/conversations/" + id);
+  document.getElementById("conv-detail-title").textContent = "Client " + c.customer_id.slice(0, 8) + "… — " + c.status;
+  document.getElementById("conv-messages").innerHTML = c.messages
+    .map((m) => `<div class="msg ${m.sender}">${m.content}</div>`)
+    .join("");
+  document.getElementById("btn-takeover").classList.toggle("hidden", c.status === "WAITING_HUMAN");
+  document.getElementById("btn-release").classList.toggle("hidden", c.status !== "WAITING_HUMAN");
+}
+
+function backToList() {
+  loadConversations();
+}
+
+async function takeover() {
+  await api(`/api/v1/conversations/${currentConversationId}/takeover`, { method: "POST" });
+  openConversation(currentConversationId);
+}
+
+async function release() {
+  await api(`/api/v1/conversations/${currentConversationId}/release`, { method: "POST" });
+  openConversation(currentConversationId);
+}
+
+async function loadProducts() {
+  const rows = document.getElementById("product-rows");
+  rows.innerHTML = "<tr><td colspan='5'>Chargement…</td></tr>";
+  const products = await api("/api/v1/products");
+  rows.innerHTML = products
+    .map(
+      (p) => `<tr>
+        <td>${p.name}</td><td>${p.sku}</td><td>${Number(p.price).toLocaleString()} ${p.currency}</td>
+        <td>${p.stock_quantity}</td><td>${p.active ? "✅" : "❌"}</td>
+      </tr>`
+    )
+    .join("") || "<tr><td colspan='5'>Aucun produit</td></tr>";
+}
+
+async function loadOrders() {
+  const rows = document.getElementById("order-rows");
+  rows.innerHTML = "<tr><td colspan='4'>Chargement…</td></tr>";
+  const orders = await api("/api/v1/orders");
+  rows.innerHTML = orders
+    .map(
+      (o) => `<tr>
+        <td>${o.id.slice(0, 8)}…</td>
+        <td><span class="badge ${o.status}">${o.status}</span></td>
+        <td>${Number(o.total_amount).toLocaleString()} ${o.currency}</td>
+        <td>${o.created_by === "IA" ? "Bob (IA)" : o.created_by.slice(0, 8) + "…"}</td>
+      </tr>`
+    )
+    .join("") || "<tr><td colspan='4'>Aucune commande</td></tr>";
+}
+
+if (token) enterApp();
+</script>
+</body>
+</html>

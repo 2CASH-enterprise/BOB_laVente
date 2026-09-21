@@ -63,6 +63,21 @@ async def test_release_returns_conversation_to_ai(client, db_session, unique_ema
 
 
 @pytest.mark.asyncio
+async def test_takeover_and_release_log_system_messages(client, db_session, unique_email):
+    tenant, customer, conversation = await _setup(db_session, unique_email)
+    token = await _login(client, unique_email)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    await client.post(f"/api/v1/conversations/{conversation.id}/takeover", headers=headers)
+    await client.post(f"/api/v1/conversations/{conversation.id}/release", headers=headers)
+
+    detail = await client.get(f"/api/v1/conversations/{conversation.id}", headers=headers)
+    contents = [m["content"] for m in detail.json()["messages"]]
+    assert any("pris le contrôle" in c for c in contents)
+    assert any("rendue à l'IA" in c for c in contents)
+
+
+@pytest.mark.asyncio
 async def test_conversations_isolated_by_tenant(client, db_session, unique_email):
     tenant_a, customer_a, conversation_a = await _setup(db_session, unique_email)
     tenant_b, customer_b, conversation_b = await _setup(db_session, f"b_{unique_email}")
