@@ -10,6 +10,8 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
 from app.core.database import Base, get_db  # noqa: E402
+from app.core.rate_limit import InMemoryRateLimiter  # noqa: E402
+from app.core.rate_limit_dependency import get_rate_limiter  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -26,6 +28,11 @@ async def db_session():
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    # Rate limiter en mémoire, frais à chaque test : jamais de vrai Redis en environnement de test,
+    # et jamais de fuite d'état entre deux tests. Une SEULE instance par test (capturée dans la
+    # fermeture) : sinon FastAPI en recrée une neuve à chaque requête et les compteurs ne persistent pas.
+    test_rate_limiter = InMemoryRateLimiter()
+    app.dependency_overrides[get_rate_limiter] = lambda: test_rate_limiter
 
     async with session_factory() as session:
         yield session

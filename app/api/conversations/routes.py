@@ -9,6 +9,7 @@ from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
 from app.repositories.conversation_repository import ConversationRepository
 from app.schemas.conversation import ConversationDetailResponse, ConversationResponse
+from app.services.audit import log_audit_event
 
 router = APIRouter(prefix="/api/v1/conversations", tags=["conversations"])
 
@@ -75,6 +76,13 @@ async def takeover_conversation(
             content="Un conseiller a pris le contrôle de la conversation.",
         )
     )
+    await log_audit_event(
+        db,
+        actor=str(current_user.user_id),
+        action="CONVERSATION_TAKEOVER",
+        tenant_id=current_user.tenant_id,
+        details={"conversation_id": str(conversation.id)},
+    )
     await db.commit()
     await db.refresh(conversation)
     return conversation
@@ -107,6 +115,13 @@ async def release_conversation(
             message_type="release",
             content="La conversation a été rendue à l'IA.",
         )
+    )
+    await log_audit_event(
+        db,
+        actor=str(current_user.user_id),
+        action="CONVERSATION_RELEASE",
+        tenant_id=current_user.tenant_id,
+        details={"conversation_id": str(conversation.id)},
     )
     await db.commit()
     await db.refresh(conversation)

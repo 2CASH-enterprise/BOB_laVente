@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +9,7 @@ from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import generate_ai_reply
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.integrations.whatsapp.client import parse_whatsapp_message
+from app.integrations.whatsapp.client import parse_whatsapp_message, verify_whatsapp_signature
 from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.tenant import Tenant
 from app.repositories.conversation_repository import ConversationRepository
@@ -40,17 +42,33 @@ async def verify_webhook(request: Request):
 
 @router.post("", status_code=status.HTTP_200_OK)
 async def receive_webhook(
-    payload: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ) -> dict:
     """
     Section 7 — doit répondre rapidement (< 1s, section 42) pour éviter les timeouts Meta.
     Section 9 — pipeline complet : identification tenant/client, historique, agent IA.
+    Section 32 — la signature HMAC de Meta est vérifiée AVANT tout traitement du payload.
     L'envoi RÉEL vers WhatsApp (appel à l'API Meta) reste à câbler — la réponse de Bob
     est ici générée et persistée, prête à être envoyée dès que le compte WhatsApp du
     tenant dispose d'un vrai token (section 59).
     """
+    raw_body = await request.body()
+
+    if settings.whatsapp_app_secret:
+        signature = request.headers.get("X-Hub-Signature-256")
+        if not verify_whatsapp_signature(settings.whatsapp_app_secret, raw_body, signature):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signature webhook invalide")
+    # Si WHATSAPP_APP_SECRET n'est pas configuré (dev/démo), la vérification est ignorée :
+    # c'est un choix délibéré pour ne pas bloquer le développement local, jamais acceptable
+    # en production (section 32) — WHATSAPP_APP_SECRET doit être renseigné avant mise en ligne.
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload JSON invalide") from None
+
     parsed = parse_whatsapp_message(payload)
     if parsed is None:
         # Accusé de statut (delivered/read) ou payload non pertinent : on accuse réception sans traiter.

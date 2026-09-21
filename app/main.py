@@ -15,6 +15,7 @@ from app.api.tenants.routes import router as tenants_router
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from app.api.whatsapp.routes import router as whatsapp_router
 from app.core.config import get_settings
+from app.core.security_headers import SecurityHeadersMiddleware
 
 settings = get_settings()
 
@@ -23,6 +24,8 @@ app = FastAPI(
     version="0.1.0",
     description="Plateforme SaaS multi-tenant — agent vendeur IA connecté à WhatsApp",
 )
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(auth_router)
 app.include_router(tenants_router)

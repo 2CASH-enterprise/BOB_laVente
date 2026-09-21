@@ -9,6 +9,7 @@ from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.order import OrderItem
 from app.repositories.order_repository import OrderRepository
 from app.schemas.order import OrderCreateRequest, OrderDetailResponse, OrderResponse
+from app.services.audit import log_audit_event
 from app.services.order_service import OrderCreationError, create_order
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
@@ -74,6 +75,13 @@ async def create_order_endpoint(
     except OrderCreationError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
 
+    await log_audit_event(
+        db,
+        actor=str(current_user.user_id),
+        action="ORDER_CREATED",
+        tenant_id=current_user.tenant_id,
+        details={"order_id": str(order.id), "total_amount": float(order.total_amount)},
+    )
     await db.commit()
     await db.refresh(order)
 

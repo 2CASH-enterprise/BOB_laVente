@@ -7,6 +7,7 @@ from app.models.messaging_settings import TenantMessagingSettings, MessageSendAu
 from app.models.category import Category  # noqa: F401
 from app.models.product import Product  # noqa: F401
 from app.models.order import Order, OrderItem  # noqa: F401
+from app.models.audit_log import AuditLog  # noqa: F401
 
 __all__ = [
     "Tenant",
@@ -21,4 +22,5 @@ __all__ = [
     "Product",
     "Order",
     "OrderItem",
+    "AuditLog",
 ]
