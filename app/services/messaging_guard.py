@@ -50,10 +50,15 @@ async def check_and_log_outbound(
     result = await db.execute(stmt)
     settings = result.scalar_one_or_none()
 
-    # Pas de configuration = comportement le plus restrictif par défaut (section 56.2 : IA uniquement)
+    # Pas de configuration explicite = comportement par défaut du produit : IA uniquement,
+    # kill switch désactivé (section 56.2). Un humain reste bloqué tant que rien n'est configuré ;
+    # seule l'IA peut répondre — jamais un refus total qui empêcherait le vendeur IA de fonctionner.
     if settings is None:
-        await _log(db, tenant_id, requested_by, permission, SendResult.DENIED_403)
-        raise OutboundDenied("Aucune configuration de messagerie pour ce tenant — envoi refusé par défaut")
+        settings = TenantMessagingSettings(
+            tenant_id=tenant_id, outbound_mode=OutboundMode.AI_ONLY, kill_switch=KillSwitch.ALLOWED
+        )
+        db.add(settings)
+        await db.flush()
 
     if settings.kill_switch == KillSwitch.BLOCKED:
         await _log(db, tenant_id, requested_by, permission, SendResult.DENIED_403)

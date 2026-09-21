@@ -1,16 +1,24 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.dependency import get_llm_client
+from app.agents.llm_client import LLMClient
+from app.agents.orchestrator import generate_ai_reply
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.integrations.whatsapp.client import parse_whatsapp_message
-from app.models.conversation import Message, MessageSender
+from app.models.conversation import ConversationStatus, Message, MessageSender
+from app.models.tenant import Tenant
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.customer_repository import CustomerRepository
 from app.repositories.whatsapp_account_repository import WhatsAppAccountRepository
+from app.services.messaging_guard import OutboundDenied, Permission, check_and_log_outbound
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["webhooks"])
 settings = get_settings()
+
+HISTORY_LIMIT = 20  # section 13 — mémoire conversationnelle, fenêtre raisonnable
 
 
 @router.get("")
@@ -31,12 +39,17 @@ async def verify_webhook(request: Request):
 
 
 @router.post("", status_code=status.HTTP_200_OK)
-async def receive_webhook(payload: dict, db: AsyncSession = Depends(get_db)) -> dict:
+async def receive_webhook(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    llm_client: LLMClient | None = Depends(get_llm_client),
+) -> dict:
     """
     Section 7 — doit répondre rapidement (< 1s, section 42) pour éviter les timeouts Meta.
-    Le traitement IA réel (section 9, pipeline complet) est délégué à un traitement asynchrone
-    ultérieur (section 3, Message Queue) — ici on se limite à la réception, l'identification
-    du tenant/client, et la persistance, condition préalable à tout le reste.
+    Section 9 — pipeline complet : identification tenant/client, historique, agent IA.
+    L'envoi RÉEL vers WhatsApp (appel à l'API Meta) reste à câbler — la réponse de Bob
+    est ici générée et persistée, prête à être envoyée dès que le compte WhatsApp du
+    tenant dispose d'un vrai token (section 59).
     """
     parsed = parse_whatsapp_message(payload)
     if parsed is None:
@@ -58,7 +71,7 @@ async def receive_webhook(payload: dict, db: AsyncSession = Depends(get_db)) -> 
     conversation_repo = ConversationRepository(db)
     conversation = await conversation_repo.get_or_create_active(tenant_id, customer.id)
 
-    message = Message(
+    incoming_message = Message(
         tenant_id=tenant_id,
         conversation_id=conversation.id,
         sender=MessageSender.CUSTOMER,
@@ -66,10 +79,47 @@ async def receive_webhook(payload: dict, db: AsyncSession = Depends(get_db)) -> 
         content=parsed.get("text") or "",
         message_metadata={"wa_message_id": parsed["wa_message_id"]},
     )
-    db.add(message)
+    db.add(incoming_message)
     await db.commit()
 
-    # À ce stade (section 9) : publication vers la file de tâches pour classification d'intention
-    # + agent IA, non implémentée dans ce Sprint 2 (prévu Sprint 4 — agents/orchestrator.py).
+    if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
+        # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
+        # le message reste en base sans réponse automatique.
+        return {"status": "received"}
 
-    return {"status": "received"}
+    try:
+        await check_and_log_outbound(db, tenant_id=tenant_id, requested_by="IA", permission=Permission.CAN_REPLY_TO_CUSTOMER)
+    except OutboundDenied:
+        await db.commit()
+        return {"status": "received_no_ai_reply"}
+
+    history_stmt = (
+        select(Message)
+        .where(Message.conversation_id == conversation.id, Message.id != incoming_message.id)
+        .order_by(Message.created_at.desc())
+        .limit(HISTORY_LIMIT)
+    )
+    history = list(reversed((await db.execute(history_stmt)).scalars().all()))
+
+    tenant = await db.get(Tenant, tenant_id)
+
+    reply_text = await generate_ai_reply(
+        db=db,
+        tenant=tenant,
+        conversation=conversation,
+        history=history,
+        incoming_text=incoming_message.content,
+        llm_client=llm_client,
+    )
+
+    ai_message = Message(
+        tenant_id=tenant_id,
+        conversation_id=conversation.id,
+        sender=MessageSender.AI,
+        message_type="text",
+        content=reply_text,
+    )
+    db.add(ai_message)
+    await db.commit()
+
+    return {"status": "received", "ai_reply": reply_text}

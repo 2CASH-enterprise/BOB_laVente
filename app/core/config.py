@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     default_max_discount_pct: float = 10.0
     default_max_negotiation_rounds: int = 3
 
+    # Agent IA (section 13, 20) — moteur LLM
+    llm_provider: str = "anthropic"  # "anthropic" ou "mistral"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-5"
+    mistral_api_key: str = ""
+    mistral_model: str = "mistral-large-latest"
+    max_tool_iterations: int = 5
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,0 +1,108 @@
+"""
+Exécution réelle des outils (section 33 : protection contre les hallucinations).
+
+Principe absolu : cette classe est le SEUL endroit où prix, stock et existence d'un
+produit sont déterminés. Le LLM ne fait jamais que lire ce qui est renvoyé ici — il
+n'a aucun autre moyen d'obtenir ces informations (section 50 : le LLM comprend,
+raisonne, utilise les outils, communique ; il n'est jamais la source de vérité).
+"""
+import json
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.conversation import Conversation, ConversationStatus
+from app.repositories.product_repository import ProductRepository
+
+
+class ToolExecutor:
+    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, conversation: Conversation):
+        self.db = db
+        self.tenant_id = tenant_id
+        self.conversation = conversation
+        self.product_repo = ProductRepository(db)
+        self.handoff_requested: bool = False
+        self.handoff_reason: str | None = None
+
+    async def execute(self, tool_name: str, tool_input: dict) -> dict:
+        handler = getattr(self, f"_tool_{tool_name}", None)
+        if handler is None:
+            return {"error": f"Outil inconnu : {tool_name}"}
+        return await handler(tool_input)
+
+    async def _product_to_dict(self, product) -> dict:
+        return {
+            "product_id": str(product.id),
+            "name": product.name,
+            "price": float(product.price),
+            "currency": product.currency,
+            "stock": product.stock_quantity,
+            "active": product.active,
+        }
+
+    async def _tool_search_products(self, tool_input: dict) -> dict:
+        products = await self.product_repo.search(
+            tenant_id=self.tenant_id,
+            query=tool_input.get("query"),
+            min_price=tool_input.get("min_price"),
+            max_price=tool_input.get("max_price"),
+            limit=10,
+        )
+        if not products:
+            return {"results": [], "message": "Aucun produit trouvé pour cette recherche."}
+        return {"results": [await self._product_to_dict(p) for p in products]}
+
+    async def _tool_check_stock(self, tool_input: dict) -> dict:
+        product_id = tool_input.get("product_id")
+        try:
+            product = await self.product_repo.get(tenant_id=self.tenant_id, record_id=uuid.UUID(product_id))
+        except (ValueError, TypeError):
+            return {"error": "Identifiant produit invalide"}
+        if product is None:
+            return {"error": "Produit introuvable"}
+        return {"product_id": str(product.id), "stock": product.stock_quantity, "active": product.active}
+
+    async def _tool_get_product_price(self, tool_input: dict) -> dict:
+        product_id = tool_input.get("product_id")
+        try:
+            product = await self.product_repo.get(tenant_id=self.tenant_id, record_id=uuid.UUID(product_id))
+        except (ValueError, TypeError):
+            return {"error": "Identifiant produit invalide"}
+        if product is None:
+            return {"error": "Produit introuvable"}
+        return {"product_id": str(product.id), "price": float(product.price), "currency": product.currency}
+
+    async def _tool_recommend_products(self, tool_input: dict) -> dict:
+        budget = tool_input.get("budget")
+        products = await self.product_repo.search(
+            tenant_id=self.tenant_id,
+            query=tool_input.get("customer_need", ""),
+            max_price=budget,
+            limit=10,
+        )
+        if not products:
+            # Recherche large de secours : sans le terme du besoin, juste le budget (section 17)
+            products = await self.product_repo.search(tenant_id=self.tenant_id, query=None, max_price=budget, limit=10)
+
+        # Priorité aux produits en stock, puis les plus proches du budget (section 17, 22 : max 3 propositions)
+        in_stock = [p for p in products if p.stock_quantity > 0]
+        pool = in_stock or products
+        if budget:
+            pool = sorted(pool, key=lambda p: abs(float(p.price) - float(budget)))
+        top3 = pool[:3]
+
+        if not top3:
+            return {"results": [], "message": "Aucun produit ne correspond à ce besoin dans le catalogue."}
+        return {"results": [await self._product_to_dict(p) for p in top3]}
+
+    async def _tool_handoff_to_human(self, tool_input: dict) -> dict:
+        reason = tool_input.get("reason", "Non précisé")
+        self.conversation.status = ConversationStatus.WAITING_HUMAN
+        self.handoff_requested = True
+        self.handoff_reason = reason
+        await self.db.flush()
+        return {"status": "handoff_registered", "reason": reason}
+
+
+def tool_result_to_text(result: dict) -> str:
+    return json.dumps(result, ensure_ascii=False)
