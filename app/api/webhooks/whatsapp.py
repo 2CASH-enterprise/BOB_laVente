@@ -90,6 +90,11 @@ async def receive_webhook(
     conversation_repo = ConversationRepository(db)
     conversation = await conversation_repo.get_or_create_active(tenant_id, customer.id)
 
+    # Section 23 — un client qui répond n'est plus « abandonné » : on repart de zéro.
+    if conversation.followup_stage != 0:
+        conversation.followup_stage = 0
+        conversation.last_followup_at = None
+
     incoming_message = Message(
         tenant_id=tenant_id,
         conversation_id=conversation.id,

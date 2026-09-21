@@ -89,6 +89,7 @@
       <button data-tab="settings" onclick="showTab('settings')"><span>⚙️</span> Paramètres</button>
     </nav>
     <div class="sidebar-tenant" id="tenant-tag"></div>
+    <button onclick="logout()" style="background: none; border: none; color: #A9CBBB; font-size: 12px; text-align: left; padding: 8px 10px; cursor: pointer;">↪ Déconnexion</button>
   </aside>
   <main>
     <section id="tab-overview">
@@ -213,6 +214,31 @@
           <button class="action" onclick="saveWebsiteUrl()">Enregistrer</button>
           <div id="settings-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Relances automatiques</div>
+          <p style="font-size: 12px; color: var(--muted); margin-top: 0 0 10px;">
+            Nécessite le mode d'envoi « Commercial autorisé » (section 56) — sinon aucune relance n'est envoyée.
+          </p>
+          <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
+            <input type="checkbox" id="followup-enabled"> Activer les relances
+          </label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+            <div>
+              <label style="font-size: 12px; color: var(--muted);">1ʳᵉ relance après (h)</label>
+              <input id="followup-first-hours" type="number" class="input">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--muted);">2ᵉ relance après (h)</label>
+              <input id="followup-second-hours" type="number" class="input">
+            </div>
+          </div>
+          <label style="font-size: 12px; color: var(--muted);">Message de la 1ʳᵉ relance</label>
+          <textarea id="followup-first-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
+          <label style="font-size: 12px; color: var(--muted);">Message de la 2ᵉ relance</label>
+          <textarea id="followup-second-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
+          <button class="action" onclick="saveFollowupSettings()">Enregistrer</button>
+          <div id="followup-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
       </div>
     </section>
   </main>
@@ -226,9 +252,20 @@ const API_BASE = window.location.pathname.replace(/\/dashboard\/?.*$/, "");
 let token = localStorage.getItem("bob_token") || null;
 let currentConversationId = null;
 
+function logout() {
+  localStorage.removeItem("bob_token");
+  token = null;
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+}
+
 function api(path, options = {}) {
   options.headers = Object.assign({}, options.headers, token ? { Authorization: "Bearer " + token } : {});
   return fetch(API_BASE + path, options).then(async (r) => {
+    if (r.status === 401) {
+      logout();
+      throw new Error("Session expirée, reconnectez-vous.");
+    }
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
     if (r.status === 204) return null;
     return r.json();
@@ -271,7 +308,7 @@ function showTab(name) {
   if (name === "orders") loadOrders();
   if (name === "integrations") loadIntegrationsStatus();
   if (name === "knowledge") loadKnowledge();
-  if (name === "settings") { loadWhatsAppStatus(); loadTenantProfile(); }
+  if (name === "settings") { loadWhatsAppStatus(); loadTenantProfile(); loadFollowupSettings(); }
 }
 
 async function loadTenant() {
@@ -479,6 +516,38 @@ async function saveWebsiteUrl() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ website_url: websiteUrl || null }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function loadFollowupSettings() {
+  const s = await api("/api/v1/tenants/me/followup-settings");
+  document.getElementById("followup-enabled").checked = s.enabled;
+  document.getElementById("followup-first-hours").value = s.first_followup_hours;
+  document.getElementById("followup-second-hours").value = s.second_followup_hours;
+  document.getElementById("followup-first-message").value = s.first_message;
+  document.getElementById("followup-second-message").value = s.second_message;
+}
+
+async function saveFollowupSettings() {
+  const msg = document.getElementById("followup-msg");
+  const payload = {
+    enabled: document.getElementById("followup-enabled").checked,
+    first_followup_hours: parseInt(document.getElementById("followup-first-hours").value, 10),
+    second_followup_hours: parseInt(document.getElementById("followup-second-hours").value, 10),
+    first_message: document.getElementById("followup-first-message").value.trim(),
+    second_message: document.getElementById("followup-second-message").value.trim(),
+  };
+  try {
+    await api("/api/v1/tenants/me/followup-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
     msg.style.color = "var(--success)";
     msg.textContent = "Enregistré.";

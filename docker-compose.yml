@@ -13,6 +13,32 @@ services:
     volumes:
       - ./app:/code/app
 
+  worker:
+    build: .
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/code/app
+
+  beat:
+    build: .
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/code/app
+
   db:
     image: postgres:16-alpine
     environment:

@@ -32,6 +32,12 @@ class Conversation(Base):
     assigned_agent: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"))
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Section 23 — relance automatique. 0 = aucune relance envoyée, 1 = première envoyée,
+    # 2 = deuxième envoyée (STOP, plus aucune relance après). Remis à 0 dès que le client
+    # répond (la conversation n'est alors plus « abandonnée »).
+    followup_stage: Mapped[int] = mapped_column(default=0, nullable=False)
+    last_followup_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

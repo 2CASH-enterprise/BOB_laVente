@@ -137,3 +137,62 @@ async def update_messaging_settings(
     await db.commit()
     await db.refresh(settings)
     return settings
+
+
+class FollowupSettingsResp(BaseModel):
+    enabled: bool
+    first_followup_hours: int
+    first_message: str
+    second_followup_hours: int
+    second_message: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FollowupSettingsReq(BaseModel):
+    enabled: bool | None = None
+    first_followup_hours: int | None = None
+    first_message: str | None = None
+    second_followup_hours: int | None = None
+    second_message: str | None = None
+
+
+@router.get("/me/followup-settings", response_model=FollowupSettingsResp)
+async def get_followup_settings(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.followup_settings import TenantFollowupSettings
+
+    stmt = select(TenantFollowupSettings).where(TenantFollowupSettings.tenant_id == current_user.tenant_id)
+    settings = (await db.execute(stmt)).scalar_one_or_none()
+    if settings is None:
+        settings = TenantFollowupSettings(tenant_id=current_user.tenant_id)
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return settings
+
+
+@router.put(
+    "/me/followup-settings", response_model=FollowupSettingsResp, dependencies=[Depends(require_role("ADMIN"))]
+)
+async def update_followup_settings(
+    payload: FollowupSettingsReq,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.followup_settings import TenantFollowupSettings
+
+    stmt = select(TenantFollowupSettings).where(TenantFollowupSettings.tenant_id == current_user.tenant_id)
+    settings = (await db.execute(stmt)).scalar_one_or_none()
+    if settings is None:
+        settings = TenantFollowupSettings(tenant_id=current_user.tenant_id)
+        db.add(settings)
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(settings, field, value)
+
+    await db.commit()
+    await db.refresh(settings)
+    return settings
