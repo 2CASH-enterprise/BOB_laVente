@@ -92,17 +92,40 @@ class ToolExecutor:
             # Recherche large de secours : sans le terme du besoin, juste le budget (section 17)
             products = await self.product_repo.search(tenant_id=self.tenant_id, query=None, max_price=budget, limit=10)
 
-        # Priorité aux produits en stock, puis les plus proches du budget (section 17, 22 : max 3 propositions)
+        # Priorité aux produits en stock (section 17, 22 : max 3 propositions)
         in_stock = [p for p in products if p.stock_quantity > 0]
         pool = in_stock or products
-        if budget:
-            pool = sorted(pool, key=lambda p: abs(float(p.price) - float(budget)))
+
+        # Popularité réelle (point 5) : quantité vendue depuis les vraies commandes, jamais devinée.
+        sales_counts = await self.product_repo.get_sales_counts(self.tenant_id, [p.id for p in pool])
+
+        def _sort_key(p):
+            budget_fit = abs(float(p.price) - float(budget)) if budget else 0.0
+            popularity = -sales_counts.get(p.id, 0)  # négatif : plus vendu = mieux classé
+            margin = -(float(p.price) - float(p.cost_price)) if p.cost_price is not None else 0.0
+            # Avec budget : priorité à la proximité de budget, popularité en départage.
+            # Sans budget : priorité à la popularité (meilleures ventes en premier), marge en départage.
+            return (budget_fit, popularity, margin) if budget else (popularity, margin, budget_fit)
+
+        pool = sorted(pool, key=_sort_key)
         top3 = pool[:3]
 
         if not top3:
             return {"results": [], "message": "Aucun produit ne correspond à ce besoin dans le catalogue."}
         await record_product_view(self.db, self.tenant_id, self.customer_id, [p.id for p in top3])
         return {"results": [await self._product_to_dict(p) for p in top3]}
+
+    async def _tool_get_frequently_bought_together(self, tool_input: dict) -> dict:
+        product_id = tool_input.get("product_id")
+        try:
+            product_uuid = uuid.UUID(product_id)
+        except (ValueError, TypeError):
+            return {"error": "Identifiant produit invalide"}
+
+        products = await self.product_repo.get_frequently_bought_together(self.tenant_id, product_uuid, limit=3)
+        if not products:
+            return {"results": [], "message": "Pas encore assez de données de vente pour ce produit."}
+        return {"results": [await self._product_to_dict(p) for p in products]}
 
     async def _tool_suggest_complementary_products(self, tool_input: dict) -> dict:
         product_id = tool_input.get("product_id")

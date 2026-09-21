@@ -31,7 +31,11 @@ BASE_RULES = """RÈGLES
     jamais un chiffre de toi-même. Si la décision est COUNTER, propose exactement le
     proposed_price renvoyé. Si ESCALATE_HUMAN, informe poliment le client qu'un conseiller
     va reprendre la conversation. N'appelle pas cet outil si le client n'a fait aucune
-    contre-proposition chiffrée."""
+    contre-proposition chiffrée.
+15. recommend_products priorise déjà les meilleures ventes réelles de l'entreprise — fais-en
+    confiance à son classement plutôt que de réordonner toi-même. Pour renforcer une suggestion
+    ou combler l'absence de complémentaires configurés, tu peux utiliser
+    get_frequently_bought_together, basé sur les vraies commandes passées."""
 
 CATEGORY_LABELS = {
     "HORAIRES": "Horaires",

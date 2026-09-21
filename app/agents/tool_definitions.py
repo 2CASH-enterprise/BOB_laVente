@@ -70,6 +70,20 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "get_frequently_bought_together",
+        "description": (
+            "Retourne jusqu'à 3 produits fréquemment achetés avec le produit donné, calculés "
+            "à partir des vraies commandes passées (pas une configuration manuelle, contrairement "
+            "à suggest_complementary_products). Utile quand aucune liaison n'a été configurée "
+            "par l'entreprise, ou pour renforcer une suggestion avec des données de vente réelles."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"product_id": {"type": "string", "description": "UUID du produit"}},
+            "required": ["product_id"],
+        },
+    },
+    {
         "name": "suggest_complementary_products",
         "description": (
             "Suggère jusqu'à 2 produits complémentaires configurés par l'entreprise pour un produit "

@@ -25,6 +25,7 @@ class Product(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text)
     price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    cost_price: Mapped[float | None] = mapped_column(Numeric(14, 2))  # optionnel — permet le calcul de marge
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     stock_quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     category_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("categories.id"))

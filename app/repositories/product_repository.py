@@ -1,5 +1,6 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from app.models.order import Order, OrderItem, OrderStatus
 from app.models.product import Product
 from app.repositories.base import TenantScopedRepository
 
@@ -53,3 +54,54 @@ class ProductRepository(TenantScopedRepository[Product]):
         stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_sales_counts(self, tenant_id, product_ids: list) -> dict:
+        """
+        Popularité réelle (point 5) : quantité totale vendue par produit, commandes annulées
+        exclues. Retourne un dict {product_id: quantité}, 0 si jamais vendu — jamais une
+        estimation, uniquement ce qui a réellement été commandé.
+        """
+        if not product_ids:
+            return {}
+        stmt = (
+            select(OrderItem.product_id, func.sum(OrderItem.quantity))
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(Order.tenant_id == tenant_id, Order.status != OrderStatus.CANCELLED, OrderItem.product_id.in_(product_ids))
+            .group_by(OrderItem.product_id)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        counts = {product_id: int(qty) for product_id, qty in rows}
+        return {pid: counts.get(pid, 0) for pid in product_ids}
+
+    async def get_frequently_bought_together(self, tenant_id, product_id, limit: int = 3) -> list[Product]:
+        """
+        Associations « souvent achetés ensemble » (point 5) : calculées depuis les VRAIES
+        commandes passées (co-occurrence dans une même commande), jamais une supposition.
+        """
+        co_orders_stmt = (
+            select(OrderItem.order_id)
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(Order.tenant_id == tenant_id, Order.status != OrderStatus.CANCELLED, OrderItem.product_id == product_id)
+        )
+        order_ids = [row[0] for row in (await self.session.execute(co_orders_stmt)).all()]
+        if not order_ids:
+            return []
+
+        stmt = (
+            select(OrderItem.product_id, func.count(OrderItem.order_id.distinct()).label("co_count"))
+            .where(OrderItem.order_id.in_(order_ids), OrderItem.product_id != product_id)
+            .group_by(OrderItem.product_id)
+            .order_by(func.count(OrderItem.order_id.distinct()).desc())
+            .limit(limit)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        product_ids = [row[0] for row in rows]
+        if not product_ids:
+            return []
+
+        products_stmt = select(Product).where(
+            Product.tenant_id == tenant_id, Product.id.in_(product_ids), Product.active.is_(True)
+        )
+        products = {p.id: p for p in (await self.session.execute(products_stmt)).scalars().all()}
+        # Préserve l'ordre de co-occurrence (le plus fréquent en premier), pas l'ordre de la requête produits.
+        return [products[pid] for pid in product_ids if pid in products]
