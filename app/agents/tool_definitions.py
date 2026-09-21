@@ -69,4 +69,33 @@ TOOL_DEFINITIONS = [
             "required": ["reason"],
         },
     },
+    {
+        "name": "create_order",
+        "description": (
+            "Crée réellement une commande. N'appelle CET OUTIL QU'APRÈS que le client a confirmé "
+            "explicitement (section 18) — jamais avant, jamais sur une simple hésitation. Le stock "
+            "et les prix sont revérifiés en base au moment de l'appel : si le stock a changé depuis "
+            "la dernière recherche, la commande peut être refusée, informe-en le client."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "description": "Articles commandés",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product_id": {"type": "string", "description": "UUID du produit"},
+                            "quantity": {"type": "integer", "description": "Quantité, minimum 1"},
+                        },
+                        "required": ["product_id", "quantity"],
+                    },
+                },
+                "delivery_address": {"type": "string", "description": "Adresse de livraison, si fournie"},
+                "payment_method": {"type": "string", "description": "Moyen de paiement mentionné par le client"},
+            },
+            "required": ["items"],
+        },
+    },
 ]

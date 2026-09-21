@@ -13,13 +13,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationStatus
 from app.repositories.product_repository import ProductRepository
+from app.services.order_service import OrderCreationError, create_order
 
 
 class ToolExecutor:
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, conversation: Conversation):
+    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, conversation: Conversation, customer_id: uuid.UUID | None = None):
         self.db = db
         self.tenant_id = tenant_id
         self.conversation = conversation
+        self.customer_id = customer_id or conversation.customer_id
         self.product_repo = ProductRepository(db)
         self.handoff_requested: bool = False
         self.handoff_reason: str | None = None
@@ -102,6 +104,28 @@ class ToolExecutor:
         self.handoff_reason = reason
         await self.db.flush()
         return {"status": "handoff_registered", "reason": reason}
+
+    async def _tool_create_order(self, tool_input: dict) -> dict:
+        try:
+            order = await create_order(
+                db=self.db,
+                tenant_id=self.tenant_id,
+                customer_id=self.customer_id,
+                items=tool_input.get("items", []),
+                delivery_address=tool_input.get("delivery_address"),
+                payment_method=tool_input.get("payment_method"),
+                created_by="IA",
+                conversation_id=self.conversation.id,
+            )
+        except OrderCreationError as exc:
+            return {"error": exc.message}
+
+        return {
+            "order_id": str(order.id),
+            "status": order.status.value,
+            "total_amount": float(order.total_amount),
+            "currency": order.currency,
+        }
 
 
 def tool_result_to_text(result: dict) -> str:

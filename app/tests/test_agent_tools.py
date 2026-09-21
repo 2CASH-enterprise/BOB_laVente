@@ -128,3 +128,29 @@ async def test_tools_are_isolated_by_tenant(db_session, unique_email):
     executor_b = ToolExecutor(db_session, tenant_b.id, conversation_b)
     result = await executor_b.execute("check_stock", {"product_id": str(product_a.id)})
     assert "error" in result  # le produit du tenant A est invisible pour le tenant B
+
+
+@pytest.mark.asyncio
+async def test_create_order_tool_creates_real_order_and_decrements_stock(db_session, unique_email):
+    tenant, product, conversation = await _setup(db_session, unique_email)
+    executor = ToolExecutor(db_session, tenant.id, conversation)
+
+    result = await executor.execute(
+        "create_order", {"items": [{"product_id": str(product.id), "quantity": 2}], "delivery_address": "Dakar"}
+    )
+    await db_session.commit()
+    await db_session.refresh(product)
+
+    assert "order_id" in result
+    assert result["total_amount"] == 560000.0
+    assert product.stock_quantity == 10  # 12 - 2
+
+
+@pytest.mark.asyncio
+async def test_create_order_tool_never_oversells(db_session, unique_email):
+    tenant, product, conversation = await _setup(db_session, unique_email)
+    executor = ToolExecutor(db_session, tenant.id, conversation)
+
+    result = await executor.execute("create_order", {"items": [{"product_id": str(product.id), "quantity": 999}]})
+    assert "error" in result
+    assert "Stock insuffisant" in result["error"]
