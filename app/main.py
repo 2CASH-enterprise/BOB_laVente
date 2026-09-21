@@ -47,6 +47,10 @@ _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():
     app.mount("/dashboard", StaticFiles(directory=str(_static_dir), html=True), name="dashboard")
 
+_legal_dir = Path(__file__).parent / "static" / "legal"
+if _legal_dir.exists():
+    app.mount("/legal", StaticFiles(directory=str(_legal_dir), html=True), name="legal")
+
 
 @app.get("/health", tags=["system"])
 async def health() -> dict[str, str]:

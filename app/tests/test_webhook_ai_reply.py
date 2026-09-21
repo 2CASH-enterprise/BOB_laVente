@@ -97,6 +97,65 @@ async def test_webhook_without_llm_configured_persists_message_only(client, db_s
 
 
 @pytest.mark.asyncio
+async def test_webhook_sends_reply_via_whatsapp_client(client, db_session, unique_email, monkeypatch):
+    """Vérifie que la réponse générée est réellement transmise à l'API WhatsApp (pas juste stockée)."""
+    tenant = await _setup_tenant_with_whatsapp_and_product(db_session, unique_email, "phone_send_test")
+
+    fake = FakeLLMClient([text_response("Réponse à envoyer")])
+    app.dependency_overrides[get_llm_client] = lambda: fake
+
+    sent_calls = []
+
+    class FakeWhatsAppClient:
+        def __init__(self, phone_number_id, system_user_token):
+            self.phone_number_id = phone_number_id
+            self.system_user_token = system_user_token
+
+        async def send_text_message(self, to, body):
+            sent_calls.append({"to": to, "body": body})
+            return {"messages": [{"id": "wamid.SENT"}]}
+
+    monkeypatch.setattr("app.api.webhooks.whatsapp.WhatsAppClient", FakeWhatsAppClient)
+
+    try:
+        payload = _incoming_message_payload("phone_send_test", "221700000009", "Bonjour")
+        response = await client.post("/webhooks/whatsapp", json=payload)
+        assert response.status_code == 200
+    finally:
+        del app.dependency_overrides[get_llm_client]
+
+    assert len(sent_calls) == 1
+    assert sent_calls[0]["to"] == "221700000009"
+    assert sent_calls[0]["body"] == "Réponse à envoyer"
+
+
+@pytest.mark.asyncio
+async def test_webhook_whatsapp_send_failure_does_not_break_response(client, db_session, unique_email, monkeypatch):
+    """Section 34 — une panne de l'API WhatsApp ne doit jamais faire échouer le webhook."""
+    tenant = await _setup_tenant_with_whatsapp_and_product(db_session, unique_email, "phone_send_fail_test")
+
+    fake = FakeLLMClient([text_response("Réponse")])
+    app.dependency_overrides[get_llm_client] = lambda: fake
+
+    class BrokenWhatsAppClient:
+        def __init__(self, phone_number_id, system_user_token):
+            pass
+
+        async def send_text_message(self, to, body):
+            raise RuntimeError("Token WhatsApp expiré")
+
+    monkeypatch.setattr("app.api.webhooks.whatsapp.WhatsAppClient", BrokenWhatsAppClient)
+
+    try:
+        payload = _incoming_message_payload("phone_send_fail_test", "221700000010", "Bonjour")
+        response = await client.post("/webhooks/whatsapp", json=payload)
+        assert response.status_code == 200
+        assert response.json()["ai_reply"] == "Réponse"
+    finally:
+        del app.dependency_overrides[get_llm_client]
+
+
+@pytest.mark.asyncio
 async def test_webhook_no_ai_reply_when_conversation_waiting_human(client, db_session, unique_email):
     """Section 28 — une fois qu'un humain a pris la main, l'IA ne doit plus répondre automatiquement."""
     tenant = await _setup_tenant_with_whatsapp_and_product(db_session, unique_email, "phone_human_takeover")

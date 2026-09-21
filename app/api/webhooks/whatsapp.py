@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -9,7 +10,7 @@ from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import generate_ai_reply
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.integrations.whatsapp.client import parse_whatsapp_message, verify_whatsapp_signature
+from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_message, verify_whatsapp_signature
 from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.tenant import Tenant
 from app.repositories.conversation_repository import ConversationRepository
@@ -139,5 +140,16 @@ async def receive_webhook(
     )
     db.add(ai_message)
     await db.commit()
+
+    # Envoi réel vers WhatsApp (section 3 : ... -> WhatsApp API -> CLIENT). Ne doit jamais
+    # faire planter le webhook si Meta est indisponible ou si le token a expiré : on journalise
+    # et on continue, la réponse reste de toute façon consultable dans le dashboard (section 27).
+    try:
+        wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+        await wa_client.send_text_message(to=customer.whatsapp_number, body=reply_text)
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception(
+            "Échec de l'envoi WhatsApp réel pour la conversation %s", conversation.id
+        )
 
     return {"status": "received", "ai_reply": reply_text}
