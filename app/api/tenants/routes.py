@@ -19,9 +19,15 @@ class TenantResponse(BaseModel):
     country: str
     currency: str
     company_size: str
+    website_url: str | None
     active: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TenantProfileUpdate(BaseModel):
+    name: str | None = None
+    website_url: str | None = None
 
 
 @router.get("/me", response_model=TenantResponse)
@@ -36,6 +42,24 @@ async def get_my_tenant(
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+    return tenant
+
+
+@router.put("/me/profile", response_model=TenantResponse, dependencies=[Depends(require_role("ADMIN"))])
+async def update_tenant_profile(
+    payload: TenantProfileUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Tenant:
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(tenant, field, value)
+
+    await db.commit()
+    await db.refresh(tenant)
     return tenant
 
 

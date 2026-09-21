@@ -16,6 +16,7 @@ from app.agents.tools import ToolExecutor, tool_result_to_text
 from app.core.config import get_settings
 from app.models.conversation import Conversation, Message, MessageSender
 from app.models.tenant import Tenant
+from app.repositories.knowledge_entry_repository import KnowledgeEntryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,9 @@ async def generate_ai_reply(
     de repli et laisse la conversation en l'état pour reprise par un humain (section 34).
     """
     settings = get_settings()
-    system_prompt = build_system_prompt(tenant)
+    knowledge_repo = KnowledgeEntryRepository(db)
+    knowledge_entries = await knowledge_repo.list_active(tenant.id)
+    system_prompt = build_system_prompt(tenant, knowledge_entries)
     executor = ToolExecutor(db, tenant.id, conversation)
 
     messages = _history_to_anthropic_messages(history)

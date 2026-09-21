@@ -11,9 +11,11 @@ class FakeLLMClient(LLMClient):
         self.scripted_responses = scripted_responses
         self.call_count = 0
         self.received_messages: list[list[dict]] = []
+        self.received_systems: list[str] = []
 
     async def create_message(self, *, system, messages, tools, max_tokens=1024):
         self.received_messages.append(messages)
+        self.received_systems.append(system)
         response = self.scripted_responses[self.call_count]
         self.call_count += 1
         return response

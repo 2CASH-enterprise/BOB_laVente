@@ -26,6 +26,7 @@ class Tenant(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False)  # ISO 4217
     phone: Mapped[str | None] = mapped_column(String(32))
     email: Mapped[str] = mapped_column(String(255), nullable=False)
+    website_url: Mapped[str | None] = mapped_column(String(500))
 
     # Section 57 — segmentation
     company_size: Mapped[CompanySize] = mapped_column(

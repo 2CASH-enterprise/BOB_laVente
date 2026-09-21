@@ -14,6 +14,38 @@ settings = get_settings()
 GRAPH_BASE_URL = "https://graph.facebook.com"
 
 
+class MetaOAuthClient:
+    """
+    Section 59.6 — échange réel du code Embedded Signup contre un token, puis abonnement
+    de l'app au WABA du client (section 59.5, condition pour recevoir ses webhooks).
+    Isolé en classe pour rester mockable en test, même principe que les autres clients.
+    """
+
+    def __init__(self, app_id: str, app_secret: str, api_version: str | None = None):
+        self.app_id = app_id
+        self.app_secret = app_secret
+        self.api_version = api_version or settings.whatsapp_graph_api_version
+
+    async def exchange_code_for_token(self, code: str) -> str:
+        """
+        La configuration Facebook Login for Business en variation « WhatsApp Embedded
+        Signup » ne délivre que des System User Access Tokens (longue durée) — un seul
+        échange suffit, pas de rafraîchissement supplémentaire nécessaire.
+        """
+        url = f"{GRAPH_BASE_URL}/{self.api_version}/oauth/access_token"
+        params = {"client_id": self.app_id, "client_secret": self.app_secret, "code": code}
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()["access_token"]
+
+    async def subscribe_app_to_waba(self, waba_id: str, access_token: str) -> None:
+        url = f"{GRAPH_BASE_URL}/{self.api_version}/{waba_id}/subscribed_apps"
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(url, headers={"Authorization": f"Bearer {access_token}"})
+            response.raise_for_status()
+
+
 def verify_whatsapp_signature(app_secret: str, raw_body: bytes, signature_header: str | None) -> bool:
     """
     Section 32 — validation des webhooks. Meta signe chaque requête avec

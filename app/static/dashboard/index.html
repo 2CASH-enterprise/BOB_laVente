@@ -6,49 +6,64 @@
 <title>Bob — Dashboard</title>
 <style>
   :root {
-    --bg: #0f1115; --panel: #171a21; --border: #262b36; --text: #e6e8ec;
-    --muted: #8b92a3; --accent: #4f7cff; --success: #34c07a; --danger: #ef5b5b;
+    --bg: #F4FAF6; --panel: #FFFFFF; --border: #DCEBE1; --text: #14261C;
+    --muted: #6C8277; --accent: #1B4332; --accent-light: #52B788; --accent-soft: #DFF3E8;
+    --success: #2D8A5E; --warning: #C98A2E; --danger: #C1443C;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid var(--border); }
-  header h1 { font-size: 18px; margin: 0; }
-  header .tag { color: var(--muted); font-size: 13px; }
-  nav { display: flex; gap: 4px; padding: 12px 24px 0; border-bottom: 1px solid var(--border); }
-  nav button { background: none; border: none; color: var(--muted); padding: 10px 14px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; }
-  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
-  main { padding: 24px; max-width: 1100px; margin: 0 auto; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-  .card .value { font-size: 26px; font-weight: 600; }
-  .card .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
-  th { color: var(--muted); font-weight: 500; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  #app { display: flex; min-height: 100vh; align-items: stretch; }
+  .sidebar { width: 240px; flex-shrink: 0; background: var(--accent); color: #CDEADA; display: flex; flex-direction: column; padding: 22px 14px; position: sticky; top: 0; height: 100vh; }
+  .sidebar-logo { font-size: 18px; font-weight: 700; color: white; padding: 0 10px; margin-bottom: 28px; letter-spacing: -0.01em; }
+  .sidebar nav { display: flex; flex-direction: column; gap: 3px; }
+  .sidebar nav button { display: flex; align-items: center; gap: 11px; background: none; border: none; color: #CDEADA; padding: 11px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500; text-align: left; width: 100%; }
+  .sidebar nav button span { font-size: 15px; width: 18px; text-align: center; }
+  .sidebar nav button:hover { background: rgba(255, 255, 255, 0.08); color: white; }
+  .sidebar nav button.active { background: var(--accent-light); color: #0E2318; font-weight: 700; }
+  .sidebar-tenant { margin-top: auto; padding: 12px 10px 4px; font-size: 12px; color: #A9CBBB; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+  main { flex: 1; min-width: 0; padding: 28px 32px; max-width: 1000px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: 0 1px 2px rgba(27, 67, 50, 0.04); }
+  .card .icon { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px; margin-bottom: 10px; }
+  .card .value { font-size: 25px; font-weight: 700; color: var(--text); }
+  .card .label { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(27, 67, 50, 0.04); }
+  th, td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 14px; line-height: 1.4; vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--accent-soft); }
+  tbody tr:nth-child(even) { background: #FAFDFB; }
   tr:last-child td { border-bottom: none; }
   tr.clickable { cursor: pointer; }
-  tr.clickable:hover { background: #1c2029; }
-  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
-  .badge.ACTIVE { background: #16351f; color: var(--success); }
-  .badge.WAITING_HUMAN { background: #3a2a12; color: #e8a33d; }
-  .badge.CLOSED { background: #2a2d35; color: var(--muted); }
-  .badge.PENDING { background: #3a2a12; color: #e8a33d; }
-  .badge.PAID { background: #16351f; color: var(--success); }
-  .badge.CANCELLED { background: #3a1616; color: var(--danger); }
-  button.action { background: var(--accent); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-  button.action.secondary { background: #2a2d35; }
-  #login-screen { max-width: 360px; margin: 80px auto; }
-  #login-screen input { width: 100%; padding: 10px; margin-bottom: 10px; background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 6px; }
-  #login-screen button { width: 100%; padding: 10px; background: var(--accent); border: none; color: white; border-radius: 6px; cursor: pointer; }
+  tr.clickable:hover { background: var(--accent-soft); }
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge.ACTIVE { background: #DFF3E8; color: var(--success); }
+  .badge.WAITING_HUMAN { background: #FBEFDB; color: var(--warning); }
+  .badge.CLOSED { background: #EDF2EF; color: var(--muted); }
+  .badge.PENDING { background: #FBEFDB; color: var(--warning); }
+  .badge.PAID { background: #DFF3E8; color: var(--success); }
+  .badge.CANCELLED { background: #FBE4E2; color: var(--danger); }
+  button.action { background: var(--accent); border: none; color: white; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  button.action:hover { background: #16382A; }
+  button.action.secondary { background: var(--accent-soft); color: var(--accent); }
+  button.action.secondary:hover { background: #CDEADA; }
+  button.action:disabled { background: var(--border); color: var(--muted); cursor: default; }
+  #login-screen { max-width: 360px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 16px rgba(27, 67, 50, 0.06); }
+  #login-screen h2 { color: var(--accent); margin-top: 0; }
+  #login-screen input { width: 100%; padding: 11px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 14px; }
+  #login-screen input:focus { outline: none; border-color: var(--accent-light); }
+  #login-screen button { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  #login-screen button:hover { background: #16382A; }
   #login-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
-  .msg { padding: 8px 12px; margin-bottom: 6px; border-radius: 8px; font-size: 14px; max-width: 70%; }
-  .msg.CUSTOMER { background: #1c2029; }
-  .msg.AI { background: #1a2740; margin-left: auto; }
-  .msg.HUMAN { background: #1a2740; margin-left: auto; border: 1px solid var(--accent); }
+  .msg { padding: 9px 13px; margin-bottom: 6px; border-radius: 10px; font-size: 14px; max-width: 70%; }
+  .msg.CUSTOMER { background: var(--bg); border: 1px solid var(--border); }
+  .msg.AI { background: var(--accent-soft); margin-left: auto; color: #123524; }
+  .msg.HUMAN { background: var(--accent-soft); margin-left: auto; border: 1px solid var(--accent-light); color: #123524; }
   .msg.SYSTEM { background: none; color: var(--muted); font-style: italic; font-size: 12px; text-align: center; max-width: 100%; }
   #conv-detail { display: none; }
-  a.back { color: var(--accent); cursor: pointer; font-size: 13px; }
+  a.back { color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 500; }
   .hidden { display: none !important; }
+  .input { width: 100%; padding: 9px 11px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 13px; }
+  .input:focus { outline: none; border-color: var(--accent-light); }
+  textarea.input { font-family: inherit; }
 </style>
 </head>
 <body>
@@ -62,16 +77,19 @@
 </div>
 
 <div id="app" class="hidden">
-  <header>
-    <h1>Bob — Dashboard</h1>
-    <span class="tag" id="tenant-tag"></span>
-  </header>
-  <nav>
-    <button class="active" data-tab="overview" onclick="showTab('overview')">Vue d'ensemble</button>
-    <button data-tab="conversations" onclick="showTab('conversations')">Conversations</button>
-    <button data-tab="products" onclick="showTab('products')">Produits</button>
-    <button data-tab="orders" onclick="showTab('orders')">Commandes</button>
-  </nav>
+  <aside class="sidebar">
+    <div class="sidebar-logo">🤖 Bob</div>
+    <nav>
+      <button class="active" data-tab="overview" onclick="showTab('overview')"><span>📊</span> Vue d'ensemble</button>
+      <button data-tab="conversations" onclick="showTab('conversations')"><span>💬</span> Conversations</button>
+      <button data-tab="products" onclick="showTab('products')"><span>📦</span> Produits</button>
+      <button data-tab="orders" onclick="showTab('orders')"><span>🧾</span> Commandes</button>
+      <button data-tab="integrations" onclick="showTab('integrations')"><span>🔌</span> Intégrations</button>
+      <button data-tab="knowledge" onclick="showTab('knowledge')"><span>📚</span> Base de connaissances</button>
+      <button data-tab="settings" onclick="showTab('settings')"><span>⚙️</span> Paramètres</button>
+    </nav>
+    <div class="sidebar-tenant" id="tenant-tag"></div>
+  </aside>
   <main>
     <section id="tab-overview">
       <div class="grid" id="analytics-grid"></div>
@@ -94,6 +112,29 @@
     </section>
 
     <section id="tab-products" class="hidden">
+      <div style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
+        <div class="card" style="flex: 1; min-width: 280px;">
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Ajouter un produit</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <input id="new-product-sku" placeholder="SKU" class="input">
+            <input id="new-product-name" placeholder="Nom" class="input">
+            <input id="new-product-price" placeholder="Prix" type="number" class="input">
+            <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input" maxlength="3">
+            <input id="new-product-stock" placeholder="Stock" type="number" class="input" style="grid-column: span 2;">
+          </div>
+          <button class="action" style="margin-top: 10px;" onclick="createProduct()">Ajouter</button>
+          <div id="new-product-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+        <div class="card" style="flex: 1; min-width: 280px;">
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV</div>
+          <p style="font-size: 13px; color: var(--muted); margin-top: 0;">
+            Colonnes attendues : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE
+          </p>
+          <input type="file" id="csv-file-input" accept=".csv" style="margin-bottom: 10px;">
+          <button class="action" onclick="importCsv()">Importer</button>
+          <div id="csv-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+      </div>
       <table>
         <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th></tr></thead>
         <tbody id="product-rows"></tbody>
@@ -106,17 +147,90 @@
         <tbody id="order-rows"></tbody>
       </table>
     </section>
+
+    <section id="tab-integrations" class="hidden">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="card" style="flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Shopify</div>
+          <div id="shopify-status" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Vérification…</div>
+          <div id="shopify-form">
+            <input id="shopify-domain" placeholder="ma-boutique.myshopify.com" class="input" style="margin-bottom: 8px;">
+            <input id="shopify-token" placeholder="Access token Shopify" class="input" style="margin-bottom: 8px;">
+            <button class="action" onclick="connectShopify()">Connecter Shopify</button>
+          </div>
+          <button class="action secondary hidden" id="shopify-sync-btn" onclick="syncShopify()" style="margin-top: 8px;">Synchroniser maintenant</button>
+          <div id="shopify-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+        <div class="card" style="flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Meta Commerce Catalog</div>
+          <div id="meta-status" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Vérification…</div>
+          <div id="meta-form">
+            <input id="meta-catalog-id" placeholder="Catalog ID" class="input" style="margin-bottom: 8px;">
+            <input id="meta-token" placeholder="Access token Meta" class="input" style="margin-bottom: 8px;">
+            <button class="action" onclick="connectMetaCatalog()">Connecter le catalogue</button>
+          </div>
+          <button class="action secondary hidden" id="meta-sync-btn" onclick="syncMetaCatalog()" style="margin-top: 8px;">Synchroniser maintenant</button>
+          <div id="meta-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-knowledge" class="hidden">
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="label" style="margin-bottom: 12px; font-weight: 600;">Ajouter une entrée</div>
+        <div style="display: grid; grid-template-columns: 200px 1fr; gap: 8px; margin-bottom: 8px;">
+          <select id="new-knowledge-category" class="input">
+            <option value="OBJECTION">Objection</option>
+            <option value="FAQ">Question fréquente</option>
+            <option value="HORAIRES">Horaires</option>
+            <option value="ADRESSE">Adresse</option>
+            <option value="LIVRAISON">Livraison</option>
+            <option value="RETOUR">Retours</option>
+            <option value="GARANTIE">Garantie</option>
+            <option value="PAIEMENT">Moyens de paiement</option>
+            <option value="CONDITIONS">Conditions commerciales</option>
+            <option value="AUTRE">Autre</option>
+          </select>
+          <input id="new-knowledge-title" placeholder="Titre (ex. « C'est trop cher »)" class="input">
+        </div>
+        <textarea id="new-knowledge-content" placeholder="Réponse ou information que Bob doit utiliser…" class="input" rows="3" style="margin-bottom: 8px; resize: vertical;"></textarea>
+        <button class="action" onclick="createKnowledgeEntry()">Ajouter</button>
+        <div id="knowledge-msg" style="margin-top: 8px; font-size: 13px;"></div>
+      </div>
+      <div id="knowledge-list"></div>
+    </section>
+
+    <section id="tab-settings" class="hidden">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Compte WhatsApp Business</div>
+          <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
+          <button class="action" id="btn-connect-whatsapp" onclick="connectWhatsApp()">Connecter WhatsApp</button>
+        </div>
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Profil de l'entreprise</div>
+          <input id="settings-website-url" placeholder="https://votre-site.com" class="input" style="margin-bottom: 10px;">
+          <button class="action" onclick="saveWebsiteUrl()">Enregistrer</button>
+          <div id="settings-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
 <script>
+// Calcule le préfixe réel sous lequel l'app est servie (ex. "/bob" via nginx, ou "" en direct).
+// Indispensable car le dashboard est monté sous /dashboard mais accédé via /bob/dashboard/ en prod.
+const API_BASE = window.location.pathname.replace(/\/dashboard\/?.*$/, "");
+
 let token = localStorage.getItem("bob_token") || null;
 let currentConversationId = null;
 
 function api(path, options = {}) {
   options.headers = Object.assign({}, options.headers, token ? { Authorization: "Bearer " + token } : {});
-  return fetch(path, options).then(async (r) => {
+  return fetch(API_BASE + path, options).then(async (r) => {
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    if (r.status === 204) return null;
     return r.json();
   });
 }
@@ -127,7 +241,7 @@ async function login() {
   document.getElementById("login-error").textContent = "";
   try {
     const body = new URLSearchParams({ username: email, password });
-    const res = await fetch("/api/v1/auth/login", { method: "POST", body }).then((r) => {
+    const res = await fetch(API_BASE + "/api/v1/auth/login", { method: "POST", body }).then((r) => {
       if (!r.ok) throw new Error("Email ou mot de passe incorrect");
       return r.json();
     });
@@ -148,13 +262,16 @@ function enterApp() {
 
 function showTab(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  ["overview", "conversations", "products", "orders"].forEach((t) =>
+  ["overview", "conversations", "products", "orders", "integrations", "knowledge", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
   if (name === "conversations") loadConversations();
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
+  if (name === "integrations") loadIntegrationsStatus();
+  if (name === "knowledge") loadKnowledge();
+  if (name === "settings") { loadWhatsAppStatus(); loadTenantProfile(); }
 }
 
 async function loadTenant() {
@@ -169,12 +286,12 @@ async function loadOverview() {
   const grid = document.getElementById("analytics-grid");
   const cur = a.currency || "";
   grid.innerHTML = `
-    <div class="card"><div class="value">${a.total_conversations}</div><div class="label">Conversations</div></div>
-    <div class="card"><div class="value">${a.qualified_prospects}</div><div class="label">Prospects qualifiés</div></div>
-    <div class="card"><div class="value">${a.total_orders}</div><div class="label">Commandes</div></div>
-    <div class="card"><div class="value">${a.revenue.toLocaleString()} ${cur}</div><div class="label">Chiffre d'affaires</div></div>
-    <div class="card"><div class="value">${a.conversion_rate_pct}%</div><div class="label">Conversion</div></div>
-    <div class="card"><div class="value">${a.human_handoffs}</div><div class="label">Transferts humains</div></div>
+    <div class="card"><div class="icon">💬</div><div class="value">${a.total_conversations}</div><div class="label">Conversations</div></div>
+    <div class="card"><div class="icon">👥</div><div class="value">${a.qualified_prospects}</div><div class="label">Prospects qualifiés</div></div>
+    <div class="card"><div class="icon">📦</div><div class="value">${a.total_orders}</div><div class="label">Commandes</div></div>
+    <div class="card"><div class="icon">💰</div><div class="value">${a.revenue.toLocaleString()} ${cur}</div><div class="label">Chiffre d'affaires</div></div>
+    <div class="card"><div class="icon">📈</div><div class="value">${a.conversion_rate_pct}%</div><div class="label">Conversion</div></div>
+    <div class="card"><div class="icon">🤝</div><div class="value">${a.human_handoffs}</div><div class="label">Transferts humains</div></div>
   `;
 }
 
@@ -236,6 +353,248 @@ async function loadProducts() {
     .join("") || "<tr><td colspan='5'>Aucun produit</td></tr>";
 }
 
+async function createProduct() {
+  const msg = document.getElementById("new-product-msg");
+  msg.textContent = "";
+  const payload = {
+    sku: document.getElementById("new-product-sku").value.trim(),
+    name: document.getElementById("new-product-name").value.trim(),
+    price: document.getElementById("new-product-price").value,
+    currency: document.getElementById("new-product-currency").value.trim().toUpperCase(),
+    stock_quantity: parseInt(document.getElementById("new-product-stock").value || "0", 10),
+  };
+  if (!payload.sku || !payload.name || !payload.price || !payload.currency) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "SKU, nom, prix et devise sont obligatoires.";
+    return;
+  }
+  try {
+    await api("/api/v1/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Produit ajouté.";
+    ["sku", "name", "price", "currency", "stock"].forEach((f) => (document.getElementById("new-product-" + f).value = ""));
+    loadProducts();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function importCsv() {
+  const msg = document.getElementById("csv-import-msg");
+  const fileInput = document.getElementById("csv-file-input");
+  msg.textContent = "";
+  if (!fileInput.files.length) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Choisissez un fichier CSV d'abord.";
+    return;
+  }
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+  try {
+    const result = await api("/api/v1/catalog/import-csv", { method: "POST", body: formData });
+    msg.style.color = "var(--success)";
+    msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour, ${result.failed} échecs.`;
+    loadProducts();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function loadTenantProfile() {
+  const tenant = await api("/api/v1/tenants/me");
+  document.getElementById("settings-website-url").value = tenant.website_url || "";
+}
+
+async function saveWebsiteUrl() {
+  const msg = document.getElementById("settings-profile-msg");
+  const websiteUrl = document.getElementById("settings-website-url").value.trim();
+  try {
+    await api("/api/v1/tenants/me/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ website_url: websiteUrl || null }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+// ---- Intégrations e-commerce (Shopify / Meta Commerce Catalog) ----
+async function loadIntegrationsStatus() {
+  try {
+    const s = await api("/api/v1/integrations/shopify/status");
+    document.getElementById("shopify-status").textContent = `Connecté — ${s.shop_domain} (dernière sync : ${s.last_synced_at ? new Date(s.last_synced_at).toLocaleString() : "jamais"})`;
+    document.getElementById("shopify-form").classList.add("hidden");
+    document.getElementById("shopify-sync-btn").classList.remove("hidden");
+  } catch (e) {
+    document.getElementById("shopify-status").textContent = "Aucune boutique Shopify connectée.";
+  }
+
+  try {
+    const m = await api("/api/v1/integrations/meta-catalog/status");
+    document.getElementById("meta-status").textContent = `Connecté — catalogue ${m.shop_domain} (dernière sync : ${m.last_synced_at ? new Date(m.last_synced_at).toLocaleString() : "jamais"})`;
+    document.getElementById("meta-form").classList.add("hidden");
+    document.getElementById("meta-sync-btn").classList.remove("hidden");
+  } catch (e) {
+    document.getElementById("meta-status").textContent = "Aucun Meta Commerce Catalog connecté.";
+  }
+}
+
+async function connectShopify() {
+  const msg = document.getElementById("shopify-msg");
+  const shop_domain = document.getElementById("shopify-domain").value.trim();
+  const access_token = document.getElementById("shopify-token").value.trim();
+  if (!shop_domain || !access_token) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Domaine et token requis.";
+    return;
+  }
+  try {
+    await api("/api/v1/integrations/shopify/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shop_domain, access_token }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Shopify connecté !";
+    loadIntegrationsStatus();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function syncShopify() {
+  const msg = document.getElementById("shopify-msg");
+  msg.textContent = "Synchronisation en cours…";
+  msg.style.color = "var(--muted)";
+  try {
+    const result = await api("/api/v1/integrations/shopify/sync", { method: "POST" });
+    msg.style.color = "var(--success)";
+    msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour.`;
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function connectMetaCatalog() {
+  const msg = document.getElementById("meta-msg");
+  const catalog_id = document.getElementById("meta-catalog-id").value.trim();
+  const access_token = document.getElementById("meta-token").value.trim();
+  if (!catalog_id || !access_token) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Catalog ID et token requis.";
+    return;
+  }
+  try {
+    await api("/api/v1/integrations/meta-catalog/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalog_id, access_token }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Meta Commerce Catalog connecté !";
+    loadIntegrationsStatus();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function syncMetaCatalog() {
+  const msg = document.getElementById("meta-msg");
+  msg.textContent = "Synchronisation en cours…";
+  msg.style.color = "var(--muted)";
+  try {
+    const result = await api("/api/v1/integrations/meta-catalog/sync", { method: "POST" });
+    msg.style.color = "var(--success)";
+    msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour.`;
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+// ---- Base de connaissances (section 29) ----
+const KNOWLEDGE_CATEGORY_LABELS = {
+  OBJECTION: "Objection", FAQ: "FAQ", HORAIRES: "Horaires", ADRESSE: "Adresse",
+  LIVRAISON: "Livraison", RETOUR: "Retours", GARANTIE: "Garantie",
+  PAIEMENT: "Paiement", CONDITIONS: "Conditions", AUTRE: "Autre",
+};
+
+async function loadKnowledge() {
+  const list = document.getElementById("knowledge-list");
+  list.innerHTML = "<p style='color: var(--muted); font-size: 14px;'>Chargement…</p>";
+  const entries = await api("/api/v1/knowledge");
+  if (!entries.length) {
+    list.innerHTML = "<p style='color: var(--muted); font-size: 14px;'>Aucune entrée pour le moment. Bob n'utilise que ses règles par défaut.</p>";
+    return;
+  }
+  list.innerHTML = entries
+    .map(
+      (e) => `<div class="card" style="margin-bottom: 10px; opacity: ${e.active ? "1" : "0.55"};">
+        <div style="display: flex; justify-content: space-between; align-items: start; gap: 12px;">
+          <div>
+            <span class="badge ACTIVE" style="margin-right: 8px;">${KNOWLEDGE_CATEGORY_LABELS[e.category] || e.category}</span>
+            <strong>${e.title}</strong>
+            <p style="margin: 6px 0 0; font-size: 13px; color: var(--muted); white-space: pre-wrap;">${e.content}</p>
+          </div>
+          <div style="display: flex; gap: 6px; flex-shrink: 0;">
+            <button class="action secondary" onclick="toggleKnowledgeActive('${e.id}', ${!e.active})">${e.active ? "Désactiver" : "Activer"}</button>
+            <button class="action secondary" onclick="deleteKnowledgeEntry('${e.id}')">Supprimer</button>
+          </div>
+        </div>
+      </div>`
+    )
+    .join("");
+}
+
+async function createKnowledgeEntry() {
+  const msg = document.getElementById("knowledge-msg");
+  const payload = {
+    category: document.getElementById("new-knowledge-category").value,
+    title: document.getElementById("new-knowledge-title").value.trim(),
+    content: document.getElementById("new-knowledge-content").value.trim(),
+  };
+  if (!payload.title || !payload.content) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Titre et contenu sont obligatoires.";
+    return;
+  }
+  try {
+    await api("/api/v1/knowledge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Entrée ajoutée — Bob en tiendra compte dès le prochain message.";
+    document.getElementById("new-knowledge-title").value = "";
+    document.getElementById("new-knowledge-content").value = "";
+    loadKnowledge();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function toggleKnowledgeActive(id, newActive) {
+  await api(`/api/v1/knowledge/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ active: newActive }),
+  });
+  loadKnowledge();
+}
+
+async function deleteKnowledgeEntry(id) {
+  if (!confirm("Supprimer définitivement cette entrée ?")) return;
+  await api(`/api/v1/knowledge/${id}`, { method: "DELETE" });
+  loadKnowledge();
+}
+
 async function loadOrders() {
   const rows = document.getElementById("order-rows");
   rows.innerHTML = "<tr><td colspan='4'>Chargement…</td></tr>";
@@ -253,6 +612,105 @@ async function loadOrders() {
 }
 
 if (token) enterApp();
+
+// ---- Embedded Signup (section 59.2/59.6) ----
+let fbSdkLoaded = false;
+let waSessionInfo = null; // capturé via postMessage, contient waba_id/phone_number_id
+
+function loadFacebookSdk(appId, graphVersion) {
+  if (fbSdkLoaded) return;
+  fbSdkLoaded = true;
+  window.fbAsyncInit = function () {
+    FB.init({ appId, cookie: true, xfbml: true, version: graphVersion });
+  };
+  const script = document.createElement("script");
+  script.src = "https://connect.facebook.net/fr_FR/sdk.js";
+  script.async = true;
+  script.defer = true;
+  script.crossOrigin = "anonymous";
+  document.body.appendChild(script);
+}
+
+window.addEventListener("message", (event) => {
+  if (!event.origin.endsWith("facebook.com")) return;
+  try {
+    const data = JSON.parse(event.data);
+    if (data.type === "WA_EMBEDDED_SIGNUP" && data.event === "FINISH") {
+      waSessionInfo = data.data; // { waba_id, phone_number_id, business_id? }
+    }
+  } catch (e) {
+    // message non-JSON, ignoré (autres événements Facebook sans rapport)
+  }
+});
+
+async function loadWhatsAppStatus() {
+  const statusEl = document.getElementById("whatsapp-status");
+  const btn = document.getElementById("btn-connect-whatsapp");
+  try {
+    const account = await api("/api/v1/whatsapp/account");
+    statusEl.textContent = `Connecté — numéro ${account.phone_number_id}, statut du nom : ${account.display_name_status}`;
+    btn.textContent = "Déjà connecté";
+    btn.disabled = true;
+  } catch (e) {
+    statusEl.textContent = "Aucun compte WhatsApp connecté pour le moment.";
+    btn.textContent = "Connecter WhatsApp";
+    btn.disabled = false;
+  }
+
+  try {
+    const config = await fetch(API_BASE + "/api/v1/whatsapp/embedded-signup/config").then((r) => r.json());
+    if (config.app_id) loadFacebookSdk(config.app_id, config.graph_api_version || "v21.0");
+  } catch (e) {}
+}
+
+function connectWhatsApp() {
+  if (typeof FB === "undefined") {
+    alert("Le SDK Facebook n'est pas encore chargé, réessayez dans quelques secondes.");
+    return;
+  }
+  fetch(API_BASE + "/api/v1/whatsapp/embedded-signup/config")
+    .then((r) => r.json())
+    .then((config) => {
+      FB.login(
+        (response) => {
+          if (response.authResponse && response.authResponse.code) {
+            finishEmbeddedSignup(response.authResponse.code);
+          } else {
+            alert("Connexion WhatsApp annulée ou refusée.");
+          }
+        },
+        {
+          config_id: config.login_config_id,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+        }
+      );
+    });
+}
+
+async function finishEmbeddedSignup(code) {
+  if (!waSessionInfo || !waSessionInfo.waba_id || !waSessionInfo.phone_number_id) {
+    alert("Informations WhatsApp incomplètes reçues de Meta, réessayez.");
+    return;
+  }
+  try {
+    await api("/api/v1/whatsapp/embedded-signup/callback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        code,
+        waba_id: waSessionInfo.waba_id,
+        phone_number_id: waSessionInfo.phone_number_id,
+        business_id: waSessionInfo.business_id || null,
+      }),
+    });
+    alert("WhatsApp connecté avec succès !");
+    loadWhatsAppStatus();
+  } catch (e) {
+    alert("Erreur lors de la connexion WhatsApp : " + e.message);
+  }
+}
 </script>
 </body>
 </html>

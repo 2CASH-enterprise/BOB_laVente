@@ -95,6 +95,44 @@ async def test_handoff_tool_changes_conversation_status_via_orchestrator(db_sess
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_injects_active_knowledge_into_system_prompt(db_session, unique_email):
+    """L'agent doit réellement s'appuyer sur la base de connaissances active (section 29)."""
+    from app.models.knowledge_entry import KnowledgeCategory, KnowledgeEntry
+
+    tenant, product, conversation = await _setup(db_session, unique_email)
+    db_session.add(
+        KnowledgeEntry(
+            tenant_id=tenant.id,
+            category=KnowledgeCategory.OBJECTION,
+            title="Trop cher",
+            content="Mettre en avant la garantie 2 ans incluse.",
+            active=True,
+        )
+    )
+    db_session.add(
+        KnowledgeEntry(
+            tenant_id=tenant.id,
+            category=KnowledgeCategory.FAQ,
+            title="Entrée désactivée",
+            content="NE DOIT JAMAIS APPARAÎTRE",
+            active=False,
+        )
+    )
+    await db_session.commit()
+
+    fake = FakeLLMClient([text_response("Réponse")])
+    await generate_ai_reply(
+        db=db_session, tenant=tenant, conversation=conversation, history=[], incoming_text="C'est trop cher", llm_client=fake
+    )
+
+    system_prompt_used = fake.received_systems[0]
+    assert "BASE DE CONNAISSANCES" in system_prompt_used
+    assert "Trop cher" in system_prompt_used
+    assert "garantie 2 ans" in system_prompt_used
+    assert "NE DOIT JAMAIS APPARAÎTRE" not in system_prompt_used
+
+
+@pytest.mark.asyncio
 async def test_conversation_history_passed_to_llm(db_session, unique_email):
     tenant, product, conversation = await _setup(db_session, unique_email)
     fake = FakeLLMClient([text_response("D'accord.")])

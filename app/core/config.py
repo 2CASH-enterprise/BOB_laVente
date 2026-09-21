@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     whatsapp_app_secret: str = ""
     whatsapp_webhook_verify_token: str = ""
     whatsapp_graph_api_version: str = "v25.0"
+    whatsapp_login_config_id: str = ""  # section 59.6 — config "Facebook Login for Business"
 
     # Commission B2B (section 53) — bornes strictes, jamais dépassées côté code
     commission_floor_pct: float = 0.0
