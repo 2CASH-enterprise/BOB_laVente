@@ -11,7 +11,10 @@ class Product(Base):
     """Section 4 (schéma products) et 14-17 (outils recherche/stock/prix)."""
 
     __tablename__ = "products"
-    __table_args__ = (UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),
+        UniqueConstraint("tenant_id", "external_source", "external_id", name="uq_products_tenant_external"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -27,6 +30,10 @@ class Product(Base):
     category_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("categories.id"))
     image_url: Mapped[str | None] = mapped_column(String(1000))
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Traçabilité d'origine (section 25) — NULL pour un produit saisi manuellement ou importé en CSV.
+    external_source: Mapped[str | None] = mapped_column(String(32))  # ex. "SHOPIFY"
+    external_id: Mapped[str | None] = mapped_column(String(128))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -12,6 +12,16 @@ class ProductRepository(TenantScopedRepository[Product]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_external_id(self, tenant_id, external_source: str, external_id: str) -> Product | None:
+        """Utilisé pour l'upsert lors d'une synchronisation externe (section 25) — SKU non fiable."""
+        stmt = select(Product).where(
+            Product.tenant_id == tenant_id,
+            Product.external_source == external_source,
+            Product.external_id == external_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def search(
         self,
         tenant_id,
