@@ -2,31 +2,64 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bob — Dashboard</title>
 <style>
   :root {
     --bg: #F4FAF6; --panel: #FFFFFF; --border: #DCEBE1; --text: #14261C;
     --muted: #6C8277; --accent: #1B4332; --accent-light: #52B788; --accent-soft: #DFF3E8;
     --success: #2D8A5E; --warning: #C98A2E; --danger: #C1443C;
+    --topbar-h: 56px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  html { -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font-family: inherit; }
+  ::selection { background: var(--accent-light); color: #0E2318; }
+
+  /* ---- Barre du haut (mobile uniquement) ---- */
+  .topbar {
+    display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+    height: calc(var(--topbar-h) + var(--safe-top)); padding-top: var(--safe-top);
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    align-items: center; gap: 12px; padding-left: 16px; padding-right: 16px;
+    box-shadow: 0 1px 3px rgba(27, 67, 50, 0.06);
+  }
+  .topbar .hamburger { background: none; border: none; padding: 6px; margin: -6px; cursor: pointer; color: var(--accent); border-radius: 8px; display: flex; }
+  .topbar .hamburger:active { background: var(--accent-soft); }
+  .topbar .topbar-title { font-weight: 700; font-size: 15px; color: var(--accent); }
+  .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(10, 20, 15, 0.45); z-index: 55; opacity: 0; transition: opacity 0.2s ease; }
+  .sidebar-backdrop.visible { display: block; opacity: 1; }
+
+  /* ---- Structure principale ---- */
   #app { display: flex; min-height: 100vh; align-items: stretch; }
-  .sidebar { width: 240px; flex-shrink: 0; background: var(--accent); color: #CDEADA; display: flex; flex-direction: column; padding: 22px 14px; position: sticky; top: 0; height: 100vh; }
-  .sidebar-logo { font-size: 18px; font-weight: 700; color: white; padding: 0 10px; margin-bottom: 28px; letter-spacing: -0.01em; }
+  .sidebar {
+    width: 240px; flex-shrink: 0; background: var(--accent); color: #CDEADA;
+    display: flex; flex-direction: column; padding: 22px 14px; position: sticky; top: 0; height: 100vh;
+    transition: transform 0.25s ease;
+  }
+  .sidebar-logo { font-size: 18px; font-weight: 700; color: white; padding: 0 10px; margin-bottom: 28px; letter-spacing: -0.01em; display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-close { display: none; background: none; border: none; color: #CDEADA; font-size: 18px; cursor: pointer; padding: 4px; }
   .sidebar nav { display: flex; flex-direction: column; gap: 3px; }
-  .sidebar nav button { display: flex; align-items: center; gap: 11px; background: none; border: none; color: #CDEADA; padding: 11px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500; text-align: left; width: 100%; }
+  .sidebar nav button { display: flex; align-items: center; gap: 11px; background: none; border: none; color: #CDEADA; padding: 11px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500; text-align: left; width: 100%; transition: background 0.15s ease, color 0.15s ease; }
   .sidebar nav button span { font-size: 15px; width: 18px; text-align: center; }
   .sidebar nav button:hover { background: rgba(255, 255, 255, 0.08); color: white; }
   .sidebar nav button.active { background: var(--accent-light); color: #0E2318; font-weight: 700; }
   .sidebar-tenant { margin-top: auto; padding: 12px 10px 4px; font-size: 12px; color: #A9CBBB; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+  .sidebar-logout { background: none; border: none; color: #A9CBBB; font-size: 12px; text-align: left; padding: 8px 10px; cursor: pointer; width: 100%; border-radius: 8px; }
+  .sidebar-logout:hover { background: rgba(255, 255, 255, 0.06); color: white; }
   main { flex: 1; min-width: 0; padding: 28px 32px; max-width: 1000px; }
+
+  /* ---- Cartes / grille ---- */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: 0 1px 2px rgba(27, 67, 50, 0.04); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: 0 1px 2px rgba(27, 67, 50, 0.04); transition: box-shadow 0.15s ease; }
   .card .icon { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 16px; margin-bottom: 10px; }
-  .card .value { font-size: 25px; font-weight: 700; color: var(--text); }
+  .card .value { font-size: 25px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
   .card .label { color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+  /* ---- Tableaux (version bureau) ---- */
   table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(27, 67, 50, 0.04); }
   th, td { text-align: left; padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 14px; line-height: 1.4; vertical-align: middle; }
   th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--accent-soft); }
@@ -34,26 +67,31 @@
   tr:last-child td { border-bottom: none; }
   tr.clickable { cursor: pointer; }
   tr.clickable:hover { background: var(--accent-soft); }
-  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .badge.ACTIVE { background: #DFF3E8; color: var(--success); }
   .badge.WAITING_HUMAN { background: #FBEFDB; color: var(--warning); }
   .badge.CLOSED { background: #EDF2EF; color: var(--muted); }
   .badge.PENDING { background: #FBEFDB; color: var(--warning); }
   .badge.PAID { background: #DFF3E8; color: var(--success); }
   .badge.CANCELLED { background: #FBE4E2; color: var(--danger); }
-  button.action { background: var(--accent); border: none; color: white; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+
+  button.action { background: var(--accent); border: none; color: white; padding: 9px 15px; border-radius: 9px; cursor: pointer; font-size: 13px; font-weight: 600; transition: background 0.15s ease, transform 0.1s ease; }
   button.action:hover { background: #16382A; }
+  button.action:active { transform: scale(0.97); }
   button.action.secondary { background: var(--accent-soft); color: var(--accent); }
   button.action.secondary:hover { background: #CDEADA; }
-  button.action:disabled { background: var(--border); color: var(--muted); cursor: default; }
+  button.action:disabled { background: var(--border); color: var(--muted); cursor: default; transform: none; }
+
   #login-screen { max-width: 360px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 16px rgba(27, 67, 50, 0.06); }
   #login-screen h2 { color: var(--accent); margin-top: 0; }
   #login-screen input { width: 100%; padding: 11px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 14px; }
   #login-screen input:focus { outline: none; border-color: var(--accent-light); }
-  #login-screen button { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  #login-screen button { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.15s ease; }
   #login-screen button:hover { background: #16382A; }
   #login-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
-  .msg { padding: 9px 13px; margin-bottom: 6px; border-radius: 10px; font-size: 14px; max-width: 70%; }
+
+  .msg { padding: 9px 13px; margin-bottom: 6px; border-radius: 10px; font-size: 14px; max-width: 85%; }
   .msg.CUSTOMER { background: var(--bg); border: 1px solid var(--border); }
   .msg.AI { background: var(--accent-soft); margin-left: auto; color: #123524; }
   .msg.HUMAN { background: var(--accent-soft); margin-left: auto; border: 1px solid var(--accent-light); color: #123524; }
@@ -61,9 +99,46 @@
   #conv-detail { display: none; }
   a.back { color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 500; }
   .hidden { display: none !important; }
-  .input { width: 100%; padding: 9px 11px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 13px; }
+  .input { width: 100%; padding: 9px 11px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 13px; transition: border-color 0.15s ease; }
   .input:focus { outline: none; border-color: var(--accent-light); }
   textarea.input { font-family: inherit; }
+
+  .loading-text { color: var(--muted); font-size: 14px; padding: 18px; text-align: center; }
+  .loading-text::after { content: "…"; }
+
+  /* ==================== MOBILE ==================== */
+  @media (max-width: 860px) {
+    .topbar { display: flex; }
+    .sidebar-backdrop { }
+    .sidebar {
+      position: fixed; top: 0; left: 0; z-index: 65; height: 100dvh;
+      padding-top: calc(22px + var(--safe-top)); padding-bottom: calc(14px + var(--safe-bottom));
+      transform: translateX(-100%); box-shadow: 8px 0 32px rgba(0, 0, 0, 0.2);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-close { display: block; }
+    main { padding: 16px; padding-top: calc(var(--topbar-h) + var(--safe-top) + 16px); max-width: 100%; }
+    .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+
+    /* Tableaux -> cartes empilées sur petit écran */
+    table, thead, tbody, th, td, tr { display: block; }
+    table { background: none; border: none; box-shadow: none; border-radius: 0; }
+    thead { display: none; }
+    tbody tr { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; padding: 4px 14px; box-shadow: 0 1px 2px rgba(27, 67, 50, 0.04); }
+    tbody tr:nth-child(even) { background: var(--panel); }
+    td { border: none; padding: 9px 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
+    td:not(:last-child) { border-bottom: 1px solid var(--bg); }
+    td[data-label]::before { content: attr(data-label); font-weight: 600; color: var(--muted); font-size: 12px; flex-shrink: 0; }
+    td:not([data-label]) { justify-content: flex-start; }
+    /* Les lignes de panneaux dépliables (colspan) restent pleine largeur, sans label */
+    tr[id^="upsell-row-"] td, tr[id^="delivery-row-"] td { display: block; padding: 8px 0; }
+    tr[id^="upsell-row-"], tr[id^="delivery-row-"] { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin-top: -6px; margin-bottom: 10px; }
+  }
+
+  @media (max-width: 480px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    #login-screen { margin: 60px 16px; padding: 24px; }
+  }
 </style>
 </head>
 <body>
@@ -77,19 +152,29 @@
 </div>
 
 <div id="app" class="hidden">
-  <aside class="sidebar">
-    <div class="sidebar-logo">🤖 Bob</div>
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <span class="topbar-title" id="topbar-title">Vue d'ensemble</span>
+  </div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <span>🤖 Bob</span>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="Fermer">✕</button>
+    </div>
     <nav>
-      <button class="active" data-tab="overview" onclick="showTab('overview')"><span>📊</span> Vue d'ensemble</button>
-      <button data-tab="conversations" onclick="showTab('conversations')"><span>💬</span> Conversations</button>
-      <button data-tab="products" onclick="showTab('products')"><span>📦</span> Produits</button>
-      <button data-tab="orders" onclick="showTab('orders')"><span>🧾</span> Commandes</button>
-      <button data-tab="integrations" onclick="showTab('integrations')"><span>🔌</span> Intégrations</button>
-      <button data-tab="knowledge" onclick="showTab('knowledge')"><span>📚</span> Base de connaissances</button>
-      <button data-tab="settings" onclick="showTab('settings')"><span>⚙️</span> Paramètres</button>
+      <button class="active" data-tab="overview" data-label="Vue d'ensemble" onclick="showTab('overview')"><span>📊</span> Vue d'ensemble</button>
+      <button data-tab="conversations" data-label="Conversations" onclick="showTab('conversations')"><span>💬</span> Conversations</button>
+      <button data-tab="products" data-label="Produits" onclick="showTab('products')"><span>📦</span> Produits</button>
+      <button data-tab="orders" data-label="Commandes" onclick="showTab('orders')"><span>🧾</span> Commandes</button>
+      <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span>🔌</span> Intégrations</button>
+      <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span>📚</span> Base de connaissances</button>
+      <button data-tab="settings" data-label="Paramètres" onclick="showTab('settings')"><span>⚙️</span> Paramètres</button>
     </nav>
     <div class="sidebar-tenant" id="tenant-tag"></div>
-    <button onclick="logout()" style="background: none; border: none; color: #A9CBBB; font-size: 12px; text-align: left; padding: 8px 10px; cursor: pointer;">↪ Déconnexion</button>
+    <button class="sidebar-logout" onclick="logout()">↪ Déconnexion</button>
   </aside>
   <main>
     <section id="tab-overview">
@@ -318,8 +403,21 @@ function enterApp() {
   loadOverview();
 }
 
+function toggleSidebar() {
+  document.getElementById("sidebar").classList.toggle("open");
+  document.getElementById("sidebar-backdrop").classList.toggle("visible");
+}
+
+function closeSidebar() {
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sidebar-backdrop").classList.remove("visible");
+}
+
 function showTab(name) {
+  const activeBtn = [...document.querySelectorAll("nav button")].find((b) => b.dataset.tab === name);
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  document.getElementById("topbar-title").textContent = activeBtn ? activeBtn.dataset.label : "Bob";
+  closeSidebar();
   ["overview", "conversations", "products", "orders", "integrations", "knowledge", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
@@ -357,14 +455,14 @@ async function loadConversations() {
   document.getElementById("conv-list").style.display = "block";
   document.getElementById("conv-detail").style.display = "none";
   const rows = document.getElementById("conv-rows");
-  rows.innerHTML = "<tr><td colspan='3'>Chargement…</td></tr>";
+  rows.innerHTML = "<tr><td class='loading-text' colspan='3'>Chargement</td></tr>";
   const conversations = await api("/api/v1/conversations");
   rows.innerHTML = conversations
     .map(
       (c) => `<tr class="clickable" onclick="openConversation('${c.id}')">
-        <td>${c.customer_id.slice(0, 8)}…</td>
-        <td><span class="badge ${c.status}">${c.status}</span></td>
-        <td>${c.last_message_at ? new Date(c.last_message_at).toLocaleString() : "—"}</td>
+        <td data-label="Client">${c.customer_id.slice(0, 8)}…</td>
+        <td data-label="Statut"><span class="badge ${c.status}">${c.status}</span></td>
+        <td data-label="Dernier message">${c.last_message_at ? new Date(c.last_message_at).toLocaleString() : "—"}</td>
       </tr>`
     )
     .join("") || "<tr><td colspan='3'>Aucune conversation</td></tr>";
@@ -401,14 +499,14 @@ let allProducts = [];
 
 async function loadProducts() {
   const rows = document.getElementById("product-rows");
-  rows.innerHTML = "<tr><td colspan='6'>Chargement…</td></tr>";
+  rows.innerHTML = "<tr><td class='loading-text' colspan='6'>Chargement</td></tr>";
   allProducts = await api("/api/v1/products");
   rows.innerHTML = allProducts
     .map(
       (p) => `<tr>
-        <td>${p.name}</td><td>${p.sku}</td><td>${Number(p.price).toLocaleString()} ${p.currency}</td>
-        <td>${p.stock_quantity}</td><td>${p.active ? "✅" : "❌"}</td>
-        <td><button class="action secondary" onclick="toggleUpsellPanel('${p.id}')">Gérer</button></td>
+        <td data-label="Nom">${p.name}</td><td data-label="SKU">${p.sku}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${p.currency}</td>
+        <td data-label="Stock">${p.stock_quantity}</td><td data-label="Actif">${p.active ? "✅" : "❌"}</td>
+        <td data-label="Upsell"><button class="action secondary" onclick="toggleUpsellPanel('${p.id}')">Gérer</button></td>
       </tr>
       <tr id="upsell-row-${p.id}" class="hidden"><td colspan="6"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
     )
@@ -781,16 +879,16 @@ const DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PICKED_UP", "IN_TRANSIT", "D
 
 async function loadOrders() {
   const rows = document.getElementById("order-rows");
-  rows.innerHTML = "<tr><td colspan='5'>Chargement…</td></tr>";
+  rows.innerHTML = "<tr><td class='loading-text' colspan='5'>Chargement</td></tr>";
   const orders = await api("/api/v1/orders");
   rows.innerHTML = orders
     .map(
       (o) => `<tr>
-        <td>${o.id.slice(0, 8)}…</td>
-        <td><span class="badge ${o.status}">${o.status}</span></td>
-        <td>${Number(o.total_amount).toLocaleString()} ${o.currency}</td>
-        <td>${o.created_by === "IA" ? "Bob (IA)" : o.created_by.slice(0, 8) + "…"}</td>
-        <td><button class="action secondary" onclick="toggleDeliveryPanel('${o.id}')">Gérer</button></td>
+        <td data-label="Commande">${o.id.slice(0, 8)}…</td>
+        <td data-label="Statut"><span class="badge ${o.status}">${o.status}</span></td>
+        <td data-label="Total">${Number(o.total_amount).toLocaleString()} ${o.currency}</td>
+        <td data-label="Créée par">${o.created_by === "IA" ? "Bob (IA)" : o.created_by.slice(0, 8) + "…"}</td>
+        <td data-label="Livraison"><button class="action secondary" onclick="toggleDeliveryPanel('${o.id}')">Gérer</button></td>
       </tr>
       <tr id="delivery-row-${o.id}" class="hidden"><td colspan="5"><div id="delivery-panel-${o.id}" style="padding: 10px 0;"></div></td></tr>`
     )

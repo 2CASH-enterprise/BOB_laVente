@@ -10,6 +10,7 @@ from app.api.catalog.complements import router as complements_router
 from app.api.catalog.import_ import router as catalog_import_router
 from app.api.catalog.products import router as products_router
 from app.api.conversations.routes import router as conversations_router
+from app.api.demo.routes import router as demo_router
 from app.api.integrations.meta_catalog import router as meta_catalog_router
 from app.api.integrations.shopify import router as shopify_router
 from app.api.knowledge.routes import router as knowledge_router
@@ -46,6 +47,7 @@ app.include_router(analytics_router)
 app.include_router(shopify_router)
 app.include_router(meta_catalog_router)
 app.include_router(knowledge_router)
+app.include_router(demo_router)
 
 _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():
@@ -54,6 +56,10 @@ if _static_dir.exists():
 _legal_dir = Path(__file__).parent / "static" / "legal"
 if _legal_dir.exists():
     app.mount("/legal", StaticFiles(directory=str(_legal_dir), html=True), name="legal")
+
+_demo_dir = Path(__file__).parent / "static" / "instant-demo"
+if _demo_dir.exists():
+    app.mount("/demo", StaticFiles(directory=str(_demo_dir), html=True), name="instant-demo")
 
 
 @app.get("/health", tags=["system"])

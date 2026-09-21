@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Testez votre vendeur IA — Bob</title>
+<style>
+  :root {
+    --bg: #F4FAF6; --panel: #FFFFFF; --border: #DCEBE1; --text: #14261C;
+    --muted: #6C8277; --accent: #1B4332; --accent-light: #52B788; --accent-soft: #DFF3E8;
+    --success: #2D8A5E; --danger: #C1443C;
+    --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 480px; margin: 0 auto; min-height: 100vh; background: var(--panel); box-shadow: 0 0 40px rgba(27,67,50,0.06); position: relative; }
+
+  /* ---- Écran d'accueil / formulaire ---- */
+  #setup-screen { padding: 32px 24px calc(32px + var(--safe-bottom)); padding-top: calc(32px + var(--safe-top)); }
+  .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px; margin-bottom: 16px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 0 0 8px; color: var(--accent); letter-spacing: -0.01em; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; line-height: 1.5; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .input { width: 100%; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 10px; font-size: 15px; }
+  .input:focus { outline: none; border-color: var(--accent-light); }
+  .dropzone { border: 2px dashed var(--border); border-radius: 14px; padding: 28px 16px; text-align: center; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent-light); background: var(--accent-soft); }
+  .dropzone .icon { font-size: 30px; margin-bottom: 8px; }
+  .dropzone .filename { font-size: 13px; color: var(--accent); font-weight: 600; margin-top: 6px; }
+  .dropzone .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  button.cta { width: 100%; padding: 15px; background: var(--accent); border: none; color: white; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 15px; margin-top: 8px; transition: background 0.15s ease, transform 0.1s ease; }
+  button.cta:hover { background: #16382A; }
+  button.cta:active { transform: scale(0.98); }
+  button.cta:disabled { background: var(--border); color: var(--muted); cursor: default; }
+  #setup-error { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 16px; }
+  .sample-link { display: block; text-align: center; margin-top: 14px; font-size: 13px; color: var(--accent); text-decoration: none; }
+
+  /* ---- Écran de résultat d'import ---- */
+  #import-result { display: none; text-align: center; padding: 40px 24px; }
+  #import-result .check { font-size: 44px; margin-bottom: 12px; }
+  #import-result h2 { color: var(--accent); margin-bottom: 4px; }
+  #import-result .stats { display: flex; justify-content: center; gap: 20px; margin: 20px 0; }
+  #import-result .stat-value { font-size: 22px; font-weight: 800; color: var(--accent); }
+  #import-result .stat-label { font-size: 11px; color: var(--muted); }
+
+  /* ---- Chat ---- */
+  #chat-screen { display: none; flex-direction: column; height: 100vh; }
+  .chat-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; padding-top: calc(14px + var(--safe-top)); background: var(--accent); color: white; }
+  .chat-header .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-light); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .chat-header .titles { flex: 1; min-width: 0; }
+  .chat-header .name { font-weight: 700; font-size: 14px; }
+  .chat-header .status { font-size: 11px; color: #CDEADA; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: #ECF6EF; }
+  .bubble { max-width: 82%; padding: 9px 13px; border-radius: 14px; font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
+  .bubble.customer { align-self: flex-end; background: var(--accent-light); color: #0E2318; border-bottom-right-radius: 4px; }
+  .bubble.ai { align-self: flex-start; background: white; color: var(--text); border-bottom-left-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+  .bubble.typing { align-self: flex-start; background: white; color: var(--muted); font-style: italic; }
+  .scenarios { padding: 10px 12px; background: var(--panel); border-top: 1px solid var(--border); overflow-x: auto; white-space: nowrap; }
+  .scenarios::-webkit-scrollbar { display: none; }
+  .scenario-btn { display: inline-block; background: var(--accent-soft); color: var(--accent); border: none; padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; margin-right: 6px; cursor: pointer; white-space: nowrap; }
+  .scenario-btn:hover { background: #CDEADA; }
+  .chat-input-row { display: flex; gap: 8px; padding: 10px 12px calc(10px + var(--safe-bottom)); background: var(--panel); border-top: 1px solid var(--border); }
+  .chat-input-row input { flex: 1; padding: 11px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); font-size: 14px; }
+  .chat-input-row input:focus { outline: none; border-color: var(--accent-light); }
+  .chat-input-row button { background: var(--accent); border: none; color: white; width: 42px; height: 42px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .chat-input-row button:disabled { background: var(--border); }
+
+  .whatsapp-cta { margin: 12px; padding: 16px; background: var(--accent-soft); border-radius: 14px; text-align: center; }
+  .whatsapp-cta p { font-size: 13px; color: var(--text); margin: 0 0 10px; }
+  .whatsapp-cta a { display: inline-block; background: var(--accent); color: white; text-decoration: none; padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div id="setup-screen">
+    <div class="hero-badge">⚡ Prêt en 30 secondes</div>
+    <h1>Testez votre propre vendeur IA WhatsApp</h1>
+    <p class="subtitle">Importez votre catalogue, et discutez immédiatement avec votre agent — avec vos vrais produits, vos vrais prix, votre vrai stock.</p>
+
+    <div class="field">
+      <label>Nom de votre entreprise</label>
+      <input id="company-name" class="input" placeholder="Ex. Boutique ABC">
+    </div>
+
+    <div class="field">
+      <label>Devise</label>
+      <select id="currency" class="input">
+        <option value="XOF">FCFA (XOF)</option>
+        <option value="EUR">Euro (EUR)</option>
+        <option value="USD">Dollar (USD)</option>
+        <option value="MAD">Dirham (MAD)</option>
+        <option value="GHS">Cedi (GHS)</option>
+        <option value="NGN">Naira (NGN)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Votre catalogue (CSV ou export Excel enregistré en CSV)</label>
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+        <div class="icon">📁</div>
+        <div>Déposez votre fichier ici, ou cliquez pour choisir</div>
+        <div class="hint">Nom/Produit, Prix, Stock, Description — n'importe quel format, on s'adapte</div>
+        <div class="filename" id="filename-display"></div>
+      </div>
+      <input type="file" id="file-input" accept=".csv" class="hidden">
+    </div>
+
+    <button class="cta" id="create-btn" onclick="createDemo()">Créer mon vendeur IA</button>
+    <div id="setup-error"></div>
+    <a class="sample-link" onclick="useSampleCatalog(event)" href="#">Pas de fichier sous la main ? Essayer avec un catalogue d'exemple</a>
+  </div>
+
+  <div id="import-result">
+    <div class="check">✅</div>
+    <h2>Votre vendeur IA est prêt !</h2>
+    <div class="stats">
+      <div><div class="stat-value" id="stat-imported">0</div><div class="stat-label">PRODUITS IMPORTÉS</div></div>
+      <div><div class="stat-value" id="stat-available">0</div><div class="stat-label">DISPONIBLES</div></div>
+    </div>
+    <button class="cta" onclick="startChat()">Discuter avec mon agent →</button>
+  </div>
+
+  <div id="chat-screen">
+    <div class="chat-header">
+      <div class="avatar">🤖</div>
+      <div class="titles">
+        <div class="name" id="chat-company-name">Votre entreprise</div>
+        <div class="status">● Vendeur IA en ligne</div>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="scenarios" id="scenarios">
+      <button class="scenario-btn" onclick="sendScenario('Bonjour, je cherche un produit, vous pouvez m\'aider ?')">🔍 Recherche produit</button>
+      <button class="scenario-btn" onclick="sendScenario('C\'est trop cher, vous pouvez faire un effort ?')">💬 Objection prix</button>
+      <button class="scenario-btn" onclick="sendScenario('Vous en avez encore en stock ?')">📦 Stock</button>
+      <button class="scenario-btn" onclick="sendScenario('Qu\'est-ce que vous avez d\'autre à me proposer avec ça ?')">✨ Upsell</button>
+      <button class="scenario-btn" onclick="sendScenario('Je le prends, comment on fait ?')">🛒 Commande</button>
+    </div>
+    <div class="whatsapp-cta" id="whatsapp-cta">
+      <p>Convaincu ? Passez à l'étape suivante avec votre vrai numéro WhatsApp.</p>
+      <a href="mailto:contact@agenc-ai.com?subject=Connecter%20mon%20WhatsApp%20à%20Bob">Connecter mon WhatsApp</a>
+    </div>
+    <div class="chat-input-row">
+      <input id="chat-input" placeholder="Écrivez comme le ferait un client…" onkeydown="if(event.key==='Enter') sendMessage()">
+      <button onclick="sendMessage()" aria-label="Envoyer">➤</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Calcule le préfixe réel sous lequel l'app est servie (ex. "/bob" via nginx).
+const API_BASE = window.location.pathname.replace(/\/demo\/?.*$/, "");
+
+let selectedFile = null;
+let demoToken = null;
+
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("file-input");
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) {
+    selectedFile = fileInput.files[0];
+    document.getElementById("filename-display").textContent = "✓ " + selectedFile.name;
+  }
+});
+
+["dragover", "dragenter"].forEach((evt) =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add("dragover"); })
+);
+["dragleave", "drop"].forEach((evt) =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); })
+);
+dropzone.addEventListener("drop", (e) => {
+  if (e.dataTransfer.files.length) {
+    selectedFile = e.dataTransfer.files[0];
+    document.getElementById("filename-display").textContent = "✓ " + selectedFile.name;
+  }
+});
+
+function useSampleCatalog(e) {
+  e.preventDefault();
+  const sample = `Nom,Prix,Description,Stock
+iPhone 15,450000,128 Go neuf sous blister,5
+Samsung A56,280000,256 Go double SIM,12
+AirPods Pro,150000,Réduction de bruit active,8
+Chargeur rapide 20W,12000,Compatible tous smartphones,25
+Coque silicone,8000,Plusieurs coloris disponibles,40`;
+  selectedFile = new File([sample], "catalogue-exemple.csv", { type: "text/csv" });
+  document.getElementById("filename-display").textContent = "✓ catalogue-exemple.csv";
+  if (!document.getElementById("company-name").value) {
+    document.getElementById("company-name").value = "Boutique Exemple";
+  }
+}
+
+async function createDemo() {
+  const errorEl = document.getElementById("setup-error");
+  const btn = document.getElementById("create-btn");
+  errorEl.textContent = "";
+
+  const companyName = document.getElementById("company-name").value.trim();
+  const currency = document.getElementById("currency").value;
+
+  if (!companyName) { errorEl.textContent = "Indiquez le nom de votre entreprise."; return; }
+  if (!selectedFile) { errorEl.textContent = "Choisissez un fichier catalogue (ou essayez l'exemple)."; return; }
+
+  btn.disabled = true;
+  btn.textContent = "Création en cours…";
+
+  const formData = new FormData();
+  formData.append("company_name", companyName);
+  formData.append("currency", currency);
+  formData.append("file", selectedFile);
+
+  try {
+    const res = await fetch(API_BASE + "/api/v1/demo/create", { method: "POST", body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Échec de la création");
+    }
+    const data = await res.json();
+    demoToken = data.demo_token;
+
+    document.getElementById("stat-imported").textContent = data.imported + data.updated;
+    document.getElementById("stat-available").textContent = data.available;
+    document.getElementById("chat-company-name").textContent = companyName;
+
+    document.getElementById("setup-screen").classList.add("hidden");
+    document.getElementById("import-result").style.display = "block";
+  } catch (e) {
+    errorEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Créer mon vendeur IA";
+  }
+}
+
+function startChat() {
+  document.getElementById("import-result").style.display = "none";
+  document.getElementById("chat-screen").style.display = "flex";
+  addBubble("ai", "Bonjour 👋 Comment puis-je vous aider aujourd'hui ?");
+}
+
+function addBubble(role, text) {
+  const messages = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = "bubble " + role;
+  div.textContent = text;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+  return div;
+}
+
+function sendScenario(text) {
+  document.getElementById("chat-input").value = text;
+  sendMessage();
+}
+
+async function sendMessage() {
+  const input = document.getElementById("chat-input");
+  const text = input.value.trim();
+  if (!text || !demoToken) return;
+  input.value = "";
+
+  addBubble("customer", text);
+  const typing = addBubble("typing", "Bob écrit…");
+
+  try {
+    const res = await fetch(API_BASE + "/api/v1/demo/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + demoToken },
+      body: JSON.stringify({ message: text }),
+    });
+    typing.remove();
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      addBubble("ai", "Erreur : " + (err.detail || "réessayez."));
+      return;
+    }
+    const data = await res.json();
+    addBubble("ai", data.reply);
+  } catch (e) {
+    typing.remove();
+    addBubble("ai", "Connexion interrompue, réessayez.");
+  }
+}
+</script>
+</body>
+</html>
