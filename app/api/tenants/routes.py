@@ -196,3 +196,58 @@ async def update_followup_settings(
     await db.commit()
     await db.refresh(settings)
     return settings
+
+
+class NegotiationSettingsResp(BaseModel):
+    enabled: bool
+    max_discount_pct: float
+    max_rounds: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NegotiationSettingsReq(BaseModel):
+    enabled: bool | None = None
+    max_discount_pct: float | None = None
+    max_rounds: int | None = None
+
+
+@router.get("/me/negotiation-settings", response_model=NegotiationSettingsResp)
+async def get_negotiation_settings(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.negotiation_settings import TenantNegotiationSettings
+
+    stmt = select(TenantNegotiationSettings).where(TenantNegotiationSettings.tenant_id == current_user.tenant_id)
+    settings = (await db.execute(stmt)).scalar_one_or_none()
+    if settings is None:
+        settings = TenantNegotiationSettings(tenant_id=current_user.tenant_id)
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return settings
+
+
+@router.put(
+    "/me/negotiation-settings", response_model=NegotiationSettingsResp, dependencies=[Depends(require_role("ADMIN"))]
+)
+async def update_negotiation_settings(
+    payload: NegotiationSettingsReq,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.negotiation_settings import TenantNegotiationSettings
+
+    stmt = select(TenantNegotiationSettings).where(TenantNegotiationSettings.tenant_id == current_user.tenant_id)
+    settings = (await db.execute(stmt)).scalar_one_or_none()
+    if settings is None:
+        settings = TenantNegotiationSettings(tenant_id=current_user.tenant_id)
+        db.add(settings)
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(settings, field, value)
+
+    await db.commit()
+    await db.refresh(settings)
+    return settings

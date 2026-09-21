@@ -12,6 +12,8 @@ from app.models.ecommerce_connection import EcommerceConnection  # noqa: F401
 from app.models.knowledge_entry import KnowledgeEntry  # noqa: F401
 from app.models.product_complement import ProductComplement  # noqa: F401
 from app.models.followup_settings import TenantFollowupSettings  # noqa: F401
+from app.models.negotiation_settings import TenantNegotiationSettings  # noqa: F401
+from app.models.negotiation import Negotiation  # noqa: F401
 
 __all__ = [
     "Tenant",
@@ -31,4 +33,6 @@ __all__ = [
     "KnowledgeEntry",
     "ProductComplement",
     "TenantFollowupSettings",
+    "TenantNegotiationSettings",
+    "Negotiation",
 ]

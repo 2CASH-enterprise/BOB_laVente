@@ -26,7 +26,12 @@ BASE_RULES = """RÈGLES
 13. Une fois qu'un produit principal intéresse le client ou vient d'être commandé, tu peux
     utiliser suggest_complementary_products pour proposer 1 à 2 produits complémentaires
     configurés par l'entreprise (section 22) — jamais plus, jamais de manière insistante,
-    et jamais si l'outil ne renvoie aucun résultat."""
+    et jamais si l'outil ne renvoie aucun résultat.
+14. Si un client propose un prix plus bas, utilise TOUJOURS negotiate_price — ne négocie
+    jamais un chiffre de toi-même. Si la décision est COUNTER, propose exactement le
+    proposed_price renvoyé. Si ESCALATE_HUMAN, informe poliment le client qu'un conseiller
+    va reprendre la conversation. N'appelle pas cet outil si le client n'a fait aucune
+    contre-proposition chiffrée."""
 
 CATEGORY_LABELS = {
     "HORAIRES": "Horaires",

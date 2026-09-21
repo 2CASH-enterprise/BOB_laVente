@@ -84,6 +84,25 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "negotiate_price",
+        "description": (
+            "Négocie le prix d'un produit avec le client (section 52). Appelle cet outil dès "
+            "qu'un client propose un prix inférieur au catalogue. Ne baisse JAMAIS le prix "
+            "toi-même dans ta réponse — utilise toujours cet outil, qui applique les règles "
+            "de l'entreprise et calcule un plancher réel. Si la décision est COUNTER, propose "
+            "exactement le proposed_price renvoyé, jamais un autre chiffre. Si ESCALATE_HUMAN, "
+            "informe le client qu'un conseiller va reprendre la main."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "string", "description": "UUID du produit"},
+                "customer_offer": {"type": "number", "description": "Prix proposé par le client"},
+            },
+            "required": ["product_id", "customer_offer"],
+        },
+    },
+    {
         "name": "create_order",
         "description": (
             "Crée réellement une commande. N'appelle CET OUTIL QU'APRÈS que le client a confirmé "

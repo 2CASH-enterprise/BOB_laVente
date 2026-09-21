@@ -12,8 +12,10 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
+from app.models.negotiation_settings import TenantNegotiationSettings
 from app.repositories.product_complement_repository import ProductComplementRepository
 from app.repositories.product_repository import ProductRepository
+from app.services.negotiation_service import NegotiationError, negotiate_price
 from app.services.order_service import OrderCreationError, create_order
 
 
@@ -128,6 +130,31 @@ class ToolExecutor:
         )
         await self.db.flush()
         return {"status": "handoff_registered", "reason": reason}
+
+    async def _tool_negotiate_price(self, tool_input: dict) -> dict:
+        from decimal import Decimal, InvalidOperation
+        from sqlalchemy import select
+
+        product_id = tool_input.get("product_id")
+        try:
+            offer = Decimal(str(tool_input.get("customer_offer")))
+            product_uuid = uuid.UUID(product_id)
+        except (InvalidOperation, ValueError, TypeError):
+            return {"error": "Offre ou identifiant produit invalide"}
+
+        settings_stmt = select(TenantNegotiationSettings).where(TenantNegotiationSettings.tenant_id == self.tenant_id)
+        settings = (await self.db.execute(settings_stmt)).scalar_one_or_none()
+        if settings is None or not settings.enabled:
+            return {"error": "La négociation n'est pas activée pour cette entreprise"}
+
+        try:
+            result = await negotiate_price(
+                self.db, self.tenant_id, self.conversation, product_uuid, offer, settings
+            )
+        except NegotiationError as exc:
+            return {"error": exc.message}
+
+        return result
 
     async def _tool_create_order(self, tool_input: dict) -> dict:
         try:
