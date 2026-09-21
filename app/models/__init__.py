@@ -1,4 +1,17 @@
 from app.models.tenant import Tenant  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.whatsapp_account import WhatsAppAccount  # noqa: F401
+from app.models.customer import Customer  # noqa: F401
+from app.models.conversation import Conversation, Message  # noqa: F401
+from app.models.messaging_settings import TenantMessagingSettings, MessageSendAudit  # noqa: F401
 
-__all__ = ["Tenant", "User"]
+__all__ = [
+    "Tenant",
+    "User",
+    "WhatsAppAccount",
+    "Customer",
+    "Conversation",
+    "Message",
+    "TenantMessagingSettings",
+    "MessageSendAudit",
+]
