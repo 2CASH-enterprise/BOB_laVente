@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 
 from app.api.auth.routes import router as auth_router
+from app.api.catalog.categories import router as categories_router
+from app.api.catalog.import_ import router as catalog_import_router
+from app.api.catalog.products import router as products_router
 from app.api.messages.routes import router as messages_router
 from app.api.tenants.routes import router as tenants_router
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
@@ -20,6 +23,9 @@ app.include_router(tenants_router)
 app.include_router(whatsapp_webhook_router)
 app.include_router(whatsapp_router)
 app.include_router(messages_router)
+app.include_router(products_router)
+app.include_router(categories_router)
+app.include_router(catalog_import_router)
 
 
 @app.get("/health", tags=["system"])
