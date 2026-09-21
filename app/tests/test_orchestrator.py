@@ -133,6 +133,31 @@ async def test_orchestrator_injects_active_knowledge_into_system_prompt(db_sessi
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_injects_customer_memory_into_system_prompt(db_session, unique_email):
+    """La mémoire client (achats passés) doit réellement atteindre le LLM (point 4)."""
+    from app.models.order import Order, OrderItem, OrderStatus
+
+    tenant, product, conversation = await _setup(db_session, unique_email)
+    order = Order(
+        tenant_id=tenant.id, customer_id=conversation.customer_id, status=OrderStatus.PENDING,
+        total_amount=280000, currency="XOF", created_by="IA",
+    )
+    db_session.add(order)
+    await db_session.flush()
+    db_session.add(OrderItem(order_id=order.id, product_id=product.id, quantity=1, unit_price=280000, subtotal=280000))
+    await db_session.commit()
+
+    fake = FakeLLMClient([text_response("Bon retour parmi nous !")])
+    await generate_ai_reply(
+        db=db_session, tenant=tenant, conversation=conversation, history=[], incoming_text="Bonjour", llm_client=fake
+    )
+
+    system_prompt_used = fake.received_systems[0]
+    assert "MÉMOIRE CLIENT" in system_prompt_used
+    assert "Samsung A56" in system_prompt_used
+
+
+@pytest.mark.asyncio
 async def test_conversation_history_passed_to_llm(db_session, unique_email):
     tenant, product, conversation = await _setup(db_session, unique_email)
     fake = FakeLLMClient([text_response("D'accord.")])

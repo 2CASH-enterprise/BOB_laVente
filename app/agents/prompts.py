@@ -64,7 +64,9 @@ def _format_knowledge_base(entries: list[KnowledgeEntry]) -> str:
     return "\n\nBASE DE CONNAISSANCES\n\n" + "\n\n".join(sections)
 
 
-def build_system_prompt(tenant: Tenant, knowledge_entries: list[KnowledgeEntry] | None = None) -> str:
+def build_system_prompt(
+    tenant: Tenant, knowledge_entries: list[KnowledgeEntry] | None = None, customer_memory: str = ""
+) -> str:
     knowledge_section = _format_knowledge_base(knowledge_entries or [])
 
     return f"""IDENTITÉ
@@ -81,5 +83,5 @@ Aider le client à choisir et acheter les produits disponibles dans le catalogue
 CONTEXTE ENTREPRISE
 Devise : {tenant.currency}
 Pays : {tenant.country}
-{knowledge_section}
+{knowledge_section}{customer_memory}
 """

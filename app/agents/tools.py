@@ -17,6 +17,7 @@ from app.repositories.product_complement_repository import ProductComplementRepo
 from app.repositories.product_repository import ProductRepository
 from app.services.negotiation_service import NegotiationError, negotiate_price
 from app.services.order_service import OrderCreationError, create_order
+from app.services.customer_memory_service import record_product_view
 
 
 class ToolExecutor:
@@ -56,6 +57,7 @@ class ToolExecutor:
         )
         if not products:
             return {"results": [], "message": "Aucun produit trouvé pour cette recherche."}
+        await record_product_view(self.db, self.tenant_id, self.customer_id, [p.id for p in products])
         return {"results": [await self._product_to_dict(p) for p in products]}
 
     async def _tool_check_stock(self, tool_input: dict) -> dict:
@@ -99,6 +101,7 @@ class ToolExecutor:
 
         if not top3:
             return {"results": [], "message": "Aucun produit ne correspond à ce besoin dans le catalogue."}
+        await record_product_view(self.db, self.tenant_id, self.customer_id, [p.id for p in top3])
         return {"results": [await self._product_to_dict(p) for p in top3]}
 
     async def _tool_suggest_complementary_products(self, tool_input: dict) -> dict:

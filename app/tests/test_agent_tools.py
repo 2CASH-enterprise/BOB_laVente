@@ -131,6 +131,24 @@ async def test_tools_are_isolated_by_tenant(db_session, unique_email):
 
 
 @pytest.mark.asyncio
+async def test_search_products_records_customer_view(db_session, unique_email):
+    tenant, product, conversation = await _setup(db_session, unique_email)
+    executor = ToolExecutor(db_session, tenant.id, conversation)
+
+    await executor.execute("search_products", {"query": "Samsung"})
+    await db_session.commit()
+
+    from sqlalchemy import select
+
+    from app.models.customer_product_view import CustomerProductView
+
+    views = (await db_session.execute(select(CustomerProductView))).scalars().all()
+    assert len(views) == 1
+    assert views[0].product_id == product.id
+    assert views[0].customer_id == conversation.customer_id
+
+
+@pytest.mark.asyncio
 async def test_create_order_tool_creates_real_order_and_decrements_stock(db_session, unique_email):
     tenant, product, conversation = await _setup(db_session, unique_email)
     executor = ToolExecutor(db_session, tenant.id, conversation)

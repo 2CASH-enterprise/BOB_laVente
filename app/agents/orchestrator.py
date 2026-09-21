@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.models.conversation import Conversation, Message, MessageSender
 from app.models.tenant import Tenant
 from app.repositories.knowledge_entry_repository import KnowledgeEntryRepository
+from app.services.customer_memory_service import build_customer_memory
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,8 @@ async def generate_ai_reply(
     settings = get_settings()
     knowledge_repo = KnowledgeEntryRepository(db)
     knowledge_entries = await knowledge_repo.list_active(tenant.id)
-    system_prompt = build_system_prompt(tenant, knowledge_entries)
+    customer_memory = await build_customer_memory(db, tenant.id, conversation.customer_id)
+    system_prompt = build_system_prompt(tenant, knowledge_entries, customer_memory)
     executor = ToolExecutor(db, tenant.id, conversation)
 
     messages = _history_to_anthropic_messages(history)
