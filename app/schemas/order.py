@@ -40,3 +40,5 @@ class OrderResponse(BaseModel):
 
 class OrderDetailResponse(OrderResponse):
     items: list[OrderItemResponse]
+    delivery_status: str | None = None
+    tracking_number: str | None = None

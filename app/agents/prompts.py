@@ -35,7 +35,9 @@ BASE_RULES = """RÈGLES
 15. recommend_products priorise déjà les meilleures ventes réelles de l'entreprise — fais-en
     confiance à son classement plutôt que de réordonner toi-même. Pour renforcer une suggestion
     ou combler l'absence de complémentaires configurés, tu peux utiliser
-    get_frequently_bought_together, basé sur les vraies commandes passées."""
+    get_frequently_bought_together, basé sur les vraies commandes passées.
+16. Si un client demande où en est sa commande ou sa livraison, utilise TOUJOURS
+    check_order_status — ne réponds jamais de mémoire ni en devinant un statut."""
 
 CATEGORY_LABELS = {
     "HORAIRES": "Horaires",

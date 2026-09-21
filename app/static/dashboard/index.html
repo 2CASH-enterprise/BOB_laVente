@@ -144,7 +144,7 @@
 
     <section id="tab-orders" class="hidden">
       <table>
-        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th></tr></thead>
+        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Livraison</th></tr></thead>
         <tbody id="order-rows"></tbody>
       </table>
     </section>
@@ -777,9 +777,11 @@ async function deleteKnowledgeEntry(id) {
   loadKnowledge();
 }
 
+const DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PICKED_UP", "IN_TRANSIT", "DELIVERED", "FAILED", "CANCELLED"];
+
 async function loadOrders() {
   const rows = document.getElementById("order-rows");
-  rows.innerHTML = "<tr><td colspan='4'>Chargement…</td></tr>";
+  rows.innerHTML = "<tr><td colspan='5'>Chargement…</td></tr>";
   const orders = await api("/api/v1/orders");
   rows.innerHTML = orders
     .map(
@@ -788,9 +790,62 @@ async function loadOrders() {
         <td><span class="badge ${o.status}">${o.status}</span></td>
         <td>${Number(o.total_amount).toLocaleString()} ${o.currency}</td>
         <td>${o.created_by === "IA" ? "Bob (IA)" : o.created_by.slice(0, 8) + "…"}</td>
-      </tr>`
+        <td><button class="action secondary" onclick="toggleDeliveryPanel('${o.id}')">Gérer</button></td>
+      </tr>
+      <tr id="delivery-row-${o.id}" class="hidden"><td colspan="5"><div id="delivery-panel-${o.id}" style="padding: 10px 0;"></div></td></tr>`
     )
-    .join("") || "<tr><td colspan='4'>Aucune commande</td></tr>";
+    .join("") || "<tr><td colspan='5'>Aucune commande</td></tr>";
+}
+
+async function toggleDeliveryPanel(orderId) {
+  const row = document.getElementById(`delivery-row-${orderId}`);
+  const wasHidden = row.classList.contains("hidden");
+  document.querySelectorAll("[id^='delivery-row-']").forEach((r) => r.classList.add("hidden"));
+  if (wasHidden) {
+    row.classList.remove("hidden");
+    await renderDeliveryPanel(orderId);
+  }
+}
+
+async function renderDeliveryPanel(orderId) {
+  const panel = document.getElementById(`delivery-panel-${orderId}`);
+  panel.innerHTML = "Chargement…";
+  const order = await api(`/api/v1/orders/${orderId}`);
+
+  const options = DELIVERY_STATUSES.map(
+    (s) => `<option value="${s}" ${s === order.delivery_status ? "selected" : ""}>${s}</option>`
+  ).join("");
+
+  panel.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 600px; margin-bottom: 8px;">
+      <select id="delivery-status-${orderId}" class="input">${options}</select>
+      <input id="delivery-tracking-${orderId}" class="input" placeholder="N° de suivi" value="${order.tracking_number || ""}">
+      <input id="delivery-provider-${orderId}" class="input" placeholder="Transporteur">
+    </div>
+    <button class="action" onclick="saveDelivery('${orderId}')">Enregistrer</button>
+    <span id="delivery-msg-${orderId}" style="margin-left: 10px; font-size: 13px;"></span>
+  `;
+}
+
+async function saveDelivery(orderId) {
+  const msg = document.getElementById(`delivery-msg-${orderId}`);
+  const payload = {
+    status: document.getElementById(`delivery-status-${orderId}`).value,
+    tracking_number: document.getElementById(`delivery-tracking-${orderId}`).value.trim() || null,
+    provider: document.getElementById(`delivery-provider-${orderId}`).value.trim() || null,
+  };
+  try {
+    await api(`/api/v1/orders/${orderId}/delivery`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
 }
 
 if (token) enterApp();

@@ -10,6 +10,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.delivery import Delivery
 from app.models.order import Order, OrderItem, OrderStatus
 from app.models.product import Product
 from app.repositories.product_repository import ProductRepository
@@ -99,6 +100,10 @@ async def create_order(
     for oi in order_items:
         oi.order_id = order.id
         db.add(oi)
+
+    # Section 40 — chaque commande a un suivi de livraison, même sans adresse renseignée
+    # (le commerce pourra la compléter depuis le dashboard).
+    db.add(Delivery(tenant_id=tenant_id, order_id=order.id, address=delivery_address))
 
     await db.flush()
     return order

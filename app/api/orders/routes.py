@@ -6,13 +6,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
+from app.models.delivery import Delivery
 from app.models.order import OrderItem
 from app.repositories.order_repository import OrderRepository
+from app.schemas.delivery import DeliveryResponse, DeliveryUpdate
 from app.schemas.order import OrderCreateRequest, OrderDetailResponse, OrderResponse
 from app.services.audit import log_audit_event
 from app.services.order_service import OrderCreationError, create_order
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
+
+
+async def _build_order_detail(db: AsyncSession, order) -> OrderDetailResponse:
+    items_stmt = select(OrderItem).where(OrderItem.order_id == order.id)
+    items = (await db.execute(items_stmt)).scalars().all()
+
+    delivery_stmt = select(Delivery).where(Delivery.order_id == order.id)
+    delivery = (await db.execute(delivery_stmt)).scalar_one_or_none()
+
+    return OrderDetailResponse(
+        id=order.id,
+        customer_id=order.customer_id,
+        status=order.status.value,
+        total_amount=order.total_amount,
+        currency=order.currency,
+        delivery_address=order.delivery_address,
+        payment_method=order.payment_method,
+        created_by=order.created_by,
+        items=items,
+        delivery_status=delivery.status.value if delivery else None,
+        tracking_number=delivery.tracking_number if delivery else None,
+    )
 
 
 @router.get("", response_model=list[OrderResponse])
@@ -34,21 +58,7 @@ async def get_order(
     order = await repo.get(tenant_id=current_user.tenant_id, record_id=order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="Commande introuvable")
-
-    items_stmt = select(OrderItem).where(OrderItem.order_id == order.id)
-    items = (await db.execute(items_stmt)).scalars().all()
-
-    return OrderDetailResponse(
-        id=order.id,
-        customer_id=order.customer_id,
-        status=order.status.value,
-        total_amount=order.total_amount,
-        currency=order.currency,
-        delivery_address=order.delivery_address,
-        payment_method=order.payment_method,
-        created_by=order.created_by,
-        items=items,
-    )
+    return await _build_order_detail(db, order)
 
 
 @router.post("", response_model=OrderDetailResponse, status_code=201, dependencies=[Depends(require_role("AGENT"))])
@@ -84,18 +94,40 @@ async def create_order_endpoint(
     )
     await db.commit()
     await db.refresh(order)
+    return await _build_order_detail(db, order)
 
-    items_stmt = select(OrderItem).where(OrderItem.order_id == order.id)
-    items = (await db.execute(items_stmt)).scalars().all()
 
-    return OrderDetailResponse(
-        id=order.id,
-        customer_id=order.customer_id,
-        status=order.status.value,
-        total_amount=order.total_amount,
-        currency=order.currency,
-        delivery_address=order.delivery_address,
-        payment_method=order.payment_method,
-        created_by=order.created_by,
-        items=items,
+@router.put(
+    "/{order_id}/delivery", response_model=DeliveryResponse, dependencies=[Depends(require_role("AGENT"))]
+)
+async def update_delivery(
+    order_id: UUID,
+    payload: DeliveryUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Section 40 — mise à jour manuelle du suivi de livraison depuis le dashboard."""
+    order_repo = OrderRepository(db)
+    order = await order_repo.get(tenant_id=current_user.tenant_id, record_id=order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Commande introuvable")
+
+    stmt = select(Delivery).where(Delivery.tenant_id == current_user.tenant_id, Delivery.order_id == order_id)
+    delivery = (await db.execute(stmt)).scalar_one_or_none()
+    if delivery is None:
+        delivery = Delivery(tenant_id=current_user.tenant_id, order_id=order_id)
+        db.add(delivery)
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(delivery, field, value)
+
+    await log_audit_event(
+        db,
+        actor=str(current_user.user_id),
+        action="DELIVERY_UPDATED",
+        tenant_id=current_user.tenant_id,
+        details={"order_id": str(order_id), "status": payload.status},
     )
+    await db.commit()
+    await db.refresh(delivery)
+    return delivery

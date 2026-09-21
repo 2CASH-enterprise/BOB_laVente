@@ -12,7 +12,9 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
+from app.models.delivery import Delivery
 from app.models.negotiation_settings import TenantNegotiationSettings
+from app.models.order import Order, OrderItem
 from app.repositories.product_complement_repository import ProductComplementRepository
 from app.repositories.product_repository import ProductRepository
 from app.services.negotiation_service import NegotiationError, negotiate_price
@@ -181,6 +183,49 @@ class ToolExecutor:
             return {"error": exc.message}
 
         return result
+
+    async def _tool_check_order_status(self, tool_input: dict) -> dict:
+        from sqlalchemy import select
+
+        order_id = tool_input.get("order_id")
+        if order_id:
+            try:
+                order_uuid = uuid.UUID(order_id)
+            except (ValueError, TypeError):
+                return {"error": "Identifiant de commande invalide"}
+            stmt = select(Order).where(
+                Order.tenant_id == self.tenant_id, Order.id == order_uuid, Order.customer_id == self.customer_id
+            )
+        else:
+            stmt = (
+                select(Order)
+                .where(Order.tenant_id == self.tenant_id, Order.customer_id == self.customer_id)
+                .order_by(Order.created_at.desc())
+                .limit(1)
+            )
+        order = (await self.db.execute(stmt)).scalar_one_or_none()
+        if order is None:
+            return {"error": "Aucune commande trouvée pour ce client"}
+
+        items_stmt = select(OrderItem).where(OrderItem.order_id == order.id)
+        items = (await self.db.execute(items_stmt)).scalars().all()
+        item_dicts = []
+        for item in items:
+            product = await self.product_repo.get(tenant_id=self.tenant_id, record_id=item.product_id)
+            item_dicts.append({"name": product.name if product else "Produit supprimé", "quantity": item.quantity})
+
+        delivery_stmt = select(Delivery).where(Delivery.tenant_id == self.tenant_id, Delivery.order_id == order.id)
+        delivery = (await self.db.execute(delivery_stmt)).scalar_one_or_none()
+
+        return {
+            "order_id": str(order.id),
+            "order_status": order.status.value,
+            "total_amount": float(order.total_amount),
+            "currency": order.currency,
+            "items": item_dicts,
+            "delivery_status": delivery.status.value if delivery else None,
+            "tracking_number": delivery.tracking_number if delivery else None,
+        }
 
     async def _tool_create_order(self, tool_input: dict) -> dict:
         try:

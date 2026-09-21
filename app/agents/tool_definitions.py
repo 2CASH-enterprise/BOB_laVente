@@ -98,6 +98,20 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "check_order_status",
+        "description": (
+            "Renvoie le statut réel d'une commande du client (paiement, livraison, articles). "
+            "Sans order_id, renvoie la commande la plus récente de ce client dans cette "
+            "conversation. Utilise TOUJOURS cet outil quand un client demande où en est sa "
+            "commande — ne réponds jamais de mémoire ni en devinant."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"order_id": {"type": "string", "description": "UUID de la commande, optionnel"}},
+            "required": [],
+        },
+    },
+    {
         "name": "negotiate_price",
         "description": (
             "Négocie le prix d'un produit avec le client (section 52). Appelle cet outil dès "
