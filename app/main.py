@@ -14,6 +14,7 @@ from app.api.demo.routes import router as demo_router
 from app.api.integrations.meta_catalog import router as meta_catalog_router
 from app.api.integrations.shopify import router as shopify_router
 from app.api.knowledge.routes import router as knowledge_router
+from app.api.qrcodes.routes import router as qrcodes_router
 from app.api.messages.routes import router as messages_router
 from app.api.orders.routes import router as orders_router
 from app.api.tenants.routes import router as tenants_router
@@ -48,6 +49,7 @@ app.include_router(shopify_router)
 app.include_router(meta_catalog_router)
 app.include_router(knowledge_router)
 app.include_router(demo_router)
+app.include_router(qrcodes_router)
 
 _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():
@@ -65,3 +67,10 @@ if _demo_dir.exists():
 @app.get("/health", tags=["system"])
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# Montée en tout dernier : un mount à "/" intercepterait sinon toutes les routes
+# déclarées après lui (API, /dashboard, /demo, /legal, /health).
+_landing_dir = Path(__file__).parent / "static" / "landing"
+if _landing_dir.exists():
+    app.mount("/", StaticFiles(directory=str(_landing_dir), html=True), name="landing")

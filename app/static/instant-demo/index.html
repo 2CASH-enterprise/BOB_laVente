@@ -142,8 +142,13 @@
       <button class="scenario-btn" onclick="sendScenario('Je le prends, comment on fait ?')">🛒 Commande</button>
     </div>
     <div class="whatsapp-cta" id="whatsapp-cta">
-      <p>Convaincu ? Passez à l'étape suivante avec votre vrai numéro WhatsApp.</p>
-      <a href="mailto:contact@agenc-ai.com?subject=Connecter%20mon%20WhatsApp%20à%20Bob">Connecter mon WhatsApp</a>
+      <p>Convaincu ? Crée ton compte gratuit — ton catalogue reste exactement tel quel.</p>
+      <div id="promote-form">
+        <input id="promote-email" class="input" type="email" placeholder="Ton email" style="margin-bottom: 8px;">
+        <input id="promote-password" class="input" type="password" placeholder="Choisis un mot de passe" style="margin-bottom: 8px;">
+        <button class="cta" onclick="promoteAccount()" style="margin-top: 0;">Créer mon compte gratuit</button>
+        <div id="promote-error" style="color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 14px;"></div>
+      </div>
     </div>
     <div class="chat-input-row">
       <input id="chat-input" placeholder="Écrivez comme le ferait un client…" onkeydown="if(event.key==='Enter') sendMessage()">
@@ -259,6 +264,40 @@ function addBubble(role, text) {
 function sendScenario(text) {
   document.getElementById("chat-input").value = text;
   sendMessage();
+}
+
+async function promoteAccount() {
+  const errorEl = document.getElementById("promote-error");
+  const email = document.getElementById("promote-email").value.trim();
+  const password = document.getElementById("promote-password").value;
+  errorEl.textContent = "";
+
+  if (!email || !password) {
+    errorEl.textContent = "Email et mot de passe requis.";
+    return;
+  }
+  if (password.length < 8) {
+    errorEl.textContent = "Le mot de passe doit contenir au moins 8 caractères.";
+    return;
+  }
+
+  try {
+    const res = await fetch(API_BASE + "/api/v1/demo/promote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + demoToken },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Échec de la création du compte");
+    }
+    const data = await res.json();
+    // Transfert transparent : le dashboard lit la même clé localStorage (même origine).
+    localStorage.setItem("bob_token", data.access_token);
+    window.location.href = API_BASE + "/dashboard/";
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
 }
 
 async function sendMessage() {

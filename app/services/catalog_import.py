@@ -23,7 +23,13 @@ def _parse_active(raw: str | None) -> bool:
     return raw.strip().lower() in TRUTHY
 
 
-async def import_catalog_csv(db: AsyncSession, tenant_id, csv_content: str) -> CsvImportResponse:
+async def import_catalog_csv(
+    db: AsyncSession, tenant_id, csv_content: str, max_new_products: int | None = None
+) -> CsvImportResponse:
+    """
+    max_new_products : plafond freemium (section produits) — n'empêche jamais la mise à
+    jour d'un produit déjà existant, seulement l'ajout de nouveaux au-delà du plan.
+    """
     reader = csv.DictReader(io.StringIO(csv_content))
 
     if reader.fieldnames is None or not REQUIRED_COLUMNS.issubset(set(reader.fieldnames)):
@@ -96,6 +102,10 @@ async def import_catalog_csv(db: AsyncSession, tenant_id, csv_content: str) -> C
             existing.active = active
             updated += 1
         else:
+            if max_new_products is not None and imported >= max_new_products:
+                failed += 1
+                errors.append(f"Ligne {row_number} ({sku}) : limite du plan freemium atteinte, produit ignoré")
+                continue
             db.add(
                 Product(
                     tenant_id=tenant_id,

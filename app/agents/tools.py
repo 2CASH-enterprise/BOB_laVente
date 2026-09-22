@@ -175,6 +175,12 @@ class ToolExecutor:
         if settings is None or not settings.enabled:
             return {"error": "La négociation n'est pas activée pour cette entreprise"}
 
+        from app.models.tenant import Tenant
+
+        tenant = await self.db.get(Tenant, self.tenant_id)
+        if tenant is None or not tenant.is_paid:
+            return {"error": "La négociation nécessite un plan payant"}
+
         try:
             result = await negotiate_price(
                 self.db, self.tenant_id, self.conversation, product_uuid, offer, settings

@@ -21,7 +21,9 @@ from app.models.tenant import Tenant
 from app.models.user import Role, User
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.customer_repository import CustomerRepository
-from app.schemas.demo import DemoChatRequest, DemoChatResponse, DemoCreateResponse
+from app.repositories.user_repository import UserRepository
+from app.schemas.demo import DemoChatRequest, DemoChatResponse, DemoCreateResponse, DemoPromoteRequest, DemoPromoteResponse
+from app.services.audit import log_audit_event
 from app.services.catalog_import import import_catalog_csv
 from app.services.csv_column_mapper import map_csv_to_canonical_format
 
@@ -154,3 +156,45 @@ async def demo_chat(
     await db.commit()
 
     return DemoChatResponse(reply=reply_text)
+
+
+@router.post("/promote", response_model=DemoPromoteResponse)
+async def promote_demo(
+    payload: DemoPromoteRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DemoPromoteResponse:
+    """
+    Transforme un tenant de démo en vrai compte freemium — SANS recréer le catalogue déjà
+    importé. Le prospect passe de « je teste » à « c'est mon compte » sans rien retaper.
+    """
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Session de démo introuvable")
+    if not tenant.is_demo:
+        raise HTTPException(status_code=400, detail="Ce tenant est déjà un compte réel")
+
+    if not payload.email.strip() or "@" not in payload.email:
+        raise HTTPException(status_code=400, detail="Email invalide")
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail="Le mot de passe doit contenir au moins 8 caractères")
+
+    user_repo = UserRepository(db)
+    existing = await user_repo.get_by_email(payload.email.strip().lower())
+    if existing is not None and existing.tenant_id != tenant.id:
+        raise HTTPException(status_code=409, detail="Cet email est déjà utilisé par un autre compte")
+
+    owner = await db.get(User, current_user.user_id)
+    owner.email = payload.email.strip().lower()
+    owner.hashed_password = hash_password(payload.password)
+
+    tenant.is_demo = False
+    tenant.email = owner.email
+
+    await log_audit_event(
+        db, actor=str(owner.id), action="DEMO_PROMOTED_TO_ACCOUNT", tenant_id=tenant.id, details={"email": owner.email}
+    )
+    await db.commit()
+
+    new_token = create_access_token(user_id=owner.id, tenant_id=tenant.id, role=owner.role.value)
+    return DemoPromoteResponse(access_token=new_token)

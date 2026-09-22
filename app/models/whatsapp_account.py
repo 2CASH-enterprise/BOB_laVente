@@ -39,6 +39,7 @@ class WhatsAppAccount(Base):
     waba_id: Mapped[str] = mapped_column(String(64), nullable=False)
     phone_number_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     business_id: Mapped[str | None] = mapped_column(String(64))
+    display_phone_number: Mapped[str | None] = mapped_column(String(32))  # ex. "+221771234567", pour les liens wa.me (QR)
 
     display_name: Mapped[str | None] = mapped_column(String(255))
     display_name_status: Mapped[DisplayNameStatus] = mapped_column(

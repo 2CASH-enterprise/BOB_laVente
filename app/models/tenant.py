@@ -28,6 +28,7 @@ class Tenant(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     website_url: Mapped[str | None] = mapped_column(String(500))
     is_demo: Mapped[bool] = mapped_column(default=False, nullable=False)
+    is_paid: Mapped[bool] = mapped_column(default=False, nullable=False)  # False = freemium
 
     # Section 57 — segmentation
     company_size: Mapped[CompanySize] = mapped_column(

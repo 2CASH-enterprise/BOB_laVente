@@ -19,6 +19,17 @@ async def create_product(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.tenant import Tenant
+    from app.services.plan_limits import FREEMIUM_MAX_PRODUCTS, remaining_product_slots
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    remaining = await remaining_product_slots(db, current_user.tenant_id, tenant.is_paid)
+    if remaining is not None and remaining <= 0:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Plan freemium limité à {FREEMIUM_MAX_PRODUCTS} produits. Passez à un plan payant pour en ajouter davantage.",
+        )
+
     repo = ProductRepository(db)
     existing = await repo.get_by_sku(current_user.tenant_id, payload.sku)
     if existing is not None:

@@ -29,6 +29,12 @@ async def connect_meta_catalog(
     client_factory=Depends(get_meta_catalog_client_factory),
 ):
     """Valide réellement l'accès au catalogue (Graph API) avant d'enregistrer quoi que ce soit."""
+    from app.models.tenant import Tenant
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None or not tenant.is_paid:
+        raise HTTPException(status_code=403, detail="Cette intégration nécessite un plan payant")
+
     client = client_factory(payload.catalog_id, payload.access_token)
     try:
         await client.fetch_catalog_info()

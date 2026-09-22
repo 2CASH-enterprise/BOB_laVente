@@ -111,6 +111,12 @@ async def send_followup(
 
 async def run_followups_for_tenant(db: AsyncSession, tenant_id, now: datetime | None = None) -> int:
     """Retourne le nombre de relances effectivement envoyées pour ce tenant."""
+    from app.models.tenant import Tenant
+
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None or not tenant.is_paid:
+        return 0  # relances réservées aux plans payants (freemium exclu)
+
     settings_stmt = select(TenantFollowupSettings).where(TenantFollowupSettings.tenant_id == tenant_id)
     settings = (await db.execute(settings_stmt)).scalar_one_or_none()
 

@@ -225,6 +225,19 @@
         <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th><th>Upsell</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
+
+      <div class="card" style="margin-top: 24px;">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Codes QR produits (5 max)</div>
+        <p style="font-size: 12px; color: var(--muted); margin: 0 0 14px;">
+          À afficher en boutique ou en statut WhatsApp. Le QR ne change jamais — vous pouvez changer le produit ciblé à tout moment sans le réimprimer.
+        </p>
+        <div style="display: flex; gap: 8px; max-width: 480px; margin-bottom: 16px;">
+          <select id="new-qr-product" class="input"></select>
+          <button class="action" onclick="createQrCode()" style="white-space: nowrap;">Générer un QR</button>
+        </div>
+        <div id="qr-codes-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
+        <div id="qr-codes-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px;"></div>
+      </div>
     </section>
 
     <section id="tab-orders" class="hidden">
@@ -292,6 +305,12 @@
           <div class="label" style="margin-bottom: 12px; font-weight: 600;">Compte WhatsApp Business</div>
           <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
           <button class="action" id="btn-connect-whatsapp" onclick="connectWhatsApp()">Connecter WhatsApp</button>
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+            <label style="font-size: 12px; color: var(--muted);">Numéro affiché (pour les QR codes, format +221XXXXXXXXX)</label>
+            <input id="wa-display-number" class="input" placeholder="+221771234567" style="margin: 6px 0;">
+            <button class="action secondary" onclick="saveDisplayNumber()">Enregistrer</button>
+            <div id="wa-display-msg" style="margin-top: 6px; font-size: 12px;"></div>
+          </div>
         </div>
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 12px; font-weight: 600;">Profil de l'entreprise</div>
@@ -496,6 +515,7 @@ async function release() {
 }
 
 let allProducts = [];
+let allQrCodes = [];
 
 async function loadProducts() {
   const rows = document.getElementById("product-rows");
@@ -511,6 +531,182 @@ async function loadProducts() {
       <tr id="upsell-row-${p.id}" class="hidden"><td colspan="6"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
     )
     .join("") || "<tr><td colspan='6'>Aucun produit</td></tr>";
+  loadQrCodes();
+}
+
+async function loadQrCodes() {
+  const select = document.getElementById("new-qr-product");
+  select.innerHTML = allProducts.map((p) => `<option value="${p.id}">${p.name} (${p.sku})</option>`).join("");
+
+  const list = document.getElementById("qr-codes-list");
+  list.innerHTML = "<p class='loading-text' style='grid-column: 1/-1;'>Chargement</p>";
+  const codes = await api("/api/v1/qr-codes");
+  allQrCodes = codes;
+
+  document.getElementById("new-qr-product").closest("div").querySelector("button").disabled = codes.length >= 5;
+
+  if (!codes.length) {
+    list.innerHTML = "<p style='color: var(--muted); font-size: 13px; grid-column: 1/-1;'>Aucun QR généré pour le moment.</p>";
+    return;
+  }
+
+  list.innerHTML = codes
+    .map((c) => {
+      const fullUrl = window.location.origin + API_BASE + c.short_path;
+      const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(fullUrl)}`;
+      return `<div class="card" style="text-align: center; padding: 14px;">
+        <img src="${qrImg}" alt="QR ${c.product_name}" style="width: 100%; max-width: 140px; border-radius: 8px; margin-bottom: 8px;">
+        <div style="font-weight: 600; font-size: 13px;">${c.product_name}</div>
+        <div style="color: var(--muted); font-size: 11px; margin: 4px 0 8px;">${c.scan_count} scan${c.scan_count > 1 ? "s" : ""}</div>
+        <button class="action" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="shareQrImage('${c.id}')">📤 Image à partager</button>
+        <button class="action secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyQrLink('${fullUrl}')">Copier le lien</button>
+        <button class="action secondary" style="font-size: 11px; padding: 5px 10px;" onclick="deleteQrCode('${c.id}')">Supprimer</button>
+      </div>`;
+    })
+    .join("");
+}
+
+async function createQrCode() {
+  const msg = document.getElementById("qr-codes-msg");
+  const productId = document.getElementById("new-qr-product").value;
+  try {
+    await api("/api/v1/qr-codes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product_id: productId }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "QR généré.";
+    loadQrCodes();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function deleteQrCode(id) {
+  if (!confirm("Supprimer ce QR ? Il ne fonctionnera plus si déjà imprimé.")) return;
+  await api(`/api/v1/qr-codes/${id}`, { method: "DELETE" });
+  loadQrCodes();
+}
+
+function copyQrLink(url) {
+  navigator.clipboard.writeText(url).then(() => alert("Lien copié : " + url));
+}
+
+function _loadImage(src, crossOrigin) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    if (crossOrigin) img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function shareQrImage(qrId) {
+  const qr = allQrCodes.find((c) => c.id === qrId);
+  if (!qr) return;
+
+  if (!qr.product_image_url) {
+    alert(
+      "Ce produit n'a pas encore de photo, impossible de créer un visuel à partager.\n\n" +
+      "Ajoutez une photo à ce produit via l'import CSV (colonne IMAGE_URL), puis réessayez."
+    );
+    return;
+  }
+
+  const fullUrl = window.location.origin + API_BASE + qr.short_path;
+  const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(fullUrl)}`;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext("2d");
+
+  try {
+    const [productImg, qrImg] = await Promise.all([
+      _loadImage(qr.product_image_url, true),
+      _loadImage(qrImgSrc, true),
+    ]);
+
+    // Photo produit en fond, recadrée façon "cover"
+    const scale = Math.max(canvas.width / productImg.width, canvas.height / productImg.height);
+    const w = productImg.width * scale, h = productImg.height * scale;
+    ctx.drawImage(productImg, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+
+    // Dégradé sombre en bas pour la lisibilité du texte
+    const gradient = ctx.createLinearGradient(0, canvas.height * 0.45, 0, canvas.height);
+    gradient.addColorStop(0, "rgba(10,20,15,0)");
+    gradient.addColorStop(1, "rgba(10,20,15,0.92)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Nom du produit
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "700 64px -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    wrapText(ctx, qr.product_name, canvas.width / 2, canvas.height - 520, 900, 74);
+
+    // Prix
+    if (qr.product_price) {
+      ctx.fillStyle = "#52B788";
+      ctx.font = "800 56px -apple-system, sans-serif";
+      ctx.fillText(`${Number(qr.product_price).toLocaleString()} ${qr.product_currency || ""}`, canvas.width / 2, canvas.height - 400);
+    }
+
+    // Bloc QR blanc
+    const qrSize = 320, qrX = (canvas.width - qrSize) / 2, qrY = canvas.height - 360;
+    ctx.fillStyle = "#FFFFFF";
+    roundRect(ctx, qrX - 20, qrY - 20, qrSize + 40, qrSize + 40, 20);
+    ctx.fill();
+    ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+
+    // Appel à l'action
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "600 34px -apple-system, sans-serif";
+    ctx.fillText("📲 Scannez pour commander sur WhatsApp", canvas.width / 2, canvas.height - 20);
+
+    canvas.toBlob((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `bob-qr-${qr.product_name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.png`;
+      a.click();
+    }, "image/png");
+  } catch (e) {
+    alert(
+      "Impossible de générer automatiquement l'image (la photo du produit ne l'autorise pas depuis ce navigateur).\n\n" +
+      "Vous pouvez faire une capture d'écran de la carte QR ci-dessus en attendant."
+    );
+  }
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  const lines = [];
+  for (const word of words) {
+    const test = line + word + " ";
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word + " ";
+    } else {
+      line = test;
+    }
+  }
+  lines.push(line);
+  const startY = y - (lines.length - 1) * lineHeight;
+  lines.forEach((l, i) => ctx.fillText(l.trim(), x, startY + i * lineHeight));
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 async function toggleUpsellPanel(productId) {
@@ -986,6 +1182,9 @@ async function loadWhatsAppStatus() {
     statusEl.textContent = `Connecté — numéro ${account.phone_number_id}, statut du nom : ${account.display_name_status}`;
     btn.textContent = "Déjà connecté";
     btn.disabled = true;
+    if (account.display_phone_number) {
+      document.getElementById("wa-display-number").value = "+" + account.display_phone_number.replace(/^\+/, "");
+    }
   } catch (e) {
     statusEl.textContent = "Aucun compte WhatsApp connecté pour le moment.";
     btn.textContent = "Connecter WhatsApp";
@@ -996,6 +1195,23 @@ async function loadWhatsAppStatus() {
     const config = await fetch(API_BASE + "/api/v1/whatsapp/embedded-signup/config").then((r) => r.json());
     if (config.app_id) loadFacebookSdk(config.app_id, config.graph_api_version || "v21.0");
   } catch (e) {}
+}
+
+async function saveDisplayNumber() {
+  const msg = document.getElementById("wa-display-msg");
+  const value = document.getElementById("wa-display-number").value.trim();
+  try {
+    await api("/api/v1/whatsapp/account/display-phone-number", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_phone_number: value }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
 }
 
 function connectWhatsApp() {

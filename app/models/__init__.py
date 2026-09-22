@@ -16,6 +16,7 @@ from app.models.negotiation_settings import TenantNegotiationSettings  # noqa: F
 from app.models.negotiation import Negotiation  # noqa: F401
 from app.models.customer_product_view import CustomerProductView  # noqa: F401
 from app.models.delivery import Delivery  # noqa: F401
+from app.models.product_qr_code import ProductQrCode  # noqa: F401
 
 __all__ = [
     "Tenant",
@@ -39,4 +40,5 @@ __all__ = [
     "Negotiation",
     "CustomerProductView",
     "Delivery",
+    "ProductQrCode",
 ]

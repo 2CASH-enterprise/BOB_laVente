@@ -17,3 +17,12 @@ class DemoChatRequest(BaseModel):
 
 class DemoChatResponse(BaseModel):
     reply: str
+
+
+class DemoPromoteRequest(BaseModel):
+    email: str
+    password: str
+
+
+class DemoPromoteResponse(BaseModel):
+    access_token: str

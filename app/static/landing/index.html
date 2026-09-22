@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bob — Ton vendeur WhatsApp qui ne dort jamais</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0B0D; --panel: #151518; --border: #2A2A2E; --text: #F5F5F6; --muted: #9CA0A8;
+    --gold: #E8B923; --gold-dim: #C9A227; --green: #25D366; --purple: #8B5CF6;
+    --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Inter", -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, .display { font-family: "Sora", -apple-system, sans-serif; font-weight: 800; letter-spacing: -0.02em; }
+  .gold { color: var(--gold); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  a { color: inherit; }
+
+  header { position: sticky; top: 0; z-index: 50; background: rgba(11,11,13,0.85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  .header-inner { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; max-width: 1180px; margin: 0 auto; }
+  .logo { display: flex; align-items: center; gap: 8px; font-family: "Sora"; font-weight: 800; font-size: 19px; color: var(--gold); text-decoration: none; }
+  nav.main-nav { display: flex; gap: 28px; }
+  nav.main-nav a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+  nav.main-nav a:hover { color: var(--text); }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 9px; font-weight: 700; font-size: 14px; text-decoration: none; cursor: pointer; border: none; white-space: nowrap; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { border-color: var(--muted); }
+  .btn-gold { background: var(--gold); color: #191400; }
+  .btn-gold:hover { background: #F2C43A; }
+  .btn-green { background: var(--green); color: #06210F; }
+  .btn-green:hover { background: #2FE377; }
+  .menu-toggle { display: none; background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; }
+
+  .hero { padding: 64px 0 40px; }
+  .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: start; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 24px; }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+  h1.hero-title { font-size: 48px; line-height: 1.12; margin: 0 0 20px; }
+  .hero-sub { color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 480px; margin-bottom: 24px; }
+  .gift-box { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 22px; max-width: 480px; }
+  .gift-box .emoji { font-size: 20px; }
+  .gift-box .title { font-weight: 700; color: var(--gold); font-size: 14px; }
+  .gift-box .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .hero-buttons { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 40px; }
+  .hero-buttons .btn { padding: 13px 22px; font-size: 15px; }
+  .stat-row { display: flex; gap: 40px; flex-wrap: wrap; }
+  .stat-row .stat-value { font-family: "Sora"; font-weight: 800; font-size: 26px; color: var(--gold); }
+  .stat-row .stat-label { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .agent-card { background: linear-gradient(160deg, #142018, #0F1712); border: 1px solid #223526; border-radius: 18px; padding: 26px; }
+  .agent-card-icon { width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--gold); display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 14px; }
+  .agent-card h3 { text-align: center; margin: 0 0 4px; font-size: 19px; }
+  .agent-card .tagline { text-align: center; color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+  .available-pill { display: block; width: fit-content; margin: 0 auto 18px; background: rgba(37,211,102,0.12); color: #4ADE80; border: 1px solid rgba(74,222,128,0.3); border-radius: 999px; padding: 4px 12px; font-size: 11.5px; font-weight: 700; }
+  .agent-quote { font-style: italic; color: #D8DEDA; font-size: 13.5px; border-top: 1px solid #223526; padding-top: 16px; margin-bottom: 16px; }
+  .agent-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+  .agent-stats .v { font-family: "Sora"; font-weight: 800; color: var(--gold); font-size: 20px; }
+  .agent-stats .l { color: var(--muted); font-size: 11px; }
+  .agent-card-footer { background: rgba(232,185,35,0.08); border: 1px solid rgba(232,185,35,0.25); border-radius: 10px; padding: 10px 12px; text-align: center; font-size: 12.5px; font-weight: 700; color: var(--gold); }
+
+  section { padding: 72px 0; border-top: 1px solid var(--border); }
+  .section-eyebrow { color: var(--gold); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .section-eyebrow::before { content: "• "; }
+  h2.section-title { font-size: 34px; line-height: 1.2; margin: 0 0 14px; max-width: 640px; }
+  .section-sub { color: var(--muted); font-size: 15px; max-width: 520px; line-height: 1.6; margin-bottom: 36px; }
+
+  .problem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  .pain-list { display: flex; flex-direction: column; gap: 10px; }
+  .pain-item { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .pain-item .icon { font-size: 18px; }
+  .pain-item p { margin: 0; font-size: 14px; line-height: 1.5; color: #D6D6D8; }
+  .pain-item b { color: var(--text); }
+  .capability-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .capability-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .capability-card .v { font-family: "Sora"; font-weight: 800; font-size: 24px; color: var(--gold); }
+  .capability-card .l { color: var(--muted); font-size: 12.5px; margin-top: 4px; line-height: 1.4; }
+
+  .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .step-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+  .step-num { font-family: "Sora"; font-weight: 800; font-size: 32px; color: var(--gold); margin-bottom: 10px; }
+  .step-card h3 { font-size: 17px; margin: 0 0 8px; }
+  .step-card p { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin: 0; }
+
+  .scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .scenario-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .scenario-tag { display: inline-block; background: rgba(139,92,246,0.15); color: #B79DFF; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; margin-bottom: 14px; }
+  .scenario-bubble { background: #1D1D21; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #D6D6D8; margin-bottom: 8px; }
+  .scenario-bubble.reply { background: rgba(232,185,35,0.08); border: 1px solid rgba(232,185,35,0.2); color: #E9E4D2; }
+  .scenario-cta { text-align: center; margin-top: 30px; }
+
+  .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .price-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 24px; position: relative; }
+  .price-card.featured { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+  .price-badge { position: absolute; top: -11px; left: 20px; background: var(--gold); color: #191400; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+  .price-name { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+  .price-amount { font-family: "Sora"; font-weight: 800; font-size: 34px; margin-bottom: 2px; }
+  .price-amount span { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .price-features { list-style: none; padding: 0; margin: 20px 0 0; display: flex; flex-direction: column; gap: 10px; }
+  .price-features li { font-size: 13.5px; color: #D6D6D8; display: flex; gap: 8px; align-items: flex-start; }
+  .price-features li::before { content: "✓"; color: var(--gold); font-weight: 700; flex-shrink: 0; }
+  .price-card .btn { width: 100%; text-align: center; justify-content: center; margin-top: 22px; }
+
+  .final-cta { text-align: center; padding: 90px 0; }
+  .final-cta h2 { font-size: 40px; max-width: 640px; margin: 0 auto 16px; }
+  .final-cta p { color: var(--muted); font-size: 15px; max-width: 440px; margin: 0 auto 30px; }
+  .final-cta .hero-buttons { justify-content: center; }
+
+  footer { border-top: 1px solid var(--border); padding: 32px 0; }
+  .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+  .footer-left .logo { margin-bottom: 8px; }
+  .footer-left p { color: var(--muted); font-size: 12.5px; line-height: 1.7; margin: 2px 0; max-width: 420px; }
+  .footer-left a { color: var(--gold); text-decoration: none; }
+  .footer-right { display: flex; gap: 22px; align-items: flex-start; }
+  .footer-right a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  .footer-right a:hover { color: var(--text); }
+
+  .wa-float { position: fixed; bottom: calc(20px + var(--safe-bottom)); left: 20px; width: 52px; height: 52px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(37,211,102,0.4); z-index: 60; text-decoration: none; }
+
+  @media (max-width: 900px) {
+    nav.main-nav, .header-actions .btn-outline { display: none; }
+    .hero-grid, .problem-grid { grid-template-columns: 1fr; }
+    .steps-grid, .scenario-grid, .pricing-grid { grid-template-columns: 1fr; }
+    h1.hero-title { font-size: 34px; }
+    h2.section-title { font-size: 26px; }
+    .final-cta h2 { font-size: 28px; }
+    .agent-card { margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <a class="logo" href="#">🤖 Bob</a>
+    <nav class="main-nav">
+      <a href="#comment-ca-marche">Comment ça marche</a>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <div class="header-actions">
+      <a class="btn btn-outline" href="dashboard/">Se connecter</a>
+      <a class="btn btn-gold" href="demo/">Essai gratuit — Sans engagement</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero" style="border-top: none;">
+    <div class="wrap hero-grid">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> AGENT IA · VENTE WHATSAPP</div>
+        <h1 class="hero-title">Ton meilleur vendeur<br>ne dort <span class="gold">jamais</span></h1>
+        <p class="hero-sub">Bob répond à tes clients WhatsApp, connaît ton catalogue par cœur, et vend à ta place — 24h/24, 7j/7, même quand tu es fermé.</p>
+
+        <div class="gift-box">
+          <div class="emoji">🎁</div>
+          <div>
+            <div class="title">Essai gratuit — teste avec TON catalogue</div>
+            <div class="sub">Importe ton catalogue et discute avec ton agent en 30 secondes. Sans carte bancaire, sans compte à créer.</div>
+          </div>
+        </div>
+
+        <div class="hero-buttons">
+          <a class="btn btn-green" href="demo/">💬 Tester avec mon catalogue</a>
+          <a class="btn btn-outline" href="#comment-ca-marche">Voir comment ça marche</a>
+        </div>
+
+        <div class="stat-row">
+          <div><div class="stat-value">&lt;10s</div><div class="stat-label">Temps de réponse</div></div>
+          <div><div class="stat-value">24h/24</div><div class="stat-label">Disponibilité</div></div>
+          <div><div class="stat-value">7j/7</div><div class="stat-label">Aucune pause</div></div>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <div class="agent-card-icon">✨</div>
+        <h3>Bob AI</h3>
+        <div class="tagline">Vendeur IA WhatsApp · Afrique francophone</div>
+        <span class="available-pill">● Disponible 24h/24</span>
+        <div class="agent-quote">"Chaque message client mérite une réponse immédiate — même à 2h du matin."</div>
+        <div class="agent-stats">
+          <div><div class="v">&lt;10s</div><div class="l">Temps de réponse</div></div>
+          <div><div class="v">1</div><div class="l">Canal (WhatsApp)</div></div>
+          <div><div class="v">24h/24</div><div class="l">Disponible</div></div>
+          <div><div class="v">100%</div><div class="l">Automatisé</div></div>
+        </div>
+        <div class="agent-card-footer">🎁 Teste avec ton catalogue — démarrage immédiat</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="fonctionnalites">
+    <div class="wrap">
+      <div class="section-eyebrow">LE PROBLÈME</div>
+      <h2 class="section-title">Tes clients WhatsApp attendent une réponse <span class="gold">— et partent ailleurs</span></h2>
+      <p class="section-sub">Un client qui n'a pas de réponse rapide va voir le vendeur suivant. Répondre à chaque message toi-même, c'est ce qui t'épuise et ce qui te coûte des ventes.</p>
+
+      <div class="problem-grid">
+        <div class="pain-list">
+          <div class="pain-item"><span class="icon">😴</span><p><b>Ton client écrit à 23h.</b> Tu réponds le lendemain matin. Il a déjà commandé ailleurs.</p></div>
+          <div class="pain-item"><span class="icon">🧠</span><p><b>Retenir prix, stock, arguments</b> pour chaque produit, à chaque conversation — épuisant à la longue.</p></div>
+          <div class="pain-item"><span class="icon">🔁</span><p><b>Négociation, objections, relances…</b> Un vendeur humain seul ne peut pas tout suivre à la fois.</p></div>
+          <div class="pain-item"><span class="icon">📦</span><p><b>« Vous avez encore ce modèle ? »</b> Sans accès direct au stock, on invente ou on fait attendre.</p></div>
+        </div>
+        <div class="capability-grid">
+          <div class="capability-card"><div class="v">24h/24</div><div class="l">Disponibilité, jours fériés inclus</div></div>
+          <div class="capability-card"><div class="v">&lt;10s</div><div class="l">Temps de réponse moyen</div></div>
+          <div class="capability-card"><div class="v">100%</div><div class="l">Automatisé, avec reprise humaine à tout moment</div></div>
+          <div class="capability-card"><div class="v">1 clic</div><div class="l">Pour tester avec ton propre catalogue</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="comment-ca-marche">
+    <div class="wrap">
+      <div class="section-eyebrow">COMMENT ÇA MARCHE</div>
+      <h2 class="section-title">3 étapes. <span class="gold">C'est tout.</span></h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h3>Importe ton catalogue</h3>
+          <p>CSV, export Excel — n'importe quel format d'en-têtes. Bob reconnaît automatiquement tes colonnes.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h3>Connecte ton WhatsApp</h3>
+          <p>Connexion officielle Meta en quelques clics, directement depuis ton tableau de bord.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h3>Bob répond, vend, relance</h3>
+          <p>Pendant que tu gères ton business. Reprends la main à tout moment si besoin.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-eyebrow">À TESTER EN DIRECT</div>
+      <h2 class="section-title">Bob sait gérer les <span class="gold">vraies conversations</span></h2>
+      <p class="section-sub">Pas une démonstration scriptée — un vrai agent, sur ton vrai catalogue. Voici quelques scénarios que tu peux tester toi-même en moins d'une minute.</p>
+
+      <div class="scenario-grid">
+        <div class="scenario-card">
+          <span class="scenario-tag">Objection prix</span>
+          <div class="scenario-bubble">« C'est trop cher, vous pouvez faire un effort ? »</div>
+          <div class="scenario-bubble reply">Bob négocie dans les limites que tu configures — jamais au-delà, jamais sans ton accord.</div>
+        </div>
+        <div class="scenario-card">
+          <span class="scenario-tag">Stock en direct</span>
+          <div class="scenario-bubble">« Vous en avez encore en bleu ? »</div>
+          <div class="scenario-bubble reply">Bob vérifie ton vrai stock avant de répondre — jamais une supposition.</div>
+        </div>
+        <div class="scenario-card">
+          <span class="scenario-tag">Upsell</span>
+          <div class="scenario-bubble">« Qu'est-ce que vous avez d'autre avec ça ? »</div>
+          <div class="scenario-bubble reply">Bob propose les accessoires que tu as configurés, jamais plus de deux à la fois.</div>
+        </div>
+      </div>
+
+      <div class="scenario-cta">
+        <a class="btn btn-green" href="demo/">💬 Tester ces scénarios avec mon catalogue</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="tarifs">
+    <div class="wrap">
+      <div class="section-eyebrow">TARIFS</div>
+      <h2 class="section-title">Investis dans <span class="gold">tes ventes</span></h2>
+      <p class="section-sub">Moins cher qu'un vendeur à temps plein. Disponible dès aujourd'hui, sans engagement.</p>
+
+      <div class="pricing-grid">
+        <div class="price-card">
+          <div class="price-name">Starter</div>
+          <div class="price-amount">200€ <span>/mois</span></div>
+          <ul class="price-features">
+            <li>1 numéro WhatsApp</li>
+            <li>Catalogue produits</li>
+            <li>Agent IA vendeur</li>
+            <li>Conversations limitées</li>
+            <li>Tableau de bord</li>
+          </ul>
+          <a class="btn btn-outline" href="demo/">Essayer gratuitement</a>
+        </div>
+        <div class="price-card featured">
+          <div class="price-badge">POPULAIRE</div>
+          <div class="price-name">Business</div>
+          <div class="price-amount">700€ <span>/mois</span></div>
+          <ul class="price-features">
+            <li>Conversations élevées</li>
+            <li>Gestion de stock</li>
+            <li>Commandes intégrées</li>
+            <li>Relances automatiques</li>
+            <li>Plusieurs utilisateurs</li>
+          </ul>
+          <a class="btn btn-gold" href="demo/">Essayer gratuitement</a>
+        </div>
+        <div class="price-card">
+          <div class="price-name">Enterprise</div>
+          <div class="price-amount">Sur devis</div>
+          <ul class="price-features">
+            <li>Plusieurs magasins / numéros</li>
+            <li>Intégration ERP</li>
+            <li>Accès API</li>
+            <li>Support prioritaire</li>
+            <li>Environnement personnalisé</li>
+          </ul>
+          <a class="btn btn-outline" href="mailto:contact@agenc-ai.com?subject=Bob%20—%20Offre%20Enterprise">Nous contacter</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="final-cta" id="contact" style="border-top: 1px solid var(--border);">
+    <div class="wrap">
+      <h2>Prêt à vendre <span class="gold">sans lever le petit doigt</span> ?</h2>
+      <p>Importe ton catalogue. Ton vendeur IA est prêt en moins de 60 secondes. Aucune carte requise.</p>
+      <div class="hero-buttons">
+        <a class="btn btn-gold" href="demo/">Tester avec mon catalogue</a>
+        <a class="btn btn-outline" href="#tarifs">Voir les tarifs</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap footer-inner">
+    <div class="footer-left">
+      <div class="logo">🤖 Bob</div>
+      <p>Bob AI est une solution développée par SAS 2 Cash Enterprise.</p>
+      <p>© 2026 SAS 2 Cash Enterprise (Holding) — 1 Rue Hartz Huel, 22500 Kerfot, France</p>
+      <p>Exploitation : Agen'C AI — Abidjan, Côte d'Ivoire</p>
+      <p>💬 <a href="mailto:contact@agenc-ai.com">Contact</a></p>
+    </div>
+    <div class="footer-right">
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="legal/privacy.html">Confidentialité</a>
+    </div>
+  </div>
+</footer>
+
+<a class="wa-float" href="mailto:contact@agenc-ai.com" aria-label="Contact">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.32A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18a7.9 7.9 0 0 1-4.24-1.22l-.3-.18-3.1.8.83-3.02-.2-.31A7.93 7.93 0 0 1 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/></svg>
+</a>
+
+</body>
+</html>

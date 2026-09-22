@@ -117,24 +117,35 @@ async def receive_webhook(
         await db.commit()
         return {"status": "received_no_ai_reply"}
 
-    history_stmt = (
-        select(Message)
-        .where(Message.conversation_id == conversation.id, Message.id != incoming_message.id)
-        .order_by(Message.created_at.desc())
-        .limit(HISTORY_LIMIT)
-    )
-    history = list(reversed((await db.execute(history_stmt)).scalars().all()))
-
     tenant = await db.get(Tenant, tenant_id)
 
-    reply_text = await generate_ai_reply(
-        db=db,
-        tenant=tenant,
-        conversation=conversation,
-        history=history,
-        incoming_text=incoming_message.content,
-        llm_client=llm_client,
-    )
+    from app.services.plan_limits import FREEMIUM_QUOTA_MESSAGE, is_conversation_quota_exceeded
+
+    quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
+
+    if quota_exceeded:
+        reply_text = FREEMIUM_QUOTA_MESSAGE.format(company_name=tenant.name)
+    else:
+        history_stmt = (
+            select(Message)
+            .where(Message.conversation_id == conversation.id, Message.id != incoming_message.id)
+            .order_by(Message.created_at.desc())
+            .limit(HISTORY_LIMIT)
+        )
+        history = list(reversed((await db.execute(history_stmt)).scalars().all()))
+
+        reply_text = await generate_ai_reply(
+            db=db,
+            tenant=tenant,
+            conversation=conversation,
+            history=history,
+            incoming_text=incoming_message.content,
+            llm_client=llm_client,
+        )
+
+        # Freemium (jamais en démo) — mention discrète, levier de bouche-à-oreille (section freemium).
+        if not tenant.is_paid:
+            reply_text = f"{reply_text}\n\n_Propulsé par Bob 🤖_"
 
     ai_message = Message(
         tenant_id=tenant_id,

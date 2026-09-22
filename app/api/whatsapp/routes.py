@@ -56,8 +56,13 @@ class WhatsAppAccountResponse(BaseModel):
     waba_id: str
     phone_number_id: str
     display_name_status: str
+    display_phone_number: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DisplayPhoneNumberUpdate(BaseModel):
+    display_phone_number: str
 
 
 @router.post(
@@ -116,4 +121,28 @@ async def get_whatsapp_account(
     account = result.scalar_one_or_none()
     if account is None:
         raise HTTPException(status_code=404, detail="Aucun compte WhatsApp connecté pour ce tenant")
+    return account
+
+
+@router.put(
+    "/account/display-phone-number", response_model=WhatsAppAccountResponse, dependencies=[Depends(require_role("ADMIN"))]
+)
+async def update_display_phone_number(
+    payload: DisplayPhoneNumberUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WhatsAppAccount:
+    """Numéro affiché (format humain) — utilisé pour construire les liens wa.me des QR codes."""
+    digits = "".join(ch for ch in payload.display_phone_number if ch.isdigit() or ch == "+")
+    if len(digits) < 8:
+        raise HTTPException(status_code=400, detail="Numéro invalide")
+
+    stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
+    account = (await db.execute(stmt)).scalar_one_or_none()
+    if account is None:
+        raise HTTPException(status_code=404, detail="Aucun compte WhatsApp connecté pour ce tenant")
+
+    account.display_phone_number = digits
+    await db.commit()
+    await db.refresh(account)
     return account

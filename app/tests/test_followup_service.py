@@ -14,7 +14,7 @@ from app.services.followup_service import find_eligible_conversations, run_follo
 
 
 async def _setup(db_session, email: str, followup_enabled=True, outbound_mode=OutboundMode.COMMERCIAL_ENABLED):
-    tenant = Tenant(name="Boutique", country="SN", currency="XOF", email=email)
+    tenant = Tenant(name="Boutique", country="SN", currency="XOF", email=email, is_paid=True)
     db_session.add(tenant)
     await db_session.flush()
     db_session.add(

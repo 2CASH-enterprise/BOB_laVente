@@ -32,6 +32,12 @@ async def connect_shopify(
     Teste réellement les identifiants (récupération de la devise de la boutique) avant
     d'enregistrer quoi que ce soit — jamais de connexion stockée sans validation.
     """
+    from app.models.tenant import Tenant
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None or not tenant.is_paid:
+        raise HTTPException(status_code=403, detail="Cette intégration nécessite un plan payant")
+
     client = client_factory(payload.shop_domain, payload.access_token)
     try:
         currency = await client.fetch_shop_currency()

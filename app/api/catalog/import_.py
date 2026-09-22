@@ -30,4 +30,10 @@ async def import_csv(
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Encodage du fichier non supporté, utilisez UTF-8") from None
 
-    return await import_catalog_csv(db, current_user.tenant_id, content)
+    from app.models.tenant import Tenant
+    from app.services.plan_limits import remaining_product_slots
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    max_new = await remaining_product_slots(db, current_user.tenant_id, tenant.is_paid)
+
+    return await import_catalog_csv(db, current_user.tenant_id, content, max_new_products=max_new)

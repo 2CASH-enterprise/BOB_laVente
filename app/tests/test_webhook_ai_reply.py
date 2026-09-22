@@ -12,7 +12,7 @@ from app.tests.fakes import FakeLLMClient, text_response, tool_use_response
 
 
 async def _setup_tenant_with_whatsapp_and_product(db_session, email: str, phone_number_id: str):
-    tenant = Tenant(name="Boutique Test", country="SN", currency="XOF", email=email)
+    tenant = Tenant(name="Boutique Test", country="SN", currency="XOF", email=email, is_paid=True)
     db_session.add(tenant)
     await db_session.flush()
 
