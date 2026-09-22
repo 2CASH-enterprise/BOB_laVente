@@ -3,13 +3,13 @@ import pytest
 from app.core.security import hash_password
 from app.integrations.ecommerce.dependency import get_shopify_client_factory
 from app.main import app
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, TenantPlan
 from app.models.user import Role, User
 from app.tests.fakes_shopify import FakeShopifyClient, make_shopify_product
 
 
 async def _setup(db_session, email: str, role: Role = Role.OWNER):
-    tenant = Tenant(name="Boutique", country="SN", currency="XOF", email=email, is_paid=True)
+    tenant = Tenant(name="Boutique", country="SN", currency="XOF", email=email, plan=TenantPlan.INDEPENDANT)
     db_session.add(tenant)
     await db_session.flush()
     db_session.add(

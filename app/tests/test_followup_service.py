@@ -7,14 +7,14 @@ from app.models.conversation import Conversation, ConversationStatus
 from app.models.customer import Customer
 from app.models.followup_settings import TenantFollowupSettings
 from app.models.messaging_settings import KillSwitch, OutboundMode, TenantMessagingSettings
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, TenantPlan
 from app.models.user import Role, User
 from app.models.whatsapp_account import WhatsAppAccount
 from app.services.followup_service import find_eligible_conversations, run_followups_for_tenant
 
 
 async def _setup(db_session, email: str, followup_enabled=True, outbound_mode=OutboundMode.COMMERCIAL_ENABLED):
-    tenant = Tenant(name="Boutique", country="SN", currency="XOF", email=email, is_paid=True)
+    tenant = Tenant(name="Boutique", country="SN", currency="XOF", email=email, plan=TenantPlan.INDEPENDANT)
     db_session.add(tenant)
     await db_session.flush()
     db_session.add(

@@ -5,14 +5,14 @@ from app.core.security import hash_password
 from app.main import app
 from app.models.conversation import ConversationStatus
 from app.models.product import Product
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, TenantPlan
 from app.models.user import Role, User
 from app.models.whatsapp_account import WhatsAppAccount
 from app.tests.fakes import FakeLLMClient, text_response, tool_use_response
 
 
 async def _setup_tenant_with_whatsapp_and_product(db_session, email: str, phone_number_id: str):
-    tenant = Tenant(name="Boutique Test", country="SN", currency="XOF", email=email, is_paid=True)
+    tenant = Tenant(name="Boutique Test", country="SN", currency="XOF", email=email, plan=TenantPlan.INDEPENDANT)
     db_session.add(tenant)
     await db_session.flush()
 

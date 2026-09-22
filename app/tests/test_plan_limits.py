@@ -4,7 +4,7 @@ from app.core.security import hash_password
 from app.models.conversation import Conversation, ConversationStatus
 from app.models.customer import Customer
 from app.models.product import Product
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, TenantPlan
 from app.models.user import Role, User
 from app.services.plan_limits import (
     FREEMIUM_MAX_CONVERSATIONS_PER_MONTH,
@@ -16,7 +16,10 @@ from app.services.plan_limits import (
 
 
 async def _setup(db_session, email: str, is_paid: bool = False):
-    tenant = Tenant(name="Boutique", country="SN", currency="XOF", email=email, is_paid=is_paid)
+    tenant = Tenant(
+        name="Boutique", country="SN", currency="XOF", email=email,
+        plan=TenantPlan.INDEPENDANT if is_paid else TenantPlan.FREE,
+    )
     db_session.add(tenant)
     await db_session.flush()
     db_session.add(

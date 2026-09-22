@@ -18,7 +18,7 @@ class TenantResponse(BaseModel):
     name: str
     country: str
     currency: str
-    company_size: str
+    plan: str
     website_url: str | None
     active: bool
 
@@ -63,20 +63,9 @@ async def update_tenant_profile(
     return tenant
 
 
-@router.put("/me/company-size", response_model=TenantResponse, dependencies=[Depends(require_role("ADMIN"))])
-async def update_company_size(
-    company_size: str,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> Tenant:
-    """Section 57.3 — le plan reste modifiable manuellement (ex. suite à une négociation B2B)."""
-    tenant = await db.get(Tenant, current_user.tenant_id)
-    if tenant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
-    tenant.company_size = company_size  # validé par l'Enum SQLAlchemy à l'écriture
-    await db.commit()
-    await db.refresh(tenant)
-    return tenant
+# Le changement de plan n'est volontairement PAS self-service : il passera par le
+# paiement réel ou le dashboard Super Admin (à construire), jamais par le tenant
+# lui-même — évite qu'un compte se passe payant sans jamais avoir payé.
 
 
 class MessagingSettingsResponse(BaseModel):
