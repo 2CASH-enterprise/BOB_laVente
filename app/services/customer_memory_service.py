@@ -5,6 +5,7 @@ Mémoire client au-delà d'une conversation. Toute donnée vient directement de 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.customer import Customer
 from app.models.customer_product_view import CustomerProductView
 from app.models.order import Order, OrderItem, OrderStatus
 from app.models.product import Product
@@ -51,7 +52,9 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
         f"- {product_name}" for view, product_name in views if view.product_id not in purchased_product_ids
     ][:MAX_VIEWED_PRODUCTS]
 
-    if not order_lines and not viewed_lines:
+    preferences_lines = await _format_preferences(db, tenant_id, customer_id)
+
+    if not order_lines and not viewed_lines and not preferences_lines:
         return ""
 
     sections = ["MÉMOIRE CLIENT (ce client a déjà échangé avec toi par le passé)"]
@@ -59,12 +62,32 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
         sections.append("Commandes précédentes :\n" + "\n".join(order_lines))
     if viewed_lines:
         sections.append("Produits déjà consultés sans achat :\n" + "\n".join(viewed_lines))
+    if preferences_lines:
+        sections.append(
+            "Préférences détectées lors d'échanges précédents (INFÉRENCE, pas un fait vérifié) :\n"
+            + preferences_lines
+        )
     sections.append(
         "Tu peux t'appuyer sur cet historique pour personnaliser ton accueil (ex. reconnaître un client "
         "qui revient, proposer un produit déjà consulté) — mais ne mentionne jamais un détail qui n'est "
         "pas listé ci-dessus, et ne dis jamais explicitement que tu consultes un « historique »."
     )
     return "\n\n" + "\n\n".join(sections)
+
+
+async def _format_preferences(db: AsyncSession, tenant_id, customer_id) -> str:
+    customer = await db.get(Customer, customer_id)
+    if customer is None or not customer.detected_preferences:
+        return ""
+    prefs = customer.detected_preferences
+    lines = []
+    if prefs.get("need"):
+        lines.append(f"- Recherche : {prefs['need']}")
+    if prefs.get("brand"):
+        lines.append(f"- Marque préférée : {prefs['brand']}")
+    if prefs.get("budget_max"):
+        lines.append(f"- Budget maximum mentionné : {prefs['budget_max']}")
+    return "\n".join(lines)
 
 
 async def record_product_view(db: AsyncSession, tenant_id, customer_id, product_ids: list) -> None:

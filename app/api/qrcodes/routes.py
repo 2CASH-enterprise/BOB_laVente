@@ -115,7 +115,9 @@ async def redirect_qr_code(code: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     digits = "".join(ch for ch in account.display_phone_number if ch.isdigit())
-    message = quote(f"Bonjour, je suis intéressé(e) par : {product.name}")
+    # La référence [QR:code] permet au webhook de savoir exactement quel QR a généré ce
+    # premier contact (section CRM.7) — jamais une supposition, une vraie traçabilité.
+    message = quote(f"Bonjour, je suis intéressé(e) par : {product.name} [QR:{qr.code}]")
     wa_link = f"https://wa.me/{digits}?text={message}"
 
     return RedirectResponse(url=wa_link, status_code=302)

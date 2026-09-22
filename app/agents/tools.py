@@ -190,6 +190,30 @@ class ToolExecutor:
 
         return result
 
+    async def _tool_update_customer_profile(self, tool_input: dict) -> dict:
+        from app.models.customer import Customer
+
+        customer = await self.db.get(Customer, self.customer_id)
+        if customer is None:
+            return {"error": "Client introuvable"}
+
+        if tool_input.get("first_name"):
+            customer.first_name = tool_input["first_name"]
+        if tool_input.get("city"):
+            customer.city = tool_input["city"]
+
+        preferences = dict(customer.detected_preferences or {})
+        if tool_input.get("need"):
+            preferences["need"] = tool_input["need"]
+        if tool_input.get("brand"):
+            preferences["brand"] = tool_input["brand"]
+        if tool_input.get("budget_max") is not None:
+            preferences["budget_max"] = tool_input["budget_max"]
+        customer.detected_preferences = preferences
+
+        await self.db.flush()
+        return {"status": "saved"}
+
     async def _tool_check_order_status(self, tool_input: dict) -> dict:
         from sqlalchemy import select
 

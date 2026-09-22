@@ -37,7 +37,10 @@ BASE_RULES = """RÈGLES
     ou combler l'absence de complémentaires configurés, tu peux utiliser
     get_frequently_bought_together, basé sur les vraies commandes passées.
 16. Si un client demande où en est sa commande ou sa livraison, utilise TOUJOURS
-    check_order_status — ne réponds jamais de mémoire ni en devinant un statut."""
+    check_order_status — ne réponds jamais de mémoire ni en devinant un statut.
+17. Dès qu'un client mentionne son prénom, sa ville, ce qu'il cherche, une marque ou un
+    budget, utilise update_customer_profile pour l'enregistrer — jamais à chaque message,
+    seulement quand une information nouvelle et concrète apparaît."""
 
 CATEGORY_LABELS = {
     "HORAIRES": "Horaires",

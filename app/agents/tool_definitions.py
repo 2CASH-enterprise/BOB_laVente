@@ -98,6 +98,27 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "update_customer_profile",
+        "description": (
+            "Enregistre une information concrète que le client vient de donner sur lui-même "
+            "ou son besoin (nom, ville, ce qu'il cherche, marque préférée, budget). Appelle "
+            "cet outil dès qu'une information nouvelle et concrète apparaît dans la conversation "
+            "— jamais à chaque message, jamais une supposition de ta part. Ne fournis que les "
+            "champs réellement mentionnés par le client, laisse les autres vides."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "first_name": {"type": "string", "description": "Prénom du client, si mentionné"},
+                "city": {"type": "string", "description": "Ville du client, si mentionnée"},
+                "need": {"type": "string", "description": "Ce que le client recherche (ex. 'smartphone', 'robe de soirée')"},
+                "brand": {"type": "string", "description": "Marque préférée mentionnée, si applicable"},
+                "budget_max": {"type": "number", "description": "Budget maximum mentionné par le client"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "check_order_status",
         "description": (
             "Renvoie le statut réel d'une commande du client (paiement, livraison, articles). "

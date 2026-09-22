@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -12,6 +13,8 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_message, verify_whatsapp_signature
 from app.models.conversation import ConversationStatus, Message, MessageSender
+from app.models.product import Product
+from app.models.product_qr_code import ProductQrCode
 from app.models.tenant import Tenant
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.customer_repository import CustomerRepository
@@ -22,6 +25,7 @@ router = APIRouter(prefix="/webhooks/whatsapp", tags=["webhooks"])
 settings = get_settings()
 
 HISTORY_LIMIT = 20  # section 13 — mémoire conversationnelle, fenêtre raisonnable
+QR_REFERENCE_PATTERN = re.compile(r"\s*\[QR:([A-Za-z0-9_-]+)\]\s*$")
 
 
 @router.get("")
@@ -85,7 +89,7 @@ async def receive_webhook(
     tenant_id = account.tenant_id
 
     customer_repo = CustomerRepository(db)
-    customer = await customer_repo.get_or_create(tenant_id, parsed["from"])
+    customer, is_new_customer = await customer_repo.get_or_create_with_created_flag(tenant_id, parsed["from"])
 
     conversation_repo = ConversationRepository(db)
     conversation = await conversation_repo.get_or_create_active(tenant_id, customer.id)
@@ -95,12 +99,28 @@ async def receive_webhook(
         conversation.followup_stage = 0
         conversation.last_followup_at = None
 
+    incoming_text = parsed.get("text") or ""
+
+    # Section CRM.7 — attribution QR : uniquement au tout premier contact, jamais réécrite
+    # ensuite. La référence [QR:code] est retirée du texte avant tout traitement, pour que
+    # ni l'historique affiché ni l'IA ne voient jamais cette balise technique.
+    if is_new_customer:
+        match = QR_REFERENCE_PATTERN.search(incoming_text)
+        if match:
+            qr_stmt = select(ProductQrCode).where(ProductQrCode.tenant_id == tenant_id, ProductQrCode.code == match.group(1))
+            qr = (await db.execute(qr_stmt)).scalar_one_or_none()
+            if qr is not None:
+                product = await db.get(Product, qr.product_id)
+                customer.acquisition_source = "QR"
+                customer.acquisition_detail = f"Produit scanné : {product.name}" if product else None
+            incoming_text = QR_REFERENCE_PATTERN.sub("", incoming_text).strip()
+
     incoming_message = Message(
         tenant_id=tenant_id,
         conversation_id=conversation.id,
         sender=MessageSender.CUSTOMER,
         message_type=parsed["type"],
-        content=parsed.get("text") or "",
+        content=incoming_text,
         message_metadata={"wa_message_id": parsed["wa_message_id"]},
     )
     db.add(incoming_message)
