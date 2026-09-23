@@ -83,13 +83,13 @@
   button.action.secondary:hover { background: #CDEADA; }
   button.action:disabled { background: var(--border); color: var(--muted); cursor: default; transform: none; }
 
-  #login-screen { max-width: 360px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 16px rgba(27, 67, 50, 0.06); }
-  #login-screen h2 { color: var(--accent); margin-top: 0; }
-  #login-screen input { width: 100%; padding: 11px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 14px; }
-  #login-screen input:focus { outline: none; border-color: var(--accent-light); }
-  #login-screen button { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.15s ease; }
-  #login-screen button:hover { background: #16382A; }
-  #login-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
+  #login-screen, #signup-screen, #mfa-screen { max-width: 360px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 16px rgba(27, 67, 50, 0.06); }
+  #login-screen h2, #signup-screen h2, #mfa-screen h2 { color: var(--accent); margin-top: 0; }
+  #login-screen input, #signup-screen input, #mfa-screen input { width: 100%; padding: 11px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 14px; }
+  #login-screen input:focus, #signup-screen input:focus, #mfa-screen input:focus { outline: none; border-color: var(--accent-light); }
+  #login-screen button, #signup-screen button, #mfa-screen button { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.15s ease; }
+  #login-screen button:hover, #signup-screen button:hover, #mfa-screen button:hover { background: #16382A; }
+  #login-error, #signup-error, #mfa-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
 
   .msg { padding: 9px 13px; margin-bottom: 6px; border-radius: 10px; font-size: 14px; max-width: 85%; }
   .msg.CUSTOMER { background: var(--bg); border: 1px solid var(--border); }
@@ -137,7 +137,7 @@
 
   @media (max-width: 480px) {
     .grid { grid-template-columns: 1fr 1fr; }
-    #login-screen { margin: 60px 16px; padding: 24px; }
+    #login-screen, #signup-screen, #mfa-screen { margin: 60px 16px; padding: 24px; }
   }
 </style>
 </head>
@@ -149,6 +149,35 @@
   <input id="login-password" type="password" placeholder="Mot de passe">
   <button onclick="login()">Se connecter</button>
   <div id="login-error"></div>
+  <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
+    Pas encore de compte ? <a onclick="showSignup()" style="color: var(--accent); cursor: pointer;">Créer un compte</a>
+  </p>
+</div>
+
+<div id="signup-screen" class="hidden">
+  <h2>Créer votre compte Bob</h2>
+  <input id="signup-company" placeholder="Nom de votre entreprise">
+  <input id="signup-country" placeholder="Pays (ex. SN)" maxlength="2" style="text-transform: uppercase;">
+  <input id="signup-currency" placeholder="Devise (ex. XOF)" maxlength="3" style="text-transform: uppercase;">
+  <input id="signup-name" placeholder="Votre nom complet">
+  <input id="signup-email" type="email" placeholder="Email">
+  <input id="signup-password" type="password" placeholder="Mot de passe (8 caractères min.)">
+  <button onclick="signup()">Créer mon compte</button>
+  <div id="signup-error"></div>
+  <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
+    Déjà un compte ? <a onclick="showLogin()" style="color: var(--accent); cursor: pointer;">Se connecter</a>
+  </p>
+</div>
+
+<div id="mfa-screen" class="hidden">
+  <h2>Vérification en deux étapes</h2>
+  <p style="font-size: 13px; color: var(--muted); margin-top: -8px;">Un code à 6 chiffres a été envoyé à votre email.</p>
+  <input id="mfa-code" placeholder="Code à 6 chiffres" maxlength="6" style="text-align: center; font-size: 22px; letter-spacing: 6px;">
+  <button onclick="verifyMfa()">Vérifier</button>
+  <div id="mfa-error"></div>
+  <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
+    <a onclick="resendMfa()" style="color: var(--accent); cursor: pointer;">Renvoyer le code</a>
+  </p>
 </div>
 
 <div id="app" class="hidden">
@@ -327,6 +356,16 @@
     <section id="tab-settings" class="hidden">
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Sécurité du compte</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
+            Un code à 6 chiffres vous sera envoyé par email à chaque connexion.
+          </p>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+            <input type="checkbox" id="mfa-toggle" onchange="toggleMfaSetting()"> Activer la double authentification
+          </label>
+          <div id="mfa-toggle-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 12px; font-weight: 600;">Compte WhatsApp Business</div>
           <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
           <button class="action" id="btn-connect-whatsapp" onclick="connectWhatsApp()">Connecter WhatsApp</button>
@@ -416,6 +455,19 @@ function api(path, options = {}) {
   });
 }
 
+let pendingMfaToken = null;
+
+function showSignup() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("signup-screen").classList.remove("hidden");
+}
+
+function showLogin() {
+  document.getElementById("signup-screen").classList.add("hidden");
+  document.getElementById("mfa-screen").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+}
+
 async function login() {
   const email = document.getElementById("login-email").value;
   const password = document.getElementById("login-password").value;
@@ -426,6 +478,12 @@ async function login() {
       if (!r.ok) throw new Error("Email ou mot de passe incorrect");
       return r.json();
     });
+    if (res.mfa_required) {
+      pendingMfaToken = res.mfa_pending_token;
+      document.getElementById("login-screen").classList.add("hidden");
+      document.getElementById("mfa-screen").classList.remove("hidden");
+      return;
+    }
     token = res.access_token;
     localStorage.setItem("bob_token", token);
     enterApp();
@@ -434,8 +492,83 @@ async function login() {
   }
 }
 
+async function signup() {
+  const errorEl = document.getElementById("signup-error");
+  errorEl.textContent = "";
+  const payload = {
+    company_name: document.getElementById("signup-company").value.trim(),
+    country: document.getElementById("signup-country").value.trim().toUpperCase(),
+    currency: document.getElementById("signup-currency").value.trim().toUpperCase(),
+    owner_full_name: document.getElementById("signup-name").value.trim(),
+    owner_email: document.getElementById("signup-email").value.trim(),
+    owner_password: document.getElementById("signup-password").value,
+  };
+  if (!payload.company_name || !payload.country || !payload.currency || !payload.owner_full_name || !payload.owner_email || !payload.owner_password) {
+    errorEl.textContent = "Tous les champs sont requis.";
+    return;
+  }
+  try {
+    const res = await fetch(API_BASE + "/api/v1/auth/register-tenant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Échec de la création du compte");
+    }
+    // Compte créé — connexion automatique.
+    const body = new URLSearchParams({ username: payload.owner_email, password: payload.owner_password });
+    const loginRes = await fetch(API_BASE + "/api/v1/auth/login", { method: "POST", body }).then((r) => r.json());
+    token = loginRes.access_token;
+    localStorage.setItem("bob_token", token);
+    enterApp();
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+async function verifyMfa() {
+  const errorEl = document.getElementById("mfa-error");
+  const code = document.getElementById("mfa-code").value.trim();
+  errorEl.textContent = "";
+  try {
+    const res = await fetch(API_BASE + "/api/v1/auth/verify-mfa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mfa_pending_token: pendingMfaToken, code }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Code incorrect");
+    }
+    const data = await res.json();
+    token = data.access_token;
+    localStorage.setItem("bob_token", token);
+    document.getElementById("mfa-screen").classList.add("hidden");
+    enterApp();
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+async function resendMfa() {
+  try {
+    await fetch(API_BASE + "/api/v1/auth/mfa/resend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mfa_pending_token: pendingMfaToken }),
+    });
+    alert("Un nouveau code a été envoyé.");
+  } catch (e) {
+    alert("Échec de l'envoi, réessayez.");
+  }
+}
+
 function enterApp() {
   document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("signup-screen").classList.add("hidden");
+  document.getElementById("mfa-screen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   loadTenant();
   loadOverview();
@@ -466,7 +599,7 @@ function showTab(name) {
   if (name === "orders") loadOrders();
   if (name === "integrations") loadIntegrationsStatus();
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
-  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); }
+  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); loadMfaStatus(); }
 }
 
 async function loadTenant() {
@@ -820,6 +953,30 @@ async function deleteQrCode(id) {
   if (!confirm("Supprimer ce QR ? Il ne fonctionnera plus si déjà imprimé.")) return;
   await api(`/api/v1/qr-codes/${id}`, { method: "DELETE" });
   loadQrCodes();
+}
+
+async function loadMfaStatus() {
+  const me = await api("/api/v1/auth/me");
+  document.getElementById("mfa-toggle").checked = me.mfa_enabled;
+}
+
+async function toggleMfaSetting() {
+  const msg = document.getElementById("mfa-toggle-msg");
+  const enabled = document.getElementById("mfa-toggle").checked;
+  try {
+    const data = await api("/api/v1/auth/mfa/toggle", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    token = data.access_token;
+    localStorage.setItem("bob_token", token);
+    msg.style.color = "var(--success)";
+    msg.textContent = enabled ? "Activée — un code vous sera demandé à la prochaine connexion." : "Désactivée.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
 }
 
 function copyQrLink(url) {

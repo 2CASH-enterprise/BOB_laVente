@@ -13,6 +13,30 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class LoginResponse(BaseModel):
+    """
+    Deux formes possibles : soit access_token directement (2FA désactivée), soit
+    mfa_required + mfa_pending_token (2FA activée, code envoyé, à vérifier ensuite).
+    """
+    access_token: str | None = None
+    token_type: str = "bearer"
+    mfa_required: bool = False
+    mfa_pending_token: str | None = None
+
+
+class VerifyMfaRequest(BaseModel):
+    mfa_pending_token: str
+    code: str = Field(min_length=6, max_length=6)
+
+
+class ResendMfaRequest(BaseModel):
+    mfa_pending_token: str
+
+
+class MfaToggleRequest(BaseModel):
+    enabled: bool
+
+
 class RegisterTenantRequest(BaseModel):
     """Section 6 — création d'une nouvelle entreprise + son premier utilisateur OWNER."""
 

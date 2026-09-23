@@ -47,6 +47,33 @@ def create_access_token(user_id: UUID, tenant_id: UUID, role: str) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
+# ==================== 2FA — token temporaire « en attente de code » ====================
+# Volontairement différent d'un TokenPayload normal : ne contient ni rôle ni droits,
+# ne peut jamais servir à s'authentifier sur une route protégée par get_current_user.
+
+class MfaPendingTokenPayload(BaseModel):
+    sub: str  # user_id
+    mfa_pending: bool
+    exp: datetime
+
+
+def create_mfa_pending_token(user_id: UUID) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    payload = {"sub": str(user_id), "mfa_pending": True, "exp": expire}
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def decode_mfa_pending_token(token: str) -> UUID:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        parsed = MfaPendingTokenPayload(**payload)
+    except (JWTError, ValidationError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session de vérification invalide ou expirée") from exc
+    if not parsed.mfa_pending:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide")
+    return UUID(parsed.sub)
+
+
 def decode_access_token(token: str) -> TokenPayload:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])

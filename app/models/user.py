@@ -33,6 +33,8 @@ class User(Base):
     role: Mapped[Role] = mapped_column(Enum(Role, name="user_role"), default=Role.AGENT, nullable=False)
 
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_otp_code_hash: Mapped[str | None] = mapped_column(String(64))
+    mfa_otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

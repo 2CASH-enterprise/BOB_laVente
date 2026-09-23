@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     app_name: str = "Bob - Agent vendeur IA"
     environment: str = "development"  # development | staging | production
     public_base_url: str = "https://agenc-ai.com/bob"  # préfixe absolu — nécessaire pour les URLs d'images envoyées via WhatsApp
+
+    # SMTP — envoi des codes de double authentification (section 2FA). Si non configuré,
+    # le code est journalisé côté serveur (utile en développement), jamais bloquant.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "no-reply@agenc-ai.com"
+    smtp_use_tls: bool = True
     debug: bool = False
 
     # Database
