@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # App
     app_name: str = "Bob - Agent vendeur IA"
     environment: str = "development"  # development | staging | production
+    public_base_url: str = "https://agenc-ai.com/bob"  # préfixe absolu — nécessaire pour les URLs d'images envoyées via WhatsApp
     debug: bool = False
 
     # Database

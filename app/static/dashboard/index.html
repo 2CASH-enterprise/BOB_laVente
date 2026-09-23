@@ -131,8 +131,8 @@
     td[data-label]::before { content: attr(data-label); font-weight: 600; color: var(--muted); font-size: 12px; flex-shrink: 0; }
     td:not([data-label]) { justify-content: flex-start; }
     /* Les lignes de panneaux dépliables (colspan) restent pleine largeur, sans label */
-    tr[id^="upsell-row-"] td, tr[id^="delivery-row-"] td { display: block; padding: 8px 0; }
-    tr[id^="upsell-row-"], tr[id^="delivery-row-"] { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin-top: -6px; margin-bottom: 10px; }
+    tr[id^="upsell-row-"] td, tr[id^="delivery-row-"] td, tr[id^="edit-row-"] td { display: block; padding: 8px 0; }
+    tr[id^="upsell-row-"], tr[id^="delivery-row-"], tr[id^="edit-row-"] { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin-top: -6px; margin-bottom: 10px; }
   }
 
   @media (max-width: 480px) {
@@ -232,11 +232,12 @@
           </p>
           <input type="file" id="csv-file-input" accept=".csv" style="margin-bottom: 10px;">
           <button class="action" onclick="importCsv()">Importer</button>
+          <button class="action secondary" onclick="exportXlsx()">Exporter en Excel</button>
           <div id="csv-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
       </div>
       <table>
-        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th><th>Upsell</th></tr></thead>
+        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th><th>Upsell</th><th>Gérer</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
 
@@ -646,19 +647,119 @@ let allQrCodes = [];
 
 async function loadProducts() {
   const rows = document.getElementById("product-rows");
-  rows.innerHTML = "<tr><td class='loading-text' colspan='6'>Chargement</td></tr>";
+  rows.innerHTML = "<tr><td class='loading-text' colspan='7'>Chargement</td></tr>";
   allProducts = await api("/api/v1/products");
   rows.innerHTML = allProducts
     .map(
       (p) => `<tr>
-        <td data-label="Nom">${p.name}</td><td data-label="SKU">${p.sku}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${p.currency}</td>
+        <td data-label="Nom">${p.image_url ? `<img src="${p.image_url}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${p.name}</td>
+        <td data-label="SKU">${p.sku}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${p.currency}</td>
         <td data-label="Stock">${p.stock_quantity}</td><td data-label="Actif">${p.active ? "✅" : "❌"}</td>
         <td data-label="Upsell"><button class="action secondary" onclick="toggleUpsellPanel('${p.id}')">Gérer</button></td>
+        <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel('${p.id}')">✏️ Modifier</button></td>
       </tr>
-      <tr id="upsell-row-${p.id}" class="hidden"><td colspan="6"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
+      <tr id="upsell-row-${p.id}" class="hidden"><td colspan="7"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>
+      <tr id="edit-row-${p.id}" class="hidden"><td colspan="7"><div id="edit-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
     )
-    .join("") || "<tr><td colspan='6'>Aucun produit</td></tr>";
+    .join("") || "<tr><td colspan='7'>Aucun produit</td></tr>";
   loadQrCodes();
+}
+
+function toggleEditPanel(productId) {
+  const row = document.getElementById(`edit-row-${productId}`);
+  const wasHidden = row.classList.contains("hidden");
+  document.querySelectorAll("[id^='edit-row-'], [id^='upsell-row-']").forEach((r) => r.classList.add("hidden"));
+  if (wasHidden) {
+    row.classList.remove("hidden");
+    renderEditPanel(productId);
+  }
+}
+
+function renderEditPanel(productId) {
+  const p = allProducts.find((x) => x.id === productId);
+  const panel = document.getElementById(`edit-panel-${productId}`);
+  panel.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 620px; margin-bottom: 10px;">
+      <input id="edit-name-${p.id}" class="input" placeholder="Nom" value="${p.name}">
+      <input id="edit-price-${p.id}" class="input" type="number" placeholder="Prix" value="${p.price}">
+      <input id="edit-stock-${p.id}" class="input" type="number" placeholder="Stock" value="${p.stock_quantity}">
+    </div>
+    <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${p.description || ""}</textarea>
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+      <input type="file" id="edit-image-${p.id}" accept="image/png,image/jpeg,image/webp" style="max-width: 240px;">
+      <button class="action secondary" onclick="uploadProductImage('${p.id}')">📷 Changer la photo</button>
+      <label style="font-size: 13px; display: flex; align-items: center; gap: 6px;">
+        <input type="checkbox" id="edit-active-${p.id}" ${p.active ? "checked" : ""}> Actif
+      </label>
+    </div>
+    <button class="action" onclick="saveProductEdit('${p.id}')">Enregistrer</button>
+    <button class="action secondary" onclick="deleteProduct('${p.id}')">🗑️ Supprimer le produit</button>
+    <span id="edit-msg-${p.id}" style="margin-left: 10px; font-size: 13px;"></span>
+  `;
+}
+
+async function saveProductEdit(productId) {
+  const msg = document.getElementById(`edit-msg-${productId}`);
+  try {
+    await api(`/api/v1/products/${productId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: document.getElementById(`edit-name-${productId}`).value,
+        price: document.getElementById(`edit-price-${productId}`).value,
+        stock_quantity: parseInt(document.getElementById(`edit-stock-${productId}`).value, 10),
+        description: document.getElementById(`edit-description-${productId}`).value || null,
+        active: document.getElementById(`edit-active-${productId}`).checked,
+      }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+    loadProducts();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function uploadProductImage(productId) {
+  const msg = document.getElementById(`edit-msg-${productId}`);
+  const fileInput = document.getElementById(`edit-image-${productId}`);
+  if (!fileInput.files.length) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Choisissez une image d'abord.";
+    return;
+  }
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+  try {
+    await api(`/api/v1/products/${productId}/image`, { method: "POST", body: formData });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Photo mise à jour.";
+    loadProducts();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function deleteProduct(productId) {
+  if (!confirm("Supprimer ce produit ? Il ne sera plus visible ni proposé par Bob (l'historique des commandes est conservé).")) return;
+  await api(`/api/v1/products/${productId}`, { method: "DELETE" });
+  loadProducts();
+}
+
+async function exportXlsx() {
+  try {
+    const res = await fetch(API_BASE + "/api/v1/products/export/xlsx", { headers: { Authorization: "Bearer " + token } });
+    if (!res.ok) throw new Error("Échec de l'export");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "catalogue-bob.xlsx";
+    a.click();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function loadQrCodes() {

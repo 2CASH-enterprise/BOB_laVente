@@ -71,6 +71,10 @@ _superadmin_dir = Path(__file__).parent / "static" / "superadmin"
 if _superadmin_dir.exists():
     app.mount("/superadmin", StaticFiles(directory=str(_superadmin_dir), html=True), name="superadmin")
 
+_uploads_dir = Path(__file__).parent / "static" / "uploads"
+_uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
+
 
 @app.get("/health", tags=["system"])
 async def health() -> dict[str, str]:
