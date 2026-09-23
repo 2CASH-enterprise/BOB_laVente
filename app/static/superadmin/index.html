@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bob — Super Admin</title>
+<style>
+  :root {
+    --bg: #F4FAF6; --panel: #FFFFFF; --border: #DCEBE1; --text: #14261C;
+    --muted: #6C8277; --accent: #1B4332; --accent-light: #52B788; --accent-soft: #DFF3E8;
+    --success: #2D8A5E; --warning: #C98A2E; --danger: #C1443C;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; background: var(--accent); color: white; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  header button { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  main { padding: 28px; max-width: 1100px; margin: 0 auto; }
+
+  #login-screen { max-width: 360px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 16px rgba(27,67,50,0.06); }
+  #login-screen h2 { color: var(--accent); margin-top: 0; }
+  .input { width: 100%; padding: 11px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 14px; }
+  .input:focus { outline: none; border-color: var(--accent-light); }
+  button.cta { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; }
+  #login-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .bootstrap-hint { font-size: 12px; color: var(--muted); margin-top: 16px; text-align: center; }
+  .bootstrap-hint a { color: var(--accent); cursor: pointer; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+  .card .value { font-size: 25px; font-weight: 700; }
+  .card .label { color: var(--muted); font-size: 13px; margin-top: 3px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--accent-soft); }
+  tr:last-child td { border-bottom: none; }
+  select.plan-select { padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; }
+  .badge { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge.active { background: #DFF3E8; color: var(--success); }
+  .badge.inactive { background: #FBE4E2; color: var(--danger); }
+  .badge.demo { background: #FBEFDB; color: var(--warning); }
+  button.small { font-size: 11px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h2>Bob — Super Admin</h2>
+  <input id="login-email" type="email" placeholder="Email" class="input">
+  <input id="login-password" type="password" placeholder="Mot de passe" class="input">
+  <button class="cta" onclick="login()">Se connecter</button>
+  <div id="login-error"></div>
+  <div class="bootstrap-hint">Premier accès, aucun compte encore créé ? <a onclick="showBootstrap()">Créer le compte initial</a></div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <h1>🛡️ Bob — Super Admin</h1>
+    <button onclick="logout()">Déconnexion</button>
+  </header>
+  <main>
+    <div class="grid" id="stats-grid"></div>
+    <table>
+      <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Statut</th><th>Produits</th><th>Conversations (mois)</th><th>Créé le</th></tr></thead>
+      <tbody id="tenant-rows"></tbody>
+    </table>
+  </main>
+</div>
+
+<script>
+const API_BASE = window.location.pathname.replace(/\/superadmin\/?.*$/, "");
+let token = localStorage.getItem("bob_superadmin_token") || null;
+
+function api(path, options = {}) {
+  options.headers = Object.assign({}, options.headers, token ? { Authorization: "Bearer " + token } : {});
+  return fetch(API_BASE + path, options).then(async (r) => {
+    if (r.status === 401) { logout(); throw new Error("Session expirée."); }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    return r.json();
+  });
+}
+
+function enterApp() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  loadStats();
+  loadTenants();
+}
+
+function logout() {
+  localStorage.removeItem("bob_superadmin_token");
+  token = null;
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("login-screen").classList.remove("hidden");
+}
+
+if (token) enterApp();
+
+async function login() {
+  const email = document.getElementById("login-email").value;
+  const password = document.getElementById("login-password").value;
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "";
+  try {
+    const body = new URLSearchParams({ username: email, password });
+    const res = await fetch(API_BASE + "/api/v1/superadmin/login", { method: "POST", body }).then((r) => {
+      if (!r.ok) throw new Error("Email ou mot de passe incorrect");
+      return r.json();
+    });
+    token = res.access_token;
+    localStorage.setItem("bob_superadmin_token", token);
+    enterApp();
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+async function showBootstrap() {
+  const email = prompt("Email du compte Super Admin à créer :");
+  if (!email) return;
+  const fullName = prompt("Nom complet :");
+  if (!fullName) return;
+  const password = prompt("Mot de passe (8 caractères minimum) :");
+  if (!password) return;
+  try {
+    const res = await fetch(API_BASE + "/api/v1/superadmin/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, full_name: fullName }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Échec de la création");
+    }
+    const data = await res.json();
+    token = data.access_token;
+    localStorage.setItem("bob_superadmin_token", token);
+    enterApp();
+  } catch (e) {
+    document.getElementById("login-error").textContent = e.message;
+  }
+}
+
+async function loadStats() {
+  const grid = document.getElementById("stats-grid");
+  grid.innerHTML = "<p style='color: var(--muted);'>Chargement…</p>";
+  const s = await api("/api/v1/superadmin/stats");
+  const planEntries = Object.entries(s.tenants_by_plan).map(([p, c]) => `${p}: ${c}`).join(" · ");
+  grid.innerHTML = `
+    <div class="card"><div class="value">${s.total_tenants}</div><div class="label">Entreprises totales</div></div>
+    <div class="card"><div class="value">${s.demo_tenants}</div><div class="label">Démos actives</div></div>
+    <div class="card"><div class="value">${s.total_customers}</div><div class="label">Clients (tous tenants)</div></div>
+    <div class="card"><div class="value">${s.total_conversations_this_month}</div><div class="label">Conversations ce mois</div></div>
+    <div class="card"><div class="value">${s.total_orders}</div><div class="label">Commandes totales</div></div>
+    <div class="card" style="grid-column: span 2;"><div class="label" style="margin-bottom: 6px;">Répartition par plan</div><div style="font-size: 13px;">${planEntries || "—"}</div></div>
+  `;
+}
+
+const PLANS = ["FREE", "INDEPENDANT", "STARTER", "PRO", "ENTERPRISE"];
+
+async function loadTenants() {
+  const rows = document.getElementById("tenant-rows");
+  rows.innerHTML = "<tr><td colspan='7'>Chargement…</td></tr>";
+  const tenants = await api("/api/v1/superadmin/tenants");
+  rows.innerHTML = tenants
+    .map(
+      (t) => `<tr>
+        <td>${t.name}${t.is_demo ? ' <span class="badge demo">démo</span>' : ""}</td>
+        <td>${t.email}</td>
+        <td><select class="plan-select" onchange="changePlan('${t.id}', this.value)">
+          ${PLANS.map((p) => `<option value="${p}" ${p === t.plan ? "selected" : ""}>${p}</option>`).join("")}
+        </select></td>
+        <td><span class="badge ${t.active ? "active" : "inactive"}">${t.active ? "Actif" : "Suspendu"}</span></td>
+        <td>${t.product_count}</td>
+        <td>${t.conversation_count_this_month}</td>
+        <td>${new Date(t.created_at).toLocaleDateString()}</td>
+      </tr>`
+    )
+    .join("") || "<tr><td colspan='7'>Aucune entreprise</td></tr>";
+}
+
+async function changePlan(tenantId, plan) {
+  try {
+    await api(`/api/v1/superadmin/tenants/${tenantId}/plan`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan }),
+    });
+  } catch (e) {
+    alert(e.message);
+    loadTenants();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 from app.models.tenant import Tenant  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.superadmin_user import SuperAdminUser  # noqa: F401
 from app.models.whatsapp_account import WhatsAppAccount  # noqa: F401
 from app.models.customer import Customer  # noqa: F401
 from app.models.conversation import Conversation, Message  # noqa: F401
@@ -21,6 +22,7 @@ from app.models.product_qr_code import ProductQrCode  # noqa: F401
 __all__ = [
     "Tenant",
     "User",
+    "SuperAdminUser",
     "WhatsAppAccount",
     "Customer",
     "Conversation",

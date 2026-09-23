@@ -12,7 +12,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
 
@@ -51,7 +51,7 @@ def decode_access_token(token: str) -> TokenPayload:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         return TokenPayload(**payload)
-    except JWTError as exc:
+    except (JWTError, ValidationError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Jeton invalide ou expiré",
@@ -95,3 +95,40 @@ def require_role(minimum_role: str):
         return current_user
 
     return _check
+
+
+# ==================== Super Admin (Étape 3) ====================
+# Système d'authentification VOLONTAIREMENT séparé de get_current_user/CurrentUser
+# ci-dessus : un super admin n'appartient à aucun tenant, et ne doit jamais pouvoir
+# être confondu avec un utilisateur tenant même en cas de bug ailleurs dans le code.
+
+superadmin_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/superadmin/login", auto_error=False)
+
+
+class SuperAdminTokenPayload(BaseModel):
+    sub: str  # superadmin_user_id
+    superadmin: bool
+    exp: datetime
+
+
+def create_superadmin_access_token(user_id: UUID) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    payload = {"sub": str(user_id), "superadmin": True, "exp": expire}
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+class CurrentSuperAdmin(BaseModel):
+    superadmin_user_id: UUID
+
+
+def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_scheme)) -> CurrentSuperAdmin:
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Non authentifié")
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        parsed = SuperAdminTokenPayload(**payload)
+    except Exception as exc:  # noqa: BLE001 — couvre à la fois JWTError et une validation pydantic ratée
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide ou expiré") from exc
+    if not parsed.superadmin:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide")
+    return CurrentSuperAdmin(superadmin_user_id=UUID(parsed.sub))

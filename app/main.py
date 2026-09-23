@@ -16,6 +16,7 @@ from app.api.integrations.meta_catalog import router as meta_catalog_router
 from app.api.integrations.shopify import router as shopify_router
 from app.api.knowledge.routes import router as knowledge_router
 from app.api.qrcodes.routes import router as qrcodes_router
+from app.api.superadmin.routes import router as superadmin_router
 from app.api.messages.routes import router as messages_router
 from app.api.orders.routes import router as orders_router
 from app.api.tenants.routes import router as tenants_router
@@ -52,6 +53,7 @@ app.include_router(meta_catalog_router)
 app.include_router(knowledge_router)
 app.include_router(demo_router)
 app.include_router(qrcodes_router)
+app.include_router(superadmin_router)
 
 _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():
@@ -64,6 +66,10 @@ if _legal_dir.exists():
 _demo_dir = Path(__file__).parent / "static" / "instant-demo"
 if _demo_dir.exists():
     app.mount("/demo", StaticFiles(directory=str(_demo_dir), html=True), name="instant-demo")
+
+_superadmin_dir = Path(__file__).parent / "static" / "superadmin"
+if _superadmin_dir.exists():
+    app.mount("/superadmin", StaticFiles(directory=str(_superadmin_dir), html=True), name="superadmin")
 
 
 @app.get("/health", tags=["system"])
