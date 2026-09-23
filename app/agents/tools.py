@@ -190,6 +190,22 @@ class ToolExecutor:
 
         return result
 
+    async def _tool_record_marketing_consent(self, tool_input: dict) -> dict:
+        from app.models.customer import Customer
+        from app.services.consent_service import grant_marketing_consent, withdraw_marketing_consent
+
+        customer = await self.db.get(Customer, self.customer_id)
+        if customer is None:
+            return {"error": "Client introuvable"}
+
+        if tool_input.get("accepted"):
+            grant_marketing_consent(customer, source="AI_ASKED")
+        else:
+            withdraw_marketing_consent(customer)
+
+        await self.db.flush()
+        return {"status": "saved"}
+
     async def _tool_update_customer_profile(self, tool_input: dict) -> dict:
         from app.models.customer import Customer
 

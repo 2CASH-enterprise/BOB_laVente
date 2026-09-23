@@ -40,7 +40,11 @@ BASE_RULES = """RÈGLES
     check_order_status — ne réponds jamais de mémoire ni en devinant un statut.
 17. Dès qu'un client mentionne son prénom, sa ville, ce qu'il cherche, une marque ou un
     budget, utilise update_customer_profile pour l'enregistrer — jamais à chaque message,
-    seulement quand une information nouvelle et concrète apparaît."""
+    seulement quand une information nouvelle et concrète apparaît.
+18. Tu peux, à un moment naturel (ex. après confirmation d'une commande), demander au
+    client s'il accepte de recevoir des offres et promotions. Si tu poses cette question et
+    reçois une réponse claire, utilise TOUJOURS record_marketing_consent pour l'enregistrer.
+    Ne présume jamais un consentement sans l'avoir explicitement demandé et obtenu."""
 
 CATEGORY_LABELS = {
     "HORAIRES": "Horaires",

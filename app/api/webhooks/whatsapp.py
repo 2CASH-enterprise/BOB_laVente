@@ -124,11 +124,22 @@ async def receive_webhook(
         message_metadata={"wa_message_id": parsed["wa_message_id"]},
     )
     db.add(incoming_message)
+
+    # Retrait de consentement (STOP...) — toujours enregistré immédiatement, quel que soit
+    # l'état de la conversation ou la configuration du LLM. Jamais laissé à l'appréciation
+    # de l'IA : la reconnaissance est déterministe (section consentement).
+    from app.services.consent_service import is_opt_out_message, withdraw_marketing_consent
+
+    is_opt_out = is_opt_out_message(incoming_text)
+    if is_opt_out:
+        withdraw_marketing_consent(customer)
+
     await db.commit()
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
-        # le message reste en base sans réponse automatique.
+        # le message reste en base sans réponse automatique. Le retrait de consentement, lui,
+        # est déjà enregistré ci-dessus, indépendamment de cette branche.
         return {"status": "received"}
 
     try:
@@ -143,7 +154,12 @@ async def receive_webhook(
 
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
-    if quota_exceeded:
+    if is_opt_out:
+        reply_text = (
+            "Vous avez été désinscrit(e) de nos communications marketing. "
+            "Vous pouvez continuer à nous écrire à tout moment pour toute question."
+        )
+    elif quota_exceeded:
         reply_text = FREEMIUM_QUOTA_MESSAGE.format(company_name=tenant.name)
     else:
         history_stmt = (

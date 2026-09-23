@@ -167,6 +167,7 @@
     <nav>
       <button class="active" data-tab="overview" data-label="Vue d'ensemble" onclick="showTab('overview')"><span>📊</span> Vue d'ensemble</button>
       <button data-tab="conversations" data-label="Conversations" onclick="showTab('conversations')"><span>💬</span> Conversations</button>
+      <button data-tab="customers" data-label="Clients" onclick="showTab('customers')"><span>👥</span> Clients</button>
       <button data-tab="products" data-label="Produits" onclick="showTab('products')"><span>📦</span> Produits</button>
       <button data-tab="orders" data-label="Commandes" onclick="showTab('orders')"><span>🧾</span> Commandes</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span>🔌</span> Intégrations</button>
@@ -194,6 +195,19 @@
         <div id="conv-messages" style="margin: 16px 0;"></div>
         <button class="action" id="btn-takeover" onclick="takeover()">Prendre le contrôle</button>
         <button class="action secondary hidden" id="btn-release" onclick="release()">Rendre à l'IA</button>
+      </div>
+    </section>
+
+    <section id="tab-customers" class="hidden">
+      <div id="customer-list">
+        <table>
+          <thead><tr><th>Client</th><th>Statut</th><th>Source</th><th>Dernière activité</th><th>Dépensé</th></tr></thead>
+          <tbody id="customer-rows"></tbody>
+        </table>
+      </div>
+      <div id="customer-detail" class="hidden">
+        <a class="back" onclick="backToCustomerList()">&larr; Retour</a>
+        <div id="customer-detail-content" style="margin-top: 16px;"></div>
       </div>
     </section>
 
@@ -437,11 +451,12 @@ function showTab(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.getElementById("topbar-title").textContent = activeBtn ? activeBtn.dataset.label : "Bob";
   closeSidebar();
-  ["overview", "conversations", "products", "orders", "integrations", "knowledge", "settings"].forEach((t) =>
+  ["overview", "conversations", "customers", "products", "orders", "integrations", "knowledge", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
   if (name === "conversations") loadConversations();
+  if (name === "customers") loadCustomers();
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
   if (name === "integrations") loadIntegrationsStatus();
@@ -485,6 +500,118 @@ async function loadConversations() {
       </tr>`
     )
     .join("") || "<tr><td colspan='3'>Aucune conversation</td></tr>";
+}
+
+const CUSTOMER_STATUS_LABELS = { NOUVEAU: "Nouveau", PROSPECT: "Prospect", CLIENT: "Client" };
+const CUSTOMER_STATUS_BADGE = { NOUVEAU: "CLOSED", PROSPECT: "WAITING_HUMAN", CLIENT: "ACTIVE" };
+
+async function loadCustomers() {
+  document.getElementById("customer-list").classList.remove("hidden");
+  document.getElementById("customer-detail").classList.add("hidden");
+  const rows = document.getElementById("customer-rows");
+  rows.innerHTML = "<tr><td class='loading-text' colspan='5'>Chargement</td></tr>";
+  const customers = await api("/api/v1/customers");
+  rows.innerHTML = customers
+    .map(
+      (c) => `<tr class="clickable" onclick="openCustomer('${c.id}')">
+        <td data-label="Client">${c.display_name}</td>
+        <td data-label="Statut"><span class="badge ${CUSTOMER_STATUS_BADGE[c.commercial_status]}">${CUSTOMER_STATUS_LABELS[c.commercial_status]}</span></td>
+        <td data-label="Source">${c.acquisition_source || "—"}</td>
+        <td data-label="Dernière activité">${c.last_activity ? new Date(c.last_activity).toLocaleDateString() : "—"}</td>
+        <td data-label="Dépensé">${c.total_spent ? Number(c.total_spent).toLocaleString() : "0"}</td>
+      </tr>`
+    )
+    .join("") || "<tr><td colspan='5'>Aucun client pour le moment</td></tr>";
+}
+
+function backToCustomerList() {
+  document.getElementById("customer-list").classList.remove("hidden");
+  document.getElementById("customer-detail").classList.add("hidden");
+}
+
+async function openCustomer(id) {
+  document.getElementById("customer-list").classList.add("hidden");
+  document.getElementById("customer-detail").classList.remove("hidden");
+  const content = document.getElementById("customer-detail-content");
+  content.innerHTML = "<p class='loading-text'>Chargement</p>";
+
+  const c = await api(`/api/v1/customers/${id}`);
+  const prefs = c.detected_preferences || {};
+  const prefLines = [
+    prefs.need ? `Recherche : ${prefs.need}` : null,
+    prefs.brand ? `Marque : ${prefs.brand}` : null,
+    prefs.budget_max ? `Budget max : ${Number(prefs.budget_max).toLocaleString()}` : null,
+  ].filter(Boolean);
+
+  content.innerHTML = `
+    <div class="card" style="margin-bottom: 14px;">
+      <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <div style="font-size: 18px; font-weight: 700;">${c.display_name}</div>
+          <div style="color: var(--muted); font-size: 13px;">${c.whatsapp_number}${c.city ? " · " + c.city : ""}${c.email ? " · " + c.email : ""}</div>
+        </div>
+        <span class="badge ${CUSTOMER_STATUS_BADGE[c.commercial_status]}" style="font-size: 13px;">${CUSTOMER_STATUS_LABELS[c.commercial_status]}</span>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="card"><div class="value">${c.order_count}</div><div class="label">Commandes</div></div>
+      <div class="card"><div class="value">${Number(c.total_spent).toLocaleString()}</div><div class="label">Total dépensé</div></div>
+      <div class="card"><div class="value">${c.products_viewed_count}</div><div class="label">Produits consultés</div></div>
+      <div class="card"><div class="value">${c.acquisition_source || "—"}</div><div class="label">Source${c.acquisition_detail ? " : " + c.acquisition_detail : ""}</div></div>
+    </div>
+
+    ${prefLines.length ? `
+    <div class="card" style="margin-top: 14px;">
+      <div class="label" style="font-weight: 600; margin-bottom: 6px;">Préférences détectées par l'IA <span style="color: var(--muted); font-weight: 400;">(inférence, pas un fait vérifié)</span></div>
+      <div style="font-size: 14px;">${prefLines.join(" · ")}</div>
+    </div>` : ""}
+
+    <div class="card" style="margin-top: 14px;">
+      <div class="label" style="font-weight: 600; margin-bottom: 8px;">Notes internes</div>
+      <textarea id="customer-notes" class="input" rows="3" style="margin-bottom: 8px; resize: vertical;">${c.notes || ""}</textarea>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px;">
+        <input type="checkbox" id="customer-consent" ${c.marketing_consent ? "checked" : ""}> Consentement marketing (campagnes)
+      </label>
+      <div style="font-size: 11px; color: var(--muted); margin-bottom: 10px;">
+        ${c.marketing_consent && c.marketing_consent_given_at
+          ? `Donné le ${new Date(c.marketing_consent_given_at).toLocaleDateString()} (${c.marketing_consent_source === "AI_ASKED" ? "demandé par Bob" : "coché manuellement"})`
+          : c.marketing_consent_withdrawn_at
+          ? `Retiré le ${new Date(c.marketing_consent_withdrawn_at).toLocaleDateString()}`
+          : "Jamais demandé"}
+      </div>
+      <button class="action" onclick="saveCustomerNotes('${c.id}')">Enregistrer</button>
+      <span id="customer-notes-msg" style="margin-left: 10px; font-size: 13px;"></span>
+    </div>
+
+    ${c.latest_conversation_id ? `
+    <button class="action" style="margin-top: 14px;" onclick="jumpToCustomerConversation('${c.latest_conversation_id}')">💬 Voir la conversation</button>
+    ` : ""}
+  `;
+}
+
+async function saveCustomerNotes(id) {
+  const msg = document.getElementById("customer-notes-msg");
+  try {
+    await api(`/api/v1/customers/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        notes: document.getElementById("customer-notes").value,
+        marketing_consent: document.getElementById("customer-consent").checked,
+      }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+function jumpToCustomerConversation(conversationId) {
+  showTab("conversations");
+  openConversation(conversationId);
 }
 
 async function openConversation(id) {

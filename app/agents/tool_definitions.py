@@ -98,6 +98,20 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "record_marketing_consent",
+        "description": (
+            "Enregistre la réponse d'un client à une question de consentement marketing que "
+            "TU viens de lui poser explicitement (ex. « Acceptez-vous de recevoir nos offres "
+            "et promotions ? »). N'appelle cet outil qu'après avoir reçu une réponse claire "
+            "(oui/non) — jamais en devinant, jamais sans avoir explicitement posé la question."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"accepted": {"type": "boolean", "description": "True si le client a accepté, False s'il a refusé"}},
+            "required": ["accepted"],
+        },
+    },
+    {
         "name": "update_customer_profile",
         "description": (
             "Enregistre une information concrète que le client vient de donner sur lui-même "

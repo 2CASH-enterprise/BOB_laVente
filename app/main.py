@@ -10,6 +10,7 @@ from app.api.catalog.complements import router as complements_router
 from app.api.catalog.import_ import router as catalog_import_router
 from app.api.catalog.products import router as products_router
 from app.api.conversations.routes import router as conversations_router
+from app.api.customers.routes import router as customers_router
 from app.api.demo.routes import router as demo_router
 from app.api.integrations.meta_catalog import router as meta_catalog_router
 from app.api.integrations.shopify import router as shopify_router
@@ -44,6 +45,7 @@ app.include_router(complements_router)
 app.include_router(catalog_import_router)
 app.include_router(orders_router)
 app.include_router(conversations_router)
+app.include_router(customers_router)
 app.include_router(analytics_router)
 app.include_router(shopify_router)
 app.include_router(meta_catalog_router)

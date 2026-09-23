@@ -36,7 +36,11 @@ class Customer(Base):
 
     # Consentement marketing — DÉLIBÉRÉMENT séparé de tout statut commercial (section CRM) :
     # avoir déjà acheté ne donne jamais automatiquement le droit d'envoyer une campagne.
+    # given_at/source/withdrawn_at : un simple booléen ne suffit pas à prouver un consentement réel.
     marketing_consent: Mapped[bool] = mapped_column(default=False, nullable=False)
+    marketing_consent_given_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    marketing_consent_source: Mapped[str | None] = mapped_column(String(32))  # "AI_ASKED", "MANUAL", "IMPORT"
+    marketing_consent_withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Extraction structurée par l'IA (section CRM.3) — clé-valeur flexible plutôt que des
     # colonnes rigides (marque/budget n'ont pas de sens identique en mode/électronique/etc).
