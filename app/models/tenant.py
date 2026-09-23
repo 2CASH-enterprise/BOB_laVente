@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, String, Uuid, func
+from sqlalchemy import DateTime, Enum, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -31,6 +31,7 @@ class Tenant(Base):
     phone: Mapped[str | None] = mapped_column(String(32))
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     website_url: Mapped[str | None] = mapped_column(String(500))
+    company_profile: Mapped[str | None] = mapped_column(Text)  # présentation libre — injectée dans le prompt de l'agent
     is_demo: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     plan: Mapped[TenantPlan] = mapped_column(Enum(TenantPlan, name="tenant_plan"), default=TenantPlan.FREE, nullable=False)

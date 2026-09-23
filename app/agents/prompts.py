@@ -96,5 +96,16 @@ Aider le client à choisir et acheter les produits disponibles dans le catalogue
 CONTEXTE ENTREPRISE
 Devise : {tenant.currency}
 Pays : {tenant.country}
-{knowledge_section}{customer_memory}
+{_format_company_profile(tenant)}{knowledge_section}{customer_memory}
 """
+
+
+def _format_company_profile(tenant: Tenant) -> str:
+    if not tenant.company_profile and not tenant.website_url:
+        return ""
+    lines = []
+    if tenant.company_profile:
+        lines.append(f"Présentation : {tenant.company_profile}")
+    if tenant.website_url:
+        lines.append(f"Site web : {tenant.website_url}")
+    return "\n" + "\n".join(lines) + "\n"

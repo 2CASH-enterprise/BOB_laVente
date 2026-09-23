@@ -291,6 +291,16 @@
 
     <section id="tab-knowledge" class="hidden">
       <div class="card" style="margin-bottom: 20px;">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Profil de l'entreprise</div>
+        <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
+          Bob s'appuie sur ces informations pour se présenter et répondre aux questions sur votre activité.
+        </p>
+        <textarea id="knowledge-company-profile" class="input" rows="3" placeholder="Ex. Boutique de mode africaine à Dakar, spécialisée en tissus wax, fondée en 2020..." style="margin-bottom: 10px; resize: vertical;"></textarea>
+        <input id="knowledge-website-url" placeholder="https://votre-site.com" class="input" style="margin-bottom: 10px;">
+        <button class="action" onclick="saveCompanyProfile()">Enregistrer</button>
+        <div id="company-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
+      </div>
+      <div class="card" style="margin-bottom: 20px;">
         <div class="label" style="margin-bottom: 12px; font-weight: 600;">Ajouter une entrée</div>
         <div style="display: grid; grid-template-columns: 200px 1fr; gap: 8px; margin-bottom: 8px;">
           <select id="new-knowledge-category" class="input">
@@ -326,12 +336,6 @@
             <button class="action secondary" onclick="saveDisplayNumber()">Enregistrer</button>
             <div id="wa-display-msg" style="margin-top: 6px; font-size: 12px;"></div>
           </div>
-        </div>
-        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Profil de l'entreprise</div>
-          <input id="settings-website-url" placeholder="https://votre-site.com" class="input" style="margin-bottom: 10px;">
-          <button class="action" onclick="saveWebsiteUrl()">Enregistrer</button>
-          <div id="settings-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Relances automatiques</div>
@@ -461,8 +465,8 @@ function showTab(name) {
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
   if (name === "integrations") loadIntegrationsStatus();
-  if (name === "knowledge") loadKnowledge();
-  if (name === "settings") { loadWhatsAppStatus(); loadTenantProfile(); loadFollowupSettings(); loadNegotiationSettings(); }
+  if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
+  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); }
 }
 
 async function loadTenant() {
@@ -1046,22 +1050,25 @@ async function importCsv() {
   }
 }
 
-async function loadTenantProfile() {
+async function loadCompanyProfile() {
   const tenant = await api("/api/v1/tenants/me");
-  document.getElementById("settings-website-url").value = tenant.website_url || "";
+  document.getElementById("knowledge-website-url").value = tenant.website_url || "";
+  document.getElementById("knowledge-company-profile").value = tenant.company_profile || "";
 }
 
-async function saveWebsiteUrl() {
-  const msg = document.getElementById("settings-profile-msg");
-  const websiteUrl = document.getElementById("settings-website-url").value.trim();
+async function saveCompanyProfile() {
+  const msg = document.getElementById("company-profile-msg");
   try {
     await api("/api/v1/tenants/me/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ website_url: websiteUrl || null }),
+      body: JSON.stringify({
+        website_url: document.getElementById("knowledge-website-url").value.trim() || null,
+        company_profile: document.getElementById("knowledge-company-profile").value.trim() || null,
+      }),
     });
     msg.style.color = "var(--success)";
-    msg.textContent = "Enregistré.";
+    msg.textContent = "Enregistré — Bob en tiendra compte dès le prochain message.";
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
