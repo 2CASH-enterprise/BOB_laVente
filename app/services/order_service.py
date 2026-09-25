@@ -12,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.delivery import Delivery
 from app.models.order import Order, OrderItem, OrderStatus
+from app.models.order_commission import OrderCommission
 from app.models.product import Product
+from app.models.tenant import Tenant
 from app.repositories.product_repository import ProductRepository
 
 
@@ -104,6 +106,43 @@ async def create_order(
     # Section 40 — chaque commande a un suivi de livraison, même sans adresse renseignée
     # (le commerce pourra la compléter depuis le dashboard).
     db.add(Delivery(tenant_id=tenant_id, order_id=order.id, address=delivery_address))
+
+    # Section 13 — la commission n'est PLUS calculée ici : elle ne doit être due que sur un
+    # paiement réellement confirmé par le commerçant (voir mark_order_as_paid ci-dessous),
+    # jamais sur une commande qui pourrait ne jamais être payée.
+
+    await db.flush()
+    return order
+
+
+async def mark_order_as_paid(db: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UUID) -> Order:
+    """
+    Section 13/39 — LE seul déclencheur du reçu client et de la commission. Appelé
+    uniquement par un humain côté commerce, après vérification d'une preuve de paiement
+    (capture d'écran mobile money) — jamais automatique tant qu'aucun vrai prestataire
+    de paiement n'est intégré.
+    """
+    order = await db.get(Order, order_id)
+    if order is None or order.tenant_id != tenant_id:
+        raise OrderCreationError("Commande introuvable")
+    if order.status != OrderStatus.PENDING:
+        raise OrderCreationError(f"Cette commande est déjà au statut {order.status.value}, impossible de la marquer payée")
+
+    order.status = OrderStatus.PAID
+
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is not None and tenant.commission_rate is not None and float(tenant.commission_rate) > 0:
+        commission_amount = round(float(order.total_amount) * float(tenant.commission_rate) / 100, 2)
+        db.add(
+            OrderCommission(
+                tenant_id=tenant_id,
+                order_id=order.id,
+                order_total_amount=order.total_amount,
+                commission_rate_applied=tenant.commission_rate,
+                commission_amount=commission_amount,
+                currency=order.currency,
+            )
+        )
 
     await db.flush()
     return order

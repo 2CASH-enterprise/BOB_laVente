@@ -6,13 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
+from app.integrations.whatsapp.client import WhatsAppClient
+from app.models.conversation import Message, MessageSender
 from app.models.delivery import Delivery
 from app.models.order import OrderItem
 from app.repositories.order_repository import OrderRepository
 from app.schemas.delivery import DeliveryResponse, DeliveryUpdate
 from app.schemas.order import OrderCreateRequest, OrderDetailResponse, OrderResponse
 from app.services.audit import log_audit_event
-from app.services.order_service import OrderCreationError, create_order
+from app.services.order_service import OrderCreationError, create_order, mark_order_as_paid
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -131,3 +133,59 @@ async def update_delivery(
     await db.commit()
     await db.refresh(delivery)
     return delivery
+
+
+@router.put("/{order_id}/mark-paid", response_model=OrderDetailResponse, dependencies=[Depends(require_role("AGENT"))])
+async def mark_order_paid(
+    order_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Section 13/39 — action humaine EXCLUSIVE : le commerçant confirme avoir vérifié une
+    preuve de paiement (capture d'écran mobile money). C'est ce clic, et lui seul, qui
+    déclenche le reçu client et la commission — jamais automatique, jamais depuis l'IA.
+    """
+    from app.models.customer import Customer
+    from app.models.tenant import Tenant
+    from app.models.whatsapp_account import WhatsAppAccount
+    from app.services.receipt_service import generate_receipt_text, get_order_item_lines
+
+    try:
+        order = await mark_order_as_paid(db, current_user.tenant_id, order_id)
+    except OrderCreationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+    # Reçu déterministe, envoyé tel quel — jamais reformulé par le LLM.
+    item_lines = await get_order_item_lines(db, order.id, order.currency)
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    receipt_text = generate_receipt_text(order, item_lines, tenant.name if tenant else "")
+
+    # Le message n'est persisté dans l'historique QUE si la commande est liée à une
+    # conversation (ex. commande créée par l'IA) — une commande créée depuis le dashboard
+    # sans conversation associée n'a pas cette contrainte, mais l'envoi WhatsApp reste tenté.
+    if order.conversation_id is not None:
+        db.add(
+            Message(
+                tenant_id=current_user.tenant_id, conversation_id=order.conversation_id,
+                sender=MessageSender.SYSTEM, message_type="receipt", content=receipt_text,
+            )
+        )
+
+    account_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
+    account = (await db.execute(account_stmt)).scalar_one_or_none()
+    customer = await db.get(Customer, order.customer_id)
+    if account is not None and customer is not None:
+        try:
+            wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+            await wa_client.send_text_message(to=customer.whatsapp_number, body=receipt_text)
+        except Exception:  # noqa: BLE001 — un échec d'envoi ne doit jamais bloquer la confirmation
+            pass
+
+    await log_audit_event(
+        db, actor=str(current_user.user_id), action="ORDER_MARKED_PAID", tenant_id=current_user.tenant_id,
+        details={"order_id": str(order_id)},
+    )
+    await db.commit()
+
+    return await _build_order_detail(db, order)

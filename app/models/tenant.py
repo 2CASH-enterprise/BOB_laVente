@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, String, Text, Uuid, func
+from sqlalchemy import DateTime, Enum, Numeric, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -32,6 +32,11 @@ class Tenant(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     website_url: Mapped[str | None] = mapped_column(String(500))
     company_profile: Mapped[str | None] = mapped_column(Text)  # présentation libre — injectée dans le prompt de l'agent
+
+    # Section 13 — commission sur ventes. Taux fixé UNIQUEMENT par le Super Admin (négocié
+    # B2B, jamais modifiable par le commerçant lui-même). NULL = pas de commission due.
+    commission_rate: Mapped[float | None] = mapped_column(Numeric(5, 2))  # ex. 5.00 = 5%
+    payment_link: Mapped[str | None] = mapped_column(String(500))  # lien Wave/Orange Money/etc. du commerce
     is_demo: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     plan: Mapped[TenantPlan] = mapped_column(Enum(TenantPlan, name="tenant_plan"), default=TenantPlan.FREE, nullable=False)

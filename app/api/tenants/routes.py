@@ -21,6 +21,7 @@ class TenantResponse(BaseModel):
     plan: str
     website_url: str | None
     company_profile: str | None
+    payment_link: str | None
     active: bool
 
     model_config = ConfigDict(from_attributes=True)
@@ -30,6 +31,7 @@ class TenantProfileUpdate(BaseModel):
     name: str | None = None
     website_url: str | None = None
     company_profile: str | None = None
+    payment_link: str | None = None
 
 
 @router.get("/me", response_model=TenantResponse)

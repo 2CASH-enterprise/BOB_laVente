@@ -12,7 +12,9 @@ class OrderStatus(StrEnum):
     """
     Section 39 : une commande n'est jamais marquée payée par simple déclaration du
     client. PENDING = créée et confirmée par le client, en attente de paiement.
-    PAID = uniquement positionné par le prestataire de paiement (câblage futur).
+    PAID = confirmé par le COMMERÇANT après réception d'une preuve de paiement (capture
+    d'écran mobile money) — en attendant un vrai prestataire de paiement intégré. C'est
+    ce passage à PAID qui déclenche le reçu envoyé au client et la commission (section 13).
     """
 
     PENDING = "PENDING"

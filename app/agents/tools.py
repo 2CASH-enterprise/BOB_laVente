@@ -7,6 +7,7 @@ n'a aucun autre moyen d'obtenir ces informations (section 50 : le LLM comprend,
 raisonne, utilise les outils, communique ; il n'est jamais la source de vérité).
 """
 import json
+import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -206,6 +207,14 @@ class ToolExecutor:
         await self.db.flush()
         return {"status": "saved"}
 
+    async def _tool_share_payment_link(self, tool_input: dict) -> dict:
+        from app.models.tenant import Tenant
+
+        tenant = await self.db.get(Tenant, self.tenant_id)
+        if tenant is None or not tenant.payment_link:
+            return {"error": "Aucun lien de paiement configuré par cette entreprise"}
+        return {"payment_link": tenant.payment_link}
+
     async def _tool_update_customer_profile(self, tool_input: dict) -> dict:
         from app.models.customer import Customer
 
@@ -288,12 +297,54 @@ class ToolExecutor:
         except OrderCreationError as exc:
             return {"error": exc.message}
 
+        await self._send_order_confirmation(order)
+
         return {
             "order_id": str(order.id),
             "status": order.status.value,
             "total_amount": float(order.total_amount),
             "currency": order.currency,
         }
+
+    async def _send_order_confirmation(self, order) -> None:
+        """
+        Section 13/39 — message déterministe envoyé UNE SEULE FOIS à la création de la
+        commande. Ce n'est PAS un reçu de paiement (aucun paiement n'est encore confirmé
+        à ce stade) — juste une confirmation + le lien de paiement si configuré. Un échec
+        d'envoi ne doit jamais faire échouer la commande elle-même.
+        """
+        from sqlalchemy import select
+
+        from app.models.customer import Customer
+        from app.models.tenant import Tenant
+        from app.models.whatsapp_account import WhatsAppAccount
+        from app.services.receipt_service import generate_order_confirmation_text, get_order_item_lines
+
+        try:
+            item_lines = await get_order_item_lines(self.db, order.id, order.currency)
+            tenant = await self.db.get(Tenant, self.tenant_id)
+            confirmation_text = generate_order_confirmation_text(
+                order, item_lines, tenant.name if tenant else "", tenant.payment_link if tenant else None
+            )
+
+            self.db.add(
+                Message(
+                    tenant_id=self.tenant_id, conversation_id=self.conversation.id,
+                    sender=MessageSender.SYSTEM, message_type="order_confirmation", content=confirmation_text,
+                )
+            )
+            await self.db.flush()
+
+            account_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == self.tenant_id)
+            account = (await self.db.execute(account_stmt)).scalar_one_or_none()
+            customer = await self.db.get(Customer, self.customer_id)
+            if account is not None and customer is not None:
+                from app.integrations.whatsapp.client import WhatsAppClient
+
+                wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+                await wa_client.send_text_message(to=customer.whatsapp_number, body=confirmation_text)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("Échec de l'envoi de la confirmation pour la commande %s", order.id)
 
 
 def tool_result_to_text(result: dict) -> str:

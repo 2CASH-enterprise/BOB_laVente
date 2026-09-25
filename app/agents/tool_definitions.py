@@ -112,6 +112,15 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "share_payment_link",
+        "description": (
+            "Renvoie le lien de paiement de l'entreprise (Wave, Orange Money, etc.), si "
+            "elle en a configuré un. N'utilise cet outil QUE si le client demande "
+            "explicitement comment payer — jamais de façon proactive."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "update_customer_profile",
         "description": (
             "Enregistre une information concrète que le client vient de donner sur lui-même "

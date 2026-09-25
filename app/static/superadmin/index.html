@@ -63,7 +63,7 @@
   <main>
     <div class="grid" id="stats-grid"></div>
     <table>
-      <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Statut</th><th>Produits</th><th>Conversations (mois)</th><th>Créé le</th></tr></thead>
+      <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Statut</th><th>Produits</th><th>Conversations (mois)</th><th>Commission</th><th>Créé le</th></tr></thead>
       <tbody id="tenant-rows"></tbody>
     </table>
   </main>
@@ -162,7 +162,7 @@ const PLANS = ["FREE", "INDEPENDANT", "STARTER", "PRO", "ENTERPRISE"];
 
 async function loadTenants() {
   const rows = document.getElementById("tenant-rows");
-  rows.innerHTML = "<tr><td colspan='7'>Chargement…</td></tr>";
+  rows.innerHTML = "<tr><td colspan='8'>Chargement…</td></tr>";
   const tenants = await api("/api/v1/superadmin/tenants");
   rows.innerHTML = tenants
     .map(
@@ -175,10 +175,15 @@ async function loadTenants() {
         <td><span class="badge ${t.active ? "active" : "inactive"}">${t.active ? "Actif" : "Suspendu"}</span></td>
         <td>${t.product_count}</td>
         <td>${t.conversation_count_this_month}</td>
+        <td>
+          <input type="number" step="0.1" min="0" max="100" value="${t.commission_rate ?? ""}" placeholder="—"
+            style="width: 60px; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px;"
+            onchange="changeCommission('${t.id}', this.value)"> %
+        </td>
         <td>${new Date(t.created_at).toLocaleDateString()}</td>
       </tr>`
     )
-    .join("") || "<tr><td colspan='7'>Aucune entreprise</td></tr>";
+    .join("") || "<tr><td colspan='8'>Aucune entreprise</td></tr>";
 }
 
 async function changePlan(tenantId, plan) {
@@ -187,6 +192,19 @@ async function changePlan(tenantId, plan) {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan }),
+    });
+  } catch (e) {
+    alert(e.message);
+    loadTenants();
+  }
+}
+
+async function changeCommission(tenantId, value) {
+  try {
+    await api(`/api/v1/superadmin/tenants/${tenantId}/commission-rate`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commission_rate: value === "" ? null : parseFloat(value) }),
     });
   } catch (e) {
     alert(e.message);

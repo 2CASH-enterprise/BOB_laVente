@@ -24,6 +24,7 @@ class TenantSummaryForAdmin(BaseModel):
     active: bool
     product_count: int
     conversation_count_this_month: int
+    commission_rate: float | None
     created_at: datetime
 
 
@@ -32,10 +33,15 @@ class TenantDetailForAdmin(TenantSummaryForAdmin):
     currency: str
     customer_count: int
     order_count: int
+    total_commission_due: float
 
 
 class TenantPlanUpdate(BaseModel):
     plan: str
+
+
+class TenantCommissionRateUpdate(BaseModel):
+    commission_rate: float | None
 
 
 class TenantActiveUpdate(BaseModel):

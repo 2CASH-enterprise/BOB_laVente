@@ -1,7 +1,7 @@
 """
 Dashboard Super Admin (Étape 3) — remplace les requêtes SQL manuelles pour gérer les
-tenants (plan, suspension). Authentification totalement séparée du système tenant
-(app.core.security.get_current_superadmin), aucune route existante n'est touchée.
+tenants (plan, suspension, commission). Authentification totalement séparée du système
+tenant (app.core.security.get_current_superadmin), aucune route existante n'est touchée.
 """
 from datetime import datetime, timezone
 from uuid import UUID
@@ -22,6 +22,7 @@ from app.core.security import (
 from app.models.conversation import Conversation
 from app.models.customer import Customer
 from app.models.order import Order
+from app.models.order_commission import OrderCommission
 from app.models.product import Product
 from app.models.superadmin_user import SuperAdminUser
 from app.models.tenant import Tenant, TenantPlan
@@ -30,6 +31,7 @@ from app.schemas.superadmin import (
     SuperAdminBootstrapRequest,
     SuperAdminLoginResponse,
     TenantActiveUpdate,
+    TenantCommissionRateUpdate,
     TenantDetailForAdmin,
     TenantPlanUpdate,
     TenantSummaryForAdmin,
@@ -103,24 +105,40 @@ async def _conversation_count_this_month(db: AsyncSession, tenant_id) -> int:
     return (await db.execute(stmt)).scalar_one()
 
 
+async def _total_commission_due(db: AsyncSession, tenant_id) -> float:
+    stmt = select(func.coalesce(func.sum(OrderCommission.commission_amount), 0)).where(OrderCommission.tenant_id == tenant_id)
+    return float((await db.execute(stmt)).scalar_one())
+
+
+async def _build_summary(db: AsyncSession, tenant: Tenant) -> TenantSummaryForAdmin:
+    return TenantSummaryForAdmin(
+        id=tenant.id, name=tenant.name, email=tenant.email, plan=tenant.plan.value,
+        is_demo=tenant.is_demo, active=tenant.active,
+        product_count=await _product_count(db, tenant.id),
+        conversation_count_this_month=await _conversation_count_this_month(db, tenant.id),
+        commission_rate=float(tenant.commission_rate) if tenant.commission_rate is not None else None,
+        created_at=tenant.created_at,
+    )
+
+
+async def _build_detail(db: AsyncSession, tenant: Tenant) -> TenantDetailForAdmin:
+    summary = await _build_summary(db, tenant)
+    customer_count = (await db.execute(select(func.count(Customer.id)).where(Customer.tenant_id == tenant.id))).scalar_one()
+    order_count = (await db.execute(select(func.count(Order.id)).where(Order.tenant_id == tenant.id))).scalar_one()
+    return TenantDetailForAdmin(
+        **summary.model_dump(), country=tenant.country, currency=tenant.currency,
+        customer_count=customer_count, order_count=order_count,
+        total_commission_due=await _total_commission_due(db, tenant.id),
+    )
+
+
 @router.get("/tenants", response_model=list[TenantSummaryForAdmin])
 async def list_tenants(
     current: CurrentSuperAdmin = Depends(get_current_superadmin),
     db: AsyncSession = Depends(get_db),
 ):
     tenants = (await db.execute(select(Tenant).order_by(Tenant.created_at.desc()))).scalars().all()
-    results = []
-    for tenant in tenants:
-        results.append(
-            TenantSummaryForAdmin(
-                id=tenant.id, name=tenant.name, email=tenant.email, plan=tenant.plan.value,
-                is_demo=tenant.is_demo, active=tenant.active,
-                product_count=await _product_count(db, tenant.id),
-                conversation_count_this_month=await _conversation_count_this_month(db, tenant.id),
-                created_at=tenant.created_at,
-            )
-        )
-    return results
+    return [await _build_summary(db, tenant) for tenant in tenants]
 
 
 @router.get("/tenants/{tenant_id}", response_model=TenantDetailForAdmin)
@@ -132,18 +150,7 @@ async def get_tenant_detail(
     tenant = await db.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant introuvable")
-
-    customer_count = (await db.execute(select(func.count(Customer.id)).where(Customer.tenant_id == tenant.id))).scalar_one()
-    order_count = (await db.execute(select(func.count(Order.id)).where(Order.tenant_id == tenant.id))).scalar_one()
-
-    return TenantDetailForAdmin(
-        id=tenant.id, name=tenant.name, email=tenant.email, plan=tenant.plan.value,
-        is_demo=tenant.is_demo, active=tenant.active,
-        product_count=await _product_count(db, tenant.id),
-        conversation_count_this_month=await _conversation_count_this_month(db, tenant.id),
-        created_at=tenant.created_at, country=tenant.country, currency=tenant.currency,
-        customer_count=customer_count, order_count=order_count,
-    )
+    return await _build_detail(db, tenant)
 
 
 @router.put("/tenants/{tenant_id}/plan", response_model=TenantSummaryForAdmin)
@@ -162,13 +169,7 @@ async def update_tenant_plan(
         raise HTTPException(status_code=400, detail=f"Plan invalide. Valeurs possibles : {[p.value for p in TenantPlan]}") from None
 
     await db.commit()
-    return TenantSummaryForAdmin(
-        id=tenant.id, name=tenant.name, email=tenant.email, plan=tenant.plan.value,
-        is_demo=tenant.is_demo, active=tenant.active,
-        product_count=await _product_count(db, tenant.id),
-        conversation_count_this_month=await _conversation_count_this_month(db, tenant.id),
-        created_at=tenant.created_at,
-    )
+    return await _build_summary(db, tenant)
 
 
 @router.put("/tenants/{tenant_id}/active", response_model=TenantSummaryForAdmin)
@@ -184,13 +185,28 @@ async def update_tenant_active(
         raise HTTPException(status_code=404, detail="Tenant introuvable")
     tenant.active = payload.active
     await db.commit()
-    return TenantSummaryForAdmin(
-        id=tenant.id, name=tenant.name, email=tenant.email, plan=tenant.plan.value,
-        is_demo=tenant.is_demo, active=tenant.active,
-        product_count=await _product_count(db, tenant.id),
-        conversation_count_this_month=await _conversation_count_this_month(db, tenant.id),
-        created_at=tenant.created_at,
-    )
+    return await _build_summary(db, tenant)
+
+
+@router.put("/tenants/{tenant_id}/commission-rate", response_model=TenantSummaryForAdmin)
+async def update_commission_rate(
+    tenant_id: UUID,
+    payload: TenantCommissionRateUpdate,
+    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Section 13 — taux négocié B2B, jamais modifiable par le commerçant lui-même.
+    S'applique seulement aux commandes créées APRÈS ce changement (taux figé par commande).
+    """
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant introuvable")
+    if payload.commission_rate is not None and not (0 <= payload.commission_rate <= 100):
+        raise HTTPException(status_code=400, detail="Le taux doit être compris entre 0 et 100")
+    tenant.commission_rate = payload.commission_rate
+    await db.commit()
+    return await _build_summary(db, tenant)
 
 
 @router.get("/stats", response_model=PlatformStats)

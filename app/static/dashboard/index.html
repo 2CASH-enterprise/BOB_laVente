@@ -286,7 +286,7 @@
 
     <section id="tab-orders" class="hidden">
       <table>
-        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Livraison</th></tr></thead>
+        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Paiement</th><th>Livraison</th></tr></thead>
         <tbody id="order-rows"></tbody>
       </table>
     </section>
@@ -326,6 +326,7 @@
         </p>
         <textarea id="knowledge-company-profile" class="input" rows="3" placeholder="Ex. Boutique de mode africaine à Dakar, spécialisée en tissus wax, fondée en 2020..." style="margin-bottom: 10px; resize: vertical;"></textarea>
         <input id="knowledge-website-url" placeholder="https://votre-site.com" class="input" style="margin-bottom: 10px;">
+        <input id="knowledge-payment-link" placeholder="Lien de paiement (Wave, Orange Money...)" class="input" style="margin-bottom: 10px;">
         <button class="action" onclick="saveCompanyProfile()">Enregistrer</button>
         <div id="company-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
       </div>
@@ -1211,6 +1212,7 @@ async function loadCompanyProfile() {
   const tenant = await api("/api/v1/tenants/me");
   document.getElementById("knowledge-website-url").value = tenant.website_url || "";
   document.getElementById("knowledge-company-profile").value = tenant.company_profile || "";
+  document.getElementById("knowledge-payment-link").value = tenant.payment_link || "";
 }
 
 async function saveCompanyProfile() {
@@ -1222,6 +1224,7 @@ async function saveCompanyProfile() {
       body: JSON.stringify({
         website_url: document.getElementById("knowledge-website-url").value.trim() || null,
         company_profile: document.getElementById("knowledge-company-profile").value.trim() || null,
+        payment_link: document.getElementById("knowledge-payment-link").value.trim() || null,
       }),
     });
     msg.style.color = "var(--success)";
@@ -1467,7 +1470,7 @@ const DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PICKED_UP", "IN_TRANSIT", "D
 
 async function loadOrders() {
   const rows = document.getElementById("order-rows");
-  rows.innerHTML = "<tr><td class='loading-text' colspan='5'>Chargement</td></tr>";
+  rows.innerHTML = "<tr><td class='loading-text' colspan='6'>Chargement</td></tr>";
   const orders = await api("/api/v1/orders");
   rows.innerHTML = orders
     .map(
@@ -1476,11 +1479,26 @@ async function loadOrders() {
         <td data-label="Statut"><span class="badge ${o.status}">${o.status}</span></td>
         <td data-label="Total">${Number(o.total_amount).toLocaleString()} ${o.currency}</td>
         <td data-label="Créée par">${o.created_by === "IA" ? "Bob (IA)" : o.created_by.slice(0, 8) + "…"}</td>
+        <td data-label="Paiement">${
+          o.status === "PENDING"
+            ? `<button class="action" onclick="markOrderPaid('${o.id}')">✅ Paiement reçu</button>`
+            : o.status === "PAID" ? "✅ Confirmé" : "—"
+        }</td>
         <td data-label="Livraison"><button class="action secondary" onclick="toggleDeliveryPanel('${o.id}')">Gérer</button></td>
       </tr>
-      <tr id="delivery-row-${o.id}" class="hidden"><td colspan="5"><div id="delivery-panel-${o.id}" style="padding: 10px 0;"></div></td></tr>`
+      <tr id="delivery-row-${o.id}" class="hidden"><td colspan="6"><div id="delivery-panel-${o.id}" style="padding: 10px 0;"></div></td></tr>`
     )
-    .join("") || "<tr><td colspan='5'>Aucune commande</td></tr>";
+    .join("") || "<tr><td colspan='6'>Aucune commande</td></tr>";
+}
+
+async function markOrderPaid(orderId) {
+  if (!confirm("Confirmez-vous avoir vérifié la preuve de paiement de ce client ? Cette action envoie le reçu et ne peut pas être annulée.")) return;
+  try {
+    await api(`/api/v1/orders/${orderId}/mark-paid`, { method: "PUT" });
+    loadOrders();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function toggleDeliveryPanel(orderId) {
