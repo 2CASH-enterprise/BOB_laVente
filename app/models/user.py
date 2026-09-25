@@ -35,6 +35,12 @@ class User(Base):
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     mfa_otp_code_hash: Mapped[str | None] = mapped_column(String(64))
     mfa_otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Mot de passe oublié — le token n'est JAMAIS stocké en clair (SHA-256 uniquement),
+    # à usage unique, et toute nouvelle demande écrase la précédente.
+    password_reset_token_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

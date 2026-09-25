@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,10 +20,13 @@ from app.models.tenant import Tenant
 from app.models.user import Role, User
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginResponse,
     MfaToggleRequest,
     RegisterTenantRequest,
     ResendMfaRequest,
+    ResetPasswordRequest,
     TenantCreatedResponse,
     TokenResponse,
     VerifyMfaRequest,
@@ -31,6 +34,14 @@ from app.schemas.auth import (
 from app.services.audit import log_audit_event
 from app.services.email_service import send_email
 from app.services.otp_service import generate_otp, hash_otp, verify_otp
+from app.services.password_reset_service import (
+    apply_new_password,
+    build_password_changed_email,
+    build_reset_email,
+    build_reset_link,
+    find_user_by_valid_token,
+    issue_reset_token,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -212,3 +223,79 @@ async def toggle_mfa(
 async def get_me(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     user = await db.get(User, current_user.user_id)
     return {"id": str(user.id), "email": user.email, "full_name": user.full_name, "role": user.role.value, "mfa_enabled": user.mfa_enabled}
+
+
+# ---------------------------------------------------------------------------
+# Mot de passe oublié
+# ---------------------------------------------------------------------------
+
+FORGOT_RATE_LIMIT_PER_EMAIL = 3
+FORGOT_RATE_LIMIT_PER_IP = 10
+FORGOT_RATE_WINDOW_SECONDS = 900  # 15 min
+RESET_RATE_LIMIT_PER_IP = 10
+RESET_RATE_WINDOW_SECONDS = 300
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse, status_code=status.HTTP_202_ACCEPTED)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> ForgotPasswordResponse:
+    """
+    Réponse STRICTEMENT identique que le compte existe ou non. L'email part en tâche de
+    fond, après la réponse : sinon le temps de connexion SMTP trahirait l'existence du compte.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    email = str(payload.email)
+
+    allowed_ip = await rate_limiter.is_allowed(f"forgot:ip:{client_ip}", limit=FORGOT_RATE_LIMIT_PER_IP, window_seconds=FORGOT_RATE_WINDOW_SECONDS)
+    allowed_email = await rate_limiter.is_allowed(f"forgot:email:{email.lower()}", limit=FORGOT_RATE_LIMIT_PER_EMAIL, window_seconds=FORGOT_RATE_WINDOW_SECONDS)
+    if not allowed_ip or not allowed_email:
+        # 429 appliqué à n'importe quel email, existant ou non : ne révèle rien.
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Trop de demandes, réessayez plus tard")
+
+    user = await UserRepository(db).get_by_email(email)
+    if user is None:
+        await log_audit_event(db, actor="ANONYMOUS", action="PASSWORD_RESET_REQUESTED_UNKNOWN", ip_address=client_ip, details={"email": email})
+        await db.commit()
+        return ForgotPasswordResponse()
+
+    token = issue_reset_token(user)
+    await log_audit_event(db, actor=str(user.id), action="PASSWORD_RESET_REQUESTED", tenant_id=user.tenant_id, ip_address=client_ip)
+    await db.commit()  # le token doit être en base AVANT que l'email ne parte
+
+    subject, body = build_reset_email(user.full_name, build_reset_link(token))
+    background_tasks.add_task(send_email, to=user.email, subject=subject, body=body)
+    return ForgotPasswordResponse()
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> None:
+    """
+    Ne connecte PAS l'utilisateur : il doit ensuite se connecter normalement,
+    ce qui garantit que la 2FA reste exigée si elle est activée.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    allowed = await rate_limiter.is_allowed(f"reset:ip:{client_ip}", limit=RESET_RATE_LIMIT_PER_IP, window_seconds=RESET_RATE_WINDOW_SECONDS)
+    if not allowed:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Trop de tentatives, réessayez plus tard")
+
+    user = await find_user_by_valid_token(db, payload.token)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Lien invalide ou expiré, refaites une demande")
+
+    apply_new_password(user, payload.new_password)
+    await log_audit_event(db, actor=str(user.id), action="PASSWORD_RESET_COMPLETED", tenant_id=user.tenant_id, ip_address=client_ip)
+    await db.commit()
+
+    subject, body = build_password_changed_email(user.full_name)
+    background_tasks.add_task(send_email, to=user.email, subject=subject, body=body)

@@ -83,13 +83,13 @@
   button.action.secondary:hover { background: #CDEADA; }
   button.action:disabled { background: var(--border); color: var(--muted); cursor: default; transform: none; }
 
-  #login-screen, #signup-screen, #mfa-screen { max-width: 360px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 16px rgba(27, 67, 50, 0.06); }
-  #login-screen h2, #signup-screen h2, #mfa-screen h2 { color: var(--accent); margin-top: 0; }
-  #login-screen input, #signup-screen input, #mfa-screen input { width: 100%; padding: 11px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 14px; }
-  #login-screen input:focus, #signup-screen input:focus, #mfa-screen input:focus { outline: none; border-color: var(--accent-light); }
-  #login-screen button, #signup-screen button, #mfa-screen button { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.15s ease; }
-  #login-screen button:hover, #signup-screen button:hover, #mfa-screen button:hover { background: #16382A; }
-  #login-error, #signup-error, #mfa-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
+  #login-screen, #signup-screen, #mfa-screen, #forgot-screen, #reset-screen { max-width: 360px; margin: 100px auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 16px rgba(27, 67, 50, 0.06); }
+  #login-screen h2, #signup-screen h2, #mfa-screen h2, #forgot-screen h2, #reset-screen h2 { color: var(--accent); margin-top: 0; }
+  #login-screen input, #signup-screen input, #mfa-screen input, #forgot-screen input, #reset-screen input { width: 100%; padding: 11px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 14px; }
+  #login-screen input:focus, #signup-screen input:focus, #mfa-screen input:focus, #forgot-screen input:focus, #reset-screen input:focus { outline: none; border-color: var(--accent-light); }
+  #login-screen button, #signup-screen button, #mfa-screen button, #forgot-screen button, #reset-screen button { width: 100%; padding: 11px; background: var(--accent); border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background 0.15s ease; }
+  #login-screen button:hover, #signup-screen button:hover, #mfa-screen button:hover, #forgot-screen button:hover, #reset-screen button:hover { background: #16382A; }
+  #login-error, #signup-error, #mfa-error, #forgot-error, #reset-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
 
   .msg { padding: 9px 13px; margin-bottom: 6px; border-radius: 10px; font-size: 14px; max-width: 85%; }
   .msg.CUSTOMER { background: var(--bg); border: 1px solid var(--border); }
@@ -137,7 +137,7 @@
 
   @media (max-width: 480px) {
     .grid { grid-template-columns: 1fr 1fr; }
-    #login-screen, #signup-screen, #mfa-screen { margin: 60px 16px; padding: 24px; }
+    #login-screen, #signup-screen, #mfa-screen, #forgot-screen, #reset-screen { margin: 60px 16px; padding: 24px; }
   }
 </style>
 </head>
@@ -149,6 +149,9 @@
   <input id="login-password" type="password" placeholder="Mot de passe">
   <button onclick="login()">Se connecter</button>
   <div id="login-error"></div>
+  <p style="text-align: center; font-size: 13px; margin: 12px 0 0;">
+    <a onclick="showForgot()" style="color: var(--accent); cursor: pointer;">Mot de passe oublié ?</a>
+  </p>
   <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
     Pas encore de compte ? <a onclick="showSignup()" style="color: var(--accent); cursor: pointer;">Créer un compte</a>
   </p>
@@ -177,6 +180,29 @@
   <div id="mfa-error"></div>
   <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
     <a onclick="resendMfa()" style="color: var(--accent); cursor: pointer;">Renvoyer le code</a>
+  </p>
+</div>
+
+<div id="forgot-screen" class="hidden">
+  <h2>Mot de passe oublié</h2>
+  <p style="font-size: 13px; color: var(--muted); margin-top: -8px;">Indiquez l'email de votre compte : nous vous enverrons un lien pour choisir un nouveau mot de passe.</p>
+  <input id="forgot-email" type="email" placeholder="Email">
+  <button id="forgot-btn" onclick="forgotPassword()">Envoyer le lien</button>
+  <div id="forgot-error"></div>
+  <div id="forgot-done" class="hidden" style="font-size: 13px; color: var(--accent); margin-top: 8px;"></div>
+  <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
+    <a onclick="showLogin()" style="color: var(--accent); cursor: pointer;">Retour à la connexion</a>
+  </p>
+</div>
+
+<div id="reset-screen" class="hidden">
+  <h2>Nouveau mot de passe</h2>
+  <input id="reset-password" type="password" placeholder="Nouveau mot de passe (8 caractères min.)">
+  <input id="reset-password-confirm" type="password" placeholder="Confirmez le mot de passe">
+  <button onclick="resetPassword()">Enregistrer</button>
+  <div id="reset-error"></div>
+  <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
+    <a onclick="showForgot()" style="color: var(--accent); cursor: pointer;">Demander un nouveau lien</a>
   </p>
 </div>
 
@@ -475,10 +501,81 @@ function showSignup() {
   document.getElementById("signup-screen").classList.remove("hidden");
 }
 
+const AUTH_SCREENS = ["login-screen", "signup-screen", "mfa-screen", "forgot-screen", "reset-screen"];
+
+function showAuthScreen(id) {
+  AUTH_SCREENS.forEach((s) => document.getElementById(s).classList.toggle("hidden", s !== id));
+}
+
 function showLogin() {
-  document.getElementById("signup-screen").classList.add("hidden");
-  document.getElementById("mfa-screen").classList.add("hidden");
-  document.getElementById("login-screen").classList.remove("hidden");
+  showAuthScreen("login-screen");
+}
+
+function showForgot() {
+  document.getElementById("forgot-error").textContent = "";
+  document.getElementById("forgot-done").classList.add("hidden");
+  document.getElementById("forgot-btn").disabled = false;
+  const typed = document.getElementById("login-email").value.trim();
+  if (typed && !document.getElementById("forgot-email").value) document.getElementById("forgot-email").value = typed;
+  showAuthScreen("forgot-screen");
+}
+
+async function forgotPassword() {
+  const errorEl = document.getElementById("forgot-error");
+  const doneEl = document.getElementById("forgot-done");
+  const email = document.getElementById("forgot-email").value.trim();
+  errorEl.textContent = "";
+  if (!email) { errorEl.textContent = "Indiquez votre email."; return; }
+  try {
+    const res = await fetch(API_BASE + "/api/v1/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (res.status === 429) throw new Error("Trop de demandes, réessayez dans quelques minutes.");
+    if (res.status === 422) throw new Error("Adresse email invalide.");
+    if (!res.ok) throw new Error("Échec de l'envoi, réessayez.");
+    const data = await res.json();
+    doneEl.textContent = data.message + " Pensez à vérifier vos courriers indésirables.";
+    doneEl.classList.remove("hidden");
+    document.getElementById("forgot-btn").disabled = true;
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+let pendingResetToken = null;
+
+async function resetPassword() {
+  const errorEl = document.getElementById("reset-error");
+  const pwd = document.getElementById("reset-password").value;
+  const confirmPwd = document.getElementById("reset-password-confirm").value;
+  errorEl.textContent = "";
+  if (pwd.length < 8) { errorEl.textContent = "Le mot de passe doit contenir au moins 8 caractères."; return; }
+  if (pwd !== confirmPwd) { errorEl.textContent = "Les deux mots de passe ne correspondent pas."; return; }
+  try {
+    const res = await fetch(API_BASE + "/api/v1/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: pendingResetToken, new_password: pwd }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(typeof err.detail === "string" ? err.detail : "Échec de la réinitialisation.");
+    }
+    pendingResetToken = null;
+    localStorage.removeItem("bob_token");  // une éventuelle session locale est fermée
+    token = null;
+    document.getElementById("reset-password").value = "";
+    document.getElementById("reset-password-confirm").value = "";
+    showLogin();
+    const info = document.getElementById("login-error");
+    info.style.color = "var(--accent)";
+    info.textContent = "Mot de passe modifié. Vous pouvez vous connecter.";
+    setTimeout(() => { info.style.color = ""; }, 8000);
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
 }
 
 async function login() {
@@ -579,9 +676,7 @@ async function resendMfa() {
 }
 
 function enterApp() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("signup-screen").classList.add("hidden");
-  document.getElementById("mfa-screen").classList.add("hidden");
+  AUTH_SCREENS.forEach((s) => document.getElementById(s).classList.add("hidden"));
   document.getElementById("app").classList.remove("hidden");
   loadTenant();
   loadOverview();
@@ -1601,7 +1696,24 @@ async function saveDelivery(orderId) {
   }
 }
 
-if (token) enterApp();
+// Lien "mot de passe oublié" : le token est retiré de l'URL immédiatement (historique,
+// en-tête Referer) et prime sur une éventuelle session déjà ouverte dans ce navigateur.
+(function handleResetLink() {
+  const params = new URLSearchParams(window.location.search);
+  const resetToken = params.get("reset_token");
+  if (!resetToken) return;
+  pendingResetToken = resetToken;
+  params.delete("reset_token");
+  const qs = params.toString();
+  history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+})();
+
+if (pendingResetToken) {
+  document.getElementById("app").classList.add("hidden");
+  showAuthScreen("reset-screen");
+} else if (token) {
+  enterApp();
+}
 
 // ---- Embedded Signup (section 59.2/59.6) ----
 let fbSdkLoaded = false;

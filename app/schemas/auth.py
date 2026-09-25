@@ -52,3 +52,17 @@ class RegisterTenantRequest(BaseModel):
 class TenantCreatedResponse(BaseModel):
     tenant_id: UUID
     owner_user_id: UUID
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Toujours la même réponse, que le compte existe ou non (aucune énumération possible)."""
+    message: str = "Si un compte existe pour cet email, un lien de réinitialisation vient d'être envoyé."
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8)  # même règle qu'à l'inscription
