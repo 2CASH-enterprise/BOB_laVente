@@ -39,6 +39,7 @@ class CustomerDetail(BaseModel):
     marketing_consent_given_at: datetime | None
     marketing_consent_source: str | None
     marketing_consent_withdrawn_at: datetime | None
+    marketing_consent_withdrawn_source: str | None = None
     latest_conversation_id: UUID | None
 
 

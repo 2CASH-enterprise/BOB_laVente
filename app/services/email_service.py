@@ -45,7 +45,19 @@ def _sanitize_reply_to(address: str | None) -> str | None:
     return parsed
 
 
-def build_message(to: str, subject: str, body: str, from_name: str | None = None, reply_to: str | None = None) -> MIMEText:
+# En-têtes supplémentaires autorisés : liste fermée, pour qu'aucun appelant ne puisse
+# réécrire From/To/Subject ou injecter un Bcc par ce biais.
+_ALLOWED_EXTRA_HEADERS = {"List-Unsubscribe", "List-Unsubscribe-Post"}
+
+
+def build_message(
+    to: str,
+    subject: str,
+    body: str,
+    from_name: str | None = None,
+    reply_to: str | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> MIMEText:
     settings = get_settings()
     display_name = _sanitize_display_name(from_name if from_name is not None else settings.smtp_from_name)
 
@@ -59,10 +71,23 @@ def build_message(to: str, subject: str, body: str, from_name: str | None = None
         msg["Reply-To"] = clean_reply_to
     elif reply_to:
         logger.warning("Reply-To ignoré (adresse invalide) pour l'email à %s", to)
+
+    for name, value in (extra_headers or {}).items():
+        if name not in _ALLOWED_EXTRA_HEADERS or _CONTROL_CHARS.search(value or ""):
+            logger.warning("En-tête %s refusé pour l'email à %s", name, to)
+            continue
+        msg[name] = value
     return msg
 
 
-def send_email(to: str, subject: str, body: str, from_name: str | None = None, reply_to: str | None = None) -> bool:
+def send_email(
+    to: str,
+    subject: str,
+    body: str,
+    from_name: str | None = None,
+    reply_to: str | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> bool:
     settings = get_settings()
 
     if not settings.smtp_host:
@@ -71,7 +96,7 @@ def send_email(to: str, subject: str, body: str, from_name: str | None = None, r
         )
         return False
 
-    msg = build_message(to, subject, body, from_name=from_name, reply_to=reply_to)
+    msg = build_message(to, subject, body, from_name=from_name, reply_to=reply_to, extra_headers=extra_headers)
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:

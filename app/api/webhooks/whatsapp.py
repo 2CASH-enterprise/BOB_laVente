@@ -128,11 +128,11 @@ async def receive_webhook(
     # Retrait de consentement (STOP...) — toujours enregistré immédiatement, quel que soit
     # l'état de la conversation ou la configuration du LLM. Jamais laissé à l'appréciation
     # de l'IA : la reconnaissance est déterministe (section consentement).
-    from app.services.consent_service import is_opt_out_message, withdraw_marketing_consent
+    from app.services.consent_service import WITHDRAWN_VIA_WHATSAPP_KEYWORD, is_opt_out_message, withdraw_marketing_consent
 
     is_opt_out = is_opt_out_message(incoming_text)
     if is_opt_out:
-        withdraw_marketing_consent(customer)
+        withdraw_marketing_consent(customer, source=WITHDRAWN_VIA_WHATSAPP_KEYWORD)
 
     await db.commit()
 

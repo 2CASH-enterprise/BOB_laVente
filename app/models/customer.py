@@ -41,6 +41,7 @@ class Customer(Base):
     marketing_consent_given_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     marketing_consent_source: Mapped[str | None] = mapped_column(String(32))  # "AI_ASKED", "MANUAL", "IMPORT"
     marketing_consent_withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    marketing_consent_withdrawn_source: Mapped[str | None] = mapped_column(String(32))  # "EMAIL_LINK", "WHATSAPP_KEYWORD", "AI_DETECTED", "MANUAL"
 
     # Extraction structurée par l'IA (section CRM.3) — clé-valeur flexible plutôt que des
     # colonnes rigides (marque/budget n'ont pas de sens identique en mode/électronique/etc).

@@ -42,7 +42,7 @@ async def update_customer(
     db: AsyncSession = Depends(get_db),
 ):
     """Notes/tags/consentement éditables par un humain — jamais par l'IA (section CRM)."""
-    from app.services.consent_service import grant_marketing_consent, withdraw_marketing_consent
+    from app.services.consent_service import WITHDRAWN_MANUALLY, grant_marketing_consent, withdraw_marketing_consent
 
     customer = await db.get(Customer, customer_id)
     if customer is None or customer.tenant_id != current_user.tenant_id:
@@ -51,10 +51,13 @@ async def update_customer(
     payload_dict = payload.model_dump(exclude_unset=True)
     if "marketing_consent" in payload_dict:
         wants_consent = payload_dict.pop("marketing_consent")
-        if wants_consent:
+        # Le dashboard renvoie la case à CHAQUE enregistrement de la fiche (même pour une note) :
+        # on n'agit que sur un vrai changement, sinon la trace d'origine serait écrasée, ou un
+        # faux « retrait » créé pour un client à qui on n'a jamais rien demandé.
+        if wants_consent and not customer.marketing_consent:
             grant_marketing_consent(customer, source="MANUAL")
-        else:
-            withdraw_marketing_consent(customer)
+        elif not wants_consent and customer.marketing_consent:
+            withdraw_marketing_consent(customer, source=WITHDRAWN_MANUALLY)
 
     for field, value in payload_dict.items():
         setattr(customer, field, value)

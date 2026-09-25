@@ -13,6 +13,7 @@ from app.models.email_campaign import EmailCampaign
 from app.models.tenant import Tenant
 from app.models.whatsapp_account import WhatsAppAccount
 from app.services.email_service import send_email
+from app.services.unsubscribe_service import build_unsubscribe_url
 
 
 async def get_eligible_customers(db: AsyncSession, tenant_id) -> list[Customer]:
@@ -25,10 +26,22 @@ async def get_eligible_customers(db: AsyncSession, tenant_id) -> list[Customer]:
     return list((await db.execute(stmt)).scalars().all())
 
 
-def _build_email_body(body_text: str, wa_link: str | None) -> str:
-    if wa_link:
-        return f"{body_text}\n\n👉 Discuter sur WhatsApp : {wa_link}"
-    return body_text
+def _build_email_body(body_text: str, wa_link: str | None, shop_name: str, unsubscribe_url: str) -> str:
+    body = f"{body_text}\n\n👉 Discuter sur WhatsApp : {wa_link}" if wa_link else body_text
+    # Pied de page fixe, jamais reformulé : obligation légale pour tout email marketing.
+    return (
+        f"{body}\n\n—\n"
+        f"Vous recevez cet email car vous avez accepté de recevoir les offres de {shop_name}.\n"
+        f"Se désinscrire : {unsubscribe_url}"
+    )
+
+
+def _unsubscribe_headers(unsubscribe_url: str) -> dict[str, str]:
+    """RFC 8058 : fait apparaître le bouton « Se désinscrire » natif de Gmail/Outlook (désinscription en un clic)."""
+    return {
+        "List-Unsubscribe": f"<{unsubscribe_url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
 
 
 async def send_campaign(
@@ -50,12 +63,14 @@ async def send_campaign(
 
     sent_count = 0
     for customer in customers:
+        unsubscribe_url = build_unsubscribe_url(customer.id)  # lien PERSONNEL à chaque destinataire
         ok = send_email(
             to=customer.email,
             subject=subject,
-            body=_build_email_body(body_text, wa_link),
+            body=_build_email_body(body_text, wa_link, tenant.name, unsubscribe_url),
             from_name=tenant.name,
             reply_to=tenant.email,
+            extra_headers=_unsubscribe_headers(unsubscribe_url),
         )
         if ok:
             sent_count += 1

@@ -507,6 +507,13 @@ function showAuthScreen(id) {
   AUTH_SCREENS.forEach((s) => document.getElementById(s).classList.toggle("hidden", s !== id));
 }
 
+const WITHDRAWN_SOURCE_LABELS = {
+  EMAIL_LINK: "lien de désinscription dans un email",
+  WHATSAPP_KEYWORD: "mot-clé STOP sur WhatsApp",
+  AI_DETECTED: "refus exprimé à Bob",
+  MANUAL: "décoché manuellement",
+};
+
 function showLogin() {
   showAuthScreen("login-screen");
 }
@@ -860,7 +867,7 @@ async function openCustomer(id) {
         ${c.marketing_consent && c.marketing_consent_given_at
           ? `Donné le ${new Date(c.marketing_consent_given_at).toLocaleDateString()} (${c.marketing_consent_source === "AI_ASKED" ? "demandé par Bob" : "coché manuellement"})`
           : c.marketing_consent_withdrawn_at
-          ? `Retiré le ${new Date(c.marketing_consent_withdrawn_at).toLocaleDateString()}`
+          ? `Retiré le ${new Date(c.marketing_consent_withdrawn_at).toLocaleDateString()}${WITHDRAWN_SOURCE_LABELS[c.marketing_consent_withdrawn_source] ? " (" + WITHDRAWN_SOURCE_LABELS[c.marketing_consent_withdrawn_source] + ")" : ""}`
           : "Jamais demandé"}
       </div>
       <button class="action" onclick="saveCustomerNotes('${c.id}')">Enregistrer</button>

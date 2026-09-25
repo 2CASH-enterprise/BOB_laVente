@@ -115,6 +115,7 @@ async def get_customer_detail(db: AsyncSession, tenant_id, customer_id) -> dict 
         "marketing_consent_given_at": customer.marketing_consent_given_at,
         "marketing_consent_source": customer.marketing_consent_source,
         "marketing_consent_withdrawn_at": customer.marketing_consent_withdrawn_at,
+        "marketing_consent_withdrawn_source": customer.marketing_consent_withdrawn_source,
         "latest_conversation_id": latest_conversation.id if latest_conversation else None,
     }
 

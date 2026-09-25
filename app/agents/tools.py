@@ -193,7 +193,7 @@ class ToolExecutor:
 
     async def _tool_record_marketing_consent(self, tool_input: dict) -> dict:
         from app.models.customer import Customer
-        from app.services.consent_service import grant_marketing_consent, withdraw_marketing_consent
+        from app.services.consent_service import WITHDRAWN_VIA_AI, grant_marketing_consent, withdraw_marketing_consent
 
         customer = await self.db.get(Customer, self.customer_id)
         if customer is None:
@@ -202,7 +202,7 @@ class ToolExecutor:
         if tool_input.get("accepted"):
             grant_marketing_consent(customer, source="AI_ASKED")
         else:
-            withdraw_marketing_consent(customer)
+            withdraw_marketing_consent(customer, source=WITHDRAWN_VIA_AI)
 
         await self.db.flush()
         return {"status": "saved"}
