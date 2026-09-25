@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_email: str = "no-reply@agenc-ai.com"
+    smtp_from_name: str = "Bob AI"  # nom affiché pour les emails transactionnels (2FA, mot de passe)
     smtp_use_tls: bool = True
     debug: bool = False
 

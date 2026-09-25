@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.customer import Customer
 from app.models.email_campaign import EmailCampaign
+from app.models.tenant import Tenant
 from app.models.whatsapp_account import WhatsAppAccount
 from app.services.email_service import send_email
 
@@ -43,9 +44,19 @@ async def send_campaign(
         digits = "".join(ch for ch in account.display_phone_number if ch.isdigit())
         wa_link = f"https://wa.me/{digits}?text={quote(whatsapp_cta_message)}"
 
+    # Le client a une relation avec le COMMERCE, pas avec Bob : le nom affiché est celui du
+    # commerce, et ses réponses partent directement chez le commerçant (Reply-To).
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+
     sent_count = 0
     for customer in customers:
-        ok = send_email(to=customer.email, subject=subject, body=_build_email_body(body_text, wa_link))
+        ok = send_email(
+            to=customer.email,
+            subject=subject,
+            body=_build_email_body(body_text, wa_link),
+            from_name=tenant.name,
+            reply_to=tenant.email,
+        )
         if ok:
             sent_count += 1
         # Un échec d'envoi individuel (email invalide, etc.) ne doit jamais interrompre les suivants.
