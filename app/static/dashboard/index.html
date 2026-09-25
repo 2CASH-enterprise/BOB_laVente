@@ -228,6 +228,18 @@
     </section>
 
     <section id="tab-customers" class="hidden">
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">📣 Campagne email</div>
+        <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
+          Envoyé uniquement aux clients ayant explicitement accepté de recevoir des communications marketing.
+          <span id="campaign-eligible-count" style="font-weight: 600;"></span>
+        </p>
+        <input id="campaign-subject" class="input" placeholder="Objet de l'email (ex. Nouveaux arrivages !)" style="margin-bottom: 8px;">
+        <textarea id="campaign-body" class="input" rows="3" placeholder="Message de l'email" style="margin-bottom: 8px; resize: vertical;"></textarea>
+        <input id="campaign-cta" class="input" placeholder="Message pré-rempli à l'ouverture de WhatsApp" style="margin-bottom: 10px;">
+        <button class="action" onclick="sendCampaign()">Envoyer la campagne</button>
+        <div id="campaign-msg" style="margin-top: 8px; font-size: 13px;"></div>
+      </div>
       <div id="customer-list">
         <table>
           <thead><tr><th>Client</th><th>Statut</th><th>Source</th><th>Dernière activité</th><th>Dépensé</th></tr></thead>
@@ -595,7 +607,7 @@ function showTab(name) {
   );
   if (name === "overview") loadOverview();
   if (name === "conversations") loadConversations();
-  if (name === "customers") loadCustomers();
+  if (name === "customers") { loadCustomers(); loadCampaignEligibleCount(); }
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
   if (name === "integrations") loadIntegrationsStatus();
@@ -643,6 +655,43 @@ async function loadConversations() {
 
 const CUSTOMER_STATUS_LABELS = { NOUVEAU: "Nouveau", PROSPECT: "Prospect", CLIENT: "Client" };
 const CUSTOMER_STATUS_BADGE = { NOUVEAU: "CLOSED", PROSPECT: "WAITING_HUMAN", CLIENT: "ACTIVE" };
+
+async function loadCampaignEligibleCount() {
+  const el = document.getElementById("campaign-eligible-count");
+  try {
+    const data = await api("/api/v1/campaigns/eligible-count");
+    el.textContent = `(${data.eligible_count} client${data.eligible_count > 1 ? "s" : ""} éligible${data.eligible_count > 1 ? "s" : ""} actuellement)`;
+  } catch (e) {
+    el.textContent = "(fonctionnalité réservée aux plans payants)";
+  }
+}
+
+async function sendCampaign() {
+  const msg = document.getElementById("campaign-msg");
+  const subject = document.getElementById("campaign-subject").value.trim();
+  const body = document.getElementById("campaign-body").value.trim();
+  const cta = document.getElementById("campaign-cta").value.trim();
+
+  if (!subject || !body || !cta) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Tous les champs sont requis.";
+    return;
+  }
+  if (!confirm("Envoyer cette campagne à tous les clients ayant consenti au marketing ?")) return;
+
+  try {
+    const result = await api("/api/v1/campaigns/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject, body_text: body, whatsapp_cta_message: cta }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = `Envoyée à ${result.sent_count} client(s) sur ${result.eligible_count} éligibles.`;
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
 
 async function loadCustomers() {
   document.getElementById("customer-list").classList.remove("hidden");
