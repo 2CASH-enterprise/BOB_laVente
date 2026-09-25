@@ -139,6 +139,7 @@
     .grid { grid-template-columns: 1fr 1fr; }
     #login-screen, #signup-screen, #mfa-screen, #forgot-screen, #reset-screen { margin: 60px 16px; padding: 24px; }
   }
+  @media (max-width: 700px) { .cp-form { grid-template-columns: 1fr !important; } }
 </style>
 </head>
 <body>
@@ -319,6 +320,26 @@
         </div>
         <div id="qr-codes-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="qr-codes-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px;"></div>
+      </div>
+
+      <div class="card" style="margin-top: 24px;">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Liens WhatsApp &amp; widgets <span id="cp-limit"></span></div>
+        <p style="font-size: 12px; color: var(--muted); margin: 0 0 14px;">
+          Un lien à coller partout : page et catalogue Facebook, Instagram, TikTok, statut WhatsApp, publicités…
+          Pour un site web, utilisez le code du widget (une bulle WhatsApp s'affiche). Chaque clic est compté
+          et chaque client est rattaché au lien qui l'a amené.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; margin-bottom: 8px;" class="cp-form">
+          <input id="cp-name" class="input" placeholder="Nom (ex. Page Facebook)" maxlength="80">
+          <input id="cp-greeting" class="input" placeholder="Message pré-rempli (ex. Bonjour, je viens de votre page Facebook)" maxlength="300">
+          <select id="cp-position" class="input" title="Position de la bulle sur un site web">
+            <option value="RIGHT">Bulle à droite</option>
+            <option value="LEFT">Bulle à gauche</option>
+          </select>
+          <button id="cp-create-btn" class="action" onclick="createContactPoint()" style="white-space: nowrap;">Créer le lien</button>
+        </div>
+        <div id="cp-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
+        <div id="cp-list" style="display: grid; gap: 14px;"></div>
       </div>
     </section>
 
@@ -806,7 +827,7 @@ async function loadCustomers() {
       (c) => `<tr class="clickable" onclick="openCustomer('${c.id}')">
         <td data-label="Client">${c.display_name}</td>
         <td data-label="Statut"><span class="badge ${CUSTOMER_STATUS_BADGE[c.commercial_status]}">${CUSTOMER_STATUS_LABELS[c.commercial_status]}</span></td>
-        <td data-label="Source">${c.acquisition_source || "—"}</td>
+        <td data-label="Source">${acquisitionLabel(c.acquisition_source)}</td>
         <td data-label="Dernière activité">${c.last_activity ? new Date(c.last_activity).toLocaleDateString() : "—"}</td>
         <td data-label="Dépensé">${c.total_spent ? Number(c.total_spent).toLocaleString() : "0"}</td>
       </tr>`
@@ -848,7 +869,7 @@ async function openCustomer(id) {
       <div class="card"><div class="value">${c.order_count}</div><div class="label">Commandes</div></div>
       <div class="card"><div class="value">${Number(c.total_spent).toLocaleString()}</div><div class="label">Total dépensé</div></div>
       <div class="card"><div class="value">${c.products_viewed_count}</div><div class="label">Produits consultés</div></div>
-      <div class="card"><div class="value">${c.acquisition_source || "—"}</div><div class="label">Source${c.acquisition_detail ? " : " + c.acquisition_detail : ""}</div></div>
+      <div class="card"><div class="value">${acquisitionLabel(c.acquisition_source)}</div><div class="label">Source${c.acquisition_detail ? " : " + c.acquisition_detail : ""}</div></div>
     </div>
 
     ${prefLines.length ? `
@@ -952,6 +973,7 @@ async function loadProducts() {
     )
     .join("") || "<tr><td colspan='7'>Aucun produit</td></tr>";
   loadQrCodes();
+  loadContactPoints();
 }
 
 function toggleEditPanel(productId) {
@@ -1129,6 +1151,152 @@ async function toggleMfaSetting() {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
   }
+}
+
+// --- Liens WhatsApp & widgets -------------------------------------------------------
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+const ACQUISITION_LABELS = { QR: "QR code", LINK: "Lien / widget", IMPORT: "Import", ORGANIC: "Direct" };
+function acquisitionLabel(source) {
+  return source ? (ACQUISITION_LABELS[source] || source) : "—";
+}
+
+let allContactPoints = [];
+
+function publicUrl(path) {
+  return window.location.origin + API_BASE + path;
+}
+
+function widgetSnippet(cp) {
+  return `<script src="${publicUrl("/widget.js")}" data-bob-widget="${cp.code}" async><\/script>`;
+}
+
+function copyText(text, label) {
+  navigator.clipboard.writeText(text).then(
+    () => alert(label + " copié."),
+    () => prompt("Copiez manuellement :", text)
+  );
+}
+
+async function loadContactPoints() {
+  const list = document.getElementById("cp-list");
+  if (!list) return;
+  list.innerHTML = "<p class='loading-text'>Chargement</p>";
+  try {
+    const [points, limits] = await Promise.all([api("/api/v1/contact-points"), api("/api/v1/contact-points/limits")]);
+    allContactPoints = points;
+    document.getElementById("cp-limit").textContent = limits.max === null ? "" : `(${limits.used} / ${limits.max})`;
+    document.getElementById("cp-create-btn").disabled = limits.max !== null && limits.used >= limits.max;
+
+    if (!points.length) {
+      list.innerHTML = "<p style='color: var(--muted); font-size: 13px;'>Aucun lien pour le moment. Créez-en un pour votre page Facebook, par exemple.</p>";
+      return;
+    }
+    const productOptions = allProducts.filter((p) => p.active)
+      .map((p) => `<option value="${esc(p.sku)}">${esc(p.name)} (${esc(p.sku)})</option>`).join("");
+
+    list.innerHTML = points.map((cp) => {
+      const link = publicUrl(cp.short_path);
+      return `<div class="card" style="padding: 14px; ${cp.active ? "" : "opacity: .6;"}">
+        <div style="display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline;">
+          <div style="font-weight: 600;">${esc(cp.name)} ${cp.active ? "" : "<span style='font-size: 11px; color: var(--danger);'>(désactivé)</span>"}</div>
+          <div style="font-size: 12px; color: var(--muted);">${cp.click_count} clic${cp.click_count > 1 ? "s" : ""} · ${cp.customer_count} client${cp.customer_count > 1 ? "s" : ""}</div>
+        </div>
+        <div style="font-size: 12px; color: var(--muted); margin: 4px 0 10px;">Message : « ${esc(cp.greeting)} »</div>
+
+        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+          <input class="input" readonly value="${esc(link)}" style="font-size: 12px;" onclick="this.select()">
+          <button class="action" style="white-space: nowrap; font-size: 12px;" onclick="copyText('${esc(link)}', 'Lien')">Copier le lien</button>
+        </div>
+
+        <details style="margin-bottom: 8px;">
+          <summary style="cursor: pointer; font-size: 13px;">🔗 Lien vers un produit précis</summary>
+          <div style="display: flex; gap: 6px; margin-top: 8px;">
+            <select class="input" id="cp-product-${cp.id}">${productOptions}</select>
+            <button class="action secondary" style="white-space: nowrap; font-size: 12px;" onclick="copyProductLink('${cp.id}')">Copier</button>
+          </div>
+          <p style="font-size: 11px; color: var(--muted); margin: 6px 0 0;">Idéal pour une publication Facebook ou la description d'un produit du catalogue : le message indique le produit.</p>
+        </details>
+
+        <details style="margin-bottom: 10px;">
+          <summary style="cursor: pointer; font-size: 13px;">🌐 Code pour un site web (widget)</summary>
+          <textarea class="input" readonly rows="2" style="font-family: monospace; font-size: 11px; margin-top: 8px; width: 100%;" onclick="this.select()">${esc(widgetSnippet(cp))}</textarea>
+          <button class="action secondary" style="font-size: 12px; margin-top: 6px;" onclick="copyWidgetSnippet('${cp.id}')">Copier le code</button>
+          <p style="font-size: 11px; color: var(--muted); margin: 6px 0 0;">À coller une seule fois avant &lt;/body&gt;. Sur une page produit, ajoutez <code>data-bob-product="SKU"</code>. Vos modifications s'appliquent sur le site en quelques minutes, sans recoller le code.</p>
+        </details>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="action secondary" style="font-size: 12px;" onclick="toggleContactPoint('${cp.id}', ${!cp.active})">${cp.active ? "Désactiver" : "Réactiver"}</button>
+          <button class="action secondary" style="font-size: 12px;" onclick="editContactPointGreeting('${cp.id}')">Modifier le message</button>
+          <button class="action secondary" style="font-size: 12px;" onclick="archiveContactPoint('${cp.id}')">Supprimer</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (e) {
+    list.innerHTML = `<p style="color: var(--danger); font-size: 13px;">${esc(e.message)}</p>`;
+  }
+}
+
+async function createContactPoint() {
+  const msg = document.getElementById("cp-msg");
+  const name = document.getElementById("cp-name").value.trim();
+  const greeting = document.getElementById("cp-greeting").value.trim();
+  const position = document.getElementById("cp-position").value;
+  msg.textContent = "";
+  if (!name) { msg.style.color = "var(--danger)"; msg.textContent = "Donnez un nom à ce lien (ex. Page Facebook)."; return; }
+  const body = { name, position };
+  if (greeting) body.greeting = greeting;
+  try {
+    await api("/api/v1/contact-points", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    document.getElementById("cp-name").value = "";
+    document.getElementById("cp-greeting").value = "";
+    msg.style.color = "var(--success)";
+    msg.textContent = "Lien créé.";
+    loadContactPoints();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+function copyProductLink(id) {
+  const cp = allContactPoints.find((c) => c.id === id);
+  const sku = document.getElementById(`cp-product-${id}`).value;
+  if (!cp || !sku) return;
+  copyText(publicUrl(cp.short_path) + "?p=" + encodeURIComponent(sku), "Lien produit");
+}
+
+function copyWidgetSnippet(id) {
+  const cp = allContactPoints.find((c) => c.id === id);
+  if (cp) copyText(widgetSnippet(cp), "Code du widget");
+}
+
+async function patchContactPoint(id, changes) {
+  await api(`/api/v1/contact-points/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
+  loadContactPoints();
+}
+
+async function toggleContactPoint(id, active) {
+  if (!active && !confirm("Désactiver ce lien ? Il ne mènera plus vers WhatsApp et la bulle disparaîtra des sites.")) return;
+  try { await patchContactPoint(id, { active }); } catch (e) { alert(e.message); }
+}
+
+async function editContactPointGreeting(id) {
+  const cp = allContactPoints.find((c) => c.id === id);
+  const greeting = prompt("Message pré-rempli pour le client :", cp ? cp.greeting : "");
+  if (greeting === null || !greeting.trim()) return;
+  try { await patchContactPoint(id, { greeting: greeting.trim().slice(0, 300) }); } catch (e) { alert(e.message); }
+}
+
+async function archiveContactPoint(id) {
+  if (!confirm("Supprimer ce lien ? Il cessera de fonctionner partout où il a été partagé. Les clients déjà venus par ce lien restent dans votre CRM.")) return;
+  try {
+    await api(`/api/v1/contact-points/${id}`, { method: "DELETE" });
+    loadContactPoints();
+  } catch (e) { alert(e.message); }
 }
 
 function copyQrLink(url) {

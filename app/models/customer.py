@@ -31,6 +31,11 @@ class Customer(Base):
     # depuis un vrai mécanisme (QR, import...), jamais une supposition de l'IA.
     acquisition_source: Mapped[str | None] = mapped_column(String(64))  # ex. "QR", "IMPORT", "ORGANIC"
     acquisition_detail: Mapped[str | None] = mapped_column(String(255))  # ex. nom du produit scanné
+    # Point de contact (lien/widget) qui a amené ce client — vraie référence, pas un texte :
+    # les statistiques restent justes même si le point de contact est renommé.
+    acquisition_contact_point_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contact_points.id", ondelete="SET NULL"), index=True
+    )
     tags: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)  # note libre, éditable par un humain (section CRM.9)
 

@@ -9,6 +9,7 @@ from app.api.catalog.categories import router as categories_router
 from app.api.catalog.complements import router as complements_router
 from app.api.catalog.import_ import router as catalog_import_router
 from app.api.catalog.products import router as products_router
+from app.api.contact_points.routes import router as contact_points_router
 from app.api.conversations.routes import router as conversations_router
 from app.api.customers.routes import router as customers_router
 from app.api.demo.routes import router as demo_router
@@ -56,6 +57,7 @@ app.include_router(knowledge_router)
 app.include_router(demo_router)
 app.include_router(campaigns_router)
 app.include_router(qrcodes_router)
+app.include_router(contact_points_router)
 app.include_router(superadmin_router)
 app.include_router(unsubscribe_router)
 

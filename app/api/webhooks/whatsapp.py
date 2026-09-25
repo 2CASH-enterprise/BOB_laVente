@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_message, verify_whatsapp_signature
 from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.product import Product
+from app.models.contact_point import ContactPoint
 from app.models.product_qr_code import ProductQrCode
 from app.models.tenant import Tenant
 from app.repositories.conversation_repository import ConversationRepository
@@ -25,7 +26,9 @@ router = APIRouter(prefix="/webhooks/whatsapp", tags=["webhooks"])
 settings = get_settings()
 
 HISTORY_LIMIT = 20  # section 13 — mémoire conversationnelle, fenêtre raisonnable
-QR_REFERENCE_PATTERN = re.compile(r"\s*\[QR:([A-Za-z0-9_-]+)\]\s*$")
+# Référence technique cachée en fin de message : [QR:code] (QR produit) ou [W:code]
+# (lien/widget traçable). Toujours retirée ; utilisée pour l'attribution au premier contact.
+TRACKING_REFERENCE_PATTERN = re.compile(r"\s*\[(QR|W):([A-Za-z0-9_-]+)\]\s*$")
 
 
 @router.get("")
@@ -101,19 +104,29 @@ async def receive_webhook(
 
     incoming_text = parsed.get("text") or ""
 
-    # Section CRM.7 — attribution QR : uniquement au tout premier contact, jamais réécrite
-    # ensuite. La référence [QR:code] est retirée du texte avant tout traitement, pour que
-    # ni l'historique affiché ni l'IA ne voient jamais cette balise technique.
-    if is_new_customer:
-        match = QR_REFERENCE_PATTERN.search(incoming_text)
-        if match:
-            qr_stmt = select(ProductQrCode).where(ProductQrCode.tenant_id == tenant_id, ProductQrCode.code == match.group(1))
+    # Section CRM.7 — attribution : uniquement au tout premier contact, jamais réécrite ensuite.
+    # La référence technique est retirée du texte avant tout traitement, pour TOUS les clients
+    # (y compris un client existant qui rescanne un QR ou clique un lien) : ni l'historique
+    # affiché ni l'IA ne voient jamais cette balise. La recherche est toujours limitée au
+    # tenant qui reçoit le message : un code d'un autre commerce n'attribue jamais rien.
+    match = TRACKING_REFERENCE_PATTERN.search(incoming_text)
+    if match:
+        incoming_text = TRACKING_REFERENCE_PATTERN.sub("", incoming_text).strip()
+        kind, code = match.group(1), match.group(2)
+        if is_new_customer and kind == "QR":
+            qr_stmt = select(ProductQrCode).where(ProductQrCode.tenant_id == tenant_id, ProductQrCode.code == code)
             qr = (await db.execute(qr_stmt)).scalar_one_or_none()
             if qr is not None:
                 product = await db.get(Product, qr.product_id)
                 customer.acquisition_source = "QR"
                 customer.acquisition_detail = f"Produit scanné : {product.name}" if product else None
-            incoming_text = QR_REFERENCE_PATTERN.sub("", incoming_text).strip()
+        elif is_new_customer and kind == "W":
+            cp_stmt = select(ContactPoint).where(ContactPoint.tenant_id == tenant_id, ContactPoint.code == code)
+            contact_point = (await db.execute(cp_stmt)).scalar_one_or_none()
+            if contact_point is not None:
+                customer.acquisition_source = "LINK"
+                customer.acquisition_detail = contact_point.name
+                customer.acquisition_contact_point_id = contact_point.id
 
     incoming_message = Message(
         tenant_id=tenant_id,

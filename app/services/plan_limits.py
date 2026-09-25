@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.contact_point import ContactPoint
 from app.models.conversation import Conversation
 from app.models.product import Product
 from app.models.product_qr_code import ProductQrCode
@@ -16,6 +17,8 @@ from app.models.product_qr_code import ProductQrCode
 FREEMIUM_MAX_PRODUCTS = 10
 FREEMIUM_MAX_CONVERSATIONS_PER_MONTH = 100
 MAX_QR_CODES_PER_TENANT = 5
+FREEMIUM_MAX_CONTACT_POINTS = 1
+PAID_MAX_CONTACT_POINTS = 10
 
 FREEMIUM_QUOTA_MESSAGE = (
     "Merci pour votre message ! Notre service est temporairement limité pour ce mois-ci. "
@@ -60,3 +63,23 @@ async def count_qr_codes(db: AsyncSession, tenant_id) -> int:
 async def can_create_qr_code(db: AsyncSession, tenant_id) -> bool:
     """Plafond de 5 QR par tenant, freemium ET payant — décision produit assumée (section QR)."""
     return await count_qr_codes(db, tenant_id) < MAX_QR_CODES_PER_TENANT
+
+
+def max_contact_points(tenant) -> int | None:
+    """Liens/widgets : 1 en freemium, 10 en payant ; None = illimité (tenant de démo)."""
+    if tenant.is_demo:
+        return None
+    return PAID_MAX_CONTACT_POINTS if tenant.is_paid else FREEMIUM_MAX_CONTACT_POINTS
+
+
+async def count_contact_points(db: AsyncSession, tenant_id) -> int:
+    """Les points de contact archivés ne comptent plus dans la limite."""
+    stmt = select(func.count(ContactPoint.id)).where(
+        ContactPoint.tenant_id == tenant_id, ContactPoint.archived_at.is_(None)
+    )
+    return (await db.execute(stmt)).scalar_one()
+
+
+async def can_create_contact_point(db: AsyncSession, tenant) -> bool:
+    limit = max_contact_points(tenant)
+    return limit is None or await count_contact_points(db, tenant.id) < limit
