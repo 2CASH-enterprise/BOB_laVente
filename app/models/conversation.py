@@ -37,6 +37,9 @@ class Conversation(Base):
     # répond (la conversation n'est alors plus « abandonnée »).
     followup_stage: Mapped[int] = mapped_column(default=0, nullable=False)
     last_followup_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Dernière alerte email envoyée au commerçant pour cette attente (transfert ou rappel) :
+    # permet de limiter les rappels à un par heure.
+    human_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -61,7 +61,8 @@ TOOL_DEFINITIONS = [
         "description": (
             "Transfère la conversation à un vendeur humain (section 19). À utiliser pour : demande "
             "complexe, client mécontent, négociation hors de tes limites, remboursement, problème de "
-            "paiement, stock incohérent."
+            "paiement, stock incohérent. Uniquement si le DERNIER message du client le justifie — "
+            "jamais pour une demande ancienne de l'historique, ni en réponse à une simple salutation."
         ),
         "input_schema": {
             "type": "object",

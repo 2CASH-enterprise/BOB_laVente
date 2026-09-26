@@ -703,10 +703,28 @@ async function resendMfa() {
   }
 }
 
+// Lien direct depuis un email d'alerte : …/dashboard/?conversation=<id>. Conservé jusqu'à la
+// connexion si nécessaire, puis retiré de l'adresse.
+let pendingConversationId = new URLSearchParams(window.location.search).get("conversation");
+
 function enterApp() {
   AUTH_SCREENS.forEach((s) => document.getElementById(s).classList.add("hidden"));
   document.getElementById("app").classList.remove("hidden");
   loadTenant();
+  if (pendingConversationId) {
+    const id = pendingConversationId;
+    pendingConversationId = null;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("conversation");
+    const qs = params.toString();
+    history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    showTab("conversations");
+    openConversation(id).catch(() => {
+      alert("Cette conversation est introuvable dans ce compte. Vérifiez que vous êtes connecté au bon compte.");
+      loadConversations();
+    });
+    return;
+  }
   loadOverview();
 }
 
@@ -943,12 +961,20 @@ function backToList() {
 }
 
 async function takeover() {
-  await api(`/api/v1/conversations/${currentConversationId}/takeover`, { method: "POST" });
+  try {
+    await api(`/api/v1/conversations/${currentConversationId}/takeover`, { method: "POST" });
+  } catch (e) {
+    alert("Impossible de prendre le contrôle : " + e.message);
+  }
   openConversation(currentConversationId);
 }
 
 async function release() {
-  await api(`/api/v1/conversations/${currentConversationId}/release`, { method: "POST" });
+  try {
+    await api(`/api/v1/conversations/${currentConversationId}/release`, { method: "POST" });
+  } catch (e) {
+    alert("Impossible de rendre la conversation à l'IA : " + e.message);
+  }
   openConversation(currentConversationId);
 }
 

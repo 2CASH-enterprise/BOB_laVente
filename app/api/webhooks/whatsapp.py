@@ -1,8 +1,9 @@
 import json
 import logging
 import re
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,14 @@ from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_mess
 from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.product import Product
 from app.models.contact_point import ContactPoint
+from app.services.email_service import send_email
+from app.services.handoff_service import (
+    TRANSFER_MESSAGE_TYPES,
+    build_handoff_alert,
+    build_reminder_alert,
+    history_since_last_transfer,
+    reminder_due,
+)
 from app.models.product_qr_code import ProductQrCode
 from app.models.tenant import Tenant
 from app.repositories.conversation_repository import ConversationRepository
@@ -51,6 +60,7 @@ async def verify_webhook(request: Request):
 @router.post("", status_code=status.HTTP_200_OK)
 async def receive_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
 ) -> dict:
@@ -147,7 +157,19 @@ async def receive_webhook(
     if is_opt_out:
         withdraw_marketing_consent(customer, source=WITHDRAWN_VIA_WHATSAPP_KEYWORD)
 
+    # Le client relance pendant qu'il attend un humain (transfert fait par Bob) : rappel au
+    # commerçant, au plus une fois par heure — sinon le client reste sans réponse sans que
+    # personne ne le sache.
+    reminder_email = None
+    if not is_opt_out and reminder_due(conversation):
+        tenant_for_alert = await db.get(Tenant, tenant_id)
+        subject, body = build_reminder_alert(customer, conversation, incoming_text)
+        reminder_email = {"to": tenant_for_alert.email, "subject": subject, "body": body}
+        conversation.human_alert_sent_at = datetime.now(timezone.utc)
+
     await db.commit()
+    if reminder_email:
+        background_tasks.add_task(send_email, **reminder_email)
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
@@ -182,6 +204,9 @@ async def receive_webhook(
             .limit(HISTORY_LIMIT)
         )
         history = list(reversed((await db.execute(history_stmt)).scalars().all()))
+        # Mémoire de l'IA : uniquement ce qui suit le dernier transfert vers un humain (une
+        # demande déjà transmise ne doit jamais être retransmise après la reprise par Bob).
+        history = history_since_last_transfer(history)
 
         reply_text = await generate_ai_reply(
             db=db,
@@ -204,7 +229,36 @@ async def receive_webhook(
         content=reply_text,
     )
     db.add(ai_message)
+
+    # Bob vient de transmettre la conversation (outil de transfert ou négociation sans accord) :
+    # le commerçant est prévenu immédiatement par email.
+    handoff_email = None
+    if conversation.status == ConversationStatus.WAITING_HUMAN:
+        reason_stmt = (
+            select(Message)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.sender == MessageSender.SYSTEM,
+                Message.message_type.in_(TRANSFER_MESSAGE_TYPES),
+            )
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        transfer = (await db.execute(reason_stmt)).scalar_one_or_none()
+        if transfer is None:
+            reason = None
+        elif transfer.message_type == "handoff":
+            reason = transfer.content.split(" : ", 1)[-1]  # « Transfert vers un humain : <motif> »
+        else:
+            reason = transfer.content  # négociation : le texte complet (offre, plancher) est utile
+
+        subject, body = build_handoff_alert(customer, conversation, reason)
+        handoff_email = {"to": tenant.email, "subject": subject, "body": body}
+        conversation.human_alert_sent_at = datetime.now(timezone.utc)
+
     await db.commit()
+    if handoff_email:
+        background_tasks.add_task(send_email, **handoff_email)
 
     # Envoi réel vers WhatsApp (section 3 : ... -> WhatsApp API -> CLIENT). Ne doit jamais
     # faire planter le webhook si Meta est indisponible ou si le token a expiré : on journalise
