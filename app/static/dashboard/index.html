@@ -228,6 +228,7 @@
       <button data-tab="orders" data-label="Commandes" onclick="showTab('orders')"><span>🧾</span> Commandes</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span>🔌</span> Intégrations</button>
       <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span>📚</span> Base de connaissances</button>
+      <button data-tab="bob" data-label="Réglages de Bob" onclick="showTab('bob')"><span>🤖</span> Réglages de Bob</button>
       <button data-tab="settings" data-label="Paramètres" onclick="showTab('settings')"><span>⚙️</span> Paramètres</button>
     </nav>
     <div class="sidebar-tenant" id="tenant-tag"></div>
@@ -330,8 +331,29 @@
         <div id="qr-codes-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="qr-codes-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px;"></div>
       </div>
+    </section>
 
-      <div class="card" style="margin-top: 24px;">
+    <section id="tab-orders" class="hidden">
+      <table>
+        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Paiement</th><th>Livraison</th></tr></thead>
+        <tbody id="order-rows"></tbody>
+      </table>
+    </section>
+
+    <section id="tab-integrations" class="hidden">
+      <div class="card" style="max-width: 640px; margin-bottom: 20px;">
+        <div class="label" style="margin-bottom: 12px; font-weight: 600;">Compte WhatsApp Business</div>
+        <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
+        <button class="action" id="btn-connect-whatsapp" onclick="connectWhatsApp()">Connecter WhatsApp</button>
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+          <label style="font-size: 12px; color: var(--muted);">Numéro affiché (pour les QR codes, format +221XXXXXXXXX)</label>
+          <input id="wa-display-number" class="input" placeholder="+221771234567" style="margin: 6px 0;">
+          <button class="action secondary" onclick="saveDisplayNumber()">Enregistrer</button>
+          <div id="wa-display-msg" style="margin-top: 6px; font-size: 12px;"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 20px;">
         <div class="label" style="margin-bottom: 4px; font-weight: 600;">Liens WhatsApp &amp; widgets <span id="cp-limit"></span></div>
         <p style="font-size: 12px; color: var(--muted); margin: 0 0 14px;">
           Un lien à coller partout : page et catalogue Facebook, Instagram, TikTok, statut WhatsApp, publicités…
@@ -350,16 +372,7 @@
         <div id="cp-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="cp-list" style="display: grid; gap: 14px;"></div>
       </div>
-    </section>
 
-    <section id="tab-orders" class="hidden">
-      <table>
-        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Paiement</th><th>Livraison</th></tr></thead>
-        <tbody id="order-rows"></tbody>
-      </table>
-    </section>
-
-    <section id="tab-integrations" class="hidden">
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
         <div class="card" style="flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Shopify</div>
@@ -422,54 +435,12 @@
       <div id="knowledge-list"></div>
     </section>
 
-    <section id="tab-settings" class="hidden">
+    <section id="tab-bob" class="hidden">
+      <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">
+        La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances.
+        Ce que Bob sait de votre boutique se règle dans la Base de connaissances.
+      </p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Sécurité du compte</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
-            Un code à 6 chiffres vous sera envoyé par email à chaque connexion.
-          </p>
-          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
-            <input type="checkbox" id="mfa-toggle" onchange="toggleMfaSetting()"> Activer la double authentification
-          </label>
-          <div id="mfa-toggle-msg" style="margin-top: 8px; font-size: 13px;"></div>
-        </div>
-        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Compte WhatsApp Business</div>
-          <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
-          <button class="action" id="btn-connect-whatsapp" onclick="connectWhatsApp()">Connecter WhatsApp</button>
-          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
-            <label style="font-size: 12px; color: var(--muted);">Numéro affiché (pour les QR codes, format +221XXXXXXXXX)</label>
-            <input id="wa-display-number" class="input" placeholder="+221771234567" style="margin: 6px 0;">
-            <button class="action secondary" onclick="saveDisplayNumber()">Enregistrer</button>
-            <div id="wa-display-msg" style="margin-top: 6px; font-size: 12px;"></div>
-          </div>
-        </div>
-        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Relances automatiques</div>
-          <p style="font-size: 12px; color: var(--muted); margin-top: 0 0 10px;">
-            Nécessite le mode d'envoi « Commercial autorisé » (section 56) — sinon aucune relance n'est envoyée.
-          </p>
-          <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
-            <input type="checkbox" id="followup-enabled"> Activer les relances
-          </label>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-            <div>
-              <label style="font-size: 12px; color: var(--muted);">1ʳᵉ relance après (h)</label>
-              <input id="followup-first-hours" type="number" class="input">
-            </div>
-            <div>
-              <label style="font-size: 12px; color: var(--muted);">2ᵉ relance après (h)</label>
-              <input id="followup-second-hours" type="number" class="input">
-            </div>
-          </div>
-          <label style="font-size: 12px; color: var(--muted);">Message de la 1ʳᵉ relance</label>
-          <textarea id="followup-first-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
-          <label style="font-size: 12px; color: var(--muted);">Message de la 2ᵉ relance</label>
-          <textarea id="followup-second-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
-          <button class="action" onclick="saveFollowupSettings()">Enregistrer</button>
-          <div id="followup-msg" style="margin-top: 8px; font-size: 13px;"></div>
-        </div>
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix</div>
           <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
@@ -539,6 +510,47 @@
           <div id="strategy-list"><p class="loading-text">Chargement</p></div>
           <button class="action" onclick="saveStrategySettings()">Enregistrer</button>
           <div id="strategy-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Relances automatiques</div>
+          <p style="font-size: 12px; color: var(--muted); margin-top: 0 0 10px;">
+            Nécessite le mode d'envoi « Commercial autorisé » (section 56) — sinon aucune relance n'est envoyée.
+          </p>
+          <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
+            <input type="checkbox" id="followup-enabled"> Activer les relances
+          </label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+            <div>
+              <label style="font-size: 12px; color: var(--muted);">1ʳᵉ relance après (h)</label>
+              <input id="followup-first-hours" type="number" class="input">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--muted);">2ᵉ relance après (h)</label>
+              <input id="followup-second-hours" type="number" class="input">
+            </div>
+          </div>
+          <label style="font-size: 12px; color: var(--muted);">Message de la 1ʳᵉ relance</label>
+          <textarea id="followup-first-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
+          <label style="font-size: 12px; color: var(--muted);">Message de la 2ᵉ relance</label>
+          <textarea id="followup-second-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
+          <button class="action" onclick="saveFollowupSettings()">Enregistrer</button>
+          <div id="followup-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-settings" class="hidden">
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Sécurité du compte</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
+            Un code à 6 chiffres vous sera envoyé par email à chaque connexion.
+          </p>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+            <input type="checkbox" id="mfa-toggle" onchange="toggleMfaSetting()"> Activer la double authentification
+          </label>
+          <div id="mfa-toggle-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
       </div>
     </section>
@@ -801,7 +813,7 @@ function showTab(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.getElementById("topbar-title").textContent = activeBtn ? activeBtn.dataset.label : "Bob";
   closeSidebar();
-  ["overview", "conversations", "customers", "products", "orders", "integrations", "knowledge", "settings"].forEach((t) =>
+  ["overview", "conversations", "customers", "products", "orders", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
@@ -809,9 +821,10 @@ function showTab(name) {
   if (name === "customers") { loadCustomers(); loadCampaignEligibleCount(); }
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
-  if (name === "integrations") loadIntegrationsStatus();
+  if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
-  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadMfaStatus(); }
+  if (name === "bob") { loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "settings") loadMfaStatus();
 }
 
 async function loadTenant() {
@@ -859,7 +872,7 @@ async function loadStrategies() {
       <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
         Le taux de conversion n'est affiché qu'à partir de ${s.min_terminated_for_rate} opportunités terminées :
         en dessous, un pourcentage serait trompeur. Bob alterne au hasard entre les stratégies activées
-        (Paramètres → Réponses aux objections), pour pouvoir les comparer honnêtement.
+        (Réglages de Bob → Réponses aux objections), pour pouvoir les comparer honnêtement.
       </p>`;
   } catch (e) {
     card.innerHTML = `<p style="color: var(--danger); font-size: 13px;">Impossible de charger les réponses aux objections : ${esc(e.message)}</p>`;
@@ -1202,12 +1215,14 @@ async function release() {
 }
 
 let allProducts = [];
+let productsLoaded = false;
 let allQrCodes = [];
 
 async function loadProducts() {
   const rows = document.getElementById("product-rows");
   rows.innerHTML = "<tr><td class='loading-text' colspan='7'>Chargement</td></tr>";
   allProducts = await api("/api/v1/products");
+  productsLoaded = true;
   rows.innerHTML = allProducts
     .map(
       (p) => `<tr>
@@ -1222,7 +1237,6 @@ async function loadProducts() {
     )
     .join("") || "<tr><td colspan='7'>Aucun produit</td></tr>";
   loadQrCodes();
-  loadContactPoints();
 }
 
 function toggleEditPanel(productId) {
@@ -1435,6 +1449,9 @@ async function loadContactPoints() {
   if (!list) return;
   list.innerHTML = "<p class='loading-text'>Chargement</p>";
   try {
+    // La carte est dans Intégrations : la liste des produits (ciblage « ?p=SKU ») peut ne pas
+    // encore avoir été chargée si le commerçant n'est pas passé par l'onglet Produits.
+    if (!productsLoaded) { allProducts = await api("/api/v1/products"); productsLoaded = true; }
     const [points, limits] = await Promise.all([api("/api/v1/contact-points"), api("/api/v1/contact-points/limits")]);
     allContactPoints = points;
     document.getElementById("cp-limit").textContent = limits.max === null ? "" : `(${limits.used} / ${limits.max})`;
