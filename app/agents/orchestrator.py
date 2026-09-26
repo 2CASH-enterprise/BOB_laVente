@@ -5,8 +5,10 @@ Le LLM ne fait que : comprendre l'intention, décider quel outil appeler, géné
 réponse (section 50). Toute donnée factuelle (prix, stock, existence d'un produit)
 passe obligatoirement par ToolExecutor — jamais par la mémoire du modèle.
 """
+import asyncio
 import logging
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.llm_client import LLMClient
@@ -27,6 +29,45 @@ FALLBACK_MESSAGE = (
 )
 
 
+# Issue d'un échec : panne du service d'IA (après les nouveaux essais) ou boucle d'outils.
+FAILURE_OUTAGE = "OUTAGE"
+FAILURE_LOOP = "LOOP"
+
+_TRANSIENT_STATUS = {408, 429, 500, 502, 503, 504, 529}
+
+
+def is_transient_llm_error(exc: Exception) -> bool:
+    """
+    Erreur passagère (le service peut répondre dans quelques secondes) : surcharge, limite de
+    débit, indisponibilité, coupure réseau, délai dépassé. Une erreur définitive (requête
+    invalide, clé refusée) n'est jamais réessayée : ça ne ferait que retarder la réponse.
+    """
+    if isinstance(exc, (asyncio.TimeoutError, httpx.TimeoutException, httpx.NetworkError)):
+        return True
+    if type(exc).__name__ in {"NoResponseError", "APIConnectionError", "APITimeoutError"}:
+        return True
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        raw = getattr(exc, "raw_response", None)
+        status = getattr(raw, "status_code", None)
+    return status in _TRANSIENT_STATUS
+
+
+async def _create_with_retries(llm_client: LLMClient, **kwargs) -> dict:
+    """Jusqu'à len(llm_retry_delays) nouveaux essais, uniquement sur erreur passagère."""
+    delays = list(get_settings().llm_retry_delays)
+    attempt = 0
+    while True:
+        try:
+            return await llm_client.create_message(**kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if attempt >= len(delays) or not is_transient_llm_error(exc):
+                raise
+            logger.warning("Erreur passagère du service d'IA (%s), nouvel essai dans %ss", type(exc).__name__, delays[attempt])
+            await asyncio.sleep(delays[attempt])
+            attempt += 1
+
+
 def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
     """
     Mémoire conversationnelle (section 13) : convertit l'historique en base au format
@@ -42,7 +83,13 @@ def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
     return messages
 
 
-async def generate_ai_reply(
+async def generate_ai_reply(*args, **kwargs) -> str:
+    """Compatibilité : seulement le texte (voir generate_ai_reply_detailed pour l'issue)."""
+    text, _ = await generate_ai_reply_detailed(*args, **kwargs)
+    return text
+
+
+async def generate_ai_reply_detailed(
     db: AsyncSession,
     tenant: Tenant,
     conversation: Conversation,
@@ -50,7 +97,7 @@ async def generate_ai_reply(
     incoming_text: str,
     llm_client: LLMClient,
     turn=None,
-) -> str:
+) -> tuple[str, str | None]:
     """
     Retourne le texte de la réponse de Bob. Ne lève jamais d'exception vers l'appelant :
     en cas d'échec (LLM indisponible, boucle d'outils trop longue), retourne un message
@@ -73,15 +120,16 @@ async def generate_ai_reply(
 
     try:
         for _ in range(settings.max_tool_iterations):
-            response = await llm_client.create_message(
-                system=system_prompt, messages=messages, tools=TOOL_DEFINITIONS
+            response = await _create_with_retries(
+                llm_client, system=system_prompt, messages=messages, tools=TOOL_DEFINITIONS
             )
             content_blocks = response.get("content", [])
             stop_reason = response.get("stop_reason")
 
             if stop_reason != "tool_use":
                 text_parts = [b["text"] for b in content_blocks if b.get("type") == "text"]
-                return "\n".join(text_parts).strip() or FALLBACK_MESSAGE
+                text = "\n".join(text_parts).strip()
+                return (text, None) if text else (FALLBACK_MESSAGE, FAILURE_LOOP)
 
             # Le modèle veut utiliser un ou plusieurs outils : on les exécute réellement (section 33)
             messages.append({"role": "assistant", "content": content_blocks})
@@ -103,8 +151,8 @@ async def generate_ai_reply(
         logger.warning(
             "Boucle d'outils IA interrompue (max_tool_iterations atteint) — conversation %s", conversation.id
         )
-        return FALLBACK_MESSAGE
+        return FALLBACK_MESSAGE, FAILURE_LOOP
 
     except Exception:  # noqa: BLE001 — on protège systématiquement l'appelant (section 34)
         logger.exception("Échec de l'appel LLM pour la conversation %s", conversation.id)
-        return FALLBACK_MESSAGE
+        return FALLBACK_MESSAGE, FAILURE_OUTAGE

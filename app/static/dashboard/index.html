@@ -508,6 +508,11 @@
             <option value="FIXED_PRICES">Bob indique poliment que les prix sont fixes</option>
             <option value="TRANSFER">Transférer à un humain</option>
           </select>
+          <label style="font-size: 12px; color: var(--muted);">Si le service d'IA de Bob est en panne</label>
+          <select id="handoff-outage" class="input" style="margin-bottom: 10px;">
+            <option value="RETRY_LATER">Le client est invité à renvoyer son message quelques minutes plus tard</option>
+            <option value="CALLBACK">Un conseiller rappelle le client (vous recevez un email par client à rappeler)</option>
+          </select>
           <p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">
             Quand la négociation est activée, Bob négocie lui-même (ou demande au client le prix qu'il envisage),
             et ne transfère que si aucun accord n'est possible.
@@ -1812,6 +1817,7 @@ async function loadHandoffSettings() {
     document.getElementById("handoff-refund").checked = s.refund_transfer;
     document.getElementById("handoff-complaint").value = s.complaint_policy;
     document.getElementById("handoff-discount").value = s.discount_policy;
+    document.getElementById("handoff-outage").value = s.ai_outage_policy || "RETRY_LATER";
   } catch (e) {
     document.getElementById("handoff-msg").textContent = e.message;
   }
@@ -1819,6 +1825,8 @@ async function loadHandoffSettings() {
 
 async function saveHandoffSettings() {
   const msg = document.getElementById("handoff-msg");
+  if (document.getElementById("handoff-outage").value === "CALLBACK" &&
+      !confirm("En cas de panne, chaque client recevra « Un conseiller va vous rappeler ». Vous vous engagez à rappeler chacun d'eux (vous recevrez un email par client). Confirmer ?")) return;
   try {
     await api("/api/v1/tenants/me/handoff-settings", {
       method: "PUT",
@@ -1827,6 +1835,7 @@ async function saveHandoffSettings() {
         refund_transfer: document.getElementById("handoff-refund").checked,
         complaint_policy: document.getElementById("handoff-complaint").value,
         discount_policy: document.getElementById("handoff-discount").value,
+        ai_outage_policy: document.getElementById("handoff-outage").value,
       }),
     });
     msg.style.color = "var(--success)";

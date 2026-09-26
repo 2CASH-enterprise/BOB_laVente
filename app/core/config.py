@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     mistral_classifier_model: str = "mistral-small-latest"
     classifier_timeout_seconds: float = 5.0
     max_tool_iterations: int = 5
+    # Nouveaux essais du modèle principal sur erreur passagère (secondes d'attente avant chacun).
+    llm_retry_delays: list[float] = [1.0, 3.0]
 
 
 @lru_cache

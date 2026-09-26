@@ -16,6 +16,8 @@ from app.models.handoff_settings import (
     COMPLAINT_TRY_FIRST,
     DISCOUNT_FIXED_PRICES,
     DISCOUNT_TRANSFER,
+    OUTAGE_CALLBACK,
+    OUTAGE_RETRY_LATER,
 )
 
 TRANSFER_NOW = "TRANSFER_NOW"
@@ -23,6 +25,16 @@ FORBID_TRANSFER = "FORBID_TRANSFER"
 ALLOW_TRANSFER = "ALLOW_TRANSFER"
 
 TRANSFER_MESSAGE = "Je transmets votre demande à un conseiller, qui vous répondra au plus vite."
+
+# Panne du service d'IA : messages fixes, jamais une promesse que personne ne tiendra.
+OUTAGE_RETRY_LATER_MESSAGE = (
+    "Désolé, je rencontre un problème technique momentané. "
+    "Pouvez-vous renvoyer votre message dans quelques minutes ?"
+)
+OUTAGE_CALLBACK_MESSAGE = (
+    "Désolé, je rencontre un problème technique momentané. "
+    "Un conseiller va vous rappeler au plus vite, au numéro depuis lequel vous nous écrivez."
+)
 
 # Libellés lisibles par le commerçant (raison du transfert, étiquette dans la conversation).
 RULE_LABELS = {
@@ -35,6 +47,9 @@ RULE_LABELS = {
     "DISCOUNT_FIXED_PRICES": "remise sans négociation : prix fixes",
     "DISCOUNT_TRANSFER": "remise sans négociation : transfert",
     "POLITENESS_ONLY": "politesse seule : pas de transfert",
+    "AI_LOOP": "IA bloquée (aucune réponse finale)",
+    "AI_OUTAGE_RETRY_LATER": "panne de l'IA : client invité à renvoyer son message",
+    "AI_OUTAGE_CALLBACK": "panne de l'IA : client à rappeler",
 }
 
 
@@ -43,6 +58,7 @@ class HandoffSettingsView:
     refund_transfer: bool = True
     complaint_policy: str = COMPLAINT_TRY_FIRST
     discount_policy: str = DISCOUNT_FIXED_PRICES
+    ai_outage_policy: str = OUTAGE_RETRY_LATER
 
 
 @dataclass
@@ -132,22 +148,42 @@ def evaluate(signal: dict | None, settings: HandoffSettingsView, negotiation_act
     return TurnDecision()
 
 
+async def load_handoff_settings(db, tenant_id) -> HandoffSettingsView:
+    """Réglages du commerce, ou valeurs par défaut s'il n'a jamais rien enregistré."""
+    from sqlalchemy import select
+
+    from app.models.handoff_settings import TenantHandoffSettings
+
+    row = (await db.execute(
+        select(TenantHandoffSettings).where(TenantHandoffSettings.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if row is None:
+        return HandoffSettingsView()
+    return HandoffSettingsView(
+        refund_transfer=row.refund_transfer,
+        complaint_policy=row.complaint_policy,
+        discount_policy=row.discount_policy,
+        ai_outage_policy=row.ai_outage_policy or OUTAGE_RETRY_LATER,
+    )
+
+
 async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
     """Charge les réglages du commerce (défauts si absents) et évalue les règles."""
     from sqlalchemy import select
 
-    from app.models.handoff_settings import TenantHandoffSettings
     from app.models.negotiation_settings import TenantNegotiationSettings
 
-    row = (await db.execute(
-        select(TenantHandoffSettings).where(TenantHandoffSettings.tenant_id == tenant.id)
-    )).scalar_one_or_none()
-    view = HandoffSettingsView() if row is None else HandoffSettingsView(
-        refund_transfer=row.refund_transfer, complaint_policy=row.complaint_policy, discount_policy=row.discount_policy
-    )
+    view = await load_handoff_settings(db, tenant.id)
     negotiation = (await db.execute(
         select(TenantNegotiationSettings).where(TenantNegotiationSettings.tenant_id == tenant.id)
     )).scalar_one_or_none()
     # Mêmes conditions que l'outil negotiate_price : activée ET plan payant.
     negotiation_active = negotiation is not None and negotiation.enabled and tenant.is_paid
     return evaluate(signal, view, negotiation_active, currency=tenant.currency or "")
+
+
+def outage_message(settings: HandoffSettingsView) -> tuple[str, str]:
+    """(message au client, règle tracée) selon le choix du commerçant."""
+    if settings.ai_outage_policy == OUTAGE_CALLBACK:
+        return OUTAGE_CALLBACK_MESSAGE, "AI_OUTAGE_CALLBACK"
+    return OUTAGE_RETRY_LATER_MESSAGE, "AI_OUTAGE_RETRY_LATER"

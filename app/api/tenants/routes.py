@@ -256,6 +256,7 @@ class HandoffSettingsResp(BaseModel):
     refund_transfer: bool
     complaint_policy: str
     discount_policy: str
+    ai_outage_policy: str = "RETRY_LATER"
     human_request_transfer: bool = True  # non réglable : affiché pour information
 
 
@@ -263,6 +264,7 @@ class HandoffSettingsReq(BaseModel):
     refund_transfer: bool | None = None
     complaint_policy: Literal["TRY_FIRST", "TRANSFER"] | None = None
     discount_policy: Literal["FIXED_PRICES", "TRANSFER"] | None = None
+    ai_outage_policy: Literal["RETRY_LATER", "CALLBACK"] | None = None
 
 
 def _handoff_resp(row) -> HandoffSettingsResp:
@@ -270,7 +272,8 @@ def _handoff_resp(row) -> HandoffSettingsResp:
 
     view = row or HandoffSettingsView()
     return HandoffSettingsResp(
-        refund_transfer=view.refund_transfer, complaint_policy=view.complaint_policy, discount_policy=view.discount_policy
+        refund_transfer=view.refund_transfer, complaint_policy=view.complaint_policy,
+        discount_policy=view.discount_policy, ai_outage_policy=getattr(view, "ai_outage_policy", None) or "RETRY_LATER",
     )
 
 
@@ -301,7 +304,8 @@ async def update_handoff_settings(
     )).scalar_one_or_none()
     if row is None:
         row = TenantHandoffSettings(
-            tenant_id=current_user.tenant_id, refund_transfer=True, complaint_policy="TRY_FIRST", discount_policy="FIXED_PRICES"
+            tenant_id=current_user.tenant_id, refund_transfer=True, complaint_policy="TRY_FIRST",
+            discount_policy="FIXED_PRICES", ai_outage_policy="RETRY_LATER",
         )
         db.add(row)
     for field, value in payload.model_dump(exclude_unset=True).items():

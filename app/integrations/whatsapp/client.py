@@ -4,6 +4,7 @@ Isolé dans un module dédié pour rester facilement testable (mock) sans résea
 """
 import hashlib
 import hmac
+import logging
 
 import httpx
 
@@ -60,6 +61,35 @@ def verify_whatsapp_signature(app_secret: str, raw_body: bytes, signature_header
     return hmac.compare_digest(expected, received)
 
 
+logger = logging.getLogger(__name__)
+
+
+class WhatsAppSendError(Exception):
+    """Refus de Meta, avec le code et la raison lisibles (ex. 131030 destinataire non autorisé)."""
+
+    def __init__(self, status_code: int, details: str):
+        self.status_code = status_code
+        self.details = details
+        super().__init__(f"HTTP {status_code} — {details}")
+
+
+def describe_meta_error(response) -> str:
+    """Extrait code, sous-code et message de l'erreur Meta ; jamais d'en-tête ni de jeton."""
+    try:
+        error = (response.json() or {}).get("error") or {}
+    except Exception:  # noqa: BLE001 — réponse non JSON
+        return (response.text or "")[:300] or "réponse vide"
+    parts = []
+    if error.get("code") is not None:
+        parts.append(f"code {error['code']}")
+    if error.get("error_subcode") is not None:
+        parts.append(f"sous-code {error['error_subcode']}")
+    message = error.get("message") or ""
+    detail = (error.get("error_data") or {}).get("details") or ""
+    text = " — ".join(p for p in (message, detail) if p)
+    return (", ".join(parts) + (f" : {text}" if text else "")) or "erreur sans détail"
+
+
 class WhatsAppClient:
     def __init__(self, phone_number_id: str, system_user_token: str):
         self.phone_number_id = phone_number_id
@@ -88,7 +118,14 @@ class WhatsAppClient:
         headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post(f"{self.base_url}{path}", json=payload, headers=headers)
-            response.raise_for_status()
+            if response.is_error:
+                details = describe_meta_error(response)
+                # Le jeton n'apparaît jamais : ni dans le message, ni dans l'URL (il est dans l'en-tête).
+                logger.warning(
+                    "Meta a refusé l'envoi WhatsApp (numéro %s, HTTP %s) : %s",
+                    self.phone_number_id, response.status_code, details,
+                )
+                raise WhatsAppSendError(response.status_code, details)
             return response.json()
 
 

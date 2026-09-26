@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.classifier import MessageClassifier, get_message_classifier
 from app.agents.dependency import get_llm_client
 from app.agents.llm_client import LLMClient
-from app.agents.orchestrator import generate_ai_reply
+from app.agents.orchestrator import FAILURE_LOOP, FAILURE_OUTAGE, generate_ai_reply_detailed
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_message, verify_whatsapp_signature
@@ -18,11 +18,23 @@ from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.product import Product
 from app.models.contact_point import ContactPoint
 from app.services.email_service import send_email
-from app.services.handoff_rules import FORBID_TRANSFER, TRANSFER_MESSAGE, TRANSFER_NOW, decide_turn
+from app.core.rate_limit import RateLimiter
+from app.core.rate_limit_dependency import get_rate_limiter
+from app.services.handoff_rules import (
+    FORBID_TRANSFER,
+    RULE_LABELS,
+    TRANSFER_MESSAGE,
+    TRANSFER_NOW,
+    decide_turn,
+    load_handoff_settings,
+    outage_message,
+)
 from app.services.signal_service import classify_and_store
 from app.services.handoff_service import (
     TRANSFER_MESSAGE_TYPES,
+    build_callback_alert,
     build_handoff_alert,
+    build_outage_alert,
     build_reminder_alert,
     history_since_last_transfer,
     reminder_due,
@@ -77,6 +89,7 @@ async def receive_webhook(
     db: AsyncSession = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
     classifier: MessageClassifier | None = Depends(get_message_classifier),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> dict:
     """
     Section 7 — doit répondre rapidement (< 1s, section 42) pour éviter les timeouts Meta.
@@ -208,6 +221,7 @@ async def receive_webhook(
 
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
+    outage_email = None
     if is_opt_out:
         reply_text = (
             "Vous avez été désinscrit(e) de nos communications marketing. "
@@ -238,7 +252,7 @@ async def receive_webhook(
             ))
             reply_text = TRANSFER_MESSAGE
         else:
-            reply_text = await generate_ai_reply(
+            reply_text, failure = await generate_ai_reply_detailed(
                 db=db,
                 tenant=tenant,
                 conversation=conversation,
@@ -247,6 +261,31 @@ async def receive_webhook(
                 llm_client=llm_client,
                 turn=turn,
             )
+            if failure == FAILURE_LOOP:
+                # Anomalie (Bob tourne en rond) : un humain doit regarder → vrai transfert + alerte.
+                conversation.status = ConversationStatus.WAITING_HUMAN
+                db.add(Message(
+                    tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                    message_type="handoff", content=f"Transfert vers un humain : Règle — {RULE_LABELS['AI_LOOP']}",
+                ))
+                reply_text = TRANSFER_MESSAGE
+                turn.rule = "AI_LOOP"
+            elif failure == FAILURE_OUTAGE:
+                # Panne du service d'IA (après les nouveaux essais) : jamais de promesse que personne
+                # ne tiendra, et pas de transfert (tous les clients seraient bloqués après la panne).
+                handoff_view = await load_handoff_settings(db, tenant_id)
+                reply_text, turn.rule = outage_message(handoff_view)
+                db.add(Message(
+                    tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                    message_type="ai_outage", content=f"Panne du service d'IA — {RULE_LABELS[turn.rule]}",
+                ))
+                if turn.rule == "AI_OUTAGE_CALLBACK":
+                    if await rate_limiter.is_allowed(f"ai-outage-callback:{tenant_id}:{customer.id}", limit=1, window_seconds=3600):
+                        subject, body = build_callback_alert(customer, conversation, incoming_text)
+                        outage_email = {"to": tenant.email, "subject": subject, "body": body}
+                elif await rate_limiter.is_allowed(f"ai-outage:{tenant_id}", limit=1, window_seconds=3600):
+                    subject, body = build_outage_alert(tenant.name)
+                    outage_email = {"to": tenant.email, "subject": subject, "body": body}
         if signal is not None:
             signal.applied_rule = turn.rule
             signal.handoff_blocked = turn.handoff_blocked if turn.mode == FORBID_TRANSFER else None
@@ -293,6 +332,8 @@ async def receive_webhook(
     await db.commit()
     if handoff_email:
         background_tasks.add_task(send_email, **handoff_email)
+    if outage_email:
+        background_tasks.add_task(send_email, **outage_email)
 
     # Envoi réel vers WhatsApp (section 3 : ... -> WhatsApp API -> CLIENT). Ne doit jamais
     # faire planter le webhook si Meta est indisponible ou si le token a expiré : on journalise

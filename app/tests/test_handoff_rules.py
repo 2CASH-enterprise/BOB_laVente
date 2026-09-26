@@ -323,7 +323,8 @@ async def _headers(client, email):
 async def test_settings_defaults_without_creating_a_row(client, db_session, unique_email):
     tenant = await _setup(db_session, unique_email, "pn-r-11")
     r = await client.get("/api/v1/tenants/me/handoff-settings", headers=await _headers(client, unique_email))
-    assert r.json() == {"refund_transfer": True, "complaint_policy": "TRY_FIRST", "discount_policy": "FIXED_PRICES", "human_request_transfer": True}
+    assert r.json() == {"refund_transfer": True, "complaint_policy": "TRY_FIRST", "discount_policy": "FIXED_PRICES",
+                        "ai_outage_policy": "RETRY_LATER", "human_request_transfer": True}
     assert (await db_session.execute(select(TenantHandoffSettings).where(TenantHandoffSettings.tenant_id == tenant.id))).first() is None
 
 
