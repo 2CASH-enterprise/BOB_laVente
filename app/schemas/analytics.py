@@ -41,3 +41,30 @@ class SalesSummaryResponse(BaseModel):
     outside_conversation_orders: int = 0  # commandes saisies à la main qu'aucune opportunité ne porte
     outside_conversation_paid: float = 0.0
     by_source: list[SourceBreakdown]
+
+
+class IntentStat(BaseModel):
+    code: str
+    label: str
+    messages: int
+    opportunities: int
+
+
+class ObjectionStat(BaseModel):
+    code: str
+    label: str
+    messages: int
+    opportunities: int
+    terminated: int
+    paid: int
+    conversion_rate_pct: float | None
+
+
+class SignalsSummaryResponse(BaseModel):
+    """Phase 1 — étiquettes DÉDUITES par un classificateur : des indications, pas des faits."""
+
+    period_days: int
+    classified_messages: int
+    customer_messages: int
+    intents: list[IntentStat]
+    objections: list[ObjectionStat]

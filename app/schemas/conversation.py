@@ -20,6 +20,8 @@ class MessageResponse(BaseModel):
     message_type: str
     content: str
     created_at: datetime
+    # Étiquettes déduites (messages du client uniquement) : {intents, objections, offered_amount}
+    signals: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

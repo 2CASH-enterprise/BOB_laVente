@@ -239,6 +239,9 @@
       <div class="card" id="sales-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement des ventes</p>
       </div>
+      <div class="card" id="signals-card" style="margin-top: 20px;">
+        <p class="loading-text">Chargement de l'analyse des messages</p>
+      </div>
     </section>
 
     <section id="tab-conversations" class="hidden">
@@ -777,6 +780,7 @@ async function loadOverview() {
     <div class="card"><div class="icon">🤝</div><div class="value">${a.human_handoffs}</div><div class="label">Transferts (depuis le début)</div></div>
   `;
   loadSales();
+  loadSignals();
 }
 
 const OUTCOME_LABELS = [
@@ -787,6 +791,58 @@ const OUTCOME_LABELS = [
   ["ABANDONED", "Abandonnées", "var(--danger)"],
   ["IN_PROGRESS", "En cours", "var(--accent)"],
 ];
+
+function signalChips(signals) {
+  if (!signals) return "";
+  const chip = (text, bg, color) =>
+    `<span style="display: inline-block; font-size: 10px; padding: 1px 7px; margin: 2px 4px 0 0; border-radius: 999px; background: ${bg}; color: ${color};">${esc(text)}</span>`;
+  const parts = [
+    ...signals.intents.filter((i) => i.code !== "AUTRE").map((i) => chip(i.label, "rgba(0,0,0,.06)", "var(--muted)")),
+    ...signals.objections.map((o) => chip("Objection : " + o.label, "#fdf0dc", "#9a5b00")),
+  ];
+  if (signals.offered_amount) parts.push(chip(`Prix proposé : ${Math.round(signals.offered_amount).toLocaleString()}`, "#e6f4ea", "#1e6b35"));
+  if (!parts.length) return "";
+  return `<div title="Étiquettes déduites automatiquement : elles peuvent se tromper" style="margin-top: 4px;">${parts.join("")}</div>`;
+}
+
+async function loadSignals() {
+  const card = document.getElementById("signals-card");
+  if (!card) return;
+  try {
+    const s = await api("/api/v1/analytics/signals");
+    if (!s.classified_messages) {
+      card.innerHTML = `<div class="label" style="font-weight: 600;">🧭 Ce que demandent vos clients — ${s.period_days} derniers jours</div>
+        <p style="font-size: 13px; color: var(--muted); margin: 8px 0 0;">Aucun message analysé pour l'instant. Les prochains messages de vos clients seront analysés automatiquement.</p>`;
+      return;
+    }
+    const max = Math.max(...s.intents.map((i) => i.messages), 1);
+    const intents = s.intents.filter((i) => i.code !== "AUTRE").slice(0, 8).map((i) => `
+      <div style="display: grid; grid-template-columns: 170px 1fr 36px; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 6px;">
+        <span>${esc(i.label)}</span>
+        <div style="background: var(--border, #eee); border-radius: 6px; height: 10px; overflow: hidden;"><div style="width: ${Math.round(i.messages / max * 100)}%; height: 100%; background: var(--accent);"></div></div>
+        <span style="text-align: right;">${i.messages}</span>
+      </div>`).join("") || "<p style='font-size: 13px; color: var(--muted);'>—</p>";
+    const objections = s.objections.length
+      ? `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Opportunités</th><th>Payées</th><th>Conversion</th></tr></thead><tbody>
+          ${s.objections.map((o) => `<tr><td data-label="Objection">${esc(o.label)}</td><td data-label="Opportunités">${o.opportunities}</td>
+            <td data-label="Payées">${o.paid}</td><td data-label="Conversion">${o.conversion_rate_pct === null ? "—" : o.conversion_rate_pct + " %"}</td></tr>`).join("")}
+         </tbody></table>`
+      : "<p style='font-size: 13px; color: var(--muted);'>Aucune objection détectée sur la période.</p>";
+    card.innerHTML = `
+      <div class="label" style="font-weight: 600;">🧭 Ce que demandent vos clients — ${s.period_days} derniers jours</div>
+      <p style="font-size: 12px; color: var(--muted); margin: 4px 0 12px;">${s.classified_messages} message${s.classified_messages > 1 ? "s" : ""} analysé${s.classified_messages > 1 ? "s" : ""} sur ${s.customer_messages}.</p>
+      ${intents}
+      <div class="label" style="font-weight: 600; margin: 16px 0 0;">Freins à l'achat</div>
+      ${objections}
+      <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
+        Étiquettes déduites automatiquement par une IA : ce sont des indications, qui peuvent se tromper.
+        Vous pouvez les vérifier sous chaque message client, dans l'onglet Conversations.
+        Conversion = opportunités payées ÷ opportunités terminées où ce frein est apparu.
+      </p>`;
+  } catch (e) {
+    card.innerHTML = `<p style="color: var(--danger); font-size: 13px;">Impossible de charger l'analyse des messages : ${esc(e.message)}</p>`;
+  }
+}
 
 function money(value, currency) {
   return `${Math.round(value).toLocaleString()} ${esc(currency || "")}`.trim();
@@ -922,7 +978,7 @@ async function loadCustomers() {
   rows.innerHTML = customers
     .map(
       (c) => `<tr class="clickable" onclick="openCustomer('${c.id}')">
-        <td data-label="Client">${c.display_name}</td>
+        <td data-label="Client">${esc(c.display_name)}</td>
         <td data-label="Statut"><span class="badge ${CUSTOMER_STATUS_BADGE[c.commercial_status]}">${CUSTOMER_STATUS_LABELS[c.commercial_status]}</span></td>
         <td data-label="Source">${acquisitionLabel(c.acquisition_source)}</td>
         <td data-label="Dernière activité">${c.last_activity ? new Date(c.last_activity).toLocaleDateString() : "—"}</td>
@@ -946,8 +1002,8 @@ async function openCustomer(id) {
   const c = await api(`/api/v1/customers/${id}`);
   const prefs = c.detected_preferences || {};
   const prefLines = [
-    prefs.need ? `Recherche : ${prefs.need}` : null,
-    prefs.brand ? `Marque : ${prefs.brand}` : null,
+    prefs.need ? `Recherche : ${esc(prefs.need)}` : null,
+    prefs.brand ? `Marque : ${esc(prefs.brand)}` : null,
     prefs.budget_max ? `Budget max : ${Number(prefs.budget_max).toLocaleString()}` : null,
   ].filter(Boolean);
 
@@ -955,8 +1011,8 @@ async function openCustomer(id) {
     <div class="card" style="margin-bottom: 14px;">
       <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 10px;">
         <div>
-          <div style="font-size: 18px; font-weight: 700;">${c.display_name}</div>
-          <div style="color: var(--muted); font-size: 13px;">${c.whatsapp_number}${c.city ? " · " + c.city : ""}${c.email ? " · " + c.email : ""}</div>
+          <div style="font-size: 18px; font-weight: 700;">${esc(c.display_name)}</div>
+          <div style="color: var(--muted); font-size: 13px;">${esc(c.whatsapp_number)}${c.city ? " · " + esc(c.city) : ""}${c.email ? " · " + esc(c.email) : ""}</div>
         </div>
         <span class="badge ${CUSTOMER_STATUS_BADGE[c.commercial_status]}" style="font-size: 13px;">${CUSTOMER_STATUS_LABELS[c.commercial_status]}</span>
       </div>
@@ -966,7 +1022,7 @@ async function openCustomer(id) {
       <div class="card"><div class="value">${c.order_count}</div><div class="label">Commandes</div></div>
       <div class="card"><div class="value">${Number(c.total_spent).toLocaleString()}</div><div class="label">Total dépensé</div></div>
       <div class="card"><div class="value">${c.products_viewed_count}</div><div class="label">Produits consultés</div></div>
-      <div class="card"><div class="value">${acquisitionLabel(c.acquisition_source)}</div><div class="label">Source${c.acquisition_detail ? " : " + c.acquisition_detail : ""}</div></div>
+      <div class="card"><div class="value">${acquisitionLabel(c.acquisition_source)}</div><div class="label">Source${c.acquisition_detail ? " : " + esc(c.acquisition_detail) : ""}</div></div>
     </div>
 
     ${prefLines.length ? `
@@ -977,7 +1033,7 @@ async function openCustomer(id) {
 
     <div class="card" style="margin-top: 14px;">
       <div class="label" style="font-weight: 600; margin-bottom: 8px;">Notes internes</div>
-      <textarea id="customer-notes" class="input" rows="3" style="margin-bottom: 8px; resize: vertical;">${c.notes || ""}</textarea>
+      <textarea id="customer-notes" class="input" rows="3" style="margin-bottom: 8px; resize: vertical;">${esc(c.notes || "")}</textarea>
       <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px;">
         <input type="checkbox" id="customer-consent" ${c.marketing_consent ? "checked" : ""}> Consentement marketing (campagnes)
       </label>
@@ -1028,8 +1084,10 @@ async function openConversation(id) {
   document.getElementById("conv-detail").style.display = "block";
   const c = await api("/api/v1/conversations/" + id);
   document.getElementById("conv-detail-title").textContent = "Client " + c.customer_id.slice(0, 8) + "… — " + c.status;
+  // Le texte vient du client (WhatsApp) : TOUJOURS échappé, sinon un message piégé pourrait
+  // exécuter du code dans le dashboard du commerçant.
   document.getElementById("conv-messages").innerHTML = c.messages
-    .map((m) => `<div class="msg ${m.sender}">${m.content}</div>`)
+    .map((m) => `<div class="msg ${esc(m.sender)}">${esc(m.content)}${signalChips(m.signals)}</div>`)
     .join("");
   document.getElementById("btn-takeover").classList.toggle("hidden", c.status === "WAITING_HUMAN");
   document.getElementById("btn-release").classList.toggle("hidden", c.status !== "WAITING_HUMAN");

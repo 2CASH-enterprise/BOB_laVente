@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-5"
     mistral_api_key: str = ""
     mistral_model: str = "mistral-large-latest"
+    # Classificateur de messages (phase 1) : petit modèle rapide, appel séparé, jamais bloquant.
+    mistral_classifier_model: str = "mistral-small-latest"
+    classifier_timeout_seconds: float = 5.0
     max_tool_iterations: int = 5
 
 

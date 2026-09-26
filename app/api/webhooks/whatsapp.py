@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.classifier import MessageClassifier, get_message_classifier
 from app.agents.dependency import get_llm_client
 from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import generate_ai_reply
@@ -17,6 +18,7 @@ from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.product import Product
 from app.models.contact_point import ContactPoint
 from app.services.email_service import send_email
+from app.services.signal_service import classify_and_store
 from app.services.handoff_service import (
     TRANSFER_MESSAGE_TYPES,
     build_handoff_alert,
@@ -63,6 +65,7 @@ async def receive_webhook(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     llm_client: LLMClient | None = Depends(get_llm_client),
+    classifier: MessageClassifier | None = Depends(get_message_classifier),
 ) -> dict:
     """
     Section 7 — doit répondre rapidement (< 1s, section 42) pour éviter les timeouts Meta.
@@ -170,6 +173,11 @@ async def receive_webhook(
     await db.commit()
     if reminder_email:
         background_tasks.add_task(send_email, **reminder_email)
+
+    # Phase 1 (lot 12) — étiquettes du message (intentions, objections, prix proposé), pour
+    # TOUS les messages texte du client, même en attente d'un humain. Jamais bloquant, et
+    # sans effet sur la réponse de Bob dans ce lot.
+    await classify_and_store(db, classifier, incoming_message)
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :

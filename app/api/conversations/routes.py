@@ -37,13 +37,21 @@ async def get_conversation(
     messages_stmt = select(Message).where(Message.conversation_id == conversation.id).order_by(Message.created_at)
     messages = (await db.execute(messages_stmt)).scalars().all()
 
+    from app.schemas.conversation import MessageResponse
+    from app.services.signal_service import signals_by_message
+
+    signals = await signals_by_message(db, current_user.tenant_id, [m.id for m in messages])
+    message_payload = [
+        MessageResponse.model_validate(m).model_copy(update={"signals": signals.get(m.id)}) for m in messages
+    ]
+
     return ConversationDetailResponse(
         id=conversation.id,
         customer_id=conversation.customer_id,
         status=conversation.status.value,
         assigned_agent=conversation.assigned_agent,
         last_message_at=conversation.last_message_at,
-        messages=messages,
+        messages=message_payload,
     )
 
 

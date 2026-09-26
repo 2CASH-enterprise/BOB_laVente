@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
 from app.models.order import Order, OrderStatus
-from app.schemas.analytics import AnalyticsResponse, SalesSummaryResponse
+from app.schemas.analytics import AnalyticsResponse, SalesSummaryResponse, SignalsSummaryResponse
 from app.services.opportunity_service import recompute_tenant_opportunities, sales_summary
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -75,3 +75,15 @@ async def refresh_sales_summary(
     """Recalcul immédiat pour CE compte uniquement (lecture de ses propres données)."""
     await recompute_tenant_opportunities(db, current_user.tenant_id)
     return SalesSummaryResponse(**await sales_summary(db, current_user.tenant_id, days=days))
+
+
+@router.get("/signals", response_model=SignalsSummaryResponse)
+async def get_signals_summary(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SignalsSummaryResponse:
+    """Ce que demandent les clients, et les objections avec la conversion des opportunités concernées."""
+    from app.services.signal_service import signals_summary
+
+    return SignalsSummaryResponse(**await signals_summary(db, current_user.tenant_id, days=days))
