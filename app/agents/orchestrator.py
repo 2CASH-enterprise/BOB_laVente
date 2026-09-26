@@ -23,9 +23,11 @@ from app.services.customer_memory_service import build_customer_memory
 
 logger = logging.getLogger(__name__)
 
+# Lot 16 : ne promet plus « un conseiller va prendre le relais » (personne n'était prévenu).
+# Le webhook le remplace de toute façon (vrai transfert en cas de boucle, message de panne).
 FALLBACK_MESSAGE = (
-    "Je rencontre une difficulté à traiter votre demande pour le moment. "
-    "Un conseiller va prendre le relais dans les plus brefs délais."
+    "Désolé, je rencontre un problème technique momentané. "
+    "Pouvez-vous renvoyer votre message dans quelques minutes ?"
 )
 
 

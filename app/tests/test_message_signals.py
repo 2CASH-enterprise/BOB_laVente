@@ -398,6 +398,11 @@ def test_first_real_misclassification_is_now_an_explicit_example():
 def test_taxonomy_version_changed_but_codes_did_not():
     from app.agents.taxonomy import TAXONOMY_VERSION
 
-    assert TAXONOMY_VERSION == "v1.1"
+    assert TAXONOMY_VERSION == "v1.2"
     assert "HESITATION" in OBJECTIONS and "SALUTATION" in INTENTS
     assert INTENTS["SALUTATION"][0] == "Salutation ou politesse"
+    # v1.2 : une intention AJOUTÉE, aucun code existant retiré ni renommé.
+    for code in ("RECHERCHE_PRODUIT", "DEMANDE_PRIX", "DISPONIBILITE", "DEMANDE_REMISE", "LIVRAISON", "PAIEMENT",
+                 "INTENTION_ACHAT", "SUIVI_COMMANDE", "RECLAMATION", "REMBOURSEMENT", "DEMANDE_HUMAIN", "AUTRE"):
+        assert code in INTENTS
+    assert INTENTS["CONDITIONS_VENTE"][0] == "Question sur les conditions de vente"

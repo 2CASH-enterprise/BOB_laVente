@@ -8,7 +8,10 @@ Les codes sont stables (stockés en base) ; seuls les libellés peuvent évoluer
 
 # v1.1 : exemples ajoutés aux consignes, « Hésitation » précisée, « Salutation » élargie à la
 # politesse. Les CODES sont inchangés : les étiquettes v1 et v1.1 restent comparables.
-TAXONOMY_VERSION = "v1.1"
+# v1.2 (lot 16) : nouvelle intention CONDITIONS_VENTE. Constat du 26/09 : « Vous acceptez les
+# retours ? » était classé REMBOURSEMENT/RÉCLAMATION (transfert inutile). Les autres codes ne
+# changent pas ; seules ces questions quittent REMBOURSEMENT/RECLAMATION à partir de v1.2.
+TAXONOMY_VERSION = "v1.2"
 
 INTENTS: dict[str, tuple[str, str]] = {
     # code: (libellé affiché, définition donnée au classificateur)
@@ -21,8 +24,16 @@ INTENTS: dict[str, tuple[str, str]] = {
     "PAIEMENT": ("Paiement", "question sur les moyens ou modalités de paiement"),
     "INTENTION_ACHAT": ("Intention d'achat", "veut acheter, commander, réserver, « je prends »"),
     "SUIVI_COMMANDE": ("Suivi de commande", "demande où en est une commande déjà passée"),
-    "RECLAMATION": ("Réclamation", "se plaint : produit abîmé, erreur, retard, mécontentement"),
-    "REMBOURSEMENT": ("Remboursement", "demande un remboursement ou un retour avec remboursement"),
+    "CONDITIONS_VENTE": (
+        "Question sur les conditions de vente",
+        "demande quelles sont les conditions de retour, d'échange ou de garantie, sans problème réel "
+        "avec une commande (« vous acceptez les retours ? », « je peux échanger si la taille ne va pas ? »)",
+    ),
+    "RECLAMATION": ("Réclamation", "se plaint d'un problème réel : produit abîmé, erreur, retard, mécontentement"),
+    "REMBOURSEMENT": (
+        "Remboursement",
+        "demande à être remboursé ou à retourner un achat qu'il a fait (pas une simple question sur la politique de retour)",
+    ),
     "DEMANDE_HUMAIN": ("Demande d'un humain", "demande explicitement à parler à une personne, un conseiller, le responsable"),
     "AUTRE": ("Autre", "rien de ce qui précède"),
 }

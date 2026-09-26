@@ -37,6 +37,8 @@ def build_classifier_prompt() -> str:
         "raison donnée ; s'il n'y a aucun frein, liste vide ;\n"
         "- offered_amount = le montant que le client PROPOSE de payer ou annonce comme budget "
         "(ex. « je vous le prends à 250 000 » → 250000) ; null s'il n'en donne aucun ;\n"
+        "- une question sur la politique de retour, d'échange ou de garantie, sans problème réel avec "
+        "une commande, est CONDITIONS_VENTE, jamais REMBOURSEMENT ni RECLAMATION ;\n"
         "- le message précédent de la boutique, s'il est fourni, sert seulement à comprendre "
         "une réponse courte (« oui », « combien ? ») ; ne classe que le message du client.\n\n"
         f"Exemples :\n{_examples()}"
@@ -57,6 +59,11 @@ CLASSIFIER_EXAMPLES: list[tuple[str, dict]] = [
     ("D'accord merci", {"intents": ["SALUTATION"], "objections": [], "offered_amount": None}),
     ("Je prends le noir en taille 42", {"intents": ["INTENTION_ACHAT"], "objections": [], "offered_amount": None}),
     ("Je veux parler au responsable", {"intents": ["DEMANDE_HUMAIN"], "objections": [], "offered_amount": None}),
+    # Lot 16 (26/09) : « Vous acceptez les retours ? » était pris pour un remboursement.
+    ("Vous acceptez les retours ?", {"intents": ["CONDITIONS_VENTE"], "objections": [], "offered_amount": None}),
+    ("Si la taille ne me va pas je peux l'échanger ?", {"intents": ["CONDITIONS_VENTE"], "objections": [], "offered_amount": None}),
+    ("Il y a une garantie sur ce téléphone ?", {"intents": ["CONDITIONS_VENTE"], "objections": [], "offered_amount": None}),
+    ("La robe est arrivée déchirée, je veux être remboursée", {"intents": ["RECLAMATION", "REMBOURSEMENT"], "objections": [], "offered_amount": None}),
 ]
 
 

@@ -25,6 +25,10 @@ FORBID_TRANSFER = "FORBID_TRANSFER"
 ALLOW_TRANSFER = "ALLOW_TRANSFER"
 
 TRANSFER_MESSAGE = "Je transmets votre demande à un conseiller, qui vous répondra au plus vite."
+MISSING_CONDITIONS_MESSAGE = "Je transmets votre question à la boutique, qui vous répondra au plus vite."
+
+# Catégories de la base de connaissances qui répondent à une question sur les conditions de vente.
+CONDITIONS_CATEGORIES = frozenset({"RETOUR", "GARANTIE", "CONDITIONS"})
 
 # Panne du service d'IA : messages fixes, jamais une promesse que personne ne tiendra.
 OUTAGE_RETRY_LATER_MESSAGE = (
@@ -50,7 +54,16 @@ RULE_LABELS = {
     "AI_LOOP": "IA bloquée (aucune réponse finale)",
     "AI_OUTAGE_RETRY_LATER": "panne de l'IA : client invité à renvoyer son message",
     "AI_OUTAGE_CALLBACK": "panne de l'IA : client à rappeler",
+    "MISSING_CONDITIONS": "conditions de vente non renseignées : question transmise à la boutique",
+    "PROMISE_KEPT": "Bob a promis un suivi par un humain : transfert automatique",
 }
+
+# Message fixe au client selon la règle de transfert immédiat (défaut : TRANSFER_MESSAGE).
+TRANSFER_MESSAGES = {"MISSING_CONDITIONS": MISSING_CONDITIONS_MESSAGE}
+
+
+def transfer_message(rule: str | None) -> str:
+    return TRANSFER_MESSAGES.get(rule, TRANSFER_MESSAGE)
 
 
 @dataclass
@@ -77,8 +90,18 @@ def _amount(value: float, currency: str) -> str:
     return f"{value:,.0f} {currency}".replace(",", " ")
 
 
-def evaluate(signal: dict | None, settings: HandoffSettingsView, negotiation_active: bool, currency: str = "") -> TurnDecision:
-    """`signal` = {"intents": [...], "objections": [...], "offered_amount": float|None}, ou None."""
+def evaluate(
+    signal: dict | None,
+    settings: HandoffSettingsView,
+    negotiation_active: bool,
+    currency: str = "",
+    known_categories: set[str] | None = None,
+) -> TurnDecision:
+    """
+    `signal` = {"intents": [...], "objections": [...], "offered_amount": float|None}, ou None.
+    `known_categories` = catégories renseignées dans la base de connaissances (None : inconnu,
+    la règle des conditions de vente ne s'applique pas).
+    """
     if not signal:
         return TurnDecision()  # analyse indisponible : comportement d'avant, inchangé
 
@@ -91,6 +114,12 @@ def evaluate(signal: dict | None, settings: HandoffSettingsView, negotiation_act
 
     if "REMBOURSEMENT" in intents and settings.refund_transfer:
         return TurnDecision(mode=TRANSFER_NOW, rule="REFUND")
+
+    # Lot 16 — question sur les retours / échanges / garantie alors que la boutique n'a rien
+    # renseigné : Bob ne peut qu'inventer ou promettre de « vérifier ». Le code transmet
+    # réellement la question (le commerçant est prévenu), avec un message fixe.
+    if "CONDITIONS_VENTE" in intents and known_categories is not None and not (known_categories & CONDITIONS_CATEGORIES):
+        return TurnDecision(mode=TRANSFER_NOW, rule="MISSING_CONDITIONS")
 
     if "RECLAMATION" in intents:
         if settings.complaint_policy == COMPLAINT_TRANSFER:
@@ -179,7 +208,10 @@ async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
     )).scalar_one_or_none()
     # Mêmes conditions que l'outil negotiate_price : activée ET plan payant.
     negotiation_active = negotiation is not None and negotiation.enabled and tenant.is_paid
-    return evaluate(signal, view, negotiation_active, currency=tenant.currency or "")
+    from app.services.strategy_service import knowledge_categories
+
+    known = await knowledge_categories(db, tenant.id)
+    return evaluate(signal, view, negotiation_active, currency=tenant.currency or "", known_categories=known)
 
 
 def outage_message(settings: HandoffSettingsView) -> tuple[str, str]:

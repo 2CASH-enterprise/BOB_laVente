@@ -28,7 +28,9 @@ from app.services.handoff_rules import (
     decide_turn,
     load_handoff_settings,
     outage_message,
+    transfer_message,
 )
+from app.services.promise_guard import contains_human_promise, remove_human_promises
 from app.services.signal_service import classify_and_store
 from app.services.strategy_service import apply_strategy
 from app.services.handoff_service import (
@@ -253,7 +255,7 @@ async def receive_webhook(
                 tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
                 message_type="handoff", content=f"Transfert vers un humain : Règle — {turn.rule_label}",
             ))
-            reply_text = TRANSFER_MESSAGE
+            reply_text = transfer_message(turn.rule)
         else:
             reply_text, failure = await generate_ai_reply_detailed(
                 db=db,
@@ -289,6 +291,27 @@ async def receive_webhook(
                 elif await rate_limiter.is_allowed(f"ai-outage:{tenant_id}", limit=1, window_seconds=3600):
                     subject, body = build_outage_alert(tenant.name)
                     outage_email = {"to": tenant.email, "subject": subject, "body": body}
+            elif conversation.status == ConversationStatus.ACTIVE and contains_human_promise(reply_text):
+                # Lot 16 — Bob promet un suivi par un humain SANS avoir transféré : le code tient
+                # la promesse (vrai transfert, commerçant prévenu), ou la retire si une règle
+                # interdit le transfert pour ce message.
+                if turn.mode == FORBID_TRANSFER:
+                    reply_text = remove_human_promises(reply_text)
+                    db.add(Message(
+                        tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                        message_type="promise_removed",
+                        content=(
+                            "Promesse d'un suivi par un humain retirée de la réponse de Bob "
+                            f"(transfert non autorisé — Règle : {turn.rule_label})"
+                        ),
+                    ))
+                else:
+                    conversation.status = ConversationStatus.WAITING_HUMAN
+                    db.add(Message(
+                        tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                        message_type="handoff", content=f"Transfert vers un humain : Règle — {RULE_LABELS['PROMISE_KEPT']}",
+                    ))
+                    turn.rule = "PROMISE_KEPT"
         if signal is not None:
             signal.applied_rule = turn.rule
             signal.handoff_blocked = turn.handoff_blocked if turn.mode == FORBID_TRANSFER else None

@@ -28,8 +28,9 @@ CONDITION_CATEGORIES = frozenset({"PAIEMENT", "LIVRAISON", "RETOUR", "GARANTIE",
 # (cas réel du 26/09 : base vide, Bob a inventé « retours sous 14 jours »).
 NO_KNOWLEDGE_INSTRUCTION = (
     "Le client pose une question sur des conditions que la boutique n'a pas renseignées. N'affirme "
-    "AUCUNE condition (paiement, livraison, retours, remboursement, garantie, délai) : dis honnêtement "
-    "que tu vas vérifier ce point auprès de la boutique, et demande au client ce qui l'inquiète."
+    "AUCUNE condition (paiement, livraison, retours, remboursement, garantie, délai). Si le client pose "
+    "une question précise sur ces conditions, appelle l'outil handoff_to_human (raison : sa question) et "
+    "dis-lui que tu transmets sa question à la boutique ; sinon, demande-lui ce qui l'inquiète."
 )
 
 
