@@ -236,6 +236,9 @@
   <main>
     <section id="tab-overview">
       <div class="grid" id="analytics-grid"></div>
+      <div class="card" id="sales-card" style="margin-top: 20px;">
+        <p class="loading-text">Chargement des ventes</p>
+      </div>
     </section>
 
     <section id="tab-conversations" class="hidden">
@@ -766,15 +769,82 @@ async function loadTenant() {
 async function loadOverview() {
   const a = await api("/api/v1/analytics");
   const grid = document.getElementById("analytics-grid");
-  const cur = a.currency || "";
+  // Commandes, chiffre d'affaires et conversion sont désormais dans la carte « Ventes » :
+  // l'ancien calcul comptait les commandes non payées comme des ventes.
   grid.innerHTML = `
     <div class="card"><div class="icon">💬</div><div class="value">${a.total_conversations}</div><div class="label">Conversations</div></div>
     <div class="card"><div class="icon">👥</div><div class="value">${a.qualified_prospects}</div><div class="label">Prospects qualifiés</div></div>
-    <div class="card"><div class="icon">📦</div><div class="value">${a.total_orders}</div><div class="label">Commandes</div></div>
-    <div class="card"><div class="icon">💰</div><div class="value">${a.revenue.toLocaleString()} ${cur}</div><div class="label">Chiffre d'affaires</div></div>
-    <div class="card"><div class="icon">📈</div><div class="value">${a.conversion_rate_pct}%</div><div class="label">Conversion</div></div>
     <div class="card"><div class="icon">🤝</div><div class="value">${a.human_handoffs}</div><div class="label">Transferts humains</div></div>
   `;
+  loadSales();
+}
+
+const OUTCOME_LABELS = [
+  ["PAID", "Payées", "var(--success)"],
+  ["ORDER_UNPAID", "Commande non payée", "#d4a017"],
+  ["CANCELLED", "Annulées", "var(--muted)"],
+  ["TRANSFERRED", "Transférées à un humain", "#7b61ff"],
+  ["ABANDONED", "Abandonnées", "var(--danger)"],
+  ["IN_PROGRESS", "En cours", "var(--accent)"],
+];
+
+function money(value, currency) {
+  return `${Math.round(value).toLocaleString()} ${esc(currency || "")}`.trim();
+}
+
+async function loadSales(forceRefresh = false) {
+  const card = document.getElementById("sales-card");
+  try {
+    let s = forceRefresh
+      ? await api("/api/v1/analytics/sales/refresh", { method: "POST" })
+      : await api("/api/v1/analytics/sales");
+    if (!s.computed_at && !forceRefresh) {
+      s = await api("/api/v1/analytics/sales/refresh", { method: "POST" });  // tout premier calcul
+    }
+    const rate = s.conversion_rate_pct === null ? "—" : `${s.conversion_rate_pct} %`;
+    const updated = s.computed_at ? new Date(s.computed_at).toLocaleString() : "jamais";
+    const bar = (value, max, color) =>
+      `<div style="background: var(--border, #eee); border-radius: 6px; height: 10px; overflow: hidden;">
+         <div style="width: ${max ? Math.round((value / max) * 100) : 0}%; height: 100%; background: ${color};"></div></div>`;
+
+    const outcomes = OUTCOME_LABELS.map(([key, label, color]) => `
+      <div style="display: grid; grid-template-columns: 170px 1fr 36px; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 6px;">
+        <span>${label}</span>${bar(s.outcomes[key] || 0, s.total, color)}<span style="text-align: right;">${s.outcomes[key] || 0}</span>
+      </div>`).join("");
+
+    const sources = s.by_source.length
+      ? `<table style="margin-top: 8px;"><thead><tr><th>Source</th><th>Opportunités</th><th>Payées</th><th>Conversion</th></tr></thead><tbody>
+          ${s.by_source.map((b) => `<tr><td data-label="Source">${esc(b.label)}</td><td data-label="Opportunités">${b.opportunities}</td>
+            <td data-label="Payées">${b.paid}</td><td data-label="Conversion">${b.conversion_rate_pct === null ? "—" : b.conversion_rate_pct + " %"}</td></tr>`).join("")}
+         </tbody></table>`
+      : "<p style='font-size: 13px; color: var(--muted);'>Aucune opportunité sur la période.</p>";
+
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+        <div class="label" style="font-weight: 600;">🛒 Ventes — ${s.period_days} derniers jours</div>
+        <div style="font-size: 12px; color: var(--muted);">Mis à jour : ${updated}
+          <a onclick="loadSales(true)" style="color: var(--accent); cursor: pointer; margin-left: 6px;">Recalculer</a></div>
+      </div>
+      <div class="grid" style="margin: 14px 0;">
+        <div class="card"><div class="value">${s.total}</div><div class="label">Opportunités</div></div>
+        <div class="card"><div class="value">${s.with_order}</div><div class="label">Avec commande</div></div>
+        <div class="card"><div class="value">${s.paid}</div><div class="label">Payées</div></div>
+        <div class="card"><div class="value">${rate}</div><div class="label">Conversion réelle</div></div>
+        <div class="card"><div class="value">${money(s.revenue_paid, s.currency)}</div><div class="label">Encaissé</div></div>
+        <div class="card"><div class="value">${money(s.revenue_pending, s.currency)}</div><div class="label">En attente de paiement</div></div>
+      </div>
+      <div class="label" style="font-weight: 600; margin-bottom: 8px;">Comment se terminent vos opportunités</div>
+      ${outcomes}
+      <div class="label" style="font-weight: 600; margin: 16px 0 0;">D'où viennent vos ventes</div>
+      ${sources}
+      <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
+        Une opportunité commence quand un client écrit après au moins 7 jours de silence.
+        Conversion réelle = opportunités payées ÷ opportunités terminées (les opportunités en cours ne comptent pas).
+        « Payée » = paiement confirmé par vous (bouton « Paiement reçu »).
+      </p>`;
+  } catch (e) {
+    card.innerHTML = `<p style="color: var(--danger); font-size: 13px;">Impossible de charger les ventes : ${esc(e.message)}</p>`;
+  }
 }
 
 async function loadConversations() {

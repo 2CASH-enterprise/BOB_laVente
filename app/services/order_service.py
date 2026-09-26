@@ -7,6 +7,7 @@ fonction elle-même ne peut pas vérifier une conversation, mais elle ne fait ja
 confiance à un prix ou un stock fourni en paramètre : tout est relu depuis la base).
 """
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,6 +130,7 @@ async def mark_order_as_paid(db: AsyncSession, tenant_id: uuid.UUID, order_id: u
         raise OrderCreationError(f"Cette commande est déjà au statut {order.status.value}, impossible de la marquer payée")
 
     order.status = OrderStatus.PAID
+    order.paid_at = datetime.now(timezone.utc)
 
     tenant = await db.get(Tenant, tenant_id)
     if tenant is not None and tenant.commission_rate is not None and float(tenant.commission_rate) > 0:

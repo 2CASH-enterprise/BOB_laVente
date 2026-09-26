@@ -20,6 +20,7 @@ from app.models.customer_product_view import CustomerProductView  # noqa: F401
 from app.models.delivery import Delivery  # noqa: F401
 from app.models.product_qr_code import ProductQrCode  # noqa: F401
 from app.models.contact_point import ContactPoint  # noqa: F401
+from app.models.sales_opportunity import SalesOpportunity  # noqa: F401
 from app.models.email_campaign import EmailCampaign  # noqa: F401
 
 __all__ = [

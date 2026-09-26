@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,7 +6,8 @@ from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
 from app.models.order import Order, OrderStatus
-from app.schemas.analytics import AnalyticsResponse
+from app.schemas.analytics import AnalyticsResponse, SalesSummaryResponse
+from app.services.opportunity_service import recompute_tenant_opportunities, sales_summary
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
@@ -53,3 +54,24 @@ async def get_analytics(
         conversion_rate_pct=round(conversion_rate, 1),
         human_handoffs=human_handoffs,
     )
+
+
+@router.get("/sales", response_model=SalesSummaryResponse)
+async def get_sales_summary(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SalesSummaryResponse:
+    """Issues des opportunités de la période (table recalculée chaque nuit et à la demande)."""
+    return SalesSummaryResponse(**await sales_summary(db, current_user.tenant_id, days=days))
+
+
+@router.post("/sales/refresh", response_model=SalesSummaryResponse)
+async def refresh_sales_summary(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SalesSummaryResponse:
+    """Recalcul immédiat pour CE compte uniquement (lecture de ses propres données)."""
+    await recompute_tenant_opportunities(db, current_user.tenant_id)
+    return SalesSummaryResponse(**await sales_summary(db, current_user.tenant_id, days=days))

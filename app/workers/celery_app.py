@@ -9,14 +9,26 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url)
+# Modules de tâches déclarés EXPLICITEMENT : autodiscover_tasks(["app.workers"]) cherche un
+# fichier app/workers/tasks.py qui n'existe pas, et ne trouvait donc AUCUNE tâche — le worker
+# refusait silencieusement les relances et le calcul des opportunités (« unregistered task »).
+#
+# Les relances automatiques (app.workers.followups) ne sont VOLONTAIREMENT PAS activées : elles
+# n'ont en réalité jamais tourné, et les activer en l'état enverrait des messages libres hors de
+# la fenêtre de 24 h de WhatsApp (refusés par Meta, mais enregistrés comme « envoyés »), sans
+# limite d'ancienneté des conversations. À réactiver après refonte (modèles Meta, garde-fous).
+TASK_MODULES = [
+    "app.workers.opportunities",
+]
+
+celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
 
 celery_app.conf.beat_schedule = {
-    "check-followups-every-15-minutes": {
-        "task": "app.workers.followups.check_followups_task",
-        "schedule": crontab(minute="*/15"),
+    # Phase 0 — mesure des issues : recalcul complet chaque nuit, à une heure creuse.
+    "recompute-sales-opportunities-nightly": {
+        "task": "app.workers.opportunities.recompute_opportunities_task",
+        "schedule": crontab(hour=2, minute=30),
     },
 }
 celery_app.conf.timezone = "UTC"
 
-celery_app.autodiscover_tasks(["app.workers"])
