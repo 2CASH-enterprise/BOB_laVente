@@ -320,3 +320,54 @@ async def update_handoff_settings(
     await db.commit()
     await db.refresh(row)
     return _handoff_resp(row)
+
+
+# ---------------------------------------------------------------------------
+# Stratégies de réponse aux objections (lot 15)
+# ---------------------------------------------------------------------------
+
+class StrategySettingsReq(BaseModel):
+    disabled: list[str]
+
+
+@router.get("/me/strategy-settings")
+async def get_strategy_settings(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bibliothèque groupée par objection, avec l'état activé/désactivé pour ce commerce."""
+    from app.services.strategy_service import disabled_strategies, knowledge_categories, library_with_state
+
+    known = await knowledge_categories(db, current_user.tenant_id)
+    return {"objections": library_with_state(await disabled_strategies(db, current_user.tenant_id), known)}
+
+
+@router.put("/me/strategy-settings", dependencies=[Depends(require_role("ADMIN"))])
+async def update_strategy_settings(
+    payload: StrategySettingsReq,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.strategy_settings import TenantStrategySettings
+    from app.services.audit import log_audit_event
+    from app.services.strategy_service import knowledge_categories, library_with_state, validate_disabled
+
+    disabled = sorted(set(payload.disabled))
+    error = validate_disabled(disabled)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
+
+    row = (await db.execute(
+        select(TenantStrategySettings).where(TenantStrategySettings.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if row is None:
+        row = TenantStrategySettings(tenant_id=current_user.tenant_id, disabled_strategies=disabled)
+        db.add(row)
+    else:
+        row.disabled_strategies = disabled
+    await log_audit_event(
+        db, actor=str(current_user.user_id), action="STRATEGY_SETTINGS_UPDATED", tenant_id=current_user.tenant_id,
+        details={"disabled": disabled},
+    )
+    await db.commit()
+    return {"objections": library_with_state(set(disabled), await knowledge_categories(db, current_user.tenant_id))}

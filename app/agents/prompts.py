@@ -30,6 +30,10 @@ BASE_RULES = """RÈGLES
 12. Pour les horaires, l'adresse, la livraison, les retours, la garantie, les moyens de
     paiement et les objections courantes, t'appuyer sur la base de connaissances ci-dessous
     si elle contient une réponse pertinente — jamais improviser sur ces sujets non plus.
+    N'affirme JAMAIS une condition commerciale (paiement, livraison, retours, remboursement,
+    garantie, délai) qui ne figure ni dans la base de connaissances ni dans la présentation
+    de l'entreprise, même pour rassurer un client : réponds que tu vas vérifier auprès de
+    la boutique.
 13. Une fois qu'un produit principal intéresse le client ou vient d'être commandé, tu peux
     utiliser suggest_complementary_products pour proposer 1 à 2 produits complémentaires
     configurés par l'entreprise (section 22) — jamais plus, jamais de manière insistante,
@@ -87,6 +91,30 @@ def _format_knowledge_base(entries: list[KnowledgeEntry]) -> str:
     return "\n\nBASE DE CONNAISSANCES\n\n" + "\n\n".join(sections)
 
 
+# Sujets sur lesquels le client attend des conditions précises : si la boutique ne les a pas
+# renseignés, Bob en reçoit la liste EXPLICITE. Constat du 26/09 : avec une base vide, la
+# règle générale n'a pas suffi (« retours sous 14 jours » inventé) ; nommer ce qui manque aide.
+_CONDITION_TOPICS = {
+    "PAIEMENT": "le paiement",
+    "LIVRAISON": "la livraison",
+    "RETOUR": "les retours et remboursements",
+    "GARANTIE": "la garantie",
+}
+
+
+def _format_missing_conditions(entries: list[KnowledgeEntry]) -> str:
+    known = {getattr(e.category, "value", e.category) for e in entries}
+    missing = [label for code, label in _CONDITION_TOPICS.items() if code not in known]
+    if not missing:
+        return ""
+    return (
+        "\n\nINFORMATIONS NON RENSEIGNÉES PAR LA BOUTIQUE\n\n"
+        f"La boutique n'a donné AUCUNE information sur : {', '.join(missing)}. "
+        "N'affirme rien sur ces sujets (pas de délai, pas de condition, pas de politique de retour) : "
+        "si le client pose la question, dis-lui honnêtement que tu vas vérifier auprès de la boutique."
+    )
+
+
 def build_system_prompt(
     tenant: Tenant, knowledge_entries: list[KnowledgeEntry] | None = None, customer_memory: str = ""
 ) -> str:
@@ -106,7 +134,7 @@ Aider le client à choisir et acheter les produits disponibles dans le catalogue
 CONTEXTE ENTREPRISE
 Devise : {tenant.currency}
 Pays : {tenant.country}
-{_format_company_profile(tenant)}{knowledge_section}{customer_memory}
+{_format_company_profile(tenant)}{knowledge_section}{_format_missing_conditions(knowledge_entries or [])}{customer_memory}
 """
 
 

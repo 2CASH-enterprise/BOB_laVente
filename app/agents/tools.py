@@ -23,6 +23,9 @@ from app.services.order_service import OrderCreationError, create_order
 from app.services.customer_memory_service import record_product_view
 
 
+PRODUCT_DESCRIPTION_MAX_CHARS = 300
+
+
 class ToolExecutor:
     def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, conversation: Conversation, customer_id: uuid.UUID | None = None):
         self.db = db
@@ -43,9 +46,16 @@ class ToolExecutor:
         return await handler(tool_input)
 
     async def _product_to_dict(self, product) -> dict:
+        # Lot 15 : la description (tronquée) permet à Bob d'argumenter sur des caractéristiques
+        # RÉELLES au lieu de les inventer. Le prix d'achat (cost_price) n'est jamais exposé : il
+        # révélerait la marge du commerçant.
+        description = (product.description or "").strip()
+        if len(description) > PRODUCT_DESCRIPTION_MAX_CHARS:
+            description = description[:PRODUCT_DESCRIPTION_MAX_CHARS].rstrip() + "…"
         return {
             "product_id": str(product.id),
             "name": product.name,
+            "description": description or None,
             "price": float(product.price),
             "currency": product.currency,
             "stock": product.stock_quantity,

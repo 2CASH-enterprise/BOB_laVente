@@ -87,3 +87,15 @@ async def get_signals_summary(
     from app.services.signal_service import signals_summary
 
     return SignalsSummaryResponse(**await signals_summary(db, current_user.tenant_id, days=days))
+
+
+@router.get("/strategies")
+async def get_strategies_summary(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stratégies utilisées et issue des opportunités concernées (taux affiché seulement au-delà du seuil)."""
+    from app.services.strategy_service import strategies_summary
+
+    return await strategies_summary(db, current_user.tenant_id, days=days)

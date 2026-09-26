@@ -35,4 +35,6 @@ class MessageSignal(Base):
     # Lot 13 — règle de transmission appliquée à ce message, et tentative de transfert bloquée.
     applied_rule: Mapped[str | None] = mapped_column(String(40))
     handoff_blocked: Mapped[bool | None] = mapped_column(Boolean)
+    # Lot 15 — stratégie de réponse appliquée à l'objection de ce message (code de la bibliothèque).
+    strategy: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

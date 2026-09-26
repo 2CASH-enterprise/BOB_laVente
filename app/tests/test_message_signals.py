@@ -296,6 +296,7 @@ async def test_conversation_detail_shows_labels_under_customer_messages(client, 
         # Lot 13 : règle appliquée (négociation non configurée → prix fixes), aucun transfert tenté.
         "applied_rule": "remise sans négociation : prix fixes",
         "handoff_blocked": False,
+        "strategy": None,  # lot 15 : une règle s'applique, donc aucune stratégie de prix ne s'y ajoute
     }
     assert by_sender["AI"]["signals"] is None
 

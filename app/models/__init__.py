@@ -23,6 +23,7 @@ from app.models.contact_point import ContactPoint  # noqa: F401
 from app.models.sales_opportunity import SalesOpportunity  # noqa: F401
 from app.models.message_signal import MessageSignal  # noqa: F401
 from app.models.handoff_settings import TenantHandoffSettings  # noqa: F401
+from app.models.strategy_settings import TenantStrategySettings  # noqa: F401
 from app.models.email_campaign import EmailCampaign  # noqa: F401
 
 __all__ = [

@@ -242,6 +242,9 @@
       <div class="card" id="signals-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement de l'analyse des messages</p>
       </div>
+      <div class="card" id="strategies-card" style="margin-top: 20px;">
+        <p class="loading-text">Chargement des réponses aux objections</p>
+      </div>
     </section>
 
     <section id="tab-conversations" class="hidden">
@@ -520,6 +523,18 @@
           <button class="action" onclick="saveHandoffSettings()">Enregistrer</button>
           <div id="handoff-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
+
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Réponses aux objections</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
+            Quand un client exprime un frein (prix, hésitation, confiance…), Bob applique l'une des stratégies
+            activées ci-dessous, choisie au hasard : c'est ce qui permet de mesurer celle qui fonctionne le mieux.
+            Aucune stratégie n'autorise Bob à inventer un prix, une promotion ou une fausse urgence.
+          </p>
+          <div id="strategy-list"><p class="loading-text">Chargement</p></div>
+          <button class="action" onclick="saveStrategySettings()">Enregistrer</button>
+          <div id="strategy-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
       </div>
     </section>
   </main>
@@ -791,7 +806,7 @@ function showTab(name) {
   if (name === "orders") loadOrders();
   if (name === "integrations") loadIntegrationsStatus();
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
-  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); loadHandoffSettings(); loadMfaStatus(); }
+  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadMfaStatus(); }
 }
 
 async function loadTenant() {
@@ -813,6 +828,37 @@ async function loadOverview() {
   `;
   loadSales();
   loadSignals();
+  loadStrategies();
+}
+
+async function loadStrategies() {
+  const card = document.getElementById("strategies-card");
+  if (!card) return;
+  try {
+    const s = await api("/api/v1/analytics/strategies");
+    const title = `<div class="label" style="font-weight: 600;">🎯 Réponses aux objections — ${s.period_days} derniers jours</div>`;
+    if (!s.strategies.length) {
+      card.innerHTML = `${title}<p style="font-size: 13px; color: var(--muted); margin: 8px 0 0;">Aucune stratégie appliquée pour l'instant : elles s'appliqueront dès qu'un client exprimera un frein à l'achat.</p>`;
+      return;
+    }
+    card.innerHTML = `${title}
+      <table style="margin-top: 10px;"><thead><tr><th>Objection</th><th>Stratégie</th><th>Utilisations</th><th>Opportunités payées</th><th>Conversion</th></tr></thead><tbody>
+        ${s.strategies.map((r) => `<tr>
+          <td data-label="Objection">${esc(r.objection_label)}</td>
+          <td data-label="Stratégie">${esc(r.label)}</td>
+          <td data-label="Utilisations">${r.uses}</td>
+          <td data-label="Payées">${r.paid} / ${r.terminated} terminée${r.terminated > 1 ? "s" : ""}</td>
+          <td data-label="Conversion">${r.enough_data ? r.conversion_rate_pct + " %" : "<span style='color: var(--muted); font-size: 12px;'>Pas encore assez de données</span>"}</td>
+        </tr>`).join("")}
+      </tbody></table>
+      <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
+        Le taux de conversion n'est affiché qu'à partir de ${s.min_terminated_for_rate} opportunités terminées :
+        en dessous, un pourcentage serait trompeur. Bob alterne au hasard entre les stratégies activées
+        (Paramètres → Réponses aux objections), pour pouvoir les comparer honnêtement.
+      </p>`;
+  } catch (e) {
+    card.innerHTML = `<p style="color: var(--danger); font-size: 13px;">Impossible de charger les réponses aux objections : ${esc(e.message)}</p>`;
+  }
 }
 
 const OUTCOME_LABELS = [
@@ -835,6 +881,7 @@ function signalChips(signals) {
   if (signals.offered_amount) parts.push(chip(`Prix proposé : ${Math.round(signals.offered_amount).toLocaleString()}`, "#e6f4ea", "#1e6b35"));
   if (signals.applied_rule) parts.push(chip("Règle : " + signals.applied_rule, "#ece8ff", "#4b3aa8"));
   if (signals.handoff_blocked) parts.push(chip("Transfert bloqué par la règle", "#fde8e8", "#a12c2c"));
+  if (signals.strategy) parts.push(chip("Stratégie : " + signals.strategy, "#e3f1fb", "#1a5a8a"));
   if (!parts.length) return "";
   return `<div title="Étiquettes déduites automatiquement : elles peuvent se tromper" style="margin-top: 4px;">${parts.join("")}</div>`;
 }
@@ -1837,6 +1884,46 @@ async function saveHandoffSettings() {
         discount_policy: document.getElementById("handoff-discount").value,
         ai_outage_policy: document.getElementById("handoff-outage").value,
       }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+const KNOWLEDGE_LABELS = { PAIEMENT: "sur le paiement", LIVRAISON: "sur la livraison", RETOUR: "sur les retours", GARANTIE: "sur la garantie", CONDITIONS: "sur les conditions de vente" };
+
+async function loadStrategySettings() {
+  const box = document.getElementById("strategy-list");
+  try {
+    const data = await api("/api/v1/tenants/me/strategy-settings");
+    box.innerHTML = data.objections.map((group) => `
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 4px;">${esc(group.label)}</div>
+        ${group.strategies.map((st) => `
+          <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-bottom: 4px;">
+            <input type="checkbox" class="strategy-toggle" data-code="${esc(st.code)}" ${st.enabled ? "checked" : ""} style="margin-top: 3px;">
+            <span><strong>${esc(st.label)}</strong> — <span style="color: var(--muted);">${esc(st.description)}</span>
+              ${st.available === false
+                ? `<br><span style="font-size: 11px; color: #9a5b00;">⚠️ Inactive tant que votre base de connaissances ne contient pas d'information ${esc(st.requires.map((c) => KNOWLEDGE_LABELS[c] || c).join(" ou "))}. Bob ne citera jamais de condition qui n'y figure pas.</span>`
+                : ""}</span>
+          </label>`).join("")}
+      </div>`).join("");
+  } catch (e) {
+    box.innerHTML = `<p style="color: var(--danger); font-size: 13px;">${esc(e.message)}</p>`;
+  }
+}
+
+async function saveStrategySettings() {
+  const msg = document.getElementById("strategy-msg");
+  const disabled = [...document.querySelectorAll(".strategy-toggle")].filter((c) => !c.checked).map((c) => c.dataset.code);
+  try {
+    await api("/api/v1/tenants/me/strategy-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ disabled }),
     });
     msg.style.color = "var(--success)";
     msg.textContent = "Enregistré.";

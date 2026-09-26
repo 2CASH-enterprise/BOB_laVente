@@ -30,6 +30,7 @@ from app.services.handoff_rules import (
     outage_message,
 )
 from app.services.signal_service import classify_and_store
+from app.services.strategy_service import apply_strategy
 from app.services.handoff_service import (
     TRANSFER_MESSAGE_TYPES,
     build_callback_alert,
@@ -243,6 +244,8 @@ async def receive_webhook(
 
         # Lot 13 — règles de transmission, évaluées par le code AVANT la réponse de Bob.
         turn = await decide_turn(db, tenant, _signal_payload(signal))
+        # Lot 15 — stratégie de réponse à l'objection (après les règles, jamais contre elles).
+        strategy = await apply_strategy(db, tenant_id, turn, _signal_payload(signal))
         if turn.mode == TRANSFER_NOW:
             # Transfert immédiat, message fixe, sans appel à l'IA (elle pourrait le contredire).
             conversation.status = ConversationStatus.WAITING_HUMAN
@@ -289,6 +292,8 @@ async def receive_webhook(
         if signal is not None:
             signal.applied_rule = turn.rule
             signal.handoff_blocked = turn.handoff_blocked if turn.mode == FORBID_TRANSFER else None
+            # En cas de panne ou de boucle, la stratégie n'a pas réellement été appliquée.
+            signal.strategy = strategy.code if strategy is not None and turn.rule is None else None
 
         # Freemium (jamais en démo) — mention discrète, levier de bouche-à-oreille (section freemium).
         if not tenant.is_paid:
