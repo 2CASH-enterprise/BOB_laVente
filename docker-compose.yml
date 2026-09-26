@@ -49,7 +49,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: bob
-      POSTGRES_PASSWORD: bob
+      # Lu dans le .env (jamais commité). Le « :? » fait échouer le démarrage avec un message
+      # clair si la variable manque, plutôt que de démarrer avec un mot de passe vide.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans le fichier .env}
       POSTGRES_DB: bob
     ports:
       # Accessible uniquement depuis le serveur lui-même, jamais depuis Internet
