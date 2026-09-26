@@ -3,7 +3,9 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "8002:8000"
+      # Joint uniquement par nginx sur le serveur (proxy_pass http://127.0.0.1:8002) :
+      # jamais d'accès direct depuis Internet en HTTP simple, qui contournerait le HTTPS.
+      - "127.0.0.1:8002:8000"
     env_file:
       - .env
     depends_on:
