@@ -1,6 +1,7 @@
 services:
   api:
     build: .
+    restart: unless-stopped
     ports:
       - "8002:8000"
     env_file:
@@ -15,6 +16,7 @@ services:
 
   worker:
     build: .
+    restart: unless-stopped
     command: celery -A app.workers.celery_app worker --loglevel=info
     env_file:
       - .env
@@ -28,6 +30,7 @@ services:
 
   beat:
     build: .
+    restart: unless-stopped
     command: celery -A app.workers.celery_app beat --loglevel=info
     env_file:
       - .env
@@ -41,12 +44,15 @@ services:
 
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: bob
       POSTGRES_PASSWORD: bob
       POSTGRES_DB: bob
     ports:
-      - "5434:5432"
+      # Accessible uniquement depuis le serveur lui-même, jamais depuis Internet
+      # (Docker contourne ufw pour les ports publiés : l'adresse 127.0.0.1 est la vraie protection).
+      - "127.0.0.1:5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -57,8 +63,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "6380:6379"
+      # Redis n'a pas de mot de passe : il ne doit JAMAIS être exposé sur Internet.
+      - "127.0.0.1:6380:6379"
 
 volumes:
   pgdata:
