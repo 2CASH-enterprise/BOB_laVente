@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -34,6 +35,8 @@ class OrderResponse(BaseModel):
     delivery_address: str | None
     payment_method: str | None
     created_by: str
+    created_at: datetime | None = None  # pour signaler les commandes en attente depuis longtemps
+    paid_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

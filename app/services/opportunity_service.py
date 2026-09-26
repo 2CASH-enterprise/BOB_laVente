@@ -80,6 +80,24 @@ def _episode_index(starts: list[datetime], moment: datetime) -> int:
     return index
 
 
+def episode_for_manual_order(episodes: list, order_time: datetime):
+    """
+    Commande saisie à la main (sans conversation) : rattachée à l'épisode du client dont
+    le dernier message date de MOINS de OPPORTUNITY_GAP avant la commande, jamais à un
+    épisode ancien (ce qui le ferait passer rétroactivement en « payée »).
+    `episodes` : objets ayant started_at et last_customer_message_at (épisodes de calcul ou
+    lignes SalesOpportunity). Renvoie l'épisode le plus récent qui convient, ou None.
+    """
+    best = None
+    for episode in episodes:
+        start = _aware(episode.started_at)
+        last = _aware(episode.last_customer_message_at)
+        if start <= order_time < last + OPPORTUNITY_GAP:
+            if best is None or start > _aware(best.started_at):
+                best = episode
+    return best
+
+
 def compute_outcome(episode: _Episode, now: datetime) -> str:
     statuses = {order.status for order in episode.orders}
     if OrderStatus.PAID in statuses:
@@ -136,7 +154,8 @@ async def recompute_tenant_opportunities(db: AsyncSession, tenant_id, now: datet
         if order.status == OrderStatus.PAID:
             paid_order_dates.setdefault(order.customer_id, []).append(_aware(order.created_at))
 
-    rows: list[SalesOpportunity] = []
+    built: list[tuple] = []  # (conversation, customer, episodes)
+    episodes_by_customer: dict = {}
     for conversation in conversations:
         conv_messages = messages_by_conversation.get(conversation.id, [])
         customer_times = [_aware(m.created_at) for m in conv_messages if m.sender == MessageSender.CUSTOMER]
@@ -164,7 +183,19 @@ async def recompute_tenant_opportunities(db: AsyncSession, tenant_id, now: datet
         for order in orders_by_conversation.get(conversation.id, []):
             episodes[_episode_index(starts, _aware(order.created_at))].orders.append(order)
 
-        customer = customers.get(conversation.customer_id)
+        built.append((conversation, customers.get(conversation.customer_id), episodes))
+        episodes_by_customer.setdefault(conversation.customer_id, []).extend(episodes)
+
+    # Commandes saisies à la main (sans conversation) : rattachées si le client écrivait encore
+    # à ce moment-là ; sinon elles restent « hors conversation » (comptées dans le résumé).
+    for order in orders:
+        if order.conversation_id is None:
+            episode = episode_for_manual_order(episodes_by_customer.get(order.customer_id, []), _aware(order.created_at))
+            if episode is not None:
+                episode.orders.append(order)
+
+    rows: list[SalesOpportunity] = []
+    for conversation, customer, episodes in built:
         rows.extend(_build_rows(tenant_id, conversation, customer, episodes, paid_order_dates, now))
 
     # « Première opportunité du client » : sur l'ensemble de ses conversations (un client peut
@@ -253,12 +284,8 @@ async def sales_summary(db: AsyncSession, tenant_id, days: int = 30, now: dateti
         OpportunityOutcome.TRANSFERRED, OpportunityOutcome.ABANDONED, OpportunityOutcome.IN_PROGRESS,
     )}
     by_source: dict[str, dict] = {}
-    revenue_paid = Decimal("0")
-    revenue_pending = Decimal("0")
     for row in rows:
         outcomes[row.outcome] += 1
-        revenue_paid += Decimal(str(row.paid_amount))
-        revenue_pending += Decimal(str(row.order_amount)) - Decimal(str(row.paid_amount))
 
         if not row.is_first_opportunity:
             label = RETURNING_LABEL
@@ -270,6 +297,8 @@ async def sales_summary(db: AsyncSession, tenant_id, days: int = 30, now: dateti
         bucket["opportunities"] += 1
         bucket["terminated"] += row.outcome in OpportunityOutcome.TERMINATED
         bucket["paid"] += row.outcome == OpportunityOutcome.PAID
+
+    cash = await _cash_summary(db, tenant_id, since)
 
     terminated = sum(outcomes[o] for o in OpportunityOutcome.TERMINATED)
     with_order = outcomes[OpportunityOutcome.PAID] + outcomes[OpportunityOutcome.ORDER_UNPAID] + outcomes[OpportunityOutcome.CANCELLED]
@@ -287,7 +316,71 @@ async def sales_summary(db: AsyncSession, tenant_id, days: int = 30, now: dateti
         "paid": outcomes[OpportunityOutcome.PAID],
         "terminated": terminated,
         "conversion_rate_pct": _rate(outcomes[OpportunityOutcome.PAID], terminated),
-        "revenue_paid": float(revenue_paid),
-        "revenue_pending": float(revenue_pending),
+        **cash,
         "by_source": sources,
+    }
+
+
+async def _cash_summary(db: AsyncSession, tenant_id, since: datetime) -> dict:
+    """
+    Trésorerie de la période, sur TOUTES les commandes (conversations et saisies à la main) :
+    - encaissé : commandes payées dont le paiement date de la période (à défaut de date de
+      paiement, pour les commandes anciennes, la date de création) ;
+    - en attente : commandes non payées créées pendant la période ;
+    - dont en attente dans des opportunités déjà payées (pour lire la carte sans contresens) ;
+    - ventes hors conversation : commandes manuelles qu'aucune opportunité ne peut porter.
+    """
+    orders = (await db.execute(select(Order).where(Order.tenant_id == tenant_id))).scalars().all()
+    opportunities = (await db.execute(
+        select(SalesOpportunity).where(SalesOpportunity.tenant_id == tenant_id)
+    )).scalars().all()
+    by_conversation: dict = {}
+    by_customer: dict = {}
+    for opp in opportunities:
+        by_conversation.setdefault(opp.conversation_id, []).append(opp)
+        by_customer.setdefault(opp.customer_id, []).append(opp)
+
+    def opportunity_of(order):
+        moment = _aware(order.created_at)
+        if order.conversation_id is not None:
+            candidates = sorted(by_conversation.get(order.conversation_id, []), key=lambda o: _aware(o.started_at))
+            chosen = None
+            for opp in candidates:  # même règle que le calcul : le dernier épisode commencé avant la commande
+                if _aware(opp.started_at) <= moment:
+                    chosen = opp
+            return chosen or (candidates[0] if candidates else None)
+        return episode_for_manual_order(by_customer.get(order.customer_id, []), moment)
+
+    paid = Decimal("0")
+    pending = Decimal("0")
+    pending_in_paid = Decimal("0")
+    outside_count = 0
+    outside_paid = Decimal("0")
+    for order in orders:
+        amount = Decimal(str(order.total_amount))
+        created = _aware(order.created_at)
+        paid_moment = _aware(order.paid_at) if order.paid_at else created
+        opportunity = opportunity_of(order)
+
+        in_period = False
+        if order.status == OrderStatus.PAID and paid_moment >= since:
+            paid += amount
+            in_period = True
+        elif order.status == OrderStatus.PENDING and created >= since:
+            pending += amount
+            in_period = True
+            if opportunity is not None and opportunity.outcome == OpportunityOutcome.PAID:
+                pending_in_paid += amount
+
+        if in_period and order.conversation_id is None and opportunity is None:
+            outside_count += 1
+            if order.status == OrderStatus.PAID:
+                outside_paid += amount
+
+    return {
+        "revenue_paid": float(paid),
+        "revenue_pending": float(pending),
+        "revenue_pending_in_paid_opportunities": float(pending_in_paid),
+        "outside_conversation_orders": outside_count,
+        "outside_conversation_paid": float(outside_paid),
     }

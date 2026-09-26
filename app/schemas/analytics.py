@@ -35,6 +35,9 @@ class SalesSummaryResponse(BaseModel):
     paid: int
     terminated: int
     conversion_rate_pct: float | None  # payées ÷ terminées ; None si aucune opportunité terminée
-    revenue_paid: float
-    revenue_pending: float
+    revenue_paid: float  # toutes les commandes payées de la période (y compris hors conversation)
+    revenue_pending: float  # toutes les commandes non payées créées pendant la période
+    revenue_pending_in_paid_opportunities: float = 0.0  # part du « en attente » dans des opportunités déjà payées
+    outside_conversation_orders: int = 0  # commandes saisies à la main qu'aucune opportunité ne porte
+    outside_conversation_paid: float = 0.0
     by_source: list[SourceBreakdown]
