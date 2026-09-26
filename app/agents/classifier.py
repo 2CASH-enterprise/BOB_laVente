@@ -33,11 +33,36 @@ def build_classifier_prompt() -> str:
         f"Objections possibles (zéro, une ou plusieurs) :\n{objections}\n\n"
         "Règles :\n"
         "- n'utilise que les codes ci-dessus, en majuscules ;\n"
-        "- une objection n'existe que si le client exprime un frein à l'achat ; sinon liste vide ;\n"
+        "- une objection = tout ce qui freine ou retarde l'achat, y compris une hésitation sans "
+        "raison donnée ; s'il n'y a aucun frein, liste vide ;\n"
         "- offered_amount = le montant que le client PROPOSE de payer ou annonce comme budget "
         "(ex. « je vous le prends à 250 000 » → 250000) ; null s'il n'en donne aucun ;\n"
         "- le message précédent de la boutique, s'il est fourni, sert seulement à comprendre "
-        "une réponse courte (« oui », « combien ? ») ; ne classe que le message du client."
+        "une réponse courte (« oui », « combien ? ») ; ne classe que le message du client.\n\n"
+        f"Exemples :\n{_examples()}"
+    )
+
+
+# Exemples : la façon la plus efficace de guider un petit modèle. Le premier cas réel mal classé
+# (« Je vais réfléchir » → AUTRE sans objection, 26/09/2026) a motivé cette liste.
+CLASSIFIER_EXAMPLES: list[tuple[str, dict]] = [
+    ("Je vais réfléchir", {"intents": ["AUTRE"], "objections": ["HESITATION"], "offered_amount": None}),
+    ("Je dois demander à mon mari d'abord", {"intents": ["AUTRE"], "objections": ["HESITATION"], "offered_amount": None}),
+    ("Ok je reviens plus tard", {"intents": ["SALUTATION"], "objections": ["HESITATION"], "offered_amount": None}),
+    ("C'est trop cher pour moi", {"intents": ["AUTRE"], "objections": ["PRIX_TROP_ELEVE"], "offered_amount": None}),
+    ("Vous pouvez me le faire à 250000 ?", {"intents": ["DEMANDE_REMISE"], "objections": ["PRIX_TROP_ELEVE"], "offered_amount": 250000}),
+    ("Vous faites un prix ?", {"intents": ["DEMANDE_REMISE"], "objections": [], "offered_amount": None}),
+    ("C'est pas une arnaque ? Je paie à la livraison ?", {"intents": ["PAIEMENT"], "objections": ["CONFIANCE"], "offered_amount": None}),
+    ("La livraison à 5000 c'est trop", {"intents": ["LIVRAISON"], "objections": ["FRAIS_LIVRAISON"], "offered_amount": None}),
+    ("D'accord merci", {"intents": ["SALUTATION"], "objections": [], "offered_amount": None}),
+    ("Je prends le noir en taille 42", {"intents": ["INTENTION_ACHAT"], "objections": [], "offered_amount": None}),
+    ("Je veux parler au responsable", {"intents": ["DEMANDE_HUMAIN"], "objections": [], "offered_amount": None}),
+]
+
+
+def _examples() -> str:
+    return "\n".join(
+        f"« {text} » → {json.dumps(expected, ensure_ascii=False)}" for text, expected in CLASSIFIER_EXAMPLES
     )
 
 

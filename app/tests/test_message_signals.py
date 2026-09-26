@@ -157,7 +157,9 @@ async def test_customer_message_is_classified_and_stored(client, db_session, uni
     assert signal.intents == ["DEMANDE_REMISE"]
     assert signal.objections == ["PRIX_TROP_ELEVE"]
     assert float(signal.offered_amount) == 250000
-    assert signal.model == "fake-small" and signal.taxonomy_version == "v1"
+    from app.agents.taxonomy import TAXONOMY_VERSION
+
+    assert signal.model == "fake-small" and signal.taxonomy_version == TAXONOMY_VERSION
     assert classifier.calls[0][0] == "C'est trop cher, je vous le prends à 250 000"
 
 
@@ -362,3 +364,36 @@ async def test_signals_api(client, db_session, unique_email):
     assert r.status_code == 200
     assert r.json() == {"period_days": 30, "classified_messages": 0, "customer_messages": 0, "intents": [], "objections": []}
     assert (await client.get("/api/v1/analytics/signals")).status_code == 401
+
+
+# --- v1.1 : exemples dans les consignes ------------------------------------------------
+
+def test_every_example_is_valid_under_the_taxonomy():
+    """Un exemple avec un code mal orthographié apprendrait au modèle une étiquette inexistante."""
+    from app.agents.classifier import CLASSIFIER_EXAMPLES
+
+    for text, expected in CLASSIFIER_EXAMPLES:
+        assert normalize_classification(expected) == expected, text
+
+
+def test_examples_cover_every_objection_used_in_real_cases():
+    from app.agents.classifier import CLASSIFIER_EXAMPLES
+
+    covered = {code for _, expected in CLASSIFIER_EXAMPLES for code in expected["objections"]}
+    assert {"HESITATION", "PRIX_TROP_ELEVE", "CONFIANCE", "FRAIS_LIVRAISON"} <= covered
+
+
+def test_first_real_misclassification_is_now_an_explicit_example():
+    """26/09/2026 : « Je vais réfléchir » classé AUTRE sans objection en production."""
+    prompt = build_classifier_prompt()
+    assert "« Je vais réfléchir » →" in prompt
+    assert '"objections": ["HESITATION"]' in prompt
+    assert "hésitation sans raison donnée" in prompt
+
+
+def test_taxonomy_version_changed_but_codes_did_not():
+    from app.agents.taxonomy import TAXONOMY_VERSION
+
+    assert TAXONOMY_VERSION == "v1.1"
+    assert "HESITATION" in OBJECTIONS and "SALUTATION" in INTENTS
+    assert INTENTS["SALUTATION"][0] == "Salutation ou politesse"

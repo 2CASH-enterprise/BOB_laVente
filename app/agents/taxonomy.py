@@ -6,11 +6,13 @@ tous cette liste. Volontairement courte : une liste réduite est classée plus f
 Les codes sont stables (stockés en base) ; seuls les libellés peuvent évoluer.
 """
 
-TAXONOMY_VERSION = "v1"
+# v1.1 : exemples ajoutés aux consignes, « Hésitation » précisée, « Salutation » élargie à la
+# politesse. Les CODES sont inchangés : les étiquettes v1 et v1.1 restent comparables.
+TAXONOMY_VERSION = "v1.1"
 
 INTENTS: dict[str, tuple[str, str]] = {
     # code: (libellé affiché, définition donnée au classificateur)
-    "SALUTATION": ("Salutation", "bonjour, merci, au revoir, sans autre demande"),
+    "SALUTATION": ("Salutation ou politesse", "bonjour, merci, d'accord, ok, au revoir, sans autre demande"),
     "RECHERCHE_PRODUIT": ("Recherche de produit", "cherche un produit, un modèle, une catégorie"),
     "DEMANDE_PRIX": ("Demande de prix", "demande combien coûte un produit"),
     "DISPONIBILITE": ("Disponibilité", "demande si un produit, une taille ou une couleur est disponible"),
@@ -32,7 +34,11 @@ OBJECTIONS: dict[str, tuple[str, str]] = {
     "QUALITE": ("Qualité", "doute de la qualité, de l'authenticité ou de la durabilité"),
     "DELAI": ("Délai", "trouve le délai de livraison ou de disponibilité trop long"),
     "RUPTURE_STOCK": ("Rupture de stock", "le produit voulu n'est pas disponible"),
-    "HESITATION": ("Hésitation", "« je vais réfléchir », « je reviens », doit demander à quelqu'un"),
+    "HESITATION": (
+        "Hésitation",
+        "reporte sa décision sans donner de raison : « je vais réfléchir », « je reviens plus tard », "
+        "« je dois demander à mon mari » — c'est une objection même si aucune raison n'est donnée",
+    ),
 }
 
 
