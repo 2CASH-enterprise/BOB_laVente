@@ -148,3 +148,57 @@ async def mark_order_as_paid(db: AsyncSession, tenant_id: uuid.UUID, order_id: u
 
     await db.flush()
     return order
+
+
+# Livraison déjà partie : l'annulation n'a plus de sens côté commerce (la marchandise a quitté le stock).
+_DELIVERY_ALREADY_LEFT = frozenset({"PICKED_UP", "IN_TRANSIT", "DELIVERED"})
+
+
+async def cancel_order(db: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UUID) -> Order:
+    """
+    Annulation par un HUMAIN côté commerce uniquement (jamais par l'IA : action commerciale
+    irréversible). Seule une commande en attente de paiement peut être annulée ; une commande
+    payée relèverait d'un remboursement. Les articles réservés à la création sont remis en
+    stock, et une livraison pas encore partie est annulée avec la commande.
+    Ne commite pas : l'appelant trace l'audit et commite en une seule transaction.
+    """
+    from sqlalchemy import select
+
+    from app.models.delivery import Delivery, DeliveryStatus
+
+    order = await db.get(Order, order_id)
+    if order is None or order.tenant_id != tenant_id:
+        raise OrderCreationError("Commande introuvable")
+    if order.status == OrderStatus.PAID:
+        raise OrderCreationError("Cette commande est payée : elle ne peut pas être annulée (un remboursement n'est pas géré ici)")
+    if order.status != OrderStatus.PENDING:
+        raise OrderCreationError(f"Cette commande est déjà au statut {order.status.value}")
+
+    deliveries = (await db.execute(
+        select(Delivery).where(Delivery.order_id == order.id, Delivery.tenant_id == tenant_id)
+    )).scalars().all()
+    if any(d.status.value in _DELIVERY_ALREADY_LEFT for d in deliveries):
+        raise OrderCreationError("La livraison de cette commande est déjà partie : annulation impossible")
+
+    items = (await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))).scalars().all()
+    for item in items:
+        product = await db.get(Product, item.product_id)
+        if product is not None and product.tenant_id == tenant_id:
+            product.stock_quantity += item.quantity  # même produit désactivé : le stock reste juste
+
+    for delivery in deliveries:
+        if delivery.status not in (DeliveryStatus.CANCELLED, DeliveryStatus.FAILED):
+            delivery.status = DeliveryStatus.CANCELLED
+
+    order.status = OrderStatus.CANCELLED
+    await db.flush()
+    return order
+
+
+def build_cancellation_message(order: Order) -> str:
+    """Message fixe, jamais rédigé par l'IA — même numéro et même format de montant que le reçu."""
+    return (
+        f"Votre commande n° {str(order.id)[:8].upper()} "
+        f"({float(order.total_amount):,.0f} {order.currency}) a été annulée. "
+        "N'hésitez pas à nous écrire si vous avez des questions."
+    )

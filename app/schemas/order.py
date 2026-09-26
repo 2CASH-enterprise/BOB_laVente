@@ -45,3 +45,13 @@ class OrderDetailResponse(OrderResponse):
     items: list[OrderItemResponse]
     delivery_status: str | None = None
     tracking_number: str | None = None
+
+
+class OrderCancelRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=300)  # motif facultatif, tracé dans l'audit
+    notify_customer: bool = False  # désactivé par défaut : c'est le commerçant qui choisit
+
+
+class OrderCancelResponse(OrderDetailResponse):
+    # None = non demandé ; True = accepté par WhatsApp ; False = refusé (ex. hors fenêtre de 24 h)
+    customer_notified: bool | None = None

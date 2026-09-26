@@ -12,9 +12,15 @@ from app.models.delivery import Delivery
 from app.models.order import OrderItem
 from app.repositories.order_repository import OrderRepository
 from app.schemas.delivery import DeliveryResponse, DeliveryUpdate
-from app.schemas.order import OrderCreateRequest, OrderDetailResponse, OrderResponse
+from app.schemas.order import OrderCancelRequest, OrderCancelResponse, OrderCreateRequest, OrderDetailResponse, OrderResponse
 from app.services.audit import log_audit_event
-from app.services.order_service import OrderCreationError, create_order, mark_order_as_paid
+from app.services.order_service import (
+    OrderCreationError,
+    build_cancellation_message,
+    cancel_order,
+    create_order,
+    mark_order_as_paid,
+)
 
 router = APIRouter(prefix="/api/v1/orders", tags=["orders"])
 
@@ -189,3 +195,57 @@ async def mark_order_paid(
     await db.commit()
 
     return await _build_order_detail(db, order)
+
+
+@router.put("/{order_id}/cancel", response_model=OrderCancelResponse, dependencies=[Depends(require_role("AGENT"))])
+async def cancel_order_route(
+    order_id: UUID,
+    payload: OrderCancelRequest | None = None,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Annulation par un humain uniquement (l'IA n'a aucun outil pour annuler). Remet les articles
+    en stock, trace l'audit avec le motif, et prévient le client SEULEMENT si le commerçant le
+    demande — par un message fixe, jamais rédigé par l'IA.
+    """
+    from app.models.customer import Customer
+    from app.models.whatsapp_account import WhatsAppAccount
+
+    payload = payload or OrderCancelRequest()
+    try:
+        order = await cancel_order(db, current_user.tenant_id, order_id)
+    except OrderCreationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+    reason = payload.reason.strip() if payload.reason and payload.reason.strip() else None
+    customer_notified: bool | None = None
+    if payload.notify_customer:
+        text = build_cancellation_message(order)
+        customer_notified = False
+        account = (await db.execute(
+            select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
+        )).scalar_one_or_none()
+        customer = await db.get(Customer, order.customer_id)
+        if account is not None and customer is not None:
+            try:
+                wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+                await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
+                customer_notified = True
+            except Exception:  # noqa: BLE001 — l'annulation reste valable même si le message est refusé
+                customer_notified = False
+        # Trace dans l'historique uniquement si le message est réellement parti.
+        if customer_notified and order.conversation_id is not None:
+            db.add(Message(
+                tenant_id=current_user.tenant_id, conversation_id=order.conversation_id,
+                sender=MessageSender.SYSTEM, message_type="order_cancelled", content=text,
+            ))
+
+    await log_audit_event(
+        db, actor=str(current_user.user_id), action="ORDER_CANCELLED", tenant_id=current_user.tenant_id,
+        details={"order_id": str(order_id), "reason": reason, "customer_notified": customer_notified},
+    )
+    await db.commit()
+
+    detail = await _build_order_detail(db, order)
+    return OrderCancelResponse(**detail.model_dump(), customer_notified=customer_notified)

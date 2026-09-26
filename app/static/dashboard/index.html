@@ -1898,7 +1898,7 @@ function staleOrderNotice(order) {
   if (order.status !== "PENDING" || !order.created_at) return "";
   const days = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 86400000);
   if (days < STALE_ORDER_DAYS) return "";
-  return `<div style="font-size: 11px; color: #b7791f; margin-top: 4px;">⚠️ En attente depuis ${days} jours — pensez à relancer le client</div>`;
+  return `<div style="font-size: 11px; color: #b7791f; margin-top: 4px;">⚠️ En attente depuis ${days} jours — relancez le client ou annulez la commande</div>`;
 }
 
 async function loadOrders() {
@@ -1914,7 +1914,8 @@ async function loadOrders() {
         <td data-label="Créée par">${o.created_by === "IA" ? "Bob (IA)" : o.created_by.slice(0, 8) + "…"}</td>
         <td data-label="Paiement">${
           o.status === "PENDING"
-            ? `<button class="action" onclick="markOrderPaid('${o.id}')">✅ Paiement reçu</button>`
+            ? `<button class="action" onclick="markOrderPaid('${o.id}')">✅ Paiement reçu</button>
+               <button class="action secondary" style="margin-left: 6px;" onclick="cancelOrder('${o.id}')">Annuler</button>`
             : o.status === "PAID" ? "✅ Confirmé" : "—"
         }</td>
         <td data-label="Livraison"><button class="action secondary" onclick="toggleDeliveryPanel('${o.id}')">Gérer</button></td>
@@ -1931,6 +1932,29 @@ async function markOrderPaid(orderId) {
     loadOrders();
   } catch (e) {
     alert(e.message);
+  }
+}
+
+async function cancelOrder(orderId) {
+  if (!confirm("Annuler cette commande ? Les articles seront remis en stock. Cette action est définitive.")) return;
+  const reason = prompt("Motif de l'annulation (facultatif, visible dans le journal) :", "");
+  if (reason === null) return;  // « Annuler » sur la saisie du motif = on renonce
+  const notify = confirm(
+    "Prévenir le client par WhatsApp ?\n\nOK = envoyer un message d'annulation\nAnnuler = ne rien envoyer\n\n" +
+    "(WhatsApp refuse ce message si le client n'a pas écrit depuis plus de 24 h.)"
+  );
+  try {
+    const r = await api(`/api/v1/orders/${orderId}/cancel`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason.trim() || null, notify_customer: notify }),
+    });
+    if (r.customer_notified === true) alert("Commande annulée. Le client a été prévenu.");
+    else if (r.customer_notified === false) alert("Commande annulée. ⚠️ Le message au client n'a pas pu être envoyé (il n'a probablement pas écrit depuis plus de 24 h) : prévenez-le par un autre moyen.");
+    else alert("Commande annulée. Les articles ont été remis en stock.");
+    loadOrders();
+  } catch (e) {
+    alert("Annulation impossible : " + e.message);
   }
 }
 
