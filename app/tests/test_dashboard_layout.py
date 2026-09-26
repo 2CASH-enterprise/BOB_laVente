@@ -78,3 +78,58 @@ def test_links_card_loads_products_when_opened_directly():
 def test_no_text_points_to_the_old_location():
     assert "Paramètres → Réponses aux objections" not in HTML
     assert "Réglages de Bob → Réponses aux objections" in HTML
+
+
+# --- Lot 18 : système visuel, mode sombre -------------------------------------------------
+
+def _block(selector: str) -> str:
+    match = re.search(re.escape(selector) + r"\s*\{(.*?)\n  \}", HTML, re.S)
+    assert match, selector
+    return match.group(1)
+
+
+def test_dark_theme_redefines_every_color_token():
+    light = set(re.findall(r"(--[a-z0-9-]+):", _block(":root")))
+    dark = set(re.findall(r"(--[a-z0-9-]+):", _block('html[data-theme="dark"]')))
+    layout_only = {"--radius", "--radius-sm", "--topbar-h", "--safe-top", "--safe-bottom"}
+    assert light - layout_only - dark == set()
+
+
+def test_theme_is_applied_before_first_paint_and_survives_blocked_storage():
+    head = HTML.split("</head>")[0]
+    assert 'document.documentElement.setAttribute("data-theme", theme)' in head
+    assert 'try { theme = localStorage.getItem("bob_theme"); } catch (e) {}' in head
+    assert "prefers-color-scheme: dark" in head
+
+
+def test_theme_switch_in_sidebar():
+    sidebar = re.search(r'<aside class="sidebar".*?</aside>', HTML, re.S).group(0)
+    assert "setTheme('light')" in sidebar and "setTheme('dark')" in sidebar
+    assert 'try { localStorage.setItem("bob_theme", theme); } catch (e) {}' in HTML
+
+
+def test_menu_uses_line_icons_not_emojis():
+    nav = re.search(r"<nav>(.*?)</nav>", HTML, re.S).group(1)
+    assert nav.count("<svg") == nav.count("data-tab=")
+    assert not re.search("[\U0001F300-\U0001FAFF☀-➿]", nav)
+
+
+def test_logo_on_sidebar_and_login_and_favicon():
+    assert HTML.count('class="brand-mark"') >= 6  # barre latérale + 5 écrans de connexion
+    assert 'rel="icon" type="image/svg+xml"' in HTML
+
+
+def test_no_hardcoded_colors_in_templates():
+    """Toute couleur d'interface passe par les variables du thème (sinon illisible en mode sombre).
+    Seule exception : l'image QR à partager, dessinée sur un canvas."""
+    script = HTML.split("<script>", 2)[-1]
+    offenders = [
+        line.strip() for line in script.splitlines()
+        if re.search(r"#[0-9A-Fa-f]{3,6}\b", line) and "ctx." not in line and "addColorStop" not in line
+    ]
+    assert offenders == []
+
+
+def test_status_badges_show_french_labels():
+    assert "STATUS_LABELS[c.status] || c.status" in HTML and "STATUS_LABELS[o.status] || o.status" in HTML
+    assert 'WAITING_HUMAN: "Attend un humain"' in HTML
