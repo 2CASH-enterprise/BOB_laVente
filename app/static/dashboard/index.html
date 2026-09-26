@@ -488,6 +488,33 @@
           <button class="action" onclick="saveNegotiationSettings()">Enregistrer</button>
           <div id="negotiation-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
+
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Transmission à un humain</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
+            Ce qui décide si Bob vous passe la main. Un client qui demande à parler à une personne est
+            <strong>toujours</strong> transféré. Vous recevez un email à chaque transfert.
+          </p>
+          <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
+            <input type="checkbox" id="handoff-refund"> Transférer immédiatement les demandes de remboursement
+          </label>
+          <label style="font-size: 12px; color: var(--muted);">Réclamation d'un client</label>
+          <select id="handoff-complaint" class="input" style="margin-bottom: 10px;">
+            <option value="TRY_FIRST">Bob essaie d'abord de résoudre, puis transfère s'il n'y arrive pas</option>
+            <option value="TRANSFER">Transférer immédiatement</option>
+          </select>
+          <label style="font-size: 12px; color: var(--muted);">Demande de remise, quand la négociation est désactivée</label>
+          <select id="handoff-discount" class="input" style="margin-bottom: 10px;">
+            <option value="FIXED_PRICES">Bob indique poliment que les prix sont fixes</option>
+            <option value="TRANSFER">Transférer à un humain</option>
+          </select>
+          <p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">
+            Quand la négociation est activée, Bob négocie lui-même (ou demande au client le prix qu'il envisage),
+            et ne transfère que si aucun accord n'est possible.
+          </p>
+          <button class="action" onclick="saveHandoffSettings()">Enregistrer</button>
+          <div id="handoff-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
       </div>
     </section>
   </main>
@@ -759,7 +786,7 @@ function showTab(name) {
   if (name === "orders") loadOrders();
   if (name === "integrations") loadIntegrationsStatus();
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
-  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); loadMfaStatus(); }
+  if (name === "settings") { loadWhatsAppStatus(); loadFollowupSettings(); loadNegotiationSettings(); loadHandoffSettings(); loadMfaStatus(); }
 }
 
 async function loadTenant() {
@@ -801,6 +828,8 @@ function signalChips(signals) {
     ...signals.objections.map((o) => chip("Objection : " + o.label, "#fdf0dc", "#9a5b00")),
   ];
   if (signals.offered_amount) parts.push(chip(`Prix proposé : ${Math.round(signals.offered_amount).toLocaleString()}`, "#e6f4ea", "#1e6b35"));
+  if (signals.applied_rule) parts.push(chip("Règle : " + signals.applied_rule, "#ece8ff", "#4b3aa8"));
+  if (signals.handoff_blocked) parts.push(chip("Transfert bloqué par la règle", "#fde8e8", "#a12c2c"));
   if (!parts.length) return "";
   return `<div title="Étiquettes déduites automatiquement : elles peuvent se tromper" style="margin-top: 4px;">${parts.join("")}</div>`;
 }
@@ -1768,6 +1797,37 @@ async function saveNegotiationSettings() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function loadHandoffSettings() {
+  try {
+    const s = await api("/api/v1/tenants/me/handoff-settings");
+    document.getElementById("handoff-refund").checked = s.refund_transfer;
+    document.getElementById("handoff-complaint").value = s.complaint_policy;
+    document.getElementById("handoff-discount").value = s.discount_policy;
+  } catch (e) {
+    document.getElementById("handoff-msg").textContent = e.message;
+  }
+}
+
+async function saveHandoffSettings() {
+  const msg = document.getElementById("handoff-msg");
+  try {
+    await api("/api/v1/tenants/me/handoff-settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        refund_transfer: document.getElementById("handoff-refund").checked,
+        complaint_policy: document.getElementById("handoff-complaint").value,
+        discount_policy: document.getElementById("handoff-discount").value,
+      }),
     });
     msg.style.color = "var(--success)";
     msg.textContent = "Enregistré.";

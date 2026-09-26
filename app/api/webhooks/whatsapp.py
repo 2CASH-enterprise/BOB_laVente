@@ -18,6 +18,7 @@ from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.product import Product
 from app.models.contact_point import ContactPoint
 from app.services.email_service import send_email
+from app.services.handoff_rules import FORBID_TRANSFER, TRANSFER_MESSAGE, TRANSFER_NOW, decide_turn
 from app.services.signal_service import classify_and_store
 from app.services.handoff_service import (
     TRANSFER_MESSAGE_TYPES,
@@ -57,6 +58,16 @@ async def verify_webhook(request: Request):
         return int(challenge) if challenge and challenge.isdigit() else challenge
 
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vérification du webhook échouée")
+
+
+def _signal_payload(signal) -> dict | None:
+    if signal is None:
+        return None
+    return {
+        "intents": list(signal.intents or []),
+        "objections": list(signal.objections or []),
+        "offered_amount": float(signal.offered_amount) if signal.offered_amount is not None else None,
+    }
 
 
 @router.post("", status_code=status.HTTP_200_OK)
@@ -177,7 +188,7 @@ async def receive_webhook(
     # Phase 1 (lot 12) — étiquettes du message (intentions, objections, prix proposé), pour
     # TOUS les messages texte du client, même en attente d'un humain. Jamais bloquant, et
     # sans effet sur la réponse de Bob dans ce lot.
-    await classify_and_store(db, classifier, incoming_message)
+    signal = await classify_and_store(db, classifier, incoming_message)
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
@@ -216,14 +227,29 @@ async def receive_webhook(
         # demande déjà transmise ne doit jamais être retransmise après la reprise par Bob).
         history = history_since_last_transfer(history)
 
-        reply_text = await generate_ai_reply(
-            db=db,
-            tenant=tenant,
-            conversation=conversation,
-            history=history,
-            incoming_text=incoming_message.content,
-            llm_client=llm_client,
-        )
+        # Lot 13 — règles de transmission, évaluées par le code AVANT la réponse de Bob.
+        turn = await decide_turn(db, tenant, _signal_payload(signal))
+        if turn.mode == TRANSFER_NOW:
+            # Transfert immédiat, message fixe, sans appel à l'IA (elle pourrait le contredire).
+            conversation.status = ConversationStatus.WAITING_HUMAN
+            db.add(Message(
+                tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                message_type="handoff", content=f"Transfert vers un humain : Règle — {turn.rule_label}",
+            ))
+            reply_text = TRANSFER_MESSAGE
+        else:
+            reply_text = await generate_ai_reply(
+                db=db,
+                tenant=tenant,
+                conversation=conversation,
+                history=history,
+                incoming_text=incoming_message.content,
+                llm_client=llm_client,
+                turn=turn,
+            )
+        if signal is not None:
+            signal.applied_rule = turn.rule
+            signal.handoff_blocked = turn.handoff_blocked if turn.mode == FORBID_TRANSFER else None
 
         # Freemium (jamais en démo) — mention discrète, levier de bouche-à-oreille (section freemium).
         if not tenant.is_paid:

@@ -33,6 +33,8 @@ class ToolExecutor:
         self.complement_repo = ProductComplementRepository(db)
         self.handoff_requested: bool = False
         self.handoff_reason: str | None = None
+        # Lot 13 : décision des règles de transmission pour CE message (None = pas de règle).
+        self.turn = None
 
     async def execute(self, tool_name: str, tool_input: dict) -> dict:
         handler = getattr(self, f"_tool_{tool_name}", None)
@@ -144,7 +146,23 @@ class ToolExecutor:
         return {"results": [await self._product_to_dict(p) for p in complements]}
 
     async def _tool_handoff_to_human(self, tool_input: dict) -> dict:
+        from app.services.handoff_rules import FORBID_TRANSFER
+
+        # Verrou garanti par le code : une règle a interdit le transfert pour ce message.
+        if self.turn is not None and self.turn.mode == FORBID_TRANSFER:
+            self.turn.handoff_blocked = True
+            return {
+                "error": (
+                    "Transfert non autorisé pour ce message (règle : "
+                    f"{self.turn.rule_label}). Réponds toi-même au client en suivant la consigne."
+                )
+            }
+
         reason = tool_input.get("reason", "Non précisé")
+        if self.turn is not None and self.turn.rule_label:
+            reason = f"{reason} — décision de Bob (règle : {self.turn.rule_label})"
+        else:
+            reason = f"{reason} — décision de Bob"
         self.conversation.status = ConversationStatus.WAITING_HUMAN
         self.handoff_requested = True
         self.handoff_reason = reason

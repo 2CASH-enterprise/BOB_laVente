@@ -49,6 +49,7 @@ async def generate_ai_reply(
     history: list[Message],
     incoming_text: str,
     llm_client: LLMClient,
+    turn=None,
 ) -> str:
     """
     Retourne le texte de la réponse de Bob. Ne lève jamais d'exception vers l'appelant :
@@ -61,6 +62,11 @@ async def generate_ai_reply(
     customer_memory = await build_customer_memory(db, tenant.id, conversation.customer_id)
     system_prompt = build_system_prompt(tenant, knowledge_entries, customer_memory)
     executor = ToolExecutor(db, tenant.id, conversation)
+    # Lot 13 : consigne des règles de transmission pour CE message, et verrou du transfert.
+    if turn is not None:
+        executor.turn = turn
+        if turn.instruction:
+            system_prompt += f"\n\nCONSIGNE POUR CE MESSAGE (prioritaire) :\n{turn.instruction}"
 
     messages = _history_to_anthropic_messages(history)
     messages.append({"role": "user", "content": incoming_text})

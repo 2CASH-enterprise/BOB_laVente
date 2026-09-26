@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Numeric, String, Uuid, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Numeric, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -32,4 +32,7 @@ class MessageSignal(Base):
     model: Mapped[str] = mapped_column(String(64), nullable=False)
     taxonomy_version: Mapped[str] = mapped_column(String(8), nullable=False)
     message_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    # Lot 13 — règle de transmission appliquée à ce message, et tentative de transfert bloquée.
+    applied_rule: Mapped[str | None] = mapped_column(String(40))
+    handoff_blocked: Mapped[bool | None] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

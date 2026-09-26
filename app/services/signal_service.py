@@ -71,11 +71,14 @@ async def classify_and_store(db: AsyncSession, classifier: MessageClassifier | N
 
 def signal_to_dict(signal: MessageSignal) -> dict:
     from app.agents.taxonomy import intent_label, objection_label
+    from app.services.handoff_rules import RULE_LABELS
 
     return {
         "intents": [{"code": c, "label": intent_label(c)} for c in signal.intents],
         "objections": [{"code": c, "label": objection_label(c)} for c in signal.objections],
         "offered_amount": float(signal.offered_amount) if signal.offered_amount is not None else None,
+        "applied_rule": RULE_LABELS.get(signal.applied_rule) if signal.applied_rule else None,
+        "handoff_blocked": bool(signal.handoff_blocked),
     }
 
 

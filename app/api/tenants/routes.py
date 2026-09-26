@@ -1,6 +1,8 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -244,3 +246,73 @@ async def update_negotiation_settings(
     await db.commit()
     await db.refresh(settings)
     return settings
+
+
+# ---------------------------------------------------------------------------
+# Règles de transmission à un humain (lot 13)
+# ---------------------------------------------------------------------------
+
+class HandoffSettingsResp(BaseModel):
+    refund_transfer: bool
+    complaint_policy: str
+    discount_policy: str
+    human_request_transfer: bool = True  # non réglable : affiché pour information
+
+
+class HandoffSettingsReq(BaseModel):
+    refund_transfer: bool | None = None
+    complaint_policy: Literal["TRY_FIRST", "TRANSFER"] | None = None
+    discount_policy: Literal["FIXED_PRICES", "TRANSFER"] | None = None
+
+
+def _handoff_resp(row) -> HandoffSettingsResp:
+    from app.services.handoff_rules import HandoffSettingsView
+
+    view = row or HandoffSettingsView()
+    return HandoffSettingsResp(
+        refund_transfer=view.refund_transfer, complaint_policy=view.complaint_policy, discount_policy=view.discount_policy
+    )
+
+
+@router.get("/me/handoff-settings", response_model=HandoffSettingsResp)
+async def get_handoff_settings(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sans réglage enregistré : valeurs par défaut (aucune ligne créée à la lecture)."""
+    from app.models.handoff_settings import TenantHandoffSettings
+
+    row = (await db.execute(
+        select(TenantHandoffSettings).where(TenantHandoffSettings.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    return _handoff_resp(row)
+
+
+@router.put("/me/handoff-settings", response_model=HandoffSettingsResp, dependencies=[Depends(require_role("ADMIN"))])
+async def update_handoff_settings(
+    payload: HandoffSettingsReq,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.handoff_settings import TenantHandoffSettings
+
+    row = (await db.execute(
+        select(TenantHandoffSettings).where(TenantHandoffSettings.tenant_id == current_user.tenant_id)
+    )).scalar_one_or_none()
+    if row is None:
+        row = TenantHandoffSettings(
+            tenant_id=current_user.tenant_id, refund_transfer=True, complaint_policy="TRY_FIRST", discount_policy="FIXED_PRICES"
+        )
+        db.add(row)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(row, field, value)
+    from app.services.audit import log_audit_event
+
+    await log_audit_event(
+        db, actor=str(current_user.user_id), action="HANDOFF_SETTINGS_UPDATED", tenant_id=current_user.tenant_id,
+        details=payload.model_dump(exclude_unset=True),
+    )
+    await db.commit()
+    await db.refresh(row)
+    return _handoff_resp(row)

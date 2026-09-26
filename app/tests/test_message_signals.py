@@ -293,6 +293,9 @@ async def test_conversation_detail_shows_labels_under_customer_messages(client, 
         "intents": [{"code": "DEMANDE_REMISE", "label": "Demande de remise"}],
         "objections": [{"code": "PRIX_TROP_ELEVE", "label": "Prix trop élevé"}],
         "offered_amount": 250000.0,
+        # Lot 13 : règle appliquée (négociation non configurée → prix fixes), aucun transfert tenté.
+        "applied_rule": "remise sans négociation : prix fixes",
+        "handoff_blocked": False,
     }
     assert by_sender["AI"]["signals"] is None
 
