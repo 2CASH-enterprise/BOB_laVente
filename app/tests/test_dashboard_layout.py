@@ -133,3 +133,25 @@ def test_no_hardcoded_colors_in_templates():
 def test_status_badges_show_french_labels():
     assert "STATUS_LABELS[c.status] || c.status" in HTML and "STATUS_LABELS[o.status] || o.status" in HTML
     assert 'WAITING_HUMAN: "Attend un humain"' in HTML
+
+
+# --- Lot 19 : accueil -------------------------------------------------------------------
+
+def test_home_is_first_and_existing_cards_stay_below():
+    overview = _section("overview")
+    order = [overview.index(x) for x in ('id="home-root"', "Détails", 'id="analytics-grid"', 'id="sales-card"',
+                                         'id="signals-card"', 'id="strategies-card"')]
+    assert order == sorted(order)
+    assert "loadHome();" in re.search(r"async function loadOverview\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+
+
+def test_home_escapes_everything_that_comes_from_customers():
+    render = re.search(r"function renderHome\(h\) \{(.*?)\n\}", HTML, re.S).group(1)
+    for field in ("t.customer", "t.detail", "t.reason", "a.title", "a.detail", "h.first_name", "item.conversation_id"):
+        assert f"${{esc({field}" in render or f"esc({field}" in HTML, field
+    assert "${t.customer}" not in render and "${t.detail}" not in render and "${a.detail}" not in render
+
+
+def test_home_actions_reuse_existing_navigation():
+    assert "jumpToCustomerConversation('${esc(item.conversation_id)}')" in HTML
+    assert "if (item.kind === \"ORDER\") return `showTab('orders')`" in HTML

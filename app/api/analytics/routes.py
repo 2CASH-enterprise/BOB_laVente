@@ -99,3 +99,14 @@ async def get_strategies_summary(
     from app.services.strategy_service import strategies_summary
 
     return await strategies_summary(db, current_user.tenant_id, days=days)
+
+
+@router.get("/home")
+async def get_home_summary(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Accueil (lot 19) : indicateurs sur 30 jours avec évolution, à traiter, entonnoir, activité. Lecture seule."""
+    from app.services.home_service import home_summary
+
+    return await home_summary(db, current_user.tenant_id, user_id=current_user.user_id)
