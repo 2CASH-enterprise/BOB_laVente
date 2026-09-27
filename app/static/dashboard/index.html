@@ -609,15 +609,22 @@
           <div id="shopify-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
         <div class="card" style="flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Meta Commerce Catalog</div>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Catalogue Facebook (Meta)</div>
           <div id="meta-status" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Vérification…</div>
-          <div id="meta-form">
-            <input id="meta-catalog-id" placeholder="Catalog ID" class="input" style="margin-bottom: 8px;">
-            <input id="meta-token" placeholder="Access token Meta" class="input" style="margin-bottom: 8px;">
-            <button class="action" onclick="connectMetaCatalog()">Connecter le catalogue</button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="action hidden" id="meta-oauth-btn" onclick="connectMetaCatalogOAuth()">Connecter mon catalogue Facebook</button>
+            <button class="action secondary hidden" id="meta-sync-btn" onclick="syncMetaCatalog()">Synchroniser maintenant</button>
           </div>
-          <button class="action secondary hidden" id="meta-sync-btn" onclick="syncMetaCatalog()" style="margin-top: 8px;">Synchroniser maintenant</button>
+          <div id="meta-choose" class="hidden" style="margin-top: 12px;"></div>
           <div id="meta-msg" style="margin-top: 8px; font-size: 13px;"></div>
+          <details id="meta-advanced" style="margin-top: 12px;">
+            <summary style="cursor: pointer; font-size: 13px;">Mode avancé : identifiant du catalogue et jeton</summary>
+            <div id="meta-form" style="margin-top: 10px;">
+              <input id="meta-catalog-id" placeholder="Catalog ID" class="input" style="margin-bottom: 8px;">
+              <input id="meta-token" placeholder="Access token Meta" class="input" style="margin-bottom: 8px;" autocomplete="off">
+              <button class="action secondary" onclick="connectMetaCatalog()">Connecter le catalogue</button>
+            </div>
+          </details>
         </div>
       </div>
     </section>
@@ -2382,13 +2389,99 @@ async function loadIntegrationsStatus() {
     document.getElementById("shopify-status").textContent = "Aucune boutique Shopify connectée.";
   }
 
+  let metaConnected = false;
   try {
     const m = await api("/api/v1/integrations/meta-catalog/status");
-    document.getElementById("meta-status").textContent = `Connecté — catalogue ${m.shop_domain} (dernière sync : ${m.last_synced_at ? new Date(m.last_synced_at).toLocaleString() : "jamais"})`;
-    document.getElementById("meta-form").classList.add("hidden");
+    metaConnected = true;
+    const when = m.last_synced_at ? new Date(m.last_synced_at).toLocaleString("fr-FR") : "jamais";
+    const failed = m.last_sync_status === "FAILED" ? " — la dernière synchronisation a échoué" : "";
+    document.getElementById("meta-status").textContent =
+      `Connecté — catalogue ${m.shop_domain}. Dernière synchronisation : ${when}${failed}. Mise à jour automatique chaque nuit.`;
+    document.getElementById("meta-status").style.color = failed ? "var(--danger)" : "var(--muted)";
     document.getElementById("meta-sync-btn").classList.remove("hidden");
   } catch (e) {
-    document.getElementById("meta-status").textContent = "Aucun Meta Commerce Catalog connecté.";
+    document.getElementById("meta-status").textContent = "Aucun catalogue Facebook connecté.";
+  }
+  // Lot 21 : bouton « en un clic » si la configuration Meta est en place.
+  try {
+    const cfg = await api("/api/v1/integrations/meta-catalog/login-config");
+    const btn = document.getElementById("meta-oauth-btn");
+    btn.classList.toggle("hidden", !cfg.available);
+    btn.textContent = metaConnected ? "Changer de catalogue" : "Connecter mon catalogue Facebook";
+    if (cfg.available) { metaLoginConfig = cfg; loadFacebookSdk(cfg.app_id, cfg.graph_api_version); }
+  } catch (e) {}
+}
+
+let metaLoginConfig = null;
+
+function renderCatalogSync(result) {
+  const failed = result.failed ? `, ${result.failed} non importé${result.failed > 1 ? "s" : ""}` : "";
+  const details = (result.errors || []).slice(0, 5).map((e) => `<li>${esc(e)}</li>`).join("");
+  return `${result.imported} ajoutés, ${result.updated} mis à jour${failed}.` +
+    (details ? `<ul style="margin: 6px 0 0; padding-left: 18px; color: var(--warning);">${details}</ul>` : "");
+}
+
+function connectMetaCatalogOAuth() {
+  const msg = document.getElementById("meta-msg");
+  if (typeof FB === "undefined" || !metaLoginConfig) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "La connexion Facebook se charge encore, réessayez dans quelques secondes.";
+    return;
+  }
+  FB.login((response) => {
+    if (response.authResponse && response.authResponse.code) {
+      finishMetaCatalogOAuth(response.authResponse.code);
+    } else {
+      msg.style.color = "var(--muted)";
+      msg.textContent = "Connexion annulée.";
+    }
+  }, { config_id: metaLoginConfig.config_id, response_type: "code", override_default_response_type: true });
+}
+
+async function finishMetaCatalogOAuth(code) {
+  const msg = document.getElementById("meta-msg");
+  msg.style.color = "var(--muted)";
+  msg.textContent = "Connexion au catalogue en cours…";
+  try {
+    const r = await api("/api/v1/integrations/meta-catalog/oauth/callback", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }),
+    });
+    showCatalogOAuthResult(r);
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+function showCatalogOAuthResult(r) {
+  const msg = document.getElementById("meta-msg");
+  const choose = document.getElementById("meta-choose");
+  if (r.status === "choose") {
+    msg.style.color = "var(--muted)";
+    msg.textContent = "Plusieurs catalogues partagés : choisissez celui de cette boutique.";
+    choose.innerHTML = r.catalogs.map((c) =>
+      `<button class="action secondary" style="margin: 0 8px 8px 0;" onclick="selectMetaCatalog('${esc(c.id)}')">${esc(c.name)}</button>`).join("");
+    choose.classList.remove("hidden");
+    return;
+  }
+  choose.classList.add("hidden");
+  choose.innerHTML = "";
+  msg.style.color = "var(--success)";
+  msg.innerHTML = `Catalogue connecté. ${renderCatalogSync(r.sync)}`;
+  loadIntegrationsStatus();
+}
+
+async function selectMetaCatalog(catalogId) {
+  const msg = document.getElementById("meta-msg");
+  msg.style.color = "var(--muted)";
+  msg.textContent = "Connexion et synchronisation en cours…";
+  try {
+    showCatalogOAuthResult(await api("/api/v1/integrations/meta-catalog/oauth/select", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ catalog_id: catalogId }),
+    }));
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
   }
 }
 
@@ -2446,7 +2539,8 @@ async function connectMetaCatalog() {
       body: JSON.stringify({ catalog_id, access_token }),
     });
     msg.style.color = "var(--success)";
-    msg.textContent = "Meta Commerce Catalog connecté !";
+    msg.textContent = "Catalogue connecté ! Cliquez sur « Synchroniser maintenant » pour importer les produits.";
+    document.getElementById("meta-token").value = "";
     loadIntegrationsStatus();
   } catch (e) {
     msg.style.color = "var(--danger)";
@@ -2460,8 +2554,9 @@ async function syncMetaCatalog() {
   msg.style.color = "var(--muted)";
   try {
     const result = await api("/api/v1/integrations/meta-catalog/sync", { method: "POST" });
-    msg.style.color = "var(--success)";
-    msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour.`;
+    msg.style.color = result.failed || (!result.total_rows && result.errors.length) ? "var(--warning)" : "var(--success)";
+    msg.innerHTML = renderCatalogSync(result);
+    loadIntegrationsStatus();
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;

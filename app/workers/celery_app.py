@@ -19,6 +19,7 @@ settings = get_settings()
 # limite d'ancienneté des conversations. À réactiver après refonte (modèles Meta, garde-fous).
 TASK_MODULES = [
     "app.workers.opportunities",
+    "app.workers.catalog_sync",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -28,6 +29,11 @@ celery_app.conf.beat_schedule = {
     "recompute-sales-opportunities-nightly": {
         "task": "app.workers.opportunities.recompute_opportunities_task",
         "schedule": crontab(hour=2, minute=30),
+    },
+    # Lot 21 — catalogues Meta connectés : prix, stock et nouveaux produits, chaque nuit.
+    "sync-meta-catalogs-nightly": {
+        "task": "app.workers.catalog_sync.sync_meta_catalogs_task",
+        "schedule": crontab(hour=3, minute=0),
     },
 }
 celery_app.conf.timezone = "UTC"

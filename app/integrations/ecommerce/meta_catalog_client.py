@@ -27,6 +27,10 @@ def describe_catalog_error(exc: Exception) -> str:
     Motif lisible d'un échec, SANS l'adresse de la requête : le message brut de httpx
     contient l'URL complète (lot 20 : le jeton y figurait). Code et message Meta seulement.
     """
+    from app.integrations.whatsapp.client import MetaGraphError
+
+    if isinstance(exc, MetaGraphError):
+        return str(exc)  # déjà décrite sans adresse ni secret
     if isinstance(exc, httpx.HTTPStatusError):
         from app.integrations.whatsapp.client import describe_meta_error
 
@@ -157,3 +161,85 @@ def map_meta_catalog_product(raw: dict) -> dict:
         "image_url": raw.get("image_url"),
         "active": active,
     }
+
+
+class MetaCatalogOAuth:
+    """
+    Lot 21 — connexion « en un clic » (Facebook Login for Business, permission catalog_management).
+    Le navigateur ne reçoit qu'un code à usage unique ; l'échange contre le jeton et la lecture des
+    catalogues réellement partagés par le commerçant se font ici, côté serveur.
+    """
+
+    def __init__(self, app_id: str, app_secret: str, api_version: str | None = None):
+        self.app_id = app_id
+        self.app_secret = app_secret
+        self.api_version = api_version or settings.whatsapp_graph_api_version
+
+    async def exchange_code(self, code: str) -> str:
+        from app.integrations.whatsapp.client import MetaOAuthClient
+
+        return await MetaOAuthClient(self.app_id, self.app_secret, self.api_version).exchange_code_for_token(code)
+
+    async def granted_catalogs(self, access_token: str) -> tuple[list[dict], dict]:
+        """
+        Catalogues que le commerçant a partagés, lus à trois sources (constat du 27/09 : avec un
+        jeton « utilisateur système » d'entreprise cliente, debug_token ne donne aucune liste ;
+        les catalogues sont ATTRIBUÉS à l'utilisateur système créé par Meta) :
+          1. autorisations du jeton (debug_token → granular_scopes) ;
+          2. catalogues attribués à l'utilisateur système (/me/assigned_product_catalogs) ;
+          3. catalogues de l'entreprise cliente (/{client_business_id}/owned_product_catalogs).
+        Une source en échec est ignorée. Retourne ([{id, name|None}], comptage par source) ; le
+        comptage sert au diagnostic, sans jamais aucun jeton.
+        """
+        from app.integrations.whatsapp.client import _raise_for_meta
+
+        found: dict[str, str | None] = {}
+        counts = {"autorisations": 0, "attribues": 0, "entreprise": 0}
+        base = f"{GRAPH_BASE_URL}/{self.api_version}"
+        app_auth = {"Authorization": f"Bearer {self.app_id}|{self.app_secret}"}
+        user_auth = {"Authorization": f"Bearer {access_token}"}
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            try:
+                response = await client.get(f"{base}/debug_token", params={"input_token": access_token}, headers=app_auth)
+                _raise_for_meta(response)
+                for scope in ((response.json() or {}).get("data") or {}).get("granular_scopes") or []:
+                    if scope.get("scope") == "catalog_management":
+                        for target in scope.get("target_ids") or []:
+                            found.setdefault(str(target), None)
+                            counts["autorisations"] += 1
+            except Exception:  # noqa: BLE001
+                pass
+
+            try:
+                response = await client.get(f"{base}/me/assigned_product_catalogs",
+                                            params={"fields": "id,name", "limit": 50}, headers=user_auth)
+                _raise_for_meta(response)
+                for item in (response.json() or {}).get("data") or []:
+                    if item.get("id"):
+                        found[str(item["id"])] = item.get("name") or found.get(str(item["id"]))
+                        counts["attribues"] += 1
+            except Exception:  # noqa: BLE001
+                pass
+
+            if not found:
+                try:
+                    response = await client.get(f"{base}/me", params={"fields": "client_business_id"}, headers=user_auth)
+                    _raise_for_meta(response)
+                    business_id = (response.json() or {}).get("client_business_id")
+                    if business_id:
+                        response = await client.get(f"{base}/{business_id}/owned_product_catalogs",
+                                                    params={"fields": "id,name", "limit": 50}, headers=user_auth)
+                        _raise_for_meta(response)
+                        for item in (response.json() or {}).get("data") or []:
+                            if item.get("id"):
+                                found[str(item["id"])] = item.get("name")
+                                counts["entreprise"] += 1
+                except Exception:  # noqa: BLE001
+                    pass
+
+        return [{"id": cid, "name": name} for cid, name in found.items()], counts
+
+
+def get_meta_catalog_oauth() -> MetaCatalogOAuth:
+    return MetaCatalogOAuth(settings.whatsapp_app_id, settings.whatsapp_app_secret)

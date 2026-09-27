@@ -88,7 +88,11 @@ async def embedded_signup_callback(
         access_token = await oauth_client.exchange_code_for_token(payload.code)
         await oauth_client.subscribe_app_to_waba(payload.waba_id, access_token)
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"Connexion WhatsApp impossible : {exc}") from exc
+        from app.integrations.whatsapp.client import MetaGraphError
+
+        # Jamais le texte brut d'une erreur réseau : l'adresse de l'échange contient le secret de l'app.
+        reason = str(exc) if isinstance(exc, MetaGraphError) else "Meta est injoignable pour le moment"
+        raise HTTPException(status_code=400, detail=f"Connexion WhatsApp impossible : {reason}") from exc
 
     account = WhatsAppAccount(
         tenant_id=current_user.tenant_id,

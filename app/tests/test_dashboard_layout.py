@@ -22,7 +22,7 @@ def _show_tab_line(tab: str) -> str:
 
 
 @pytest.mark.parametrize("tab, cards", [
-    ("integrations", ["Compte WhatsApp Business", "Liens WhatsApp &amp; widgets", "Shopify", "Meta Commerce Catalog"]),
+    ("integrations", ["Compte WhatsApp Business", "Liens WhatsApp &amp; widgets", "Shopify", "Catalogue Facebook (Meta)"]),
     ("bob", ["Négociation de prix", "Transmission à un humain", "Réponses aux objections", "Relances automatiques"]),
     ("settings", ["Sécurité du compte"]),
     ("products", ["Ajouter un produit", "Importer un catalogue CSV", "Codes QR produits"]),
@@ -41,7 +41,7 @@ def test_moved_cards_left_their_old_tab():
 
 def test_integrations_start_with_whatsapp_then_links():
     section = _section("integrations")
-    order = [section.index(c) for c in ("Compte WhatsApp Business", "Liens WhatsApp", "Shopify", "Meta Commerce Catalog")]
+    order = [section.index(c) for c in ("Compte WhatsApp Business", "Liens WhatsApp", "Shopify", "Catalogue Facebook (Meta)")]
     assert order == sorted(order)
 
 
@@ -155,3 +155,13 @@ def test_home_escapes_everything_that_comes_from_customers():
 def test_home_actions_reuse_existing_navigation():
     assert "jumpToCustomerConversation('${esc(item.conversation_id)}')" in HTML
     assert "if (item.kind === \"ORDER\") return `showTab('orders')`" in HTML
+
+
+# --- Lot 21 : catalogue en un clic ------------------------------------------------------------
+
+def test_catalog_card_offers_one_click_and_keeps_manual_mode_folded():
+    section = _section("integrations")
+    assert 'id="meta-oauth-btn"' in section and "connectMetaCatalogOAuth()" in section
+    assert '<details id="meta-advanced"' in section and 'id="meta-form"' in section
+    assert "onclick=\"selectMetaCatalog('${esc(c.id)}')\">${esc(c.name)}</button>" in HTML
+    assert "<li>${esc(e)}</li>" in HTML  # erreurs de synchronisation échappées

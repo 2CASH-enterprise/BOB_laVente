@@ -32,19 +32,31 @@ class MetaOAuthClient:
         La configuration Facebook Login for Business en variation « WhatsApp Embedded
         Signup » ne délivre que des System User Access Tokens (longue durée) — un seul
         échange suffit, pas de rafraîchissement supplémentaire nécessaire.
+
+        Lot 21 : le secret de l'app voyage dans l'adresse de cette requête (exigence Meta) ;
+        une erreur est donc toujours relancée en MetaGraphError, sans l'adresse.
         """
         url = f"{GRAPH_BASE_URL}/{self.api_version}/oauth/access_token"
         params = {"client_id": self.app_id, "client_secret": self.app_secret, "code": code}
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(url, params=params)
-            response.raise_for_status()
+            _raise_for_meta(response)
             return response.json()["access_token"]
 
     async def subscribe_app_to_waba(self, waba_id: str, access_token: str) -> None:
         url = f"{GRAPH_BASE_URL}/{self.api_version}/{waba_id}/subscribed_apps"
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(url, headers={"Authorization": f"Bearer {access_token}"})
-            response.raise_for_status()
+            _raise_for_meta(response)
+
+
+class MetaGraphError(Exception):
+    """Refus de Meta, décrit SANS l'adresse de la requête (qui peut contenir un secret)."""
+
+
+def _raise_for_meta(response) -> None:
+    if response.is_error:
+        raise MetaGraphError(f"Meta a répondu {response.status_code} ({describe_meta_error(response)})")
 
 
 def verify_whatsapp_signature(app_secret: str, raw_body: bytes, signature_header: str | None) -> bool:

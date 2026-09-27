@@ -36,6 +36,11 @@ async def sync_meta_catalog(
             errors=[f"Échec de connexion au Meta Commerce Catalog : {describe_catalog_error(exc)}"],
         )
 
+    from app.models.tenant import Tenant
+
+    tenant = await db.get(Tenant, tenant_id)
+    shop_currency = (tenant.currency or "").upper() if tenant else ""
+
     total = imported = updated = failed = available = unavailable = 0
     errors: list[str] = []
 
@@ -56,6 +61,15 @@ async def sync_meta_catalog(
         if len(currency) != 3:
             failed += 1
             errors.append(f"Produit Meta {raw.get('id')} : devise invalide")
+            continue
+        # Lot 21 : jamais un prix dans une autre monnaie que celle de la boutique (cas réel : un
+        # catalogue en XAF pour une boutique en XOF). Le produit n'est ni créé ni modifié.
+        if shop_currency and currency != shop_currency:
+            failed += 1
+            errors.append(
+                f"« {mapped['name']} » : devise {currency}, votre boutique est en {shop_currency}. "
+                "Corrigez la devise dans le Gestionnaire de commerce puis resynchronisez."
+            )
             continue
 
         existing = await product_repo.get_by_external_id(tenant_id, PLATFORM_META_CATALOG, mapped["external_id"])
