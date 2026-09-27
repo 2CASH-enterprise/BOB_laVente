@@ -39,7 +39,11 @@ async def connect_meta_catalog(
     try:
         await client.fetch_catalog_info()
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=f"Connexion au Meta Commerce Catalog impossible : {exc}") from exc
+        from app.integrations.ecommerce.meta_catalog_client import describe_catalog_error
+
+        raise HTTPException(
+            status_code=400, detail=f"Connexion au Meta Commerce Catalog impossible : {describe_catalog_error(exc)}"
+        ) from exc
 
     existing = await _get_connection(db, current_user.tenant_id)
     if existing is not None:

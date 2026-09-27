@@ -129,3 +129,60 @@ async def test_shopify_and_meta_catalog_connections_are_independent(client, db_s
     finally:
         del app.dependency_overrides[get_shopify_client_factory]
         del app.dependency_overrides[get_meta_catalog_client_factory]
+
+
+class _LeakyMetaClient:
+    """Reproduit une vraie erreur httpx : son message contient l'adresse, jeton compris."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def _error(self):
+        import httpx
+
+        request = httpx.Request("GET", "https://graph.facebook.com/v25.0/cat?access_token=SECRET-TOKEN-123")
+        response = httpx.Response(400, request=request, json={"error": {"code": 100, "message": "Unsupported get request"}})
+        return httpx.HTTPStatusError(f"Client error for url '{request.url}'", request=request, response=response)
+
+    async def fetch_catalog_info(self):
+        raise self._error()
+
+    async def fetch_products(self, limit: int = 100, max_pages: int = 50):
+        raise self._error()
+
+
+@pytest.mark.asyncio
+async def test_connection_error_never_shows_the_token(client, db_session, unique_email):
+    await _setup(db_session, unique_email)
+    token = await _login(client, unique_email)
+    app.dependency_overrides[get_meta_catalog_client_factory] = lambda: _LeakyMetaClient
+    try:
+        response = await client.post(
+            "/api/v1/integrations/meta-catalog/connect",
+            json={"catalog_id": "cat", "access_token": "SECRET-TOKEN-123"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 400
+        assert "SECRET-TOKEN-123" not in response.text
+        assert "code 100 : Unsupported get request" in response.json()["detail"]
+    finally:
+        del app.dependency_overrides[get_meta_catalog_client_factory]
+
+
+@pytest.mark.asyncio
+async def test_sync_error_never_shows_the_token(client, db_session, unique_email):
+    await _setup(db_session, unique_email)
+    token = await _login(client, unique_email)
+    headers = {"Authorization": f"Bearer {token}"}
+    app.dependency_overrides[get_meta_catalog_client_factory] = lambda: (
+        lambda catalog_id, access_token: FakeMetaCatalogClient(catalog_id, access_token)
+    )
+    try:
+        await client.post("/api/v1/integrations/meta-catalog/connect",
+                          json={"catalog_id": "cat", "access_token": "SECRET-TOKEN-123"}, headers=headers)
+        app.dependency_overrides[get_meta_catalog_client_factory] = lambda: _LeakyMetaClient
+        response = await client.post("/api/v1/integrations/meta-catalog/sync", headers=headers)
+        assert "SECRET-TOKEN-123" not in response.text
+        assert "Meta a répondu 400" in response.json()["errors"][0]
+    finally:
+        del app.dependency_overrides[get_meta_catalog_client_factory]

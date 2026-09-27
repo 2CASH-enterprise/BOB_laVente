@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.ecommerce.meta_catalog_client import MetaCatalogClient, map_meta_catalog_product
+from app.integrations.ecommerce.meta_catalog_client import MetaCatalogClient, describe_catalog_error, map_meta_catalog_product
 from app.models.ecommerce_connection import EcommerceConnection, SyncStatus
 from app.models.product import Product
 from app.repositories.product_repository import ProductRepository
@@ -33,7 +33,7 @@ async def sync_meta_catalog(
         await db.commit()
         return CsvImportResponse(
             total_rows=0, imported=0, updated=0, failed=0, available=0, unavailable=0,
-            errors=[f"Échec de connexion au Meta Commerce Catalog : {exc}"],
+            errors=[f"Échec de connexion au Meta Commerce Catalog : {describe_catalog_error(exc)}"],
         )
 
     total = imported = updated = failed = available = unavailable = 0
@@ -48,7 +48,8 @@ async def sync_meta_catalog(
                 raise InvalidOperation
         except (InvalidOperation, ValueError, TypeError, KeyError):
             failed += 1
-            errors.append(f"Produit Meta {raw.get('id')} : prix invalide ou absent")
+            shown = str(raw.get("price") or "")[:40]
+            errors.append(f"Produit Meta {raw.get('id')} ({raw.get('name') or 'sans nom'}) : prix « {shown} » illisible ou absent")
             continue
 
         currency = (mapped["currency"] or "").upper()
