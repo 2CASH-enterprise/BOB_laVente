@@ -234,3 +234,28 @@ async def sync_meta_catalog_endpoint(
     )
     await db.commit()
     return result
+
+
+@router.delete("", status_code=204, dependencies=[Depends(require_role("ADMIN"))])
+async def disconnect_meta_catalog(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Lot 23b : déconnexion par le commerçant. Supprime la connexion et son jeton (plus aucune
+    synchronisation, ni manuelle ni de nuit). Les produits déjà importés restent dans Bob :
+    une reconnexion les retrouve et les met à jour au lieu de les dupliquer.
+    """
+    connection = await _get_connection(db, current_user.tenant_id)
+    if connection is None:
+        raise HTTPException(status_code=404, detail="Aucun Meta Commerce Catalog connecté")
+    catalog_id = connection.shop_domain
+    await db.delete(connection)
+    await log_audit_event(
+        db,
+        actor=str(current_user.user_id),
+        action="META_CATALOG_DISCONNECTED",
+        tenant_id=current_user.tenant_id,
+        details={"catalog_id": catalog_id},
+    )
+    await db.commit()

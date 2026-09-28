@@ -482,6 +482,15 @@
         <a class="back" onclick="backToList()">&larr; Retour</a>
         <h3 id="conv-detail-title"></h3>
         <div id="conv-messages" style="margin: 16px 0;"></div>
+        <div id="reply-box" class="hidden" style="margin-bottom: 14px;">
+          <textarea id="reply-text" class="input" rows="3" maxlength="4096" placeholder="Écrire au client…" style="resize: vertical; margin-bottom: 8px;"></textarea>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button class="action" id="reply-send" onclick="sendHumanReply()">Envoyer sur WhatsApp</button>
+            <span id="reply-window" style="font-size: 12px; color: var(--muted);"></span>
+          </div>
+          <div id="reply-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+        <div id="reply-hint" class="hidden" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Bob répond à ce client. Prenez le contrôle pour lui écrire vous-même.</div>
         <button class="action" id="btn-takeover" onclick="takeover()">Prendre le contrôle</button>
         <button class="action secondary hidden" id="btn-release" onclick="release()">Rendre à l'IA</button>
       </div>
@@ -614,6 +623,7 @@
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button class="action hidden" id="meta-oauth-btn" onclick="connectMetaCatalogOAuth()">Connecter mon catalogue Facebook</button>
             <button class="action secondary hidden" id="meta-sync-btn" onclick="syncMetaCatalog()">Synchroniser maintenant</button>
+            <button class="action secondary hidden" id="meta-disconnect-btn" onclick="disconnectMetaCatalog()">Déconnecter</button>
           </div>
           <div id="meta-choose" class="hidden" style="margin-top: 12px;"></div>
           <div id="meta-msg" style="margin-top: 8px; font-size: 13px;"></div>
@@ -1605,7 +1615,7 @@ async function openConversation(id) {
   document.getElementById("conv-list").style.display = "none";
   document.getElementById("conv-detail").style.display = "block";
   const c = await api("/api/v1/conversations/" + id);
-  document.getElementById("conv-detail-title").textContent = "Client " + c.customer_id.slice(0, 8) + "… — " + c.status;
+  document.getElementById("conv-detail-title").textContent = "Client " + c.customer_id.slice(0, 8) + "… — " + (STATUS_LABELS[c.status] || c.status);
   // Le texte vient du client (WhatsApp) : TOUJOURS échappé, sinon un message piégé pourrait
   // exécuter du code dans le dashboard du commerçant.
   document.getElementById("conv-messages").innerHTML = c.messages
@@ -1613,6 +1623,52 @@ async function openConversation(id) {
     .join("");
   document.getElementById("btn-takeover").classList.toggle("hidden", c.status === "WAITING_HUMAN");
   document.getElementById("btn-release").classList.toggle("hidden", c.status !== "WAITING_HUMAN");
+  renderReplyBox(c);
+}
+
+// Lot 23b : réponse d'un humain, envoyée réellement sur WhatsApp. WhatsApp n'accepte un message
+// libre que dans les 24 h qui suivent le dernier message du client ; Bob ferme à 20 h par sécurité.
+function renderReplyBox(c) {
+  const humanInControl = c.status === "WAITING_HUMAN";
+  document.getElementById("reply-box").classList.toggle("hidden", !humanInControl);
+  document.getElementById("reply-hint").classList.toggle("hidden", humanInControl);
+  document.getElementById("reply-msg").textContent = "";
+  const windowText = document.getElementById("reply-window");
+  const closesAt = c.reply_window_closes_at ? new Date(c.reply_window_closes_at) : null;
+  const open = closesAt !== null && closesAt > new Date();
+  document.getElementById("reply-send").disabled = !open;
+  document.getElementById("reply-text").disabled = !open;
+  windowText.style.color = open ? "var(--muted)" : "var(--warning)";
+  windowText.textContent = open
+    ? `Réponse possible jusqu'au ${closesAt.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}`
+    : "Le client ne vous a pas écrit depuis plus de 20 h : la réponse est fermée pour éviter des frais WhatsApp. Elle se rouvrira dès qu'il vous réécrira.";
+}
+
+async function sendHumanReply() {
+  const text = document.getElementById("reply-text");
+  const msg = document.getElementById("reply-msg");
+  const button = document.getElementById("reply-send");
+  const body = text.value.trim();
+  if (!body) return;
+  button.disabled = true;
+  msg.style.color = "var(--muted)";
+  msg.textContent = "Envoi…";
+  try {
+    await api("/api/v1/messages/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation_id: currentConversationId, body, is_proactive: false }),
+    });
+    text.value = "";
+    await openConversation(currentConversationId);
+    msg.style.color = "var(--success)";
+    msg.textContent = "Envoyé sur WhatsApp.";
+  } catch (e) {
+    // Le texte reste dans la zone : rien n'est perdu si WhatsApp refuse.
+    button.disabled = false;
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
 }
 
 function backToList() {
@@ -2398,10 +2454,12 @@ async function loadIntegrationsStatus() {
     document.getElementById("meta-status").textContent =
       `Connecté — catalogue ${m.shop_domain}. Dernière synchronisation : ${when}${failed}. Mise à jour automatique chaque nuit.`;
     document.getElementById("meta-status").style.color = failed ? "var(--danger)" : "var(--muted)";
-    document.getElementById("meta-sync-btn").classList.remove("hidden");
   } catch (e) {
     document.getElementById("meta-status").textContent = "Aucun catalogue Facebook connecté.";
+    document.getElementById("meta-status").style.color = "var(--muted)";
   }
+  document.getElementById("meta-sync-btn").classList.toggle("hidden", !metaConnected);
+  document.getElementById("meta-disconnect-btn").classList.toggle("hidden", !metaConnected);
   // Lot 21 : bouton « en un clic » si la configuration Meta est en place.
   try {
     const cfg = await api("/api/v1/integrations/meta-catalog/login-config");
@@ -2413,6 +2471,20 @@ async function loadIntegrationsStatus() {
 }
 
 let metaLoginConfig = null;
+
+async function disconnectMetaCatalog() {
+  if (!confirm("Déconnecter le catalogue Facebook ? Vos produits restent dans Bob, mais ils ne seront plus mis à jour depuis Facebook.")) return;
+  const msg = document.getElementById("meta-msg");
+  try {
+    await api("/api/v1/integrations/meta-catalog", { method: "DELETE" });
+    msg.style.color = "var(--muted)";
+    msg.textContent = "Catalogue déconnecté. Vos produits sont conservés.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+  loadIntegrationsStatus();
+}
 
 function renderCatalogSync(result) {
   const failed = result.failed ? `, ${result.failed} non importé${result.failed > 1 ? "s" : ""}` : "";

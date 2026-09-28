@@ -165,3 +165,28 @@ def test_catalog_card_offers_one_click_and_keeps_manual_mode_folded():
     assert '<details id="meta-advanced"' in section and 'id="meta-form"' in section
     assert "onclick=\"selectMetaCatalog('${esc(c.id)}')\">${esc(c.name)}</button>" in HTML
     assert "<li>${esc(e)}</li>" in HTML  # erreurs de synchronisation échappées
+
+
+# --- Lot 23b : répondre au client, déconnecter le catalogue ----------------------------------
+
+def test_reply_box_only_when_a_human_has_control_and_window_is_shown():
+    detail = re.search(r'<div id="conv-detail">(.*?)\n      </div>\n    </section>', HTML, re.S).group(1)
+    assert 'id="reply-box" class="hidden"' in detail and 'maxlength="4096"' in detail
+    render = re.search(r"function renderReplyBox\(c\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert 'c.status === "WAITING_HUMAN"' in render and "c.reply_window_closes_at" in render
+    assert "renderReplyBox(c);" in re.search(r"async function openConversation\(id\) \{(.*?)\n\}", HTML, re.S).group(1)
+
+
+def test_failed_reply_keeps_the_text():
+    send = re.search(r"async function sendHumanReply\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    try_part, catch_part = send.split("} catch (e) {")
+    assert 'text.value = "";' in try_part and 'text.value = "";' not in catch_part
+    assert '"/api/v1/messages/send"' in send and "is_proactive: false" in send
+
+
+def test_catalog_can_be_disconnected_after_confirmation():
+    section = _section("integrations")
+    assert 'id="meta-disconnect-btn"' in section
+    fn = re.search(r"async function disconnectMetaCatalog\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert fn.strip().startswith("if (!confirm(") and 'method: "DELETE"' in fn
+    assert 'getElementById("meta-disconnect-btn").classList.toggle("hidden", !metaConnected)' in HTML

@@ -11,3 +11,4 @@ class SendMessageRequest(BaseModel):
 
 class SendMessageResponse(BaseModel):
     status: str
+    message_id: UUID | None = None

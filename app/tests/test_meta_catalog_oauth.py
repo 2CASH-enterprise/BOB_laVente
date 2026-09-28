@@ -425,3 +425,42 @@ def test_nightly_task_is_registered_and_scheduled():
     assert "app.workers.catalog_sync" in TASK_MODULES
     entry = celery_app.conf.beat_schedule["sync-meta-catalogs-nightly"]
     assert entry["task"] == "app.workers.catalog_sync.sync_meta_catalogs_task"
+
+
+# --- Lot 23b : déconnexion par le commerçant -------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_disconnect_removes_connection_and_token_but_keeps_products(client, db_session, unique_email, meta):
+    tenant = await _shop(db_session, unique_email)
+    headers = await _headers(client, unique_email)
+    await client.post("/api/v1/integrations/meta-catalog/oauth/callback", json={"code": "c0de"}, headers=headers)
+
+    r = await client.delete("/api/v1/integrations/meta-catalog", headers=headers)
+
+    assert r.status_code == 204
+    assert await _connection(db_session, tenant.id) is None
+    products = (await db_session.execute(select(Product).where(Product.tenant_id == tenant.id))).scalars().all()
+    assert [p.name for p in products] == ["Chemise jaune"]
+    audit = (await db_session.execute(select(AuditLog).where(AuditLog.action == "META_CATALOG_DISCONNECTED"))).scalar_one()
+    assert audit.details == {"catalog_id": "111"}
+    assert (await client.get("/api/v1/integrations/meta-catalog/status", headers=headers)).status_code == 404
+
+    # Reconnexion : les produits sont retrouvés, pas dupliqués.
+    again = await client.post("/api/v1/integrations/meta-catalog/oauth/callback", json={"code": "c0de"}, headers=headers)
+    assert again.json()["sync"]["imported"] == 0 and again.json()["sync"]["updated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_disconnect_needs_admin_and_stays_in_its_shop(client, db_session, unique_email, meta):
+    owner_tenant = await _shop(db_session, unique_email)
+    await client.post("/api/v1/integrations/meta-catalog/oauth/callback", json={"code": "c0de"},
+                      headers=await _headers(client, unique_email))
+    await _shop(db_session, f"agent_{unique_email}", role=Role.AGENT)
+    await _shop(db_session, f"other_{unique_email}")
+
+    assert (await client.delete("/api/v1/integrations/meta-catalog",
+                                headers=await _headers(client, f"agent_{unique_email}"))).status_code == 403
+    # Un autre commerçant sans catalogue ne peut rien déconnecter chez le premier.
+    assert (await client.delete("/api/v1/integrations/meta-catalog",
+                                headers=await _headers(client, f"other_{unique_email}"))).status_code == 404
+    assert await _connection(db_session, owner_tenant.id) is not None

@@ -45,7 +45,10 @@ async def get_conversation(
         MessageResponse.model_validate(m).model_copy(update={"signals": signals.get(m.id)}) for m in messages
     ]
 
+    from app.services.human_reply import reply_window_closes_at
+
     return ConversationDetailResponse(
+        reply_window_closes_at=await reply_window_closes_at(db, conversation),
         id=conversation.id,
         customer_id=conversation.customer_id,
         status=conversation.status.value,

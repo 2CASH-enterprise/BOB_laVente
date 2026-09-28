@@ -41,8 +41,13 @@ async def check_and_log_outbound(
     tenant_id,
     requested_by: str,
     permission: Permission,
+    human_in_control: bool = False,
 ) -> None:
     """
+    human_in_control (lot 23b) : la conversation a été transférée à un humain ou reprise par lui.
+    En mode « IA uniquement », c'est le seul cas où un humain peut répondre : sinon un transfert
+    laisserait le client sans réponse possible.
+
     Lève OutboundDenied si l'envoi n'est pas autorisé. Ne renvoie rien en cas de succès
     (l'appelant peut alors procéder à l'appel WhatsApp réel).
     """
@@ -68,7 +73,12 @@ async def check_and_log_outbound(
         await _log(db, tenant_id, requested_by, permission, SendResult.DENIED_403)
         raise OutboundDenied("Envoi proactif désactivé pour ce tenant (mode outbound insuffisant)")
 
-    if permission == Permission.CAN_REPLY_TO_CUSTOMER and settings.outbound_mode == OutboundMode.AI_ONLY and requested_by != "IA":
+    if (
+        permission == Permission.CAN_REPLY_TO_CUSTOMER
+        and settings.outbound_mode == OutboundMode.AI_ONLY
+        and requested_by != "IA"
+        and not human_in_control
+    ):
         await _log(db, tenant_id, requested_by, permission, SendResult.DENIED_403)
         raise OutboundDenied("Seule l'IA peut répondre pour ce tenant (mode IA uniquement)")
 
