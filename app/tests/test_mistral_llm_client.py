@@ -64,7 +64,8 @@ async def test_create_message_text_response_maps_to_generic_envelope():
     client._client = _fake_client_returning(response)
 
     result = await client.create_message(system="sys", messages=[{"role": "user", "content": "hi"}], tools=[])
-    assert result == {"content": [{"type": "text", "text": "Bonjour !"}], "stop_reason": "end_turn"}
+    assert result["content"] == [{"type": "text", "text": "Bonjour !"}] and result["stop_reason"] == "end_turn"
+    assert result["diagnostic"] == {"finish_reason": "stop", "chunk_types": []}
 
 
 @pytest.mark.asyncio
@@ -96,3 +97,18 @@ async def test_create_message_tool_call_with_dict_arguments():
 
     result = await client.create_message(system="sys", messages=[{"role": "user", "content": "stock ?"}], tools=[])
     assert result["content"][0]["input"] == {"product_id": "abc"}
+
+
+@pytest.mark.asyncio
+async def test_empty_reply_carries_a_diagnostic_without_any_text():
+    """Lot 22 : pour comprendre une réponse vide, on garde le motif de fin et le type des morceaux."""
+    chunks = [SimpleNamespace(type="thinking", thinking="raisonnement privé"), SimpleNamespace(type="text", text="")]
+    response = SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=chunks, tool_calls=None))])
+    client = MistralLLMClient(api_key="x", model="m")
+    client._client = _fake_client_returning(response)
+
+    result = await client.create_message(system="sys", messages=[{"role": "user", "content": "1"}], tools=[])
+
+    assert result["content"] == [{"type": "text", "text": ""}]
+    assert result["diagnostic"] == {"finish_reason": "stop", "chunk_types": ["thinking", "text"]}
+    assert "raisonnement" not in repr(result["diagnostic"])

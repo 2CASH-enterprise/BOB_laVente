@@ -368,3 +368,18 @@ async def test_settings_require_admin_and_are_isolated(client, db_session):
 
     assert forbidden.status_code == 403
     assert (await client.get("/api/v1/tenants/me/handoff-settings", headers=await _headers(client, "b@rules.sn"))).json()["discount_policy"] == "FIXED_PRICES"
+
+
+@pytest.mark.asyncio
+async def test_incident_short_answer_with_empty_ai_reply_is_not_transferred(client, db_session, unique_email, wire):
+    """27/09 : « 1 » après une proposition de Bob → réponse vide → transfert « IA bloquée ». Plus maintenant."""
+    tenant = await _setup(db_session, unique_email, "pn-r-22")
+    state = wire({"intents": ["INTENTION_ACHAT"], "objections": []},
+                 [text_response(""), text_response("Parfait, je vous réserve la chemise jaune ?")])
+
+    r = await client.post("/webhooks/whatsapp", json=_payload("pn-r-22", "221700000122", "1"))
+
+    assert r.json()["ai_reply"] == "Parfait, je vous réserve la chemise jaune ?"
+    assert (await _conversation(db_session, tenant.id)).status == ConversationStatus.ACTIVE
+    assert await _system_messages(db_session, tenant.id) == []
+    assert state["outbox"] == []

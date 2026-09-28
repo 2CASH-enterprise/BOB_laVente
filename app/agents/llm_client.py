@@ -110,9 +110,14 @@ class MistralLLMClient(LLMClient):
             return {"content": content_blocks, "stop_reason": "tool_use"}
 
         text = message.content
+        chunk_types: list[str] = []
         if isinstance(text, list):  # chunks structurés plutôt qu'une simple chaîne
+            chunk_types = [str(getattr(chunk, "type", type(chunk).__name__)) for chunk in text]
             text = "".join(chunk.text for chunk in text if getattr(chunk, "type", None) == "text")
-        return {"content": [{"type": "text", "text": text or ""}], "stop_reason": "end_turn"}
+        # Lot 22 : motif de fin et nature du contenu, pour diagnostiquer une réponse vide
+        # (jamais le texte lui-même).
+        diagnostic = {"finish_reason": str(getattr(choice, "finish_reason", None)), "chunk_types": chunk_types}
+        return {"content": [{"type": "text", "text": text or ""}], "stop_reason": "end_turn", "diagnostic": diagnostic}
 
 
 class AnthropicLLMClient(LLMClient):

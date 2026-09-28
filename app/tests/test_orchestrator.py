@@ -213,3 +213,40 @@ async def test_llm_exception_falls_back_gracefully(db_session, unique_email):
         llm_client=BrokenLLMClient(),
     )
     assert reply == FALLBACK_MESSAGE
+
+
+# --- Lot 22 : réponse vide du service d'IA ----------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_empty_reply_is_retried_once_with_an_explicit_instruction(db_session, unique_email, caplog):
+    """Cas réel du 27/09 : le client répond « 1 » à un choix, Mistral ne renvoie rien."""
+    from app.agents.orchestrator import EMPTY_REPLY_RETRY_INSTRUCTION, generate_ai_reply_detailed
+
+    tenant, product, conversation = await _setup(db_session, unique_email)
+    fake = FakeLLMClient([
+        {"content": [{"type": "text", "text": ""}], "stop_reason": "end_turn", "diagnostic": {"finish_reason": "stop", "chunk_types": []}},
+        text_response("Très bien, je vous propose le Samsung A56 à 280 000 XOF."),
+    ])
+
+    with caplog.at_level("WARNING"):
+        text, failure = await generate_ai_reply_detailed(
+            db=db_session, tenant=tenant, conversation=conversation, history=[], incoming_text="1", llm_client=fake)
+
+    assert (text, failure) == ("Très bien, je vous propose le Samsung A56 à 280 000 XOF.", None)
+    assert fake.call_count == 2
+    assert EMPTY_REPLY_RETRY_INSTRUCTION not in fake.received_systems[0]
+    assert fake.received_systems[1].endswith(EMPTY_REPLY_RETRY_INSTRUCTION)
+    assert "Réponse vide du service d'IA" in caplog.text and "'finish_reason': 'stop'" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_two_empty_replies_still_end_in_a_safe_transfer(db_session, unique_email):
+    from app.agents.orchestrator import FAILURE_LOOP, generate_ai_reply_detailed
+
+    tenant, product, conversation = await _setup(db_session, unique_email)
+    fake = FakeLLMClient([text_response(""), text_response("   "), text_response("jamais appelé")])
+
+    text, failure = await generate_ai_reply_detailed(
+        db=db_session, tenant=tenant, conversation=conversation, history=[], incoming_text="1", llm_client=fake)
+
+    assert failure == FAILURE_LOOP and fake.call_count == 2

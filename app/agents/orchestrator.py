@@ -31,6 +31,13 @@ FALLBACK_MESSAGE = (
 )
 
 
+# Lot 22 : ajoutée au prompt pour le second essai quand la première réponse était vide.
+EMPTY_REPLY_RETRY_INSTRUCTION = (
+    "\n\nCONSIGNE (ta réponse précédente était vide) : réponds maintenant au DERNIER message du client, "
+    "même s'il est très court (un chiffre, « oui », « ok ») : relis tes messages précédents pour comprendre "
+    "à quoi il répond. Si tu ne comprends pas, demande-lui poliment de préciser. Ne laisse jamais ta réponse vide."
+)
+
 # Issue d'un échec : panne du service d'IA (après les nouveaux essais) ou boucle d'outils.
 FAILURE_OUTAGE = "OUTAGE"
 FAILURE_LOOP = "LOOP"
@@ -120,6 +127,7 @@ async def generate_ai_reply_detailed(
     messages = _history_to_anthropic_messages(history)
     messages.append({"role": "user", "content": incoming_text})
 
+    empty_replies = 0
     try:
         for _ in range(settings.max_tool_iterations):
             response = await _create_with_retries(
@@ -131,7 +139,20 @@ async def generate_ai_reply_detailed(
             if stop_reason != "tool_use":
                 text_parts = [b["text"] for b in content_blocks if b.get("type") == "text"]
                 text = "\n".join(text_parts).strip()
-                return (text, None) if text else (FALLBACK_MESSAGE, FAILURE_LOOP)
+                if text:
+                    return text, None
+                # Lot 22 — réponse vide (cas réel du 27/09 : un client répond « 1 » à un choix,
+                # Mistral ne renvoie rien, le client était transféré). Un seul nouvel essai, avec
+                # une consigne explicite ; transfert seulement si le second est vide aussi.
+                logger.warning(
+                    "Réponse vide du service d'IA (conversation %s, essai %s) : %s",
+                    conversation.id, empty_replies + 1, response.get("diagnostic") or {"stop_reason": stop_reason},
+                )
+                if empty_replies >= 1:
+                    return FALLBACK_MESSAGE, FAILURE_LOOP
+                empty_replies += 1
+                system_prompt += EMPTY_REPLY_RETRY_INSTRUCTION
+                continue
 
             # Le modèle veut utiliser un ou plusieurs outils : on les exécute réellement (section 33)
             messages.append({"role": "assistant", "content": content_blocks})
