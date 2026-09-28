@@ -3,59 +3,200 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Politique de confidentialité — Bob</title>
+<title>Politique de confidentialité — Bob / Privacy Policy</title>
 <style>
-  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #1a1a1a; }
-  h1 { font-size: 26px; }
+  :root { color-scheme: light dark; --text: #1a1a1a; --muted: #5f6368; --line: #e3e3e3; --bg: #ffffff; --link: #0b7a4b; }
+  @media (prefers-color-scheme: dark) { :root { --text: #ececec; --muted: #a8adb3; --line: #33363a; --bg: #16181b; --link: #5fd39b; } }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: var(--text); background: var(--bg); }
+  h1 { font-size: 26px; margin-bottom: 4px; }
   h2 { font-size: 19px; margin-top: 32px; }
-  footer { margin-top: 48px; color: #666; font-size: 14px; }
+  h3 { font-size: 16px; margin-top: 20px; }
+  a { color: var(--link); }
+  .lang { margin: 16px 0 32px; font-size: 15px; }
+  .muted { color: var(--muted); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 56px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
 </style>
 </head>
 <body>
 
+<!-- ======================================================= FRANÇAIS -->
+<section id="fr" lang="fr">
 <h1>Politique de confidentialité — Bob</h1>
-<p><em>Dernière mise à jour : septembre 2026</em></p>
+<p class="muted"><em>Dernière mise à jour : 28 septembre 2026</em></p>
+<p class="lang">Français · <a href="#en">English version</a> · <a href="#supprimer">Supprimer vos données</a></p>
 
-<p>Bob est un agent vendeur automatisé accessible via WhatsApp, opéré par 2CASH Enterprise
-pour le compte des entreprises qui l'utilisent pour interagir avec leurs propres clients.</p>
+<p>Bob est un agent vendeur automatisé sur WhatsApp, édité et opéré par 2CASH Enterprise.
+Des commerces (« les commerçants ») l'utilisent pour répondre à leurs propres clients.
+Cette politique concerne deux publics : les <strong>commerçants</strong> qui utilisent le tableau de bord de Bob,
+et les <strong>clients</strong> qui écrivent à un commerçant sur WhatsApp.</p>
 
-<h2>Données collectées</h2>
-<p>Lorsqu'un client écrit à une entreprise utilisant Bob sur WhatsApp, nous collectons :</p>
+<h2>1. Données des clients qui écrivent sur WhatsApp</h2>
 <ul>
-  <li>Le numéro de téléphone WhatsApp du client</li>
-  <li>Le contenu des messages échangés avec l'agent</li>
-  <li>Les informations fournies volontairement par le client dans la conversation
-    (ex. adresse de livraison, préférences de commande)</li>
+  <li>Le numéro de téléphone WhatsApp</li>
+  <li>Le contenu des messages échangés avec le commerce</li>
+  <li>Les informations données volontairement dans la conversation (adresse de livraison, commande, préférences)</li>
+  <li>Le lien ou le code QR par lequel le client est arrivé, le cas échéant</li>
+</ul>
+<p>Pour le compte du commerçant, 2CASH Enterprise agit en tant que sous-traitant : ces données servent uniquement
+à répondre au client, traiter ses commandes et permettre au commerçant de suivre sa relation client.</p>
+
+<h2>2. Données des commerçants</h2>
+<ul>
+  <li>Compte : nom, adresse email, téléphone, mot de passe (stocké uniquement sous forme hachée), nom et informations de la boutique</li>
+  <li>Produits, prix, stocks, base de connaissances et réglages saisis dans le tableau de bord</li>
+  <li>Commandes, conversations et statistiques de ventes de la boutique</li>
 </ul>
 
-<h2>Utilisation des données</h2>
-<p>Ces données sont utilisées exclusivement pour :</p>
+<h3>Données reçues de Meta (Facebook, WhatsApp)</h3>
+<p>Lorsque le commerçant connecte son compte WhatsApp Business ou son catalogue Facebook à Bob,
+il se connecte avec Facebook et autorise Bob. Nous recevons alors :</p>
 <ul>
-  <li>Répondre aux demandes du client au nom de l'entreprise concernée</li>
-  <li>Traiter les commandes passées via la conversation</li>
-  <li>Assurer le suivi commercial de la relation client par l'entreprise concernée</li>
+  <li>Les identifiants techniques de son portefeuille Meta Business, de son compte WhatsApp Business, de son numéro de téléphone et de son catalogue</li>
+  <li>Un jeton d'accès qui permet à Bob d'agir pour le compte du commerçant, dans la limite des autorisations qu'il a accordées :
+      envoyer et recevoir les messages WhatsApp de sa boutique (<code>whatsapp_business_messaging</code>),
+      gérer son compte WhatsApp Business (<code>whatsapp_business_management</code>),
+      lire les produits de son catalogue (<code>catalog_management</code>)</li>
+  <li>Les produits du catalogue : nom, description, prix, devise, disponibilité, image</li>
 </ul>
-<p>Les données d'une entreprise ne sont jamais partagées avec une autre entreprise
-utilisant Bob (isolation stricte par client).</p>
+<p>Nous ne conservons pas le profil Facebook personnel du commerçant (<code>public_profile</code> sert uniquement à la connexion).
+Les jetons d'accès restent sur nos serveurs : ils ne sont jamais transmis au navigateur, jamais affichés et jamais écrits dans les journaux.
+Nous n'utilisons ces données que pour faire fonctionner Bob pour le commerçant concerné.
+Nous ne les vendons pas et ne les utilisons pas pour de la publicité.</p>
 
-<h2>Partage des données</h2>
-<p>Les données transitent par l'API WhatsApp Business de Meta pour permettre la
-conversation. Elles ne sont vendues à aucun tiers et ne sont partagées qu'avec les
-prestataires techniques strictement nécessaires au fonctionnement du service
-(hébergement, infrastructure).</p>
+<h2>3. Traitement par intelligence artificielle</h2>
+<p>Les messages des clients sont analysés par un service d'intelligence artificielle, Mistral AI (France),
+pour comprendre la demande et rédiger la réponse de Bob. Bob est un agent automatisé : il peut transmettre la conversation
+à une personne du commerce à tout moment, et le client peut demander à parler à un humain.</p>
 
-<h2>Conservation des données</h2>
-<p>Les données sont conservées le temps nécessaire à la relation commerciale entre
-le client et l'entreprise concernée, puis supprimées ou anonymisées sur demande.</p>
+<h2>4. Isolation entre commerçants</h2>
+<p>Les données d'un commerçant et de ses clients ne sont jamais visibles par un autre commerçant utilisant Bob.</p>
 
-<h2>Vos droits</h2>
-<p>Pour toute demande d'accès, de rectification ou de suppression de vos données,
-contactez l'entreprise avec laquelle vous avez échangé via WhatsApp, ou écrivez-nous
-directement à l'adresse ci-dessous.</p>
+<h2>5. Prestataires</h2>
+<table>
+  <tr><th>Prestataire</th><th>Rôle</th></tr>
+  <tr><td>Meta Platforms (WhatsApp Business Platform, API Catalogue)</td><td>Acheminement des messages WhatsApp, lecture du catalogue</td></tr>
+  <tr><td>Mistral AI (France)</td><td>Compréhension des messages et rédaction des réponses</td></tr>
+  <tr><td>Hetzner Online (Allemagne)</td><td>Hébergement des serveurs et de la base de données, dans l'Union européenne</td></tr>
+  <tr><td>Brevo (France)</td><td>Envoi des emails (alertes, sécurité du compte, campagnes du commerçant)</td></tr>
+  <tr><td>Shopify</td><td>Uniquement si le commerçant connecte sa boutique Shopify</td></tr>
+</table>
 
-<footer>
-  <p>2CASH Enterprise — <a href="mailto:bakouban2002@gmail.com">bakouban2002@gmail.com</a></p>
-</footer>
+<h2>6. Conservation</h2>
+<p>Les données sont conservées tant que le commerçant utilise Bob et que la relation commerciale avec le client le justifie.
+Elles sont supprimées ou anonymisées sur demande (section 8), et à la fermeture du compte du commerçant.</p>
+
+<h2>7. Vos droits</h2>
+<p>Vous pouvez demander l'accès, la rectification ou la suppression de vos données, et vous opposer aux messages marketing.
+Un client peut à tout moment répondre <strong>STOP</strong> sur WhatsApp pour ne plus recevoir de messages marketing.</p>
+
+<h2 id="supprimer">8. Supprimer vos données</h2>
+<h3>Vous êtes commerçant</h3>
+<ol>
+  <li>Pour retirer l'accès de Bob à vos comptes Meta : dans les paramètres de votre portefeuille Meta Business,
+      ouvrez <em>Intégrations → Applications connectées</em>, sélectionnez « Bob - Agent Vendeur IA » et retirez-la.
+      Bob ne peut alors plus lire votre catalogue ni utiliser votre compte WhatsApp Business.</li>
+  <li>Pour supprimer votre compte et toutes les données de votre boutique (produits, conversations, clients, jetons d'accès),
+      écrivez à l'adresse ci-dessous depuis l'email de votre compte, avec l'objet « Suppression de mes données ».</li>
+</ol>
+<h3>Vous êtes client d'un commerce</h3>
+<p>Écrivez au commerce avec lequel vous avez échangé, ou directement à l'adresse ci-dessous en indiquant votre numéro WhatsApp
+et le nom du commerce.</p>
+<p>Nous confirmons la suppression dans un délai d'un mois au plus.</p>
+
+<footer>2CASH Enterprise — <a href="mailto:bakouban2002@gmail.com">bakouban2002@gmail.com</a></footer>
+</section>
+
+<hr>
+
+<!-- ======================================================= ENGLISH -->
+<section id="en" lang="en">
+<h1>Privacy Policy — Bob</h1>
+<p class="muted"><em>Last updated: September 28, 2026</em></p>
+<p class="lang"><a href="#fr">Version française</a> · English · <a href="#delete-data">Delete your data</a></p>
+
+<p>Bob is an automated WhatsApp sales agent built and operated by 2CASH Enterprise.
+Businesses ("merchants") use it to reply to their own customers.
+This policy covers two audiences: <strong>merchants</strong> who use the Bob dashboard,
+and <strong>customers</strong> who message a merchant on WhatsApp.</p>
+
+<h2>1. Data of customers who message on WhatsApp</h2>
+<ul>
+  <li>WhatsApp phone number</li>
+  <li>Content of the messages exchanged with the business</li>
+  <li>Information voluntarily given in the conversation (delivery address, order, preferences)</li>
+  <li>The link or QR code through which the customer arrived, if any</li>
+</ul>
+<p>On behalf of the merchant, 2CASH Enterprise acts as a data processor: this data is used only to reply to the customer,
+process their orders and let the merchant follow up on the relationship.</p>
+
+<h2>2. Merchant data</h2>
+<ul>
+  <li>Account: name, email address, phone, password (stored only as a hash), store name and details</li>
+  <li>Products, prices, stock, knowledge base and settings entered in the dashboard</li>
+  <li>The store's orders, conversations and sales statistics</li>
+</ul>
+
+<h3>Data received from Meta (Facebook, WhatsApp)</h3>
+<p>When a merchant connects their WhatsApp Business account or Facebook catalog to Bob,
+they log in with Facebook and authorize Bob. We then receive:</p>
+<ul>
+  <li>Technical identifiers of their Meta business portfolio, WhatsApp Business account, phone number and catalog</li>
+  <li>An access token that lets Bob act on the merchant's behalf, within the permissions they granted:
+      send and receive their store's WhatsApp messages (<code>whatsapp_business_messaging</code>),
+      manage their WhatsApp Business account (<code>whatsapp_business_management</code>),
+      read the products in their catalog (<code>catalog_management</code>)</li>
+  <li>Catalog products: name, description, price, currency, availability, image</li>
+</ul>
+<p>We do not store the merchant's personal Facebook profile (<code>public_profile</code> is used only to log in).
+Access tokens stay on our servers: they are never sent to the browser, never displayed and never written to logs.
+We use this data only to run Bob for the merchant concerned.
+We do not sell it and do not use it for advertising.</p>
+
+<h2>3. Artificial intelligence processing</h2>
+<p>Customer messages are analyzed by an artificial intelligence service, Mistral AI (France),
+to understand the request and write Bob's reply. Bob is an automated agent: it can hand the conversation
+over to a person at the business at any time, and customers can ask to talk to a human.</p>
+
+<h2>4. Isolation between merchants</h2>
+<p>The data of a merchant and their customers is never visible to any other merchant using Bob.</p>
+
+<h2>5. Service providers</h2>
+<table>
+  <tr><th>Provider</th><th>Role</th></tr>
+  <tr><td>Meta Platforms (WhatsApp Business Platform, Catalog API)</td><td>Delivering WhatsApp messages, reading the catalog</td></tr>
+  <tr><td>Mistral AI (France)</td><td>Understanding messages and writing replies</td></tr>
+  <tr><td>Hetzner Online (Germany)</td><td>Server and database hosting, in the European Union</td></tr>
+  <tr><td>Brevo (France)</td><td>Sending emails (alerts, account security, merchant campaigns)</td></tr>
+  <tr><td>Shopify</td><td>Only if the merchant connects their Shopify store</td></tr>
+</table>
+
+<h2>6. Retention</h2>
+<p>Data is kept as long as the merchant uses Bob and the business relationship with the customer requires it.
+It is deleted or anonymized on request (section 8), and when the merchant's account is closed.</p>
+
+<h2>7. Your rights</h2>
+<p>You may request access to, correction or deletion of your data, and object to marketing messages.
+Customers can reply <strong>STOP</strong> on WhatsApp at any time to stop receiving marketing messages.</p>
+
+<h2 id="delete-data">8. Delete your data</h2>
+<h3>If you are a merchant</h3>
+<ol>
+  <li>To remove Bob's access to your Meta accounts: in your Meta business portfolio settings,
+      open <em>Integrations → Connected apps</em>, select "Bob - Agent Vendeur IA" and remove it.
+      Bob can then no longer read your catalog or use your WhatsApp Business account.</li>
+  <li>To delete your account and all your store's data (products, conversations, customers, access tokens),
+      email the address below from your account's email, with the subject "Delete my data".</li>
+</ol>
+<h3>If you are a customer of a business</h3>
+<p>Contact the business you talked to, or email us directly at the address below with your WhatsApp number
+and the name of the business.</p>
+<p>We confirm deletion within one month at most.</p>
+
+<footer>2CASH Enterprise — <a href="mailto:bakouban2002@gmail.com">bakouban2002@gmail.com</a></footer>
+</section>
 
 </body>
 </html>
