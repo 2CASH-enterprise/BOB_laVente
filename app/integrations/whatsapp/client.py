@@ -117,6 +117,14 @@ class WhatsAppClient:
         }
         return await self._post("/messages", payload)
 
+    async def send_image_message(self, to: str, link: str, caption: str | None = None) -> dict:
+        """Lot 26c — photo d'un produit, par son adresse publique (https)."""
+        image = {"link": link}
+        if caption:
+            image["caption"] = caption[:1024]
+        payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": image}
+        return await self._post("/messages", payload)
+
     async def send_template_message(self, to: str, template_name: str, language: str = "fr") -> dict:
         payload = {
             "messaging_product": "whatsapp",

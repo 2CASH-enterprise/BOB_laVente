@@ -227,6 +227,7 @@ async def receive_webhook(
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
     outage_email = None
+    image_outbox: list[dict] = []  # lot 26c : photos de produits demandées par Bob, envoyées après sa réponse
     if is_opt_out:
         reply_text = (
             "Vous avez été désinscrit(e) de nos communications marketing. "
@@ -267,6 +268,7 @@ async def receive_webhook(
                 incoming_text=incoming_message.content,
                 llm_client=llm_client,
                 turn=turn,
+                image_outbox=image_outbox,
             )
             if failure == FAILURE_LOOP:
                 # Anomalie (Bob tourne en rond) : un humain doit regarder → vrai transfert + alerte.
@@ -389,12 +391,31 @@ async def receive_webhook(
     # Envoi réel vers WhatsApp (section 3 : ... -> WhatsApp API -> CLIENT). Ne doit jamais
     # faire planter le webhook si Meta est indisponible ou si le token a expiré : on journalise
     # et on continue, la réponse reste de toute façon consultable dans le dashboard (section 27).
+    wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
     try:
-        wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
         await wa_client.send_text_message(to=customer.whatsapp_number, body=reply_text)
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception(
             "Échec de l'envoi WhatsApp réel pour la conversation %s", conversation.id
         )
 
-    return {"status": "received", "ai_reply": reply_text}
+    # Lot 26c — photos des produits, après le texte ; chacune n'est tracée que si Meta l'accepte.
+    images_sent = 0
+    for image in image_outbox:
+        try:
+            await wa_client.send_image_message(to=customer.whatsapp_number, link=image["link"], caption=image["caption"])
+        except Exception:  # noqa: BLE001 — une photo refusée ne bloque jamais la conversation
+            logging.getLogger(__name__).warning(
+                "Photo de produit non envoyée (conversation %s, produit %s)", conversation.id, image["product_id"]
+            )
+            continue
+        db.add(Message(
+            tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.AI, message_type="image",
+            content=f"📷 Photo envoyée : {image['caption']}",
+            message_metadata={"image_url": image["link"], "product_id": image["product_id"]},
+        ))
+        images_sent += 1
+    if images_sent:
+        await db.commit()
+
+    return {"status": "received", "ai_reply": reply_text, "images_sent": images_sent}

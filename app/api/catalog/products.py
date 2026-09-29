@@ -13,6 +13,16 @@ from app.models.product import Product
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
 
+def _checked_vehicle(raw: dict | None) -> dict | None:
+    """Lot 26 — caractéristiques normalisées ; valeur douteuse refusée plutôt qu'enregistrée."""
+    from app.services.vehicle import normalize_vehicle
+
+    vehicle, errors = normalize_vehicle(raw)
+    if errors:
+        raise HTTPException(status_code=422, detail=" ; ".join(errors))
+    return vehicle
+
+
 @router.post("", response_model=ProductResponse, status_code=201, dependencies=[Depends(require_role("MANAGER"))])
 async def create_product(
     payload: ProductCreate,
@@ -35,7 +45,9 @@ async def create_product(
     if existing is not None:
         raise HTTPException(status_code=409, detail=f"Un produit avec le SKU '{payload.sku}' existe déjà")
 
-    product = Product(tenant_id=current_user.tenant_id, **payload.model_dump())
+    data = payload.model_dump()
+    data["vehicle"] = _checked_vehicle(data.get("vehicle"))
+    product = Product(tenant_id=current_user.tenant_id, **data)
     await repo.add(product)
     await db.commit()
     await db.refresh(product)
@@ -125,7 +137,10 @@ async def update_product(
     if product is None:
         raise HTTPException(status_code=404, detail="Produit introuvable")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if "vehicle" in changes:
+        changes["vehicle"] = _checked_vehicle(changes["vehicle"])
+    for field, value in changes.items():
         setattr(product, field, value)
 
     await db.commit()

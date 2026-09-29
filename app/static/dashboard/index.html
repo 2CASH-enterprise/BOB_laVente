@@ -564,6 +564,7 @@
             <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input" maxlength="3">
             <input id="new-product-stock" placeholder="Stock" type="number" class="input" style="grid-column: span 2;">
           </div>
+          <div id="new-vehicle-fields" class="hidden" style="margin-top: 8px;"></div>
           <button class="action" style="margin-top: 10px;" onclick="createProduct()">Ajouter</button>
           <div id="new-product-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
@@ -571,6 +572,7 @@
           <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV</div>
           <p style="font-size: 13px; color: var(--muted); margin-top: 0;">
             Colonnes attendues : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE
+            <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span>
           </p>
           <input type="file" id="csv-file-input" accept=".csv" style="margin-bottom: 10px;">
           <button class="action" onclick="importCsv()">Importer</button>
@@ -1119,9 +1121,59 @@ const BUSINESS_TYPE_HELP = {
   CAR_DEALERSHIP: "Bob renseigne sur vos véhicules, qualifie le client et obtient un rendez-vous (essai, visite, reprise). Il ne prend pas de commande, ne négocie pas et ne donne jamais de chiffre de financement ou de reprise : un conseiller confirme chaque rendez-vous.",
 };
 
+let currentBusinessType = "ONLINE_STORE";
+
 function applyBusinessType(code) {
+  currentBusinessType = code;
+  const dealership = code === "CAR_DEALERSHIP";
   // Lot 25 : la page Rendez-vous n'existe que pour les concessions.
-  document.getElementById("nav-appointments").classList.toggle("hidden", code !== "CAR_DEALERSHIP");
+  document.getElementById("nav-appointments").classList.toggle("hidden", !dealership);
+  // Lot 26 : fiche véhicule dans l'ajout de produit et aide de l'import CSV.
+  const fields = document.getElementById("new-vehicle-fields");
+  fields.classList.toggle("hidden", !dealership);
+  fields.innerHTML = dealership ? vehicleFields("new", null) : "";
+  document.getElementById("csv-vehicle-help").classList.toggle("hidden", !dealership);
+}
+
+// ---- Lot 26 : fiches véhicules ----
+const VEHICLE_FUELS = { ESSENCE: "Essence", DIESEL: "Diesel", HYBRIDE: "Hybride", ELECTRIQUE: "Électrique", GPL: "GPL" };
+const VEHICLE_GEARBOXES = { MANUELLE: "Manuelle", AUTOMATIQUE: "Automatique" };
+const VEHICLE_BODY_TYPES = { SUV: "SUV", BERLINE: "Berline", CITADINE: "Citadine", BREAK: "Break", MONOSPACE: "Monospace", COUPE: "Coupé", CABRIOLET: "Cabriolet", PICK_UP: "Pick-up", UTILITAIRE: "Utilitaire" };
+
+function vehicleSummary(v) {
+  if (!v) return "";
+  return [
+    VEHICLE_BODY_TYPES[v.body_type] || v.body_type,
+    v.year,
+    v.mileage_km !== undefined && v.mileage_km !== null ? `${Number(v.mileage_km).toLocaleString("fr-FR")} km` : null,
+    VEHICLE_FUELS[v.fuel] || v.fuel,
+    VEHICLE_GEARBOXES[v.gearbox] || v.gearbox,
+  ].filter((x) => x !== null && x !== undefined && x !== "").join(" · ");
+}
+
+function vehicleFields(prefix, v) {
+  v = v || {};
+  const text = (key, label, type = "text") =>
+    `<input id="${prefix}-vehicle-${key}" class="input" type="${type}" placeholder="${label}" aria-label="${label}" value="${esc(v[key] ?? "")}">`;
+  const select = (key, label, options) =>
+    `<select id="${prefix}-vehicle-${key}" class="input" aria-label="${label}"><option value="">${label}</option>${Object.entries(options)
+      .map(([code, name]) => `<option value="${code}" ${v[key] === code ? "selected" : ""}>${name}</option>`).join("")}</select>`;
+  return `<div class="label" style="margin: 4px 0 6px; font-size: 12px;">Fiche véhicule</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+      ${text("brand", "Marque")}${text("model", "Modèle")}${text("trim", "Finition")}${text("color", "Couleur")}
+      ${text("year", "Année", "number")}${text("mileage_km", "Kilométrage", "number")}
+      ${select("body_type", "Carrosserie", VEHICLE_BODY_TYPES)}${select("fuel", "Carburant", VEHICLE_FUELS)}
+      ${select("gearbox", "Boîte", VEHICLE_GEARBOXES)}
+    </div>`;
+}
+
+function readVehicle(prefix) {
+  const vehicle = {};
+  ["brand", "model", "trim", "color", "year", "mileage_km", "body_type", "fuel", "gearbox"].forEach((key) => {
+    const el = document.getElementById(`${prefix}-vehicle-${key}`);
+    if (el && el.value.trim() !== "") vehicle[key] = el.value.trim();
+  });
+  return Object.keys(vehicle).length ? vehicle : null;
 }
 
 async function checkBusinessTypeChosen() {
@@ -1931,11 +1983,11 @@ async function loadProducts() {
   rows.innerHTML = allProducts
     .map(
       (p) => `<tr>
-        <td data-label="Nom">${p.image_url ? `<img src="${p.image_url}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${p.name}</td>
-        <td data-label="SKU">${p.sku}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${p.currency}</td>
+        <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}</td>
+        <td data-label="SKU">${esc(p.sku)}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
         <td data-label="Stock">${p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
-        <td data-label="Upsell"><button class="action secondary" onclick="toggleUpsellPanel('${p.id}')">Gérer</button></td>
-        <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel('${p.id}')">Modifier</button></td>
+        <td data-label="Upsell"><button class="action secondary" onclick="toggleUpsellPanel('${esc(p.id)}')">Gérer</button></td>
+        <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel('${esc(p.id)}')">Modifier</button></td>
       </tr>
       <tr id="upsell-row-${p.id}" class="hidden"><td colspan="7"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>
       <tr id="edit-row-${p.id}" class="hidden"><td colspan="7"><div id="edit-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
@@ -1959,11 +2011,12 @@ function renderEditPanel(productId) {
   const panel = document.getElementById(`edit-panel-${productId}`);
   panel.innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 620px; margin-bottom: 10px;">
-      <input id="edit-name-${p.id}" class="input" placeholder="Nom" value="${p.name}">
-      <input id="edit-price-${p.id}" class="input" type="number" placeholder="Prix" value="${p.price}">
-      <input id="edit-stock-${p.id}" class="input" type="number" placeholder="Stock" value="${p.stock_quantity}">
+      <input id="edit-name-${p.id}" class="input" placeholder="Nom" value="${esc(p.name)}">
+      <input id="edit-price-${p.id}" class="input" type="number" placeholder="Prix" value="${esc(p.price)}">
+      <input id="edit-stock-${p.id}" class="input" type="number" placeholder="Stock" value="${esc(p.stock_quantity)}">
     </div>
-    <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${p.description || ""}</textarea>
+    <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${esc(p.description || "")}</textarea>
+    ${currentBusinessType === "CAR_DEALERSHIP" || p.vehicle ? `<div style="max-width: 620px; margin-bottom: 10px;">${vehicleFields(`edit-${p.id}`, p.vehicle)}</div>` : ""}
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
       <input type="file" id="edit-image-${p.id}" accept="image/png,image/jpeg,image/webp" style="max-width: 240px;">
       <button class="action secondary" onclick="uploadProductImage('${p.id}')">Changer la photo</button>
@@ -1989,6 +2042,7 @@ async function saveProductEdit(productId) {
         stock_quantity: parseInt(document.getElementById(`edit-stock-${productId}`).value, 10),
         description: document.getElementById(`edit-description-${productId}`).value || null,
         active: document.getElementById(`edit-active-${productId}`).checked,
+        ...(document.getElementById(`edit-${productId}-vehicle-year`) ? { vehicle: readVehicle(`edit-${productId}`) } : {}),
       }),
     });
     msg.style.color = "var(--success)";
@@ -2043,7 +2097,7 @@ async function exportXlsx() {
 
 async function loadQrCodes() {
   const select = document.getElementById("new-qr-product");
-  select.innerHTML = allProducts.map((p) => `<option value="${p.id}">${p.name} (${p.sku})</option>`).join("");
+  select.innerHTML = allProducts.map((p) => `<option value="${esc(p.id)}">${esc(p.name)} (${esc(p.sku)})</option>`).join("");
 
   const list = document.getElementById("qr-codes-list");
   list.innerHTML = "<p class='loading-text' style='grid-column: 1/-1;'>Chargement</p>";
@@ -2062,8 +2116,8 @@ async function loadQrCodes() {
       const fullUrl = window.location.origin + API_BASE + c.short_path;
       const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(fullUrl)}`;
       return `<div class="card" style="text-align: center; padding: 14px;">
-        <img src="${qrImg}" alt="QR ${c.product_name}" style="width: 100%; max-width: 140px; border-radius: 8px; margin-bottom: 8px;">
-        <div style="font-weight: 600; font-size: 13px;">${c.product_name}</div>
+        <img src="${qrImg}" alt="QR ${esc(c.product_name)}" style="width: 100%; max-width: 140px; border-radius: 8px; margin-bottom: 8px;">
+        <div style="font-weight: 600; font-size: 13px;">${esc(c.product_name)}</div>
         <div style="color: var(--muted); font-size: 11px; margin: 4px 0 8px;">${c.scan_count} scan${c.scan_count > 1 ? "s" : ""}</div>
         <button class="action" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="shareQrImage('${c.id}')">Image à partager</button>
         <button class="action secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyQrLink('${fullUrl}')">Copier le lien</button>
@@ -2406,7 +2460,7 @@ async function renderUpsellPanel(productId) {
 
   const options = allProducts
     .filter((p) => p.id !== productId)
-    .map((p) => `<option value="${p.id}">${p.name} (${p.sku})</option>`)
+    .map((p) => `<option value="${esc(p.id)}">${esc(p.name)} (${esc(p.sku)})</option>`)
     .join("");
 
   const linksHtml = links.length
@@ -2459,6 +2513,7 @@ async function createProduct() {
     currency: document.getElementById("new-product-currency").value.trim().toUpperCase(),
     stock_quantity: parseInt(document.getElementById("new-product-stock").value || "0", 10),
   };
+  if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");
   if (!payload.sku || !payload.name || !payload.price || !payload.currency) {
     msg.style.color = "var(--danger)";
     msg.textContent = "SKU, nom, prix et devise sont obligatoires.";
@@ -2469,6 +2524,7 @@ async function createProduct() {
     msg.style.color = "var(--success)";
     msg.textContent = "Produit ajouté.";
     ["sku", "name", "price", "currency", "stock"].forEach((f) => (document.getElementById("new-product-" + f).value = ""));
+    if (currentBusinessType === "CAR_DEALERSHIP") document.getElementById("new-vehicle-fields").innerHTML = vehicleFields("new", null);
     loadProducts();
   } catch (e) {
     msg.style.color = "var(--danger)";
@@ -2882,8 +2938,8 @@ async function loadKnowledge() {
         <div style="display: flex; justify-content: space-between; align-items: start; gap: 12px;">
           <div>
             <span class="badge ACTIVE" style="margin-right: 8px;">${KNOWLEDGE_CATEGORY_LABELS[e.category] || e.category}</span>
-            <strong>${e.title}</strong>
-            <p style="margin: 6px 0 0; font-size: 13px; color: var(--muted); white-space: pre-wrap;">${e.content}</p>
+            <strong>${esc(e.title)}</strong>
+            <p style="margin: 6px 0 0; font-size: 13px; color: var(--muted); white-space: pre-wrap;">${esc(e.content)}</p>
           </div>
           <div style="display: flex; gap: 6px; flex-shrink: 0;">
             <button class="action secondary" onclick="toggleKnowledgeActive('${e.id}', ${!e.active})">${e.active ? "Désactiver" : "Activer"}</button>

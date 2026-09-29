@@ -219,7 +219,7 @@ def test_appointments_page_only_for_dealerships_and_loaded_with_its_tab():
     nav = re.search(r"<nav>(.*?)</nav>", HTML, re.S).group(1)
     assert 'data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden"' in nav
     apply = re.search(r"function applyBusinessType\(code\) \{(.*?)\n\}", HTML, re.S).group(1)
-    assert 'classList.toggle("hidden", code !== "CAR_DEALERSHIP")' in apply
+    assert 'const dealership = code === "CAR_DEALERSHIP";' in apply and 'getElementById("nav-appointments").classList.toggle("hidden", !dealership)' in apply
     assert HTML.count("applyBusinessType(") >= 4  # définition + choix initial + réglage + chargement
     assert "loadAppointments(currentAppointmentView)" in _show_tab_line("appointments")
     assert "if (item.kind === \"APPOINTMENT\") return `showTab('appointments')`" in HTML
@@ -233,3 +233,27 @@ def test_appointment_cards_escape_everything_from_customers_and_bob():
     for raw in ("${a.need}", "${a.notes}", "${a.customer}", "${a.availability}", "${a.vehicle}"):
         assert raw not in card
     assert '${a.can_notify ? "checked" : "disabled"}' in card  # prévenir le client : coché par défaut
+
+
+# --- Lot 26 : fiches véhicules, et produits enfin échappés -------------------------------------
+
+def test_product_data_is_escaped_everywhere_it_is_displayed():
+    """Les produits peuvent venir de Meta, Shopify ou d'un CSV : jamais interprétés comme du HTML."""
+    rows = re.search(r"async function loadProducts\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    for field in ("p.name", "p.sku", "p.image_url", "p.currency"):
+        assert f"esc({field})" in rows, field
+    assert "${p.name}" not in rows and "${p.sku}" not in rows and '${p.image_url}"' not in rows
+    edit = re.search(r"function renderEditPanel\(productId\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert 'value="${esc(p.name)}"' in edit and '${esc(p.description || "")}' in edit
+    assert "${p.name} (${p.sku})" not in HTML
+    assert "${c.product_name}" not in HTML and "${e.title}" not in HTML and "${e.content}" not in HTML
+
+
+def test_vehicle_sheet_fields_only_for_dealerships_and_escaped():
+    apply = re.search(r"function applyBusinessType\(code\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert 'getElementById("new-vehicle-fields")' in apply and 'getElementById("csv-vehicle-help")' in apply
+    fields = re.search(r"function vehicleFields\(prefix, v\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert 'value="${esc(v[key] ?? "")}"' in fields
+    assert 'if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");' in HTML
+    rows = re.search(r"async function loadProducts\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert "esc(vehicleSummary(p.vehicle))" in rows

@@ -24,6 +24,12 @@ from app.services.customer_memory_service import record_product_view
 
 
 PRODUCT_DESCRIPTION_MAX_CHARS = 300
+MAX_IMAGES_PER_REPLY = 3
+
+
+def has_sendable_photo(product) -> bool:
+    """Une photo n'est envoyée sur WhatsApp que par une adresse publique sécurisée (https)."""
+    return (getattr(product, "image_url", None) or "").strip().lower().startswith("https://")
 
 
 class ToolExecutor:
@@ -48,6 +54,12 @@ class ToolExecutor:
         self.handoff_reason: str | None = None
         # Lot 13 : décision des règles de transmission pour CE message (None = pas de règle).
         self.turn = None
+        # Lot 26c : photos à envoyer après la réponse (remplies par send_product_images).
+        self.pending_images: list[dict] = []
+        # Lot 26d : produits vus pendant ce message et qui ont une photo envoyable (id → nom).
+        self.products_with_photo: dict[str, str] = {}
+        # Lot 26e : Bob a-t-il consulté au moins un produit pendant ce message ?
+        self.looked_up_products = False
 
     async def execute(self, tool_name: str, tool_input: dict) -> dict:
         from app.services.business_type import tool_allowed
@@ -60,12 +72,20 @@ class ToolExecutor:
         return await handler(tool_input)
 
     async def _product_to_dict(self, product) -> dict:
+        from app.services.vehicle import for_ai
+
         # Lot 15 : la description (tronquée) permet à Bob d'argumenter sur des caractéristiques
         # RÉELLES au lieu de les inventer. Le prix d'achat (cost_price) n'est jamais exposé : il
         # révélerait la marge du commerçant.
         description = (product.description or "").strip()
         if len(description) > PRODUCT_DESCRIPTION_MAX_CHARS:
             description = description[:PRODUCT_DESCRIPTION_MAX_CHARS].rstrip() + "…"
+        # Lot 26d : Bob doit SAVOIR qu'une photo existe (incident du 29/09 : « pas de photo
+        # disponible » alors que la 5008 en avait une). Jamais l'adresse elle-même.
+        has_photo = has_sendable_photo(product)
+        self.looked_up_products = True
+        if has_photo:
+            self.products_with_photo[str(product.id)] = product.name
         return {
             "product_id": str(product.id),
             "name": product.name,
@@ -74,16 +94,38 @@ class ToolExecutor:
             "currency": product.currency,
             "stock": product.stock_quantity,
             "active": product.active,
+            "photo": "disponible : utilise send_product_images pour l'envoyer" if has_photo else "aucune",
+            **({"vehicle": for_ai(product.vehicle)} if getattr(product, "vehicle", None) else {}),
         }
 
     async def _tool_search_products(self, tool_input: dict) -> dict:
+        from app.services.business_type import CAR_DEALERSHIP, normalize
+        from app.services.vehicle import criteria_from_query, matches
+
+        dealership = normalize(self.business_type) == CAR_DEALERSHIP
+        query = tool_input.get("query")
+        criteria = {key: tool_input.get(key) for key in ("fuel", "gearbox", "min_year", "max_mileage_km", "body_type")}
+        if dealership:
+            # Lot 26b : « SUV », « diesel », « automatique » dans la recherche sont des critères,
+            # pas des mots à trouver dans le nom du véhicule.
+            query, from_words = criteria_from_query(query)
+            for key, value in from_words.items():
+                if criteria.get(key) is None:
+                    criteria[key] = value
+        filtering = dealership and any(v is not None for v in criteria.values())
         products = await self.product_repo.search(
             tenant_id=self.tenant_id,
-            query=tool_input.get("query"),
+            query=query,
             min_price=tool_input.get("min_price"),
             max_price=tool_input.get("max_price"),
-            limit=10,
+            # Lot 26 : les critères véhicule se vérifient après la requête, sur un lot plus large.
+            limit=500 if filtering else 10,
         )
+        if filtering:
+            try:
+                products = [p for p in products if matches(getattr(p, "vehicle", None), **criteria)][:10]
+            except (TypeError, ValueError):
+                return {"error": "Critères de recherche invalides (année et kilométrage : nombres entiers)."}
         if not products:
             return {"results": [], "message": "Aucun produit trouvé pour cette recherche."}
         await record_product_view(self.db, self.tenant_id, self.customer_id, [p.id for p in products])
@@ -201,6 +243,47 @@ class ToolExecutor:
         )
         await self.db.flush()
         return {"status": "handoff_registered", "reason": reason}
+
+    async def _tool_send_product_images(self, tool_input: dict) -> dict:
+        """
+        Lot 26c : photos RÉELLES des produits de CETTE boutique, jamais une adresse fournie par l'IA.
+        Trois photos au plus par réponse ; seules les adresses https publiques sont envoyées.
+        """
+        raw_ids = tool_input.get("product_ids") or []
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return {"error": "Indique les identifiants des produits (product_ids)."}
+        queued, without_photo, unknown = [], [], []
+        for raw in raw_ids[:MAX_IMAGES_PER_REPLY]:
+            try:
+                product = await self.product_repo.get(tenant_id=self.tenant_id, record_id=uuid.UUID(str(raw)))
+            except (ValueError, TypeError):
+                product = None
+            if product is None or not product.active:
+                unknown.append(str(raw))
+                continue
+            url = (product.image_url or "").strip()
+            if not has_sendable_photo(product):
+                without_photo.append(product.name)
+                continue
+            if any(img["product_id"] == str(product.id) for img in self.pending_images):
+                queued.append(product.name)
+                continue
+            if len(self.pending_images) >= MAX_IMAGES_PER_REPLY:
+                break
+            price = f"{float(product.price):,.0f}".replace(",", " ")
+            self.pending_images.append({
+                "product_id": str(product.id),
+                "link": url,
+                "caption": f"{product.name} — {price} {product.currency}",
+            })
+            queued.append(product.name)
+        result = {"status": "photos_queued" if queued else "no_photo_sent", "photos_sent_after_reply": queued}
+        if without_photo:
+            result["without_photo"] = without_photo
+            result["instruction"] = "Dis simplement au client que ces produits n'ont pas encore de photo."
+        if unknown:
+            result["unknown_products"] = unknown
+        return result
 
     async def _tool_request_appointment(self, tool_input: dict) -> dict:
         """

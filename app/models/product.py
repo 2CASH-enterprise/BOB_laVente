@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -31,6 +31,10 @@ class Product(Base):
     category_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("categories.id"))
     image_url: Mapped[str | None] = mapped_column(String(1000))
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Lot 26 — caractéristiques d'un véhicule (concession) : clés et valeurs normalisées par
+    # app/services/vehicle.py (année, kilométrage, carburant, boîte…). NULL pour un produit ordinaire.
+    vehicle: Mapped[dict | None] = mapped_column(JSON)
 
     # Traçabilité d'origine (section 25) — NULL pour un produit saisi manuellement ou importé en CSV.
     external_source: Mapped[str | None] = mapped_column(String(32))  # ex. "SHOPIFY"

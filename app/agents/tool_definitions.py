@@ -242,4 +242,25 @@ TOOL_DEFINITIONS = [
             "required": ["kind", "availability"],
         },
     },
+    {
+        # Lot 26c — envoyer la vraie photo d'un produit (boutique en ligne et concession).
+        "name": "send_product_images",
+        "description": (
+            "Envoie au client, sur WhatsApp, la photo réelle d'un à trois produits du catalogue (celle "
+            "enregistrée par l'entreprise). À utiliser quand le client demande une photo, ou pour montrer un "
+            "produit que tu recommandes. Les photos partent juste après ta réponse. Ne dis jamais que tu ne "
+            "peux pas envoyer de photo avant d'avoir essayé : si un produit n'en a pas, l'outil te le dit."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "UUID des produits (3 maximum), tels que renvoyés par search_products",
+                },
+            },
+            "required": ["product_ids"],
+        },
+    },
 ]

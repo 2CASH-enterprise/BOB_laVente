@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.models.order import Order, OrderItem, OrderStatus
 from app.models.product import Product
@@ -43,7 +43,8 @@ class ProductRepository(TenantScopedRepository[Product]):
         if active_only:
             stmt = stmt.where(Product.active.is_(True))
         if query:
-            stmt = stmt.where(Product.name.ilike(f"%{query}%"))
+            # Nom ou description : « familiale », « 7 places » se trouvent souvent dans la description.
+            stmt = stmt.where(or_(Product.name.ilike(f"%{query}%"), Product.description.ilike(f"%{query}%")))
         if category_id is not None:
             stmt = stmt.where(Product.category_id == category_id)
         if min_price is not None:

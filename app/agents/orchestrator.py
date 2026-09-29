@@ -6,6 +6,7 @@ réponse (section 50). Toute donnée factuelle (prix, stock, existence d'un prod
 passe obligatoirement par ToolExecutor — jamais par la mémoire du modèle.
 """
 import asyncio
+import re
 import logging
 
 import httpx
@@ -33,6 +34,13 @@ FALLBACK_MESSAGE = (
 
 
 # Lot 22 : ajoutée au prompt pour le second essai quand la première réponse était vide.
+# Lot 26d — « je n'ai pas de photo », « aucune image disponible », « je ne peux pas vous envoyer de photo ».
+NO_PHOTO_CLAIM = re.compile(
+    r"(?:pas|aucune?|plus)\s+(?:de\s+|d['’])?(?:photos?|images?|visuels?)"
+    r"|(?:ne\s+(?:peux|pourrai|suis\s+pas\s+en\s+mesure)|impossible)[^.!?\n]{0,40}(?:photos?|images?)",
+    re.IGNORECASE,
+)
+
 EMPTY_REPLY_RETRY_INSTRUCTION = (
     "\n\nCONSIGNE (ta réponse précédente était vide) : réponds maintenant au DERNIER message du client, "
     "même s'il est très court (un chiffre, « oui », « ok ») : relis tes messages précédents pour comprendre "
@@ -107,6 +115,7 @@ async def generate_ai_reply_detailed(
     incoming_text: str,
     llm_client: LLMClient,
     turn=None,
+    image_outbox: list | None = None,
 ) -> tuple[str, str | None]:
     """
     Retourne le texte de la réponse de Bob. Ne lève jamais d'exception vers l'appelant :
@@ -131,6 +140,8 @@ async def generate_ai_reply_detailed(
     messages.append({"role": "user", "content": incoming_text})
 
     empty_replies = 0
+    photo_retry_done = False
+    lookup_retry_done = False
     try:
         for _ in range(settings.max_tool_iterations):
             response = await _create_with_retries(
@@ -142,7 +153,34 @@ async def generate_ai_reply_detailed(
             if stop_reason != "tool_use":
                 text_parts = [b["text"] for b in content_blocks if b.get("type") == "text"]
                 text = "\n".join(text_parts).strip()
+                if text and not lookup_retry_done and not executor.pending_images and not executor.looked_up_products \
+                        and NO_PHOTO_CLAIM.search(text):
+                    # Lot 26e — incident réel : Bob recopie « pas de photo » de ses réponses précédentes,
+                    # sans rien vérifier. Un seul nouvel essai : consulter le catalogue d'abord.
+                    lookup_retry_done = True
+                    system_prompt += (
+                        "\n\nCONSIGNE (correction) : tu as dit qu'il n'y avait pas de photo sans consulter le "
+                        "catalogue. Ne te fie pas à tes réponses précédentes : cherche le produit avec "
+                        "search_products, puis, s'il a une photo, envoie-la avec send_product_images."
+                    )
+                    logger.warning("Bob a nié une photo sans vérifier (conversation %s) : nouvel essai", conversation.id)
+                    continue
+                if text and not photo_retry_done and not executor.pending_images and executor.products_with_photo \
+                        and NO_PHOTO_CLAIM.search(text):
+                    # Lot 26d — Bob affirme qu'il n'y a pas de photo alors qu'un produit vu dans ce
+                    # message en a une : un seul nouvel essai, avec les produits nommés.
+                    photo_retry_done = True
+                    names = ", ".join(f"{name} (product_id {pid})" for pid, name in list(executor.products_with_photo.items())[:3])
+                    system_prompt += (
+                        "\n\nCONSIGNE (correction) : tu as dit qu'il n'y avait pas de photo, mais ces produits en "
+                        f"ont une : {names}. Si le client veut voir l'un d'eux, appelle send_product_images, puis "
+                        "réponds-lui sans dire qu'il n'y a pas de photo."
+                    )
+                    logger.warning("Bob a nié une photo existante (conversation %s) : nouvel essai", conversation.id)
+                    continue
                 if text:
+                    if image_outbox is not None:
+                        image_outbox.extend(executor.pending_images)  # lot 26c : seulement si Bob a répondu
                     return text, None
                 # Lot 22 — réponse vide (cas réel du 27/09 : un client répond « 1 » à un choix,
                 # Mistral ne renvoie rien, le client était transféré). Un seul nouvel essai, avec

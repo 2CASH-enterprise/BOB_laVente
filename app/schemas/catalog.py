@@ -28,6 +28,7 @@ class ProductCreate(BaseModel):
     category_id: UUID | None = None
     image_url: str | None = None
     active: bool = True
+    vehicle: dict | None = None  # lot 26 — concession : année, kilométrage, carburant, boîte…
 
 
 class ProductUpdate(BaseModel):
@@ -39,6 +40,7 @@ class ProductUpdate(BaseModel):
     category_id: UUID | None = None
     image_url: str | None = None
     active: bool | None = None
+    vehicle: dict | None = None
 
 
 class ProductResponse(BaseModel):
@@ -53,6 +55,7 @@ class ProductResponse(BaseModel):
     category_id: UUID | None
     image_url: str | None
     active: bool
+    vehicle: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

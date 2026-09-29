@@ -1,6 +1,8 @@
 """
 Import du catalogue au format CSV (section 24, format MVP).
 En-têtes attendus (section 24) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE.
+Lot 26 — colonnes facultatives pour les véhicules (français ou anglais) : MARQUE, MODELE, FINITION,
+CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR.
 """
 import csv
 import io
@@ -90,6 +92,15 @@ async def import_catalog_csv(
 
         active = _parse_active(row.get("ACTIVE"))
 
+        from app.services.vehicle import normalize_vehicle, vehicle_from_csv_row
+
+        vehicle_columns = vehicle_from_csv_row(row)
+        vehicle, vehicle_errors = normalize_vehicle(vehicle_columns)
+        if vehicle_errors:
+            failed += 1
+            errors.append(f"Ligne {row_number} ({sku}) : {' ; '.join(vehicle_errors)}")
+            continue
+
         existing = await product_repo.get_by_sku(tenant_id, sku)
         if existing is not None:
             existing.name = name
@@ -100,6 +111,8 @@ async def import_catalog_csv(
             existing.category_id = category_id
             existing.image_url = (row.get("IMAGE_URL") or "").strip() or None
             existing.active = active
+            if vehicle is not None:  # un fichier sans colonnes véhicule n'efface pas une fiche existante
+                existing.vehicle = vehicle
             updated += 1
         else:
             if max_new_products is not None and imported >= max_new_products:
@@ -118,6 +131,7 @@ async def import_catalog_csv(
                     category_id=category_id,
                     image_url=(row.get("IMAGE_URL") or "").strip() or None,
                     active=active,
+                    vehicle=vehicle,
                 )
             )
             imported += 1
