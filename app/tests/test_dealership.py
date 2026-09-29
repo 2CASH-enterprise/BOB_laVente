@@ -173,7 +173,7 @@ def test_dealership_prompt_has_its_own_rules_and_no_sales_tool():
     assert DEALERSHIP_RULES in dealer and BASE_RULES not in dealer
     for tool in SALES_TOOLS:
         assert tool not in dealer
-    assert "ne donne JAMAIS de\n   chiffre" in dealer and "request_appointment" in dealer
+    assert "ne donne JAMAIS de chiffre" in dealer and "request_appointment" in dealer
     store = build_system_prompt(Tenant(name="Boutique", country="SN", currency="XOF"))
     assert BASE_RULES in store and "request_appointment" not in store
 
@@ -384,3 +384,36 @@ def test_existing_shops_are_not_asked_again():
     migration = (Path(__file__).resolve().parents[2] / "alembic" / "versions" / "a24c0b0e5d11_lot_24_mode_concession.py").read_text()
     assert 'UPDATE tenants SET business_type_chosen_at = now()' in migration
     assert "server_default='ONLINE_STORE'" in migration
+
+
+# --- Lot 24b : incident du 29/09 (« Je peux payer en plusieurs fois ? » → transfert) ----------
+
+def test_payment_question_in_a_dealership_leads_to_the_visit_not_to_a_transfer():
+    decision = evaluate(sig("PAIEMENT"), HandoffSettingsView(), False, dealership=True)
+    assert (decision.mode, decision.rule) == (ALLOW_TRANSFER, "DEALER_FINANCING")
+    assert "Ne transfère pas pour cette question" in decision.instruction
+    assert "Ne donne aucun chiffre" in decision.instruction
+    # Boutique en ligne : inchangé ; une vraie demande d'humain reste prioritaire.
+    assert evaluate(sig("PAIEMENT"), HandoffSettingsView(), False).rule is None
+    assert evaluate(sig("PAIEMENT", "DEMANDE_HUMAIN"), HandoffSettingsView(), False, dealership=True).rule == "HUMAN_REQUEST"
+    assert evaluate(sig("PAIEMENT", "DEMANDE_REMISE"), HandoffSettingsView(), False, dealership=True).rule == "DEALER_PRICE"
+
+
+def test_dealership_rules_no_longer_send_financing_questions_to_a_human():
+    assert "NE TRANSFÈRE PAS pour une première\n   question de ce type" in DEALERSHIP_RULES
+    assert "financement\n    possible" not in DEALERSHIP_RULES
+    assert "Exception : le financement et la reprise suivent la règle 6." in DEALERSHIP_RULES
+
+
+@pytest.mark.asyncio
+async def test_incident_payment_question_gets_the_instruction_and_no_transfer(client, db_session, unique_email, wire):
+    tenant = await _setup(db_session, unique_email, "pn-dealer-5")
+    await _set_business_type(db_session, tenant, CAR_DEALERSHIP)
+    reply = "Votre conseiller pourra vous présenter les possibilités de financement lors de votre visite. Quand seriez-vous disponible pour un essai ?"
+    state = wire({"intents": ["PAIEMENT"], "objections": []}, [text_response(reply)])
+
+    r = await client.post("/webhooks/whatsapp", json=_payload("pn-dealer-5", "221700000305", "Je peux payer en plusieurs fois ?"))
+
+    assert r.json()["ai_reply"] == reply
+    assert "Ne transfère pas pour cette question" in state["llm"].received_systems[0]
+    assert (await _conversation(db_session, tenant.id)).status == ConversationStatus.ACTIVE

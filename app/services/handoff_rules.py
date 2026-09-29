@@ -57,6 +57,7 @@ RULE_LABELS = {
     "MISSING_CONDITIONS": "conditions de vente non renseignées : question transmise à la boutique",
     "PROMISE_KEPT": "Bob a promis un suivi par un humain : transfert automatique",
     "DEALER_PRICE": "prix ou remise (concession) : à discuter avec un conseiller",
+    "DEALER_FINANCING": "paiement ou financement (concession) : présenté par le conseiller lors de la visite",
     "FINANCE_FIGURES": "chiffre de financement ou de reprise retiré de la réponse de Bob",
 }
 
@@ -134,6 +135,21 @@ def evaluate(
                 "Le client exprime une réclamation : essaie d'abord de comprendre et de résoudre "
                 "(vérifie sa commande avec check_order_status si besoin). Ne transfère à un humain "
                 "que si tu ne peux vraiment pas l'aider."
+            ),
+        )
+
+    if dealership and "PAIEMENT" in intents and "DEMANDE_REMISE" not in intents:
+        # Lot 24b — incident du 29/09 : « Je peux payer en plusieurs fois ? » → Bob transférait
+        # aussitôt. En concession, c'est une étape vers le rendez-vous, pas un motif de transfert.
+        return TurnDecision(
+            mode=ALLOW_TRANSFER,
+            rule="DEALER_FINANCING",
+            instruction=(
+                "Le client pose une question de paiement ou de financement. Ne donne aucun chiffre et "
+                "n'affirme pas quelles solutions existent : réponds que son conseiller pourra lui présenter "
+                "les possibilités de financement lors de sa visite, note son intérêt et propose-lui de venir "
+                "(demande ses disponibilités). Ne transfère pas pour cette question : seulement s'il insiste "
+                "pour avoir des chiffres tout de suite."
             ),
         )
 
