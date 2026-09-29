@@ -5,7 +5,7 @@ un humain. Bob ne confirme jamais un rendez-vous lui-même : il transmet la dema
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, Uuid, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -16,6 +16,8 @@ APPOINTMENT_KINDS = {
     "ESTIMATION_REPRISE": "Estimation de reprise",
 }
 STATUS_REQUESTED = "REQUESTED"
+STATUS_CONFIRMED = "CONFIRMED"
+STATUS_CANCELLED = "CANCELLED"
 
 
 class AppointmentRequest(Base):
@@ -39,5 +41,19 @@ class AppointmentRequest(Base):
     availability: Mapped[str] = mapped_column(String(300), nullable=False)  # texte libre (« samedi matin »)
     notes: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=STATUS_REQUESTED)
+
+    # Lot 25 — fiche de qualification remplie par Bob (plus de notes en vrac).
+    need: Mapped[str | None] = mapped_column(String(300))  # usage, besoin (« voiture familiale »)
+    budget: Mapped[str | None] = mapped_column(String(100))  # tel que donné par le client
+    trade_in: Mapped[str | None] = mapped_column(String(300))  # véhicule à reprendre : marque, modèle, année, km
+    financing_interest: Mapped[bool | None] = mapped_column(Boolean)  # None = non abordé
+
+    # Lot 25 — confirmation par un humain, rappels.
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)  # UTC
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_by: Mapped[str | None] = mapped_column(String(64))  # user_id
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # rappel au conseiller
+    customer_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

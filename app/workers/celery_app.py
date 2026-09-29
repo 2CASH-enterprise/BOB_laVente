@@ -20,6 +20,7 @@ settings = get_settings()
 TASK_MODULES = [
     "app.workers.opportunities",
     "app.workers.catalog_sync",
+    "app.workers.appointment_reminders",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -34,6 +35,11 @@ celery_app.conf.beat_schedule = {
     "sync-meta-catalogs-nightly": {
         "task": "app.workers.catalog_sync.sync_meta_catalogs_task",
         "schedule": crontab(hour=3, minute=0),
+    },
+    # Lot 25 — rappels de rendez-vous : la veille à partir de 18 h, heure de chaque boutique.
+    "appointment-reminders": {
+        "task": "app.workers.appointment_reminders.send_appointment_reminders_task",
+        "schedule": crontab(minute="*/15"),
     },
 }
 celery_app.conf.timezone = "UTC"

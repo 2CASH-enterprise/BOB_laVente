@@ -211,3 +211,25 @@ def test_business_type_card_is_first_in_bob_settings_and_loaded_with_the_tab():
     assert "loadBusinessType();" in _show_tab_line("bob")
     load = re.search(r"async function loadBusinessType\(\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert "${esc(o.code)}" in load and "${esc(o.label)}" in load
+
+
+# --- Lot 25 : page Rendez-vous ------------------------------------------------------------------
+
+def test_appointments_page_only_for_dealerships_and_loaded_with_its_tab():
+    nav = re.search(r"<nav>(.*?)</nav>", HTML, re.S).group(1)
+    assert 'data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden"' in nav
+    apply = re.search(r"function applyBusinessType\(code\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert 'classList.toggle("hidden", code !== "CAR_DEALERSHIP")' in apply
+    assert HTML.count("applyBusinessType(") >= 4  # définition + choix initial + réglage + chargement
+    assert "loadAppointments(currentAppointmentView)" in _show_tab_line("appointments")
+    assert "if (item.kind === \"APPOINTMENT\") return `showTab('appointments')`" in HTML
+
+
+def test_appointment_cards_escape_everything_from_customers_and_bob():
+    card = re.search(r"function appointmentCard\(a, view\) \{(.*?)\n\}", HTML, re.S).group(1)
+    for field in ("a.need", "a.budget", "a.trade_in", "a.notes", "a.kind_label", "a.vehicle", "a.customer",
+                  "a.availability", "a.scheduled_label", "a.id", "a.conversation_id"):
+        assert f"esc({field})" in card, field
+    for raw in ("${a.need}", "${a.notes}", "${a.customer}", "${a.availability}", "${a.vehicle}"):
+        assert raw not in card
+    assert '${a.can_notify ? "checked" : "disabled"}' in card  # prévenir le client : coché par défaut

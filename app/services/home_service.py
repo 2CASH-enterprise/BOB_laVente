@@ -31,6 +31,7 @@ DETAIL_MAX_CHARS = 120
 
 # Raison lisible d'une attente, d'après le dernier message de transfert (règles des lots 13 à 16).
 _REASONS = [
+    ("Rendez-vous à confirmer", "Rendez-vous à confirmer", "info"),  # lot 24/25 (concession)
     (RULE_LABELS["MISSING_CONDITIONS"], "Question transmise par Bob", "danger"),
     (RULE_LABELS["PROMISE_KEPT"], "Bob a promis un suivi", "warning"),
     (RULE_LABELS["HUMAN_REQUEST"], "Demande à parler à quelqu'un", "danger"),
@@ -186,6 +187,25 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
             "since": _aware(m.created_at), "action": "Voir",
         })
 
+    # Lot 25 — rendez-vous demandés à Bob, pas encore confirmés par un conseiller, dont la
+    # conversation n'est plus en attente (sinon elle est déjà listée ci-dessus).
+    from app.models.appointment_request import APPOINTMENT_KINDS, STATUS_REQUESTED, AppointmentRequest
+
+    pending_appointments = (await db.execute(select(AppointmentRequest).where(
+        AppointmentRequest.tenant_id == tenant_id, AppointmentRequest.status == STATUS_REQUESTED,
+    ))).scalars().all()
+    for a in pending_appointments:
+        conv = conversations.get(a.conversation_id)
+        if conv is not None and conv.status == ConversationStatus.WAITING_HUMAN:
+            continue
+        what = APPOINTMENT_KINDS.get(a.kind, a.kind)
+        todo.append({
+            "kind": "APPOINTMENT", "conversation_id": str(a.conversation_id), "customer": _name(customers.get(a.customer_id)),
+            "reason": "Rendez-vous à confirmer", "tone": "info",
+            "detail": _short(" · ".join(p for p in (what, a.vehicle_label, a.availability) if p)),
+            "since": _aware(a.created_at), "action": "Confirmer",
+        })
+
     for o in orders:
         if o.status == OrderStatus.PENDING and _aware(o.created_at) <= now - timedelta(days=STALE_ORDER_DAYS):
             days_waiting = (now - _aware(o.created_at)).days
@@ -195,7 +215,7 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                 "detail": f"Commande de {float(o.total_amount):,.0f} {o.currency}".replace(",", " "),
                 "since": _aware(o.created_at), "action": "Voir la commande",
             })
-    order_of_kind = {"CONVERSATION": 0, "CALLBACK": 1, "ORDER": 2}
+    order_of_kind = {"CONVERSATION": 0, "APPOINTMENT": 1, "CALLBACK": 2, "ORDER": 3}
     todo.sort(key=lambda t: (order_of_kind[t["kind"]], t["since"]))
 
     # --- Entonnoir ---------------------------------------------------------------------------

@@ -227,10 +227,17 @@ TOOL_DEFINITIONS = [
                 },
                 "product_id": {"type": "string", "description": "UUID du véhicule concerné, s'il est au catalogue"},
                 "vehicle": {"type": "string", "description": "Véhicule tel que le client le désigne, sinon"},
-                "notes": {
+                "need": {"type": "string", "description": "Besoin ou usage exprimé par le client (ex. « voiture familiale »), s'il l'a dit"},
+                "budget": {"type": "string", "description": "Budget donné par le client, avec ses mots, s'il l'a dit"},
+                "trade_in": {
                     "type": "string",
-                    "description": "Ce qui aide le conseiller : besoin, budget, reprise envisagée (modèle, année, kilométrage), intérêt pour un financement",
+                    "description": "Véhicule à reprendre : marque, modèle, année, kilométrage, tel que le client l'a décrit",
                 },
+                "financing_interest": {
+                    "type": "boolean",
+                    "description": "true si le client s'intéresse à un financement ou à un paiement en plusieurs fois, false s'il a dit non ; omettre si le sujet n'a pas été abordé",
+                },
+                "notes": {"type": "string", "description": "Autre information utile au conseiller"},
             },
             "required": ["kind", "availability"],
         },

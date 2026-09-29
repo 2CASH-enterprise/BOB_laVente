@@ -227,6 +227,15 @@ class ToolExecutor:
         vehicle = (product.name if product is not None else (tool_input.get("vehicle") or "").strip()) or None
         notes = (tool_input.get("notes") or "").strip() or None
 
+        def _text(key: str, limit: int) -> str | None:
+            value = (tool_input.get(key) or "")
+            value = value.strip() if isinstance(value, str) else ""
+            return value[:limit] or None
+
+        need, budget, trade_in = _text("need", 300), _text("budget", 100), _text("trade_in", 300)
+        financing = tool_input.get("financing_interest")
+        financing = financing if isinstance(financing, bool) else None
+
         self.db.add(AppointmentRequest(
             tenant_id=self.tenant_id,
             conversation_id=self.conversation.id,
@@ -236,6 +245,10 @@ class ToolExecutor:
             vehicle_label=vehicle[:255] if vehicle else None,
             availability=availability[:300],
             notes=notes,
+            need=need,
+            budget=budget,
+            trade_in=trade_in,
+            financing_interest=financing,
         ))
 
         details = [APPOINTMENT_KINDS[kind]]
@@ -243,8 +256,16 @@ class ToolExecutor:
             details.append(vehicle)
         details.append(f"disponibilités : {availability}")
         reason = "Rendez-vous à confirmer — " + " — ".join(details)
-        if notes:
-            reason += f" (notes : {notes})"
+        qualification = [
+            f"besoin : {need}" if need else None,
+            f"budget : {budget}" if budget else None,
+            f"reprise : {trade_in}" if trade_in else None,
+            {True: "financement : intéressé", False: "financement : non"}.get(financing),
+            f"notes : {notes}" if notes else None,
+        ]
+        qualification = [q for q in qualification if q]
+        if qualification:
+            reason += " (" + " ; ".join(qualification) + ")"
         self.conversation.status = ConversationStatus.WAITING_HUMAN
         self.handoff_requested = True
         self.handoff_reason = reason
