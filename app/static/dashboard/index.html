@@ -197,6 +197,16 @@
     border-radius: 20px; padding: 36px 32px; box-shadow: var(--shadow-hover);
   }
   .auth-brand { display: flex; justify-content: center; margin-bottom: 24px; }
+  /* Lot 24 — choix du secteur après l'inscription */
+  #segment-screen { position: fixed; inset: 0; z-index: 1000; background: var(--bg); overflow-y: auto; padding: 24px 16px; }
+  #segment-screen .segment-box { max-width: 640px; margin: 64px auto; }
+  #segment-screen h2 { margin: 0 0 6px; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; text-align: center; color: var(--text); }
+  #segment-screen .segment-sub { text-align: center; color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+  .segment-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .segment-option { display: flex; flex-direction: column; justify-content: flex-start; text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; cursor: pointer; color: var(--text); font: inherit; transition: border-color .15s, box-shadow .15s; }
+  .segment-option:hover, .segment-option:focus-visible { border-color: var(--accent-light); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+  .segment-option strong { display: block; font-size: 16px; margin-bottom: 6px; }
+  .segment-option span { display: block; font-size: 13px; color: var(--muted); line-height: 1.5; }
   #login-screen h2, #signup-screen h2, #mfa-screen h2, #forgot-screen h2, #reset-screen h2 { color: var(--text); margin: 0 0 18px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; text-align: center; }
   #login-screen input, #signup-screen input, #mfa-screen input, #forgot-screen input, #reset-screen input {
     width: 100%; height: 46px; padding: 0 14px; margin-bottom: 10px; background: var(--panel); border: 1px solid var(--border-strong);
@@ -365,6 +375,15 @@
   </p>
 </div>
 
+<div id="segment-screen" class="hidden" role="dialog" aria-modal="true" aria-labelledby="segment-title">
+  <div class="segment-box">
+    <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
+    <h2 id="segment-title">Quel est votre secteur d'activité&nbsp;?</h2>
+    <p class="segment-sub">Bob adapte sa façon de travailler à votre métier. Vous pourrez le changer plus tard dans Réglages de Bob.</p>
+    <div class="segment-options" id="segment-options"></div>
+    <div id="segment-msg" style="margin-top: 14px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
 <div id="signup-screen" class="hidden">
   <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
   <h2>Créer votre compte Bob</h2>
@@ -680,6 +699,18 @@
         La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances.
         Ce que Bob sait de votre boutique se règle dans la Base de connaissances.
       </p>
+      <div class="card" style="max-width: 976px; margin-bottom: 16px;">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Type d'activité</div>
+        <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
+          Bob adapte son objectif à votre métier : vendre sur WhatsApp, ou obtenir un rendez-vous en concession.
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <select id="business-type" class="input" style="max-width: 320px; margin: 0;"></select>
+          <button class="action" onclick="saveBusinessType()">Enregistrer</button>
+          <span id="business-type-msg" style="font-size: 13px;"></span>
+        </div>
+        <p id="business-type-help" style="font-size: 12px; color: var(--muted); margin: 10px 0 0;"></p>
+      </div>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix</div>
@@ -824,6 +855,7 @@ function logout() {
   localStorage.removeItem("bob_token");
   token = null;
   document.getElementById("app").classList.add("hidden");
+  document.getElementById("segment-screen").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
 }
 
@@ -1036,6 +1068,7 @@ function enterApp() {
   AUTH_SCREENS.forEach((s) => document.getElementById(s).classList.add("hidden"));
   document.getElementById("app").classList.remove("hidden");
   loadTenant();
+  checkBusinessTypeChosen();
   if (pendingConversationId) {
     const id = pendingConversationId;
     pendingConversationId = null;
@@ -1051,6 +1084,63 @@ function enterApp() {
     return;
   }
   loadOverview();
+}
+
+// ---- Lot 24 : type d'activité (boutique en ligne / concession automobile) ----
+const BUSINESS_TYPE_HELP = {
+  ONLINE_STORE: "Bob répond, conseille, prend les commandes et envoie votre lien de paiement.",
+  CAR_DEALERSHIP: "Bob renseigne sur vos véhicules, qualifie le client et obtient un rendez-vous (essai, visite, reprise). Il ne prend pas de commande, ne négocie pas et ne donne jamais de chiffre de financement ou de reprise : un conseiller confirme chaque rendez-vous.",
+};
+
+async function checkBusinessTypeChosen() {
+  let bt;
+  try { bt = await api("/api/v1/tenants/me/business-type"); } catch (e) { return; }
+  if (bt.chosen) return;
+  document.getElementById("segment-options").innerHTML = bt.options
+    .map((o) => `<button type="button" class="segment-option" onclick="chooseBusinessType('${esc(o.code)}')"><strong>${esc(o.label)}</strong><span>${esc(o.description)}</span></button>`)
+    .join("");
+  document.getElementById("segment-screen").classList.remove("hidden");
+}
+
+async function chooseBusinessType(code) {
+  const msg = document.getElementById("segment-msg");
+  try {
+    await api("/api/v1/tenants/me/business-type", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_type: code }),
+    });
+    document.getElementById("segment-screen").classList.add("hidden");
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function loadBusinessType() {
+  let bt;
+  try { bt = await api("/api/v1/tenants/me/business-type"); } catch (e) { return; }
+  const select = document.getElementById("business-type");
+  select.innerHTML = bt.options.map((o) => `<option value="${esc(o.code)}">${esc(o.label)}</option>`).join("");
+  select.value = bt.business_type;
+  select.onchange = () => { document.getElementById("business-type-help").textContent = BUSINESS_TYPE_HELP[select.value] || ""; };
+  select.onchange();
+}
+
+async function saveBusinessType() {
+  const msg = document.getElementById("business-type-msg");
+  try {
+    await api("/api/v1/tenants/me/business-type", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_type: document.getElementById("business-type").value }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
 }
 
 function toggleSidebar() {
@@ -1081,7 +1171,7 @@ function showTab(name) {
   if (name === "orders") loadOrders();
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
-  if (name === "bob") { loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { loadBusinessType(); loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "settings") loadMfaStatus();
 }
 

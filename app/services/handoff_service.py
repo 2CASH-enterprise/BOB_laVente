@@ -51,6 +51,19 @@ def conversation_link(conversation: Conversation) -> str:
 
 def build_handoff_alert(customer: Customer, conversation: Conversation, reason: str | None) -> tuple[str, str]:
     name = customer_display_name(customer)
+    if reason and reason.startswith("Rendez-vous à confirmer"):
+        # Lot 24 — concession : la demande de rendez-vous est l'information utile, en tête.
+        return (
+            f"Rendez-vous à confirmer : {name}",
+            "Bonjour,\n\n"
+            "Bob a obtenu une demande de rendez-vous. Confirmez-la au client (date et heure) : "
+            "Bob ne la confirme jamais lui-même.\n\n"
+            f"Client : {name}\n"
+            f"Demande : {reason}\n\n"
+            "Vous pouvez lui répondre directement depuis la conversation, puis la rendre à Bob "
+            "(bouton « Rendre à l'IA »).\n\n"
+            f"Ouvrir la conversation : {conversation_link(conversation)}",
+        )
     subject = f"Un client attend votre réponse : {name}"
     body = (
         "Bonjour,\n\n"

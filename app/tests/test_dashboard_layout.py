@@ -190,3 +190,24 @@ def test_catalog_can_be_disconnected_after_confirmation():
     fn = re.search(r"async function disconnectMetaCatalog\(\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert fn.strip().startswith("if (!confirm(") and 'method: "DELETE"' in fn
     assert 'getElementById("meta-disconnect-btn").classList.toggle("hidden", !metaConnected)' in HTML
+
+
+# --- Lot 24 : type d'activité ----------------------------------------------------------------
+
+def test_segment_screen_after_signup_escapes_options_and_can_be_left_by_logout():
+    assert 'id="segment-screen" class="hidden" role="dialog"' in HTML
+    check = re.search(r"async function checkBusinessTypeChosen\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert "if (bt.chosen) return;" in check
+    assert "chooseBusinessType('${esc(o.code)}')" in check and "${esc(o.label)}" in check and "${esc(o.description)}" in check
+    enter = re.search(r"function enterApp\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert "checkBusinessTypeChosen();" in enter
+    logout = re.search(r"function logout\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert 'getElementById("segment-screen").classList.add("hidden")' in logout
+
+
+def test_business_type_card_is_first_in_bob_settings_and_loaded_with_the_tab():
+    section = _section("bob")
+    assert section.index("Type d'activité") < section.index("Négociation de prix")
+    assert "loadBusinessType();" in _show_tab_line("bob")
+    load = re.search(r"async function loadBusinessType\(\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert "${esc(o.code)}" in load and "${esc(o.label)}" in load

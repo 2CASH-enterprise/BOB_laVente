@@ -204,4 +204,35 @@ TOOL_DEFINITIONS = [
             "required": ["items"],
         },
     },
+    {
+        # Lot 24 — concession automobile uniquement (retiré à l'IA en boutique en ligne).
+        "name": "request_appointment",
+        "description": (
+            "Enregistre une demande de rendez-vous à la concession (essai, visite ou estimation de "
+            "reprise) et la transmet à un conseiller, qui la confirmera au client. À utiliser dès que "
+            "le client accepte de venir et a donné ses disponibilités. Tu ne confirmes JAMAIS toi-même "
+            "une date ou une heure : dis au client qu'un conseiller va lui confirmer le rendez-vous."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["ESSAI", "VISITE", "ESTIMATION_REPRISE"],
+                    "description": "Type de rendez-vous",
+                },
+                "availability": {
+                    "type": "string",
+                    "description": "Disponibilités données par le client, avec ses mots (ex. « samedi matin »)",
+                },
+                "product_id": {"type": "string", "description": "UUID du véhicule concerné, s'il est au catalogue"},
+                "vehicle": {"type": "string", "description": "Véhicule tel que le client le désigne, sinon"},
+                "notes": {
+                    "type": "string",
+                    "description": "Ce qui aide le conseiller : besoin, budget, reprise envisagée (modèle, année, kilométrage), intérêt pour un financement",
+                },
+            },
+            "required": ["kind", "availability"],
+        },
+    },
 ]

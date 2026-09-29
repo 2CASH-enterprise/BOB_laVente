@@ -74,6 +74,72 @@ async def update_tenant_profile(
 # lui-même — évite qu'un compte se passe payant sans jamais avoir payé.
 
 
+class BusinessTypeOption(BaseModel):
+    code: str
+    label: str
+    description: str
+
+
+class BusinessTypeResponse(BaseModel):
+    business_type: str
+    chosen: bool
+    options: list[BusinessTypeOption]
+
+
+class BusinessTypeUpdate(BaseModel):
+    business_type: str
+
+
+def _business_type_response(tenant: Tenant) -> BusinessTypeResponse:
+    from app.services.business_type import BUSINESS_TYPES, normalize
+
+    return BusinessTypeResponse(
+        business_type=normalize(tenant.business_type),
+        chosen=tenant.business_type_chosen_at is not None,
+        options=[BusinessTypeOption(code=code, **info) for code, info in BUSINESS_TYPES.items()],
+    )
+
+
+@router.get("/me/business-type", response_model=BusinessTypeResponse)
+async def get_business_type(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BusinessTypeResponse:
+    """Lot 24 — type d'activité de la boutique, et s'il a déjà été choisi (écran d'après inscription)."""
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+    return _business_type_response(tenant)
+
+
+@router.put("/me/business-type", response_model=BusinessTypeResponse, dependencies=[Depends(require_role("ADMIN"))])
+async def update_business_type(
+    payload: BusinessTypeUpdate,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BusinessTypeResponse:
+    from datetime import datetime, timezone
+
+    from app.services.audit import log_audit_event
+    from app.services.business_type import BUSINESS_TYPES
+
+    if payload.business_type not in BUSINESS_TYPES:
+        raise HTTPException(status_code=422, detail="Type d'activité inconnu")
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+    previous = tenant.business_type
+    tenant.business_type = payload.business_type
+    tenant.business_type_chosen_at = datetime.now(timezone.utc)
+    await log_audit_event(
+        db, actor=str(current_user.user_id), action="BUSINESS_TYPE_CHANGED", tenant_id=tenant.id,
+        details={"from": previous, "to": payload.business_type},
+    )
+    await db.commit()
+    await db.refresh(tenant)
+    return _business_type_response(tenant)
+
+
 class MessagingSettingsResponse(BaseModel):
     outbound_mode: str
     kill_switch: str

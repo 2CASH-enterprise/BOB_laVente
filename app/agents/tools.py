@@ -27,8 +27,18 @@ PRODUCT_DESCRIPTION_MAX_CHARS = 300
 
 
 class ToolExecutor:
-    def __init__(self, db: AsyncSession, tenant_id: uuid.UUID, conversation: Conversation, customer_id: uuid.UUID | None = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        conversation: Conversation,
+        customer_id: uuid.UUID | None = None,
+        business_type: str | None = None,
+    ):
         self.db = db
+        # Lot 24 : les outils sont filtrés selon le type d'activité, ici aussi (verrou) et pas
+        # seulement dans la liste envoyée à l'IA.
+        self.business_type = business_type
         self.tenant_id = tenant_id
         self.conversation = conversation
         self.customer_id = customer_id or conversation.customer_id
@@ -40,9 +50,13 @@ class ToolExecutor:
         self.turn = None
 
     async def execute(self, tool_name: str, tool_input: dict) -> dict:
+        from app.services.business_type import tool_allowed
+
         handler = getattr(self, f"_tool_{tool_name}", None)
         if handler is None:
             return {"error": f"Outil inconnu : {tool_name}"}
+        if not tool_allowed(self.business_type, tool_name):
+            return {"error": f"Outil non disponible pour cette activité : {tool_name}"}
         return await handler(tool_input)
 
     async def _product_to_dict(self, product) -> dict:
@@ -187,6 +201,65 @@ class ToolExecutor:
         )
         await self.db.flush()
         return {"status": "handoff_registered", "reason": reason}
+
+    async def _tool_request_appointment(self, tool_input: dict) -> dict:
+        """
+        Lot 24 (concession) : enregistre la demande puis la transmet à un conseiller. Le transfert
+        n'est pas soumis au verrou « transfert interdit » : une demande de rendez-vous concrète est
+        toujours un motif légitime, et un rendez-vous que personne ne verrait serait perdu.
+        """
+        from app.models.appointment_request import APPOINTMENT_KINDS, AppointmentRequest
+
+        kind = tool_input.get("kind")
+        availability = (tool_input.get("availability") or "").strip()
+        if kind not in APPOINTMENT_KINDS:
+            return {"error": "Type de rendez-vous invalide : ESSAI, VISITE ou ESTIMATION_REPRISE"}
+        if not availability:
+            return {"error": "Demande d'abord au client quand il est disponible."}
+
+        product = None
+        product_id = tool_input.get("product_id")
+        if product_id:
+            try:
+                product = await self.product_repo.get(tenant_id=self.tenant_id, record_id=uuid.UUID(str(product_id)))
+            except (ValueError, TypeError):
+                product = None
+        vehicle = (product.name if product is not None else (tool_input.get("vehicle") or "").strip()) or None
+        notes = (tool_input.get("notes") or "").strip() or None
+
+        self.db.add(AppointmentRequest(
+            tenant_id=self.tenant_id,
+            conversation_id=self.conversation.id,
+            customer_id=self.customer_id,
+            product_id=product.id if product is not None else None,
+            kind=kind,
+            vehicle_label=vehicle[:255] if vehicle else None,
+            availability=availability[:300],
+            notes=notes,
+        ))
+
+        details = [APPOINTMENT_KINDS[kind]]
+        if vehicle:
+            details.append(vehicle)
+        details.append(f"disponibilités : {availability}")
+        reason = "Rendez-vous à confirmer — " + " — ".join(details)
+        if notes:
+            reason += f" (notes : {notes})"
+        self.conversation.status = ConversationStatus.WAITING_HUMAN
+        self.handoff_requested = True
+        self.handoff_reason = reason
+        self.db.add(Message(
+            tenant_id=self.tenant_id,
+            conversation_id=self.conversation.id,
+            sender=MessageSender.SYSTEM,
+            message_type="handoff",
+            content=f"Transfert vers un humain : {reason}",
+        ))
+        await self.db.flush()
+        return {
+            "status": "appointment_requested",
+            "instruction": "Dis au client que sa demande est bien notée et qu'un conseiller va lui confirmer le rendez-vous. Ne confirme ni date ni heure toi-même.",
+        }
 
     async def _tool_negotiate_price(self, tool_input: dict) -> dict:
         from decimal import Decimal, InvalidOperation

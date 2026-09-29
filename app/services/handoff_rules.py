@@ -56,6 +56,8 @@ RULE_LABELS = {
     "AI_OUTAGE_CALLBACK": "panne de l'IA : client à rappeler",
     "MISSING_CONDITIONS": "conditions de vente non renseignées : question transmise à la boutique",
     "PROMISE_KEPT": "Bob a promis un suivi par un humain : transfert automatique",
+    "DEALER_PRICE": "prix ou remise (concession) : à discuter avec un conseiller",
+    "FINANCE_FIGURES": "chiffre de financement ou de reprise retiré de la réponse de Bob",
 }
 
 # Message fixe au client selon la règle de transfert immédiat (défaut : TRANSFER_MESSAGE).
@@ -96,6 +98,7 @@ def evaluate(
     negotiation_active: bool,
     currency: str = "",
     known_categories: set[str] | None = None,
+    dealership: bool = False,
 ) -> TurnDecision:
     """
     `signal` = {"intents": [...], "objections": [...], "offered_amount": float|None}, ou None.
@@ -135,6 +138,19 @@ def evaluate(
         )
 
     if "DEMANDE_REMISE" in intents:
+        if dealership:
+            # Lot 24 — en concession, Bob ne négocie pas et n'accorde rien : le prix se discute
+            # avec un conseiller. Il oriente vers le rendez-vous (qui transmet de lui-même).
+            return TurnDecision(
+                mode=ALLOW_TRANSFER,
+                rule="DEALER_PRICE",
+                instruction=(
+                    "Le client parle de remise ou de prix final. N'accorde aucune remise et n'annonce aucun "
+                    "prix négocié : explique que le prix se discute avec un conseiller lors de la visite, et "
+                    "propose-lui de venir (request_appointment dès qu'il donne ses disponibilités). S'il "
+                    "insiste pour avoir une réponse maintenant, utilise handoff_to_human."
+                ),
+            )
         if negotiation_active and offered:
             return TurnDecision(
                 mode=FORBID_TRANSFER,
@@ -207,11 +223,17 @@ async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
         select(TenantNegotiationSettings).where(TenantNegotiationSettings.tenant_id == tenant.id)
     )).scalar_one_or_none()
     # Mêmes conditions que l'outil negotiate_price : activée ET plan payant.
-    negotiation_active = negotiation is not None and negotiation.enabled and tenant.is_paid
+    from app.services.business_type import is_dealership
+
+    dealership = is_dealership(tenant)
+    # Lot 24 : jamais de négociation par Bob en concession, quel que soit le réglage enregistré.
+    negotiation_active = negotiation is not None and negotiation.enabled and tenant.is_paid and not dealership
     from app.services.strategy_service import knowledge_categories
 
     known = await knowledge_categories(db, tenant.id)
-    return evaluate(signal, view, negotiation_active, currency=tenant.currency or "", known_categories=known)
+    return evaluate(
+        signal, view, negotiation_active, currency=tenant.currency or "", known_categories=known, dealership=dealership,
+    )
 
 
 def outage_message(settings: HandoffSettingsView) -> tuple[str, str]:

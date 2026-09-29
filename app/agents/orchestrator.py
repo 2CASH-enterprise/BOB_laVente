@@ -20,6 +20,7 @@ from app.models.conversation import Conversation, Message, MessageSender
 from app.models.tenant import Tenant
 from app.repositories.knowledge_entry_repository import KnowledgeEntryRepository
 from app.services.customer_memory_service import build_customer_memory
+from app.services.business_type import tools_for
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,9 @@ async def generate_ai_reply_detailed(
     knowledge_entries = await knowledge_repo.list_active(tenant.id)
     customer_memory = await build_customer_memory(db, tenant.id, conversation.customer_id)
     system_prompt = build_system_prompt(tenant, knowledge_entries, customer_memory)
-    executor = ToolExecutor(db, tenant.id, conversation)
+    business_type = getattr(tenant, "business_type", None)
+    executor = ToolExecutor(db, tenant.id, conversation, business_type=business_type)
+    tools = tools_for(business_type, TOOL_DEFINITIONS)
     # Lot 13 : consigne des règles de transmission pour CE message, et verrou du transfert.
     if turn is not None:
         executor.turn = turn
@@ -131,7 +134,7 @@ async def generate_ai_reply_detailed(
     try:
         for _ in range(settings.max_tool_iterations):
             response = await _create_with_retries(
-                llm_client, system=system_prompt, messages=messages, tools=TOOL_DEFINITIONS
+                llm_client, system=system_prompt, messages=messages, tools=tools
             )
             content_blocks = response.get("content", [])
             stop_reason = response.get("stop_reason")

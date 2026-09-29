@@ -30,6 +30,8 @@ from app.services.handoff_rules import (
     outage_message,
     transfer_message,
 )
+from app.services.business_type import is_dealership
+from app.services.finance_guard import FINANCE_MESSAGE, FINANCE_MESSAGE_NO_TRANSFER, contains_financing_figure
 from app.services.promise_guard import contains_human_promise, remove_human_promises
 from app.services.signal_service import classify_and_store
 from app.services.strategy_service import apply_strategy
@@ -291,6 +293,27 @@ async def receive_webhook(
                 elif await rate_limiter.is_allowed(f"ai-outage:{tenant_id}", limit=1, window_seconds=3600):
                     subject, body = build_outage_alert(tenant.name)
                     outage_email = {"to": tenant.email, "subject": subject, "body": body}
+            elif is_dealership(tenant) and contains_financing_figure(reply_text):
+                # Lot 24 — concession : jamais de mensualité, de taux, d'apport ni de valeur de reprise
+                # annoncés par Bob. La réponse entière est remplacée ; le client est transmis à un
+                # conseiller, sauf si une règle interdit le transfert pour ce message.
+                db.add(Message(
+                    tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                    message_type="finance_removed",
+                    content="Réponse de Bob remplacée : elle contenait un chiffre de financement ou de reprise.",
+                ))
+                if conversation.status == ConversationStatus.WAITING_HUMAN:
+                    reply_text = FINANCE_MESSAGE_NO_TRANSFER  # déjà transmis (rendez-vous, transfert)
+                elif turn.mode == FORBID_TRANSFER:
+                    reply_text = FINANCE_MESSAGE_NO_TRANSFER
+                else:
+                    reply_text = FINANCE_MESSAGE
+                    conversation.status = ConversationStatus.WAITING_HUMAN
+                    db.add(Message(
+                        tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                        message_type="handoff", content=f"Transfert vers un humain : Règle — {RULE_LABELS['FINANCE_FIGURES']}",
+                    ))
+                    turn.rule = "FINANCE_FIGURES"
             elif conversation.status == ConversationStatus.ACTIVE and contains_human_promise(reply_text):
                 # Lot 16 — Bob promet un suivi par un humain SANS avoir transféré : le code tient
                 # la promesse (vrai transfert, commerçant prévenu), ou la retire si une règle
