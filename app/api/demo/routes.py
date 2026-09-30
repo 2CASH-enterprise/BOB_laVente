@@ -31,12 +31,16 @@ router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
 
 DEMO_CUSTOMER_HANDLE = "demo-web-session"
 MAX_CSV_SIZE_BYTES = 10 * 1024 * 1024
+# Lot 33 — créneaux par défaut d'une concession de démo (modifiables ensuite dans Rendez-vous).
+DEMO_OPENING_HOURS = {str(day): [["09:00", "12:00"], ["14:00", "18:00"]] for day in range(6)}
 
 
 @router.post("/create", response_model=DemoCreateResponse)
 async def create_demo(
     company_name: str = Form(...),
     currency: str = Form("XOF"),
+    country: str = Form("SN"),
+    business_type: str = Form("ONLINE_STORE"),
     file: UploadFile = None,
     db: AsyncSession = Depends(get_db),
 ) -> DemoCreateResponse:
@@ -45,8 +49,18 @@ async def create_demo(
     pensé pour la prospection (section « Instant AI Seller »). Un compte technique
     est créé en arrière-plan (identifiants aléatoires, jamais montrés au prospect).
     """
+    from datetime import datetime, timezone
+
+    from app.services.business_type import BUSINESS_TYPES, CAR_DEALERSHIP
+
     if not company_name.strip():
         raise HTTPException(status_code=400, detail="Le nom de l'entreprise est requis")
+    if business_type not in BUSINESS_TYPES:
+        raise HTTPException(status_code=400, detail="Secteur d'activité inconnu")
+    country = (country or "").strip().upper()
+    if len(country) != 2 or not country.isalpha():
+        raise HTTPException(status_code=400, detail="Pays invalide")
+    dealership = business_type == CAR_DEALERSHIP
     if file is None or not file.filename:
         raise HTTPException(status_code=400, detail="Un fichier catalogue (CSV) est requis")
 
@@ -59,16 +73,20 @@ async def create_demo(
         raise HTTPException(status_code=400, detail="Encodage non supporté, utilisez UTF-8") from None
 
     try:
-        mapped_csv = map_csv_to_canonical_format(content, default_currency=currency.upper()[:3] or "XOF")
+        mapped_csv = map_csv_to_canonical_format(content, default_currency=currency.upper()[:3] or "XOF",
+                                                 keep_vehicle=dealership)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
     tenant = Tenant(
-        name=company_name.strip(),
-        country="SN",
+        name=company_name.strip()[:255],
+        country=country,
         currency=currency.upper()[:3] or "XOF",
         email=f"demo-{secrets.token_hex(8)}@bob-demo.internal",
         is_demo=True,
+        # Lot 33 : le secteur choisi dans la démo est le type d'activité définitif du compte.
+        business_type=business_type,
+        business_type_chosen_at=datetime.now(timezone.utc),
     )
     db.add(tenant)
     await db.flush()
@@ -83,7 +101,13 @@ async def create_demo(
     db.add(owner)
     await db.flush()
 
-    import_result = await import_catalog_csv(db, tenant.id, mapped_csv)
+    import_result = await import_catalog_csv(db, tenant.id, mapped_csv, with_vehicles=dealership)
+    if dealership:
+        from app.models.appointment_settings import TenantAppointmentSettings
+
+        db.add(TenantAppointmentSettings(tenant_id=tenant.id, online_booking=True,
+                                         opening_hours=DEMO_OPENING_HOURS, slot_minutes=60, capacity=1))
+        await db.commit()
 
     demo_token = create_access_token(user_id=owner.id, tenant_id=tenant.id, role=owner.role.value)
 
@@ -142,10 +166,18 @@ async def demo_chat(
     )
     history = list(reversed((await db.execute(history_stmt)).scalars().all()))[:-1]  # exclut le message qu'on vient d'ajouter
 
+    booking_outbox: list = []
     reply_text = await generate_ai_reply(
         db=db, tenant=tenant, conversation=conversation, history=history,
-        incoming_text=payload.message, llm_client=llm_client,
+        incoming_text=payload.message, llm_client=llm_client, booking_outbox=booking_outbox,
     )
+    from app.integrations.whatsapp.formatting import to_whatsapp
+    from app.services import appointment_service
+    from app.services.local_time import tenant_zone
+
+    reply_text = to_whatsapp(reply_text)  # lot 31/33 : la démo montre exactement ce que WhatsApp afficherait
+    # Lot 33 : la confirmation fixe du rendez-vous, comme sur WhatsApp.
+    extra = [appointment_service.confirmation_message(a, tenant.name, tenant_zone(tenant)) for a in booking_outbox]
 
     db.add(
         Message(
@@ -155,7 +187,12 @@ async def demo_chat(
     )
     await db.commit()
 
-    return DemoChatResponse(reply=reply_text)
+    for text in extra:
+        db.add(Message(tenant_id=current_user.tenant_id, conversation_id=conversation.id,
+                       sender=MessageSender.SYSTEM, message_type="appointment_confirmed", content=text))
+    await db.commit()
+
+    return DemoChatResponse(reply=reply_text, extra_messages=extra)
 
 
 @router.post("/promote", response_model=DemoPromoteResponse)
@@ -187,6 +224,21 @@ async def promote_demo(
     owner = await db.get(User, current_user.user_id)
     owner.email = payload.email.strip().lower()
     owner.hashed_password = hash_password(payload.password)
+    owner.full_name = payload.full_name.strip()
+
+    # Lot 33 : les rendez-vous pris pendant la démo (client fictif) sont annulés, pour qu'aucun
+    # rappel ne parte vers le nouveau compte.
+    from app.models.appointment_request import AppointmentRequest
+    from app.services import appointment_service
+
+    demo_customer = (await db.execute(select(Customer).where(
+        Customer.tenant_id == tenant.id, Customer.whatsapp_number == DEMO_CUSTOMER_HANDLE,
+    ))).scalar_one_or_none()
+    if demo_customer is not None:
+        for appointment in (await db.execute(select(AppointmentRequest).where(
+            AppointmentRequest.tenant_id == tenant.id, AppointmentRequest.customer_id == demo_customer.id,
+        ))).scalars().all():
+            appointment_service.cancel(appointment)
 
     tenant.is_demo = False
     tenant.email = owner.email

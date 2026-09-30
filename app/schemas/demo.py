@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DemoCreateResponse(BaseModel):
@@ -17,11 +17,14 @@ class DemoChatRequest(BaseModel):
 
 class DemoChatResponse(BaseModel):
     reply: str
+    # Lot 33 : messages fixes envoyés après la réponse (ex. confirmation de rendez-vous), comme sur WhatsApp.
+    extra_messages: list[str] = []
 
 
 class DemoPromoteRequest(BaseModel):
     email: str
     password: str
+    full_name: str = Field(min_length=1, max_length=255)  # lot 33 : comme la vraie inscription
 
 
 class DemoPromoteResponse(BaseModel):

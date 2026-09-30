@@ -22,7 +22,7 @@ async def test_promote_demo_keeps_catalog(client, db_session):
 
     response = await client.post(
         "/api/v1/demo/promote",
-        json={"email": "nouveau@example.com", "password": "supersecret123"},
+        json={"full_name": "Awa Diop", "email": "nouveau@example.com", "password": "supersecret123"},
         headers={"Authorization": f"Bearer {demo_token}"},
     )
     assert response.status_code == 200
@@ -41,7 +41,7 @@ async def test_promote_demo_flips_is_demo_flag(client, db_session):
 
     await client.post(
         "/api/v1/demo/promote",
-        json={"email": "flag@example.com", "password": "supersecret123"},
+        json={"full_name": "Awa Diop", "email": "flag@example.com", "password": "supersecret123"},
         headers={"Authorization": f"Bearer {demo_token}"},
     )
 
@@ -62,7 +62,7 @@ async def test_promote_demo_allows_login_with_new_credentials(client, db_session
 
     await client.post(
         "/api/v1/demo/promote",
-        json={"email": "login-test@example.com", "password": "supersecret123"},
+        json={"full_name": "Awa Diop", "email": "login-test@example.com", "password": "supersecret123"},
         headers={"Authorization": f"Bearer {demo_token}"},
     )
 
@@ -91,7 +91,7 @@ async def test_promote_demo_rejects_duplicate_email(client, db_session, unique_e
 
     response = await client.post(
         "/api/v1/demo/promote",
-        json={"email": unique_email, "password": "supersecret123"},
+        json={"full_name": "Awa Diop", "email": unique_email, "password": "supersecret123"},
         headers={"Authorization": f"Bearer {demo_token}"},
     )
     assert response.status_code == 409
@@ -115,7 +115,7 @@ async def test_promote_already_real_tenant_rejected(client, db_session, unique_e
     token = create_access_token(user_id=user.id, tenant_id=tenant.id, role=user.role.value)
     response = await client.post(
         "/api/v1/demo/promote",
-        json={"email": "x@example.com", "password": "supersecret123"},
+        json={"full_name": "Awa Diop", "email": "x@example.com", "password": "supersecret123"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 400
@@ -128,7 +128,7 @@ async def test_promote_rejects_short_password(client, db_session):
 
     response = await client.post(
         "/api/v1/demo/promote",
-        json={"email": "short@example.com", "password": "123"},
+        json={"full_name": "Awa Diop", "email": "short@example.com", "password": "123"},
         headers={"Authorization": f"Bearer {demo_token}"},
     )
     assert response.status_code == 400

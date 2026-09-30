@@ -35,7 +35,21 @@ def _match_column(header: str) -> str | None:
     return None
 
 
-def map_csv_to_canonical_format(raw_csv: str, default_currency: str) -> str:
+def _vehicle_headers(fieldnames) -> dict[str, str]:
+    """Lot 33 — colonnes véhicule (Marque, Année, Kilométrage…) reconnues dans le fichier du prospect."""
+    from app.services.vehicle import CSV_HEADERS
+
+    found = {}
+    for header in fieldnames:
+        normalized = _normalize(header or "")
+        for key, aliases in CSV_HEADERS.items():
+            if normalized in aliases and key not in found.values():
+                found[header] = key
+                break
+    return found
+
+
+def map_csv_to_canonical_format(raw_csv: str, default_currency: str, keep_vehicle: bool = False) -> str:
     """
     Convertit un CSV quelconque (en-têtes libres) vers le format attendu par
     import_catalog_csv (section 24) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE,
@@ -52,8 +66,10 @@ def map_csv_to_canonical_format(raw_csv: str, default_currency: str) -> str:
         if canonical and canonical not in column_mapping.values():
             column_mapping[header] = canonical
 
+    vehicle_headers = _vehicle_headers(reader.fieldnames) if keep_vehicle else {}
     output = io.StringIO()
     fieldnames = ["SKU", "NAME", "DESCRIPTION", "CATEGORY", "PRICE", "CURRENCY", "STOCK", "IMAGE_URL", "ACTIVE"]
+    fieldnames += list(vehicle_headers.values())  # lot 33 : fiches véhicules conservées pour une concession
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -70,6 +86,7 @@ def map_csv_to_canonical_format(raw_csv: str, default_currency: str) -> str:
                 "STOCK": mapped.get("STOCK") or "0",
                 "IMAGE_URL": mapped.get("IMAGE_URL", ""),
                 "ACTIVE": mapped.get("ACTIVE") or "true",
+                **{key: row.get(original, "") for original, key in vehicle_headers.items()},
             }
         )
 

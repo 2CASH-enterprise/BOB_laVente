@@ -70,6 +70,16 @@
   .whatsapp-cta p { font-size: 13px; color: var(--text); margin: 0 0 10px; }
   .whatsapp-cta a { display: inline-block; background: var(--accent); color: white; text-decoration: none; padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; }
 
+  /* Lot 33 : choix du secteur */
+  .sector-options { display: grid; gap: 12px; margin-bottom: 8px; }
+  .sector-option { text-align: left; background: var(--bg); border: 2px solid var(--border); border-radius: 14px; padding: 16px; cursor: pointer; font: inherit; color: var(--text); transition: border-color 0.15s ease, background 0.15s ease; }
+  .sector-option:hover, .sector-option:focus-visible { border-color: var(--accent-light); background: var(--accent-soft); outline: none; }
+  .sector-option .t { font-weight: 700; font-size: 15px; color: var(--accent); display: block; margin-bottom: 4px; }
+  .sector-option .d { font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .back-link { display: inline-block; font-size: 13px; color: var(--accent); cursor: pointer; margin-bottom: 14px; background: none; border: none; padding: 0; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bubble.system { align-self: flex-start; background: #FFF8E1; color: var(--text); border-bottom-left-radius: 4px; }
+
   .hidden { display: none !important; }
 </style>
 </head>
@@ -82,21 +92,36 @@
     <h1>Testez votre propre vendeur IA WhatsApp</h1>
     <p class="subtitle">Importez votre catalogue, et discutez immédiatement avec votre agent — avec vos vrais produits, vos vrais prix, votre vrai stock.</p>
 
-    <div class="field">
-      <label>Nom de votre entreprise</label>
-      <input id="company-name" class="input" placeholder="Ex. Boutique ABC">
+    <div id="sector-step">
+      <div class="field"><label>Votre secteur d'activité</label></div>
+      <div class="sector-options">
+        <button type="button" class="sector-option" onclick="chooseSector('ONLINE_STORE')">
+          <span class="t">🛍️ Boutique en ligne</span>
+          <span class="d">Bob répond, conseille et prend les commandes sur WhatsApp.</span>
+        </button>
+        <button type="button" class="sector-option" onclick="chooseSector('CAR_DEALERSHIP')">
+          <span class="t">🚗 Concession automobile</span>
+          <span class="d">Bob renseigne sur vos véhicules, qualifie le client et fixe un rendez-vous d'essai.</span>
+        </button>
+      </div>
     </div>
 
+    <div id="company-step" class="hidden">
+    <button type="button" class="back-link" onclick="changeSector()">← <span id="sector-label"></span> · changer</button>
     <div class="field">
-      <label>Devise</label>
-      <select id="currency" class="input">
-        <option value="XOF">FCFA (XOF)</option>
-        <option value="EUR">Euro (EUR)</option>
-        <option value="USD">Dollar (USD)</option>
-        <option value="MAD">Dirham (MAD)</option>
-        <option value="GHS">Cedi (GHS)</option>
-        <option value="NGN">Naira (NGN)</option>
-      </select>
+      <label for="company-name">Nom de votre entreprise</label>
+      <input id="company-name" class="input" placeholder="Ex. Boutique ABC" maxlength="255">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="country">Pays</label>
+        <select id="country" class="input" onchange="countryChanged()"></select>
+      </div>
+      <div class="field">
+        <label for="currency">Devise</label>
+        <select id="currency" class="input"></select>
+      </div>
     </div>
 
     <div class="field">
@@ -113,13 +138,14 @@
     <button class="cta" id="create-btn" onclick="createDemo()">Créer mon vendeur IA</button>
     <div id="setup-error"></div>
     <a class="sample-link" onclick="useSampleCatalog(event)" href="#">Pas de fichier sous la main ? Essayer avec un catalogue d'exemple</a>
+    </div>
   </div>
 
   <div id="import-result">
     <div class="check">✅</div>
     <h2>Votre vendeur IA est prêt !</h2>
     <div class="stats">
-      <div><div class="stat-value" id="stat-imported">0</div><div class="stat-label">PRODUITS IMPORTÉS</div></div>
+      <div><div class="stat-value" id="stat-imported">0</div><div class="stat-label" id="stat-imported-label">PRODUITS IMPORTÉS</div></div>
       <div><div class="stat-value" id="stat-available">0</div><div class="stat-label">DISPONIBLES</div></div>
     </div>
     <button class="cta" onclick="startChat()">Discuter avec mon agent →</button>
@@ -130,21 +156,16 @@
       <div class="avatar">🤖</div>
       <div class="titles">
         <div class="name" id="chat-company-name">Votre entreprise</div>
-        <div class="status">● Vendeur IA en ligne</div>
+        <div class="status" id="chat-status">● Vendeur IA en ligne</div>
       </div>
     </div>
     <div class="chat-messages" id="chat-messages"></div>
-    <div class="scenarios" id="scenarios">
-      <button class="scenario-btn" onclick="sendScenario('Bonjour, je cherche un produit, vous pouvez m\'aider ?')">🔍 Recherche produit</button>
-      <button class="scenario-btn" onclick="sendScenario('C\'est trop cher, vous pouvez faire un effort ?')">💬 Objection prix</button>
-      <button class="scenario-btn" onclick="sendScenario('Vous en avez encore en stock ?')">📦 Stock</button>
-      <button class="scenario-btn" onclick="sendScenario('Qu\'est-ce que vous avez d\'autre à me proposer avec ça ?')">✨ Upsell</button>
-      <button class="scenario-btn" onclick="sendScenario('Je le prends, comment on fait ?')">🛒 Commande</button>
-    </div>
+    <div class="scenarios" id="scenarios"></div>
     <div class="whatsapp-cta" id="whatsapp-cta">
-      <p>Convaincu ? Crée ton compte gratuit — ton catalogue reste exactement tel quel.</p>
+      <p>Convaincu ? Crée ton compte gratuit — ton catalogue et tes réglages restent exactement tels quels.</p>
       <div id="promote-form">
-        <input id="promote-email" class="input" type="email" placeholder="Ton email" style="margin-bottom: 8px;">
+        <input id="promote-name" class="input" placeholder="Ton nom complet" maxlength="255" autocomplete="name" style="margin-bottom: 8px;">
+        <input id="promote-email" class="input" type="email" placeholder="Ton email" autocomplete="email" style="margin-bottom: 8px;">
         <input id="promote-password" class="input" type="password" placeholder="Choisis un mot de passe" style="margin-bottom: 8px;">
         <button class="cta" onclick="promoteAccount()" style="margin-top: 0;">Créer mon compte gratuit</button>
         <div id="promote-error" style="color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 14px;"></div>
@@ -164,6 +185,98 @@ const API_BASE = window.location.pathname.replace(/\/demo\/?.*$/, "");
 
 let selectedFile = null;
 let demoToken = null;
+let selectedSector = null;
+
+// Lot 33 — pays proposés (mêmes pays que l'heure locale des rendez-vous) et devise habituelle.
+const COUNTRIES = [
+  ["SN", "Sénégal", "XOF"], ["CI", "Côte d'Ivoire", "XOF"], ["ML", "Mali", "XOF"], ["BF", "Burkina Faso", "XOF"],
+  ["BJ", "Bénin", "XOF"], ["TG", "Togo", "XOF"], ["NE", "Niger", "XOF"], ["GW", "Guinée-Bissau", "XOF"],
+  ["GN", "Guinée", "GNF"], ["CM", "Cameroun", "XAF"], ["GA", "Gabon", "XAF"], ["CG", "Congo", "XAF"],
+  ["TD", "Tchad", "XAF"], ["CF", "Centrafrique", "XAF"], ["GQ", "Guinée équatoriale", "XAF"], ["CD", "RD Congo", "CDF"],
+  ["MA", "Maroc", "MAD"], ["DZ", "Algérie", "DZD"], ["TN", "Tunisie", "TND"], ["MR", "Mauritanie", "MRU"],
+  ["NG", "Nigeria", "NGN"], ["GH", "Ghana", "GHS"], ["FR", "France", "EUR"], ["BE", "Belgique", "EUR"],
+  ["LU", "Luxembourg", "EUR"], ["CH", "Suisse", "CHF"], ["CA", "Canada", "CAD"],
+];
+const CURRENCIES = { XOF: "FCFA (XOF)", XAF: "FCFA (XAF)", EUR: "Euro (EUR)", USD: "Dollar (USD)", MAD: "Dirham (MAD)",
+  GNF: "Franc guinéen (GNF)", CDF: "Franc congolais (CDF)", DZD: "Dinar algérien (DZD)", TND: "Dinar tunisien (TND)",
+  MRU: "Ouguiya (MRU)", NGN: "Naira (NGN)", GHS: "Cedi (GHS)", CHF: "Franc suisse (CHF)", CAD: "Dollar canadien (CAD)" };
+
+const SECTORS = {
+  ONLINE_STORE: {
+    label: "Boutique en ligne", status: "● Vendeur IA en ligne", company: "Boutique Exemple", items: "PRODUITS IMPORTÉS",
+    sample: `Nom,Prix,Description,Stock
+iPhone 15,450000,128 Go neuf sous blister,5
+Samsung A56,280000,256 Go double SIM,12
+AirPods Pro,150000,Réduction de bruit active,8
+Chargeur rapide 20W,12000,Compatible tous smartphones,25
+Coque silicone,8000,Plusieurs coloris disponibles,40`,
+    scenarios: [
+      ["🔍 Recherche produit", "Bonjour, je cherche un produit, vous pouvez m'aider ?"],
+      ["💬 Objection prix", "C'est trop cher, vous pouvez faire un effort ?"],
+      ["📦 Stock", "Vous en avez encore en stock ?"],
+      ["✨ Upsell", "Qu'est-ce que vous avez d'autre à me proposer avec ça ?"],
+      ["🛒 Commande", "Je le prends, comment on fait ?"],
+    ],
+  },
+  CAR_DEALERSHIP: {
+    label: "Concession automobile", status: "● Conseiller IA en ligne", company: "Auto Exemple", items: "VÉHICULES IMPORTÉS",
+    sample: `Nom,Prix,Description,Stock,Marque,Modèle,Année,Kilométrage,Carburant,Boîte,Carrosserie,Couleur
+Peugeot 3008 GT,18500000,Toit panoramique et caméra de recul,1,Peugeot,3008,2021,42000,Diesel,Automatique,SUV,Gris
+Toyota RAV4 Hybride,24900000,Entretien complet chez le concessionnaire,1,Toyota,RAV4,2022,28000,Hybride,Automatique,SUV,Blanc
+Hyundai Tucson,16900000,Première main,1,Hyundai,Tucson,2020,61000,Essence,Manuelle,SUV,Noir
+Toyota Corolla,11500000,Idéale pour la ville,2,Toyota,Corolla,2019,74000,Essence,Automatique,Berline,Bleu
+Kia Picanto,6200000,Économique et facile à garer,1,Kia,Picanto,2021,35000,Essence,Manuelle,Citadine,Rouge
+Toyota Hilux,21000000,Double cabine 4x4,1,Toyota,Hilux,2020,88000,Diesel,Manuelle,Pick-up,Blanc`,
+    scenarios: [
+      ["🔍 SUV diesel", "Bonjour, vous avez un SUV diesel ?"],
+      ["💳 Financement", "Je peux payer en plusieurs fois ?"],
+      ["📅 Essai", "Je voudrais l'essayer samedi matin"],
+      ["🔁 Reprise", "Vous reprenez ma voiture ?"],
+      ["📷 Photo", "Vous avez une photo ?"],
+    ],
+  },
+};
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+// Gras WhatsApp (*texte*) affiché en gras : le texte est d'abord échappé.
+function waFormat(value) {
+  return esc(value).replace(/(^|[\s(«])\*(?=\S)([^*\n]*?\S)\*(?=$|[\s.,;:!?)»])/gm, "$1<strong>$2</strong>");
+}
+
+function fillCountries() {
+  const country = document.getElementById("country");
+  country.innerHTML = COUNTRIES.map(([code, name]) => `<option value="${code}">${esc(name)}</option>`).join("");
+  document.getElementById("currency").innerHTML = Object.entries(CURRENCIES)
+    .map(([code, label]) => `<option value="${code}">${esc(label)}</option>`).join("");
+  country.value = "SN";
+  countryChanged();
+}
+
+function countryChanged() {
+  const entry = COUNTRIES.find(([code]) => code === document.getElementById("country").value);
+  if (entry) document.getElementById("currency").value = entry[2];
+}
+
+function chooseSector(code) {
+  selectedSector = code;
+  const sector = SECTORS[code];
+  document.getElementById("sector-label").textContent = sector.label;
+  document.getElementById("company-name").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar" : "Ex. Boutique ABC";
+  document.getElementById("sector-step").classList.add("hidden");
+  document.getElementById("company-step").classList.remove("hidden");
+  selectedFile = null;
+  document.getElementById("filename-display").textContent = "";
+}
+
+function changeSector() {
+  document.getElementById("company-step").classList.add("hidden");
+  document.getElementById("sector-step").classList.remove("hidden");
+}
+
+fillCountries();
 
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
@@ -190,16 +303,11 @@ dropzone.addEventListener("drop", (e) => {
 
 function useSampleCatalog(e) {
   e.preventDefault();
-  const sample = `Nom,Prix,Description,Stock
-iPhone 15,450000,128 Go neuf sous blister,5
-Samsung A56,280000,256 Go double SIM,12
-AirPods Pro,150000,Réduction de bruit active,8
-Chargeur rapide 20W,12000,Compatible tous smartphones,25
-Coque silicone,8000,Plusieurs coloris disponibles,40`;
-  selectedFile = new File([sample], "catalogue-exemple.csv", { type: "text/csv" });
+  const sector = SECTORS[selectedSector || "ONLINE_STORE"];
+  selectedFile = new File([sector.sample], "catalogue-exemple.csv", { type: "text/csv" });
   document.getElementById("filename-display").textContent = "✓ catalogue-exemple.csv";
   if (!document.getElementById("company-name").value) {
-    document.getElementById("company-name").value = "Boutique Exemple";
+    document.getElementById("company-name").value = sector.company;
   }
 }
 
@@ -210,6 +318,8 @@ async function createDemo() {
 
   const companyName = document.getElementById("company-name").value.trim();
   const currency = document.getElementById("currency").value;
+  const country = document.getElementById("country").value;
+  if (!selectedSector) { changeSector(); return; }
 
   if (!companyName) { errorEl.textContent = "Indiquez le nom de votre entreprise."; return; }
   if (!selectedFile) { errorEl.textContent = "Choisissez un fichier catalogue (ou essayez l'exemple)."; return; }
@@ -220,6 +330,8 @@ async function createDemo() {
   const formData = new FormData();
   formData.append("company_name", companyName);
   formData.append("currency", currency);
+  formData.append("country", country);
+  formData.append("business_type", selectedSector);
   formData.append("file", selectedFile);
 
   try {
@@ -234,6 +346,14 @@ async function createDemo() {
     document.getElementById("stat-imported").textContent = data.imported + data.updated;
     document.getElementById("stat-available").textContent = data.available;
     document.getElementById("chat-company-name").textContent = companyName;
+    const sector = SECTORS[selectedSector];
+    document.getElementById("stat-imported-label").textContent = sector.items;
+    document.getElementById("chat-status").textContent = sector.status;
+    document.getElementById("scenarios").innerHTML = sector.scenarios
+      .map(([label, text], i) => `<button class="scenario-btn" data-i="${i}">${esc(label)}</button>`).join("");
+    document.querySelectorAll("#scenarios .scenario-btn").forEach((btn) => {
+      btn.onclick = () => sendScenario(sector.scenarios[Number(btn.dataset.i)][1]);
+    });
 
     document.getElementById("setup-screen").classList.add("hidden");
     document.getElementById("import-result").style.display = "block";
@@ -255,7 +375,8 @@ function addBubble(role, text) {
   const messages = document.getElementById("chat-messages");
   const div = document.createElement("div");
   div.className = "bubble " + role;
-  div.textContent = text;
+  if (role === "ai" || role === "system") div.innerHTML = waFormat(text);
+  else div.textContent = text;
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
   return div;
@@ -268,12 +389,13 @@ function sendScenario(text) {
 
 async function promoteAccount() {
   const errorEl = document.getElementById("promote-error");
+  const fullName = document.getElementById("promote-name").value.trim();
   const email = document.getElementById("promote-email").value.trim();
   const password = document.getElementById("promote-password").value;
   errorEl.textContent = "";
 
-  if (!email || !password) {
-    errorEl.textContent = "Email et mot de passe requis.";
+  if (!fullName || !email || !password) {
+    errorEl.textContent = "Nom, email et mot de passe requis.";
     return;
   }
   if (password.length < 8) {
@@ -285,11 +407,12 @@ async function promoteAccount() {
     const res = await fetch(API_BASE + "/api/v1/demo/promote", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + demoToken },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ full_name: fullName, email, password }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || "Échec de la création du compte");
+      const detail = Array.isArray(err.detail) ? "Vérifiez les champs saisis." : err.detail;
+      throw new Error(detail || "Échec de la création du compte");
     }
     const data = await res.json();
     // Transfert transparent : le dashboard lit la même clé localStorage (même origine).
@@ -323,6 +446,7 @@ async function sendMessage() {
     }
     const data = await res.json();
     addBubble("ai", data.reply);
+    (data.extra_messages || []).forEach((text) => addBubble("system", text));
   } catch (e) {
     typing.remove();
     addBubble("ai", "Connexion interrompue, réessayez.");
