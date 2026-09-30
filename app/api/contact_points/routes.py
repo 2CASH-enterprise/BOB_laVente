@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.acquisition import LINK_CHANNELS
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.contact_point import ContactPoint
@@ -44,6 +45,7 @@ def _to_response(cp: ContactPoint, customer_count: int) -> ContactPointResponse:
         active=cp.active, click_count=cp.click_count, customer_count=customer_count,
         short_path=f"/w/{cp.code}", created_at=cp.created_at,
         owner_name=cp.owner_name, owner_email=cp.owner_email,
+        channel=cp.channel, channel_label=LINK_CHANNELS.get(cp.channel) if cp.channel else None,
     )
 
 
@@ -123,6 +125,8 @@ async def create_contact_point(
         # Un commercial sans email ne recevrait rien : le nom seul n'est jamais enregistré.
         owner_name=((payload.owner_name or "").strip() or None) if payload.owner_email else None,
         owner_email=str(payload.owner_email).lower() if payload.owner_email else None,
+        # Lot 28 : un lien de commercial est, sauf choix contraire, du canal « Commercial ».
+        channel=payload.channel or ("COMMERCIAL" if payload.owner_email else None),
     )
     db.add(cp)
     await db.commit()
@@ -150,6 +154,8 @@ async def update_contact_point(
         cp.owner_email = str(email).lower() if email else None
     if cp.owner_email is None:
         cp.owner_name = None
+    if "channel" in changes:
+        cp.channel = changes.pop("channel")
     for field, value in changes.items():
         if value is None:
             continue

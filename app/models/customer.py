@@ -36,6 +36,8 @@ class Customer(Base):
     acquisition_contact_point_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("contact_points.id", ondelete="SET NULL"), index=True
     )
+    # Lot 28 — identifiant Meta de la publicité « clic vers WhatsApp » qui a amené le client.
+    acquisition_ad_id: Mapped[str | None] = mapped_column(String(64))
     # Lot 27 — dernier commercial dont le lien a amené ce client (la source d'acquisition, elle,
     # reste le tout premier contact). Sert à prévenir le bon commercial.
     referred_contact_point_id: Mapped[uuid.UUID | None] = mapped_column(

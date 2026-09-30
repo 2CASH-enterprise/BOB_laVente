@@ -294,6 +294,12 @@ async def _activity(db, tenant_id, now, customers, messages, orders) -> list[dic
                 how = f"Arrivé par le lien « {contact_points[c.acquisition_contact_point_id]} »"
             elif c.acquisition_source == "QR":
                 how = "Arrivé en scannant un QR code"
+            elif c.acquisition_source in ("AD_FACEBOOK", "AD_INSTAGRAM", "AD_META", "FACEBOOK", "INSTAGRAM"):
+                from app.services.acquisition import channel_label, channel_of
+
+                how = f"Arrivé par : {channel_label(channel_of(c.acquisition_source))}"
+                if c.acquisition_detail:
+                    how += f" « {c.acquisition_detail} »"
             else:
                 how = "Premier message"
             events.append({"kind": "CUSTOMER", "title": "Nouveau client", "detail": f"{_name(c)} · {how}", "at": _aware(c.created_at)})

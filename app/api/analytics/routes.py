@@ -110,3 +110,25 @@ async def get_home_summary(
     from app.services.home_service import home_summary
 
     return await home_summary(db, current_user.tenant_id, user_id=current_user.user_id)
+
+
+# Lot 28 — d'où viennent les clients : par canal, puis par lien ou publicité.
+_SOURCE_PERIODS = {"30": 30, "90": 90, "all": None}
+
+
+@router.get("/sources")
+async def get_sources_summary(
+    period: str = Query(default="30", pattern="^(30|90|all)$"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.tenant import Tenant
+    from app.services.acquisition import sources_summary
+
+    days = _SOURCE_PERIODS[period]
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
+    summary = await sources_summary(db, current_user.tenant_id, since)
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    return {"period": period, "currency": tenant.currency if tenant else None, **summary}

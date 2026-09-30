@@ -9,6 +9,8 @@ class CustomerSummary(BaseModel):
     display_name: str
     whatsapp_number: str
     acquisition_source: str | None
+    acquisition_channel: str = "DIRECT"
+    acquisition_channel_label: str = "Direct"
     commercial_status: str
     last_activity: datetime | None
     order_count: int
@@ -27,6 +29,8 @@ class CustomerDetail(BaseModel):
     city: str | None
     acquisition_source: str | None
     acquisition_detail: str | None
+    acquisition_channel: str = "DIRECT"
+    acquisition_channel_label: str = "Direct"
     commercial_status: str
     last_activity: datetime | None
     order_count: int

@@ -17,6 +17,7 @@ from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_mess
 from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.product import Product
 from app.models.contact_point import ContactPoint
+from app.services.acquisition import ad_context_for_ai, attribution_from_referral, parse_referral
 from app.services.email_service import send_email
 from app.core.rate_limit import RateLimiter
 from app.core.rate_limit_dependency import get_rate_limiter
@@ -61,6 +62,12 @@ HISTORY_LIMIT = 20  # section 13 — mémoire conversationnelle, fenêtre raison
 # (lien/widget traçable). Toujours retirée ; utilisée pour l'attribution au premier contact.
 TRACKING_REFERENCE_PATTERN = re.compile(r"\s*\[(QR|W):([A-Za-z0-9_-]+)\]\s*$")
 
+
+
+def with_ad_context(text: str, referral: dict | None) -> str:
+    """Texte donné à Bob : le message du client, précédé du contexte de l'annonce s'il y en a une."""
+    context = ad_context_for_ai(referral)
+    return f"{context}\n\n{text}" if context else text
 
 @router.get("")
 async def verify_webhook(request: Request):
@@ -148,6 +155,14 @@ async def receive_webhook(
 
     incoming_text = parsed.get("text") or ""
 
+    # Lot 28 — le client arrive d'une publicité (ou publication) Facebook / Instagram : Meta joint
+    # une référence au message. Source notée au tout premier contact seulement ; le contexte de
+    # l'annonce est donné à Bob pour ce message, qu'il soit nouveau client ou non.
+    referral = parse_referral(parsed.get("referral"))
+    if referral is not None and is_new_customer:
+        customer.acquisition_source, customer.acquisition_detail = attribution_from_referral(referral)
+        customer.acquisition_ad_id = referral["ad_id"]
+
     # Section CRM.7 — attribution : uniquement au tout premier contact, jamais réécrite ensuite.
     # La référence technique est retirée du texte avant tout traitement, pour TOUS les clients
     # (y compris un client existant qui rescanne un QR ou clique un lien) : ni l'historique
@@ -157,7 +172,7 @@ async def receive_webhook(
     if match:
         incoming_text = TRACKING_REFERENCE_PATTERN.sub("", incoming_text).strip()
         kind, code = match.group(1), match.group(2)
-        if is_new_customer and kind == "QR":
+        if is_new_customer and referral is None and kind == "QR":
             qr_stmt = select(ProductQrCode).where(ProductQrCode.tenant_id == tenant_id, ProductQrCode.code == code)
             qr = (await db.execute(qr_stmt)).scalar_one_or_none()
             if qr is not None:
@@ -167,7 +182,7 @@ async def receive_webhook(
         elif kind == "W":
             cp_stmt = select(ContactPoint).where(ContactPoint.tenant_id == tenant_id, ContactPoint.code == code)
             contact_point = (await db.execute(cp_stmt)).scalar_one_or_none()
-            if contact_point is not None and is_new_customer:
+            if contact_point is not None and is_new_customer and referral is None:  # la pub Meta prime
                 customer.acquisition_source = "LINK"
                 customer.acquisition_detail = contact_point.name
                 customer.acquisition_contact_point_id = contact_point.id
@@ -272,7 +287,7 @@ async def receive_webhook(
                 tenant=tenant,
                 conversation=conversation,
                 history=history,
-                incoming_text=incoming_message.content,
+                incoming_text=with_ad_context(incoming_message.content, referral),
                 llm_client=llm_client,
                 turn=turn,
                 image_outbox=image_outbox,

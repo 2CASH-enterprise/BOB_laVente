@@ -172,6 +172,8 @@ def parse_whatsapp_message(payload: dict) -> dict | None:
             "type": msg.get("type", "text"),
             "text": msg.get("text", {}).get("body"),
             "timestamp": msg.get("timestamp"),
+            # Lot 28 — publicité / publication Meta « clic vers WhatsApp » (brut, nettoyé plus loin).
+            "referral": msg.get("referral"),
         }
     except (KeyError, IndexError, TypeError):
         return None

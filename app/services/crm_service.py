@@ -14,6 +14,22 @@ from app.models.order import Order, OrderStatus
 MAX_RECENT_ORDERS = 5
 
 
+async def _link_channels(db: AsyncSession, tenant_id) -> dict:
+    from app.models.contact_point import ContactPoint
+
+    return dict((await db.execute(
+        select(ContactPoint.id, ContactPoint.channel).where(ContactPoint.tenant_id == tenant_id)
+    )).all())
+
+
+def _channel(customer: Customer, link_channels: dict) -> tuple[str, str]:
+    """Lot 28 — canal du client (Google, Pub Instagram, Direct…), avec son libellé."""
+    from app.services.acquisition import channel_label, channel_of
+
+    code = channel_of(customer.acquisition_source, link_channels.get(customer.acquisition_contact_point_id))
+    return code, channel_label(code)
+
+
 async def _commercial_status(db: AsyncSession, tenant_id, customer_id) -> str:
     has_order_stmt = select(Order.id).where(
         Order.tenant_id == tenant_id, Order.customer_id == customer_id, Order.status != OrderStatus.CANCELLED
@@ -48,9 +64,11 @@ async def _order_stats(db: AsyncSession, tenant_id, customer_id) -> tuple[int, f
 async def list_customers_with_summary(db: AsyncSession, tenant_id) -> list[dict]:
     stmt = select(Customer).where(Customer.tenant_id == tenant_id).order_by(Customer.updated_at.desc())
     customers = (await db.execute(stmt)).scalars().all()
+    link_channels = await _link_channels(db, tenant_id)
 
     results = []
     for customer in customers:
+        channel, channel_label = _channel(customer, link_channels)
         status = await _commercial_status(db, tenant_id, customer.id)
         last_activity = await _last_activity(db, tenant_id, customer.id)
         order_count, total_spent = await _order_stats(db, tenant_id, customer.id)
@@ -60,6 +78,8 @@ async def list_customers_with_summary(db: AsyncSession, tenant_id) -> list[dict]
                 "display_name": _display_name(customer),
                 "whatsapp_number": customer.whatsapp_number,
                 "acquisition_source": customer.acquisition_source,
+                "acquisition_channel": channel,
+                "acquisition_channel_label": channel_label,
                 "commercial_status": status,
                 "last_activity": last_activity,
                 "order_count": order_count,
@@ -92,6 +112,7 @@ async def get_customer_detail(db: AsyncSession, tenant_id, customer_id) -> dict 
         .limit(1)
     )
     latest_conversation = (await db.execute(active_conv_stmt)).scalar_one_or_none()
+    channel, channel_label = _channel(customer, await _link_channels(db, tenant_id))
 
     return {
         "id": customer.id,
@@ -103,6 +124,8 @@ async def get_customer_detail(db: AsyncSession, tenant_id, customer_id) -> dict 
         "city": customer.city,
         "acquisition_source": customer.acquisition_source,
         "acquisition_detail": customer.acquisition_detail,
+        "acquisition_channel": channel,
+        "acquisition_channel_label": channel_label,
         "commercial_status": status,
         "last_activity": last_activity,
         "order_count": order_count,

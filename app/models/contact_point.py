@@ -39,6 +39,8 @@ class ContactPoint(Base):
     # Lot 27 — lien personnel d'un commercial (concession) : ses clients lui sont signalés.
     owner_name: Mapped[str | None] = mapped_column(String(80))
     owner_email: Mapped[str | None] = mapped_column(String(255))  # reçoit les alertes de SES clients
+    # Lot 28 — canal où le lien est publié (Google, YouTube, TikTok…) : voir services/acquisition.py.
+    channel: Mapped[str | None] = mapped_column(String(16))
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     click_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
