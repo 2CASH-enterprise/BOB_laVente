@@ -60,7 +60,7 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
             AppointmentRequest.scheduled_at > now,
         ))).scalars().all()
 
-    report = {"staff": 0, "customer": 0, "whatsapp": 0, "failed": 0}
+    report = {"staff": 0, "customer": 0, "whatsapp": 0, "followups": 0, "failed": 0}
     for appointment_id in ids:
         async with factory() as db:
             appointment = await db.get(AppointmentRequest, appointment_id)
@@ -114,6 +114,28 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
             except Exception:  # noqa: BLE001 — un rendez-vous en échec ne bloque jamais les autres
                 report["failed"] += 1
                 logger.warning("Rappel de rendez-vous impossible (rendez-vous %s)", appointment_id)
+
+    # Lot 36 — relance unique des prospects venus mais pas décidés, deux jours après la visite.
+    from app.services import appointment_outcome
+
+    async with factory() as db:
+        followup_ids = await appointment_outcome.appointments_needing_followup(db, now)
+    for appointment_id in followup_ids:
+        async with factory() as db:
+            appointment = await db.get(AppointmentRequest, appointment_id)
+            tenant = await db.get(Tenant, appointment.tenant_id) if appointment else None
+            if appointment is None or tenant is None or not tenant.active:
+                continue
+            if not appointment_outcome.followup_due(appointment, now, tenant_zone(tenant)):
+                continue
+            try:
+                await appointment_outcome.send_followup(db, tenant, appointment, now, send_email=send,
+                                                        send_whatsapp=send_whatsapp if send_whatsapp is not _whatsapp_reminder else None)
+                await db.commit()
+                report["followups"] += 1
+            except Exception:  # noqa: BLE001
+                report["failed"] += 1
+                logger.warning("Relance après visite impossible (rendez-vous %s)", appointment_id)
     return report
 
 

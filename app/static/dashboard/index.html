@@ -272,6 +272,7 @@
   .tone-accent { background: var(--accent-soft); color: var(--accent); }
   /* Lot 32 : chaque activité ne voit que ses fonctions (le serveur refuse aussi les autres). */
   body.dealership .store-only { display: none !important; }
+  body:not(.dealership) .dealer-only { display: none !important; }
   .tone-success { background: var(--success-soft); color: var(--success); }
   .tone-warning { background: var(--warning-soft); color: var(--warning); }
   .tone-danger { background: var(--danger-soft); color: var(--danger); }
@@ -546,6 +547,10 @@
           tape lui-même votre numéro reste « Direct ».
         </p>
         <div id="sources-content"></div>
+      </div>
+      <div class="card dealer-only" style="margin-bottom: 20px;" id="commercials-card">
+        <div class="label" style="font-weight: 600; margin-bottom: 8px;">Résultats par commercial <span style="font-weight: 400; color: var(--muted); font-size: 12px;">(même période)</span></div>
+        <div id="commercials-content"></div>
       </div>
       <div class="card" style="margin-bottom: 20px;">
         <div class="label" style="margin-bottom: 4px; font-weight: 600;">Campagne email</div>
@@ -1262,6 +1267,16 @@ function appointmentCard(a, view) {
   // Lot 35 : changements faits par le prospect lui-même, et rappel WhatsApp envoyé.
   const change = a.customer_change ? ` <span class="pill tone-warning">${esc(a.customer_change)}</span>` : "";
   const waReminder = a.whatsapp_reminder_sent_at ? ` <span class="pill tone-info">Rappel WhatsApp envoyé</span>` : "";
+  // Lot 36 : issue du rendez-vous et relance.
+  const outcomePill = a.outcome_label ? ` <span class="pill ${a.outcome === "SOLD" ? "tone-success" : a.outcome === "NO_SHOW" ? "tone-danger" : "tone-info"}">${esc(a.outcome_label)}</span>` : "";
+  const followup = a.followup_channel
+    ? `<p class="appt-meta">${esc(FOLLOWUP_LABELS[a.followup_channel] || "")} ${a.followup_sent_at ? "· " + new Date(a.followup_sent_at).toLocaleDateString("fr-FR") : ""}</p>` : "";
+  const outcomeButtons = a.can_set_outcome && view === "closed" ? `
+      <div class="appt-actions" role="group" aria-label="Issue du rendez-vous">
+        <span style="font-size: 13px; color: var(--muted);">${a.outcome ? "Modifier l'issue :" : "Issue du rendez-vous :"}</span>
+        ${Object.entries(APPT_OUTCOME_LABELS).map(([code, label]) =>
+          `<button class="action ${a.outcome === code ? "" : "secondary"}" onclick="setAppointmentOutcome('${esc(a.id)}', '${code}')">${esc(label)}</button>`).join("")}
+      </div>` : "";
   const notifyNote = a.can_notify ? "" : ` <span style="color: var(--warning);">(le client n'a pas écrit depuis plus de 20 h : WhatsApp ne permet pas de le prévenir, appelez-le)</span>`;
   let actions = "";
   if (view !== "closed") {
@@ -1275,10 +1290,10 @@ function appointmentCard(a, view) {
   }
   return `
     <div class="appt-card">
-      <div class="appt-head"><strong>${title}</strong><span>${status}${change}${waReminder}</span></div>
+      <div class="appt-head"><strong>${title}</strong><span>${status}${change}${waReminder}${outcomePill}</span></div>
       <p class="appt-meta">${esc(a.customer)} · disponibilités données : « ${esc(a.availability)} » · demandé le ${new Date(a.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</p>
       ${qualif ? `<ul class="appt-qualif">${qualif}</ul>` : ""}
-      ${actions}
+      ${actions}${followup}${outcomeButtons}
       <div class="appt-actions"><button class="action secondary" onclick="jumpToCustomerConversation('${esc(a.conversation_id)}')">Voir la conversation</button></div>
     </div>`;
 }
@@ -1386,6 +1401,32 @@ async function confirmAppointment(id) {
       body: JSON.stringify({ scheduled_local: when, notify_customer: document.getElementById(`appt-notify-${id}`).checked }),
     });
     showAppointmentResult(result, `Rendez-vous confirmé : ${result.appointment.scheduled_label}.`);
+    loadAppointments(currentAppointmentView);
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+// Lot 36 : issue du rendez-vous.
+const APPT_OUTCOME_LABELS = { SOLD: "Venu, vendu", FOLLOW_UP: "Venu, à relancer", NOT_INTERESTED: "Venu, pas intéressé", NO_SHOW: "Absent" };
+const FOLLOWUP_LABELS = {
+  WHATSAPP: "Relance envoyée sur WhatsApp", EMAIL: "Relance envoyée par email",
+  TASK: "À rappeler par la concession (ni WhatsApp ni email possibles)",
+};
+
+async function setAppointmentOutcome(id, outcome) {
+  const msg = document.getElementById("appt-msg");
+  try {
+    const r = await api(`/api/v1/appointments/${id}/outcome`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outcome }),
+    });
+    const parts = [`Issue enregistrée : ${APPT_OUTCOME_LABELS[outcome]}.`];
+    if (r.vehicle_unavailable) parts.push("Le véhicule est passé en indisponible (remettez-le en stock dans Produits si besoin).");
+    if (r.followup_channel) parts.push(FOLLOWUP_LABELS[r.followup_channel] + ".");
+    if (outcome === "FOLLOW_UP" && !r.appointment.followup_sent_at) parts.push("Bob relancera le client dans 2 jours.");
+    msg.style.color = "var(--success)";
+    msg.textContent = parts.join(" ");
     loadAppointments(currentAppointmentView);
   } catch (e) {
     msg.style.color = "var(--danger)";
@@ -1507,6 +1548,7 @@ function deltaNote(delta, unit, fallback) {
 function todoAction(item) {
   if (item.kind === "ORDER") return `showTab('orders')`;
   if (item.kind === "APPOINTMENT") return `showTab('appointments')`;
+  if (item.kind === "OUTCOME") return `showTab('appointments'); loadAppointments('closed')`;
   return `jumpToCustomerConversation('${esc(item.conversation_id)}')`;
 }
 
@@ -1870,6 +1912,7 @@ async function loadSources(period) {
   document.querySelectorAll(".sources-periods .pill").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.period === period)));
   const box = document.getElementById("sources-content");
   box.innerHTML = "<p class='loading-text'>Chargement</p>";
+  if (currentBusinessType === "CAR_DEALERSHIP") loadCommercials(period);  // lot 36
   try {
     const data = await api(`/api/v1/analytics/sources?period=${encodeURIComponent(period)}`);
     if (!data.total_customers) {
@@ -1877,16 +1920,40 @@ async function loadSources(period) {
       return;
     }
     const dealership = currentBusinessType === "CAR_DEALERSHIP";
-    const head = `<tr><th>Source</th><th>Clients</th>${dealership ? "<th>Rendez-vous</th>" : ""}<th>Ventes payées</th></tr>`;
+    const head = dealership
+      ? `<tr><th>Source</th><th>Clients</th><th>Rendez-vous</th><th>Venus</th><th>Vendus</th></tr>`
+      : `<tr><th>Source</th><th>Clients</th><th>Ventes payées</th></tr>`;
     const money = (v) => v ? ` · ${Number(v).toLocaleString("fr-FR")} ${esc(data.currency || "")}` : "";
-    const row = (r, label) => `<tr><td data-label="Source">${label}</td><td data-label="Clients">${r.customers}</td>
-      ${dealership ? `<td data-label="Rendez-vous">${r.appointments}</td>` : ""}<td data-label="Ventes payées">${r.paid_orders}${money(r.revenue)}</td></tr>`;
+    const row = (r, label) => dealership
+      ? `<tr><td data-label="Source">${label}</td><td data-label="Clients">${r.customers}</td><td data-label="Rendez-vous">${r.appointments}</td>
+          <td data-label="Venus">${r.visits}</td><td data-label="Vendus">${r.vehicles_sold}</td></tr>`
+      : `<tr><td data-label="Source">${label}</td><td data-label="Clients">${r.customers}</td>
+          <td data-label="Ventes payées">${r.paid_orders}${money(r.revenue)}</td></tr>`;
     const details = data.details.filter((d) => d.label !== d.channel_label);
     box.innerHTML = `
       <table><thead>${head}</thead><tbody>${data.channels.map((r) => row(r, `<strong>${esc(r.label)}</strong>`)).join("")}</tbody></table>
       ${details.length ? `<details style="margin-top: 10px;"><summary style="cursor: pointer; font-size: 13px;">Détail par lien et par publicité</summary>
         <table style="margin-top: 8px;"><thead>${head}</thead><tbody>${details.map((r) => row(r, `${esc(r.label)} <span style="color: var(--muted); font-size: 12px;">(${esc(r.channel_label)})</span>`)).join("")}</tbody></table>
       </details>` : ""}`;
+  } catch (e) {
+    box.innerHTML = `<p style="color: var(--danger); font-size: 13px;">${esc(e.message)}</p>`;
+  }
+}
+
+// Lot 36 : résultats par commercial (concession).
+async function loadCommercials(period) {
+  const box = document.getElementById("commercials-content");
+  try {
+    const data = await api(`/api/v1/analytics/commercials?period=${encodeURIComponent(period)}`);
+    if (!data.rows.length) {
+      box.innerHTML = "<p style='font-size: 13px; color: var(--muted);'>Aucun lien commercial. Créez-en un par commercial dans Intégrations.</p>";
+      return;
+    }
+    box.innerHTML = `<table><thead><tr><th>Commercial</th><th>Prospects</th><th>Rendez-vous</th><th>Venus</th><th>Vendus</th><th>Transformation</th></tr></thead><tbody>
+      ${data.rows.map((r) => `<tr><td data-label="Commercial"><strong>${esc(r.name)}</strong> <span style="color: var(--muted); font-size: 12px;">${esc(r.link)}${r.active ? "" : " · désactivé"}</span></td>
+        <td data-label="Prospects">${r.prospects}</td><td data-label="Rendez-vous">${r.appointments}</td><td data-label="Venus">${r.visits}</td>
+        <td data-label="Vendus">${r.vehicles_sold}</td><td data-label="Transformation">${r.conversion_pct === null ? "—" : r.conversion_pct + " %"}</td></tr>`).join("")}
+    </tbody></table>`;
   } catch (e) {
     box.innerHTML = `<p style="color: var(--danger); font-size: 13px;">${esc(e.message)}</p>`;
   }

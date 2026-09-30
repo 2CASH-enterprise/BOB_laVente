@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.appointment_request import (
     APPOINTMENT_KINDS,
+    OUTCOMES,
     STATUS_CANCELLED,
     STATUS_CONFIRMED,
     STATUS_REQUESTED,
@@ -50,6 +51,11 @@ class AppointmentOut(BaseModel):
     created_at: datetime
     customer: str
     conversation_id: UUID
+    outcome: str | None = None  # lot 36
+    outcome_label: str | None = None
+    can_set_outcome: bool = False
+    followup_channel: str | None = None
+    followup_sent_at: datetime | None = None
     customer_change: str | None = None  # lot 35 : « Annulé par le client », « Déplacé par le client »
     whatsapp_reminder_sent_at: datetime | None = None  # lot 35
     confirmed_by_bob: bool = False  # lot 29 : créneau choisi par le client et réservé par Bob
@@ -105,6 +111,12 @@ async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: dat
         conversation_id=appointment.conversation_id,
         referred_by=referred_by,
         confirmed_by_bob=appointment.confirmed_by == "BOB",
+        outcome=appointment.outcome,
+        outcome_label=OUTCOMES.get(appointment.outcome) if appointment.outcome else None,
+        can_set_outcome=(appointment.status == STATUS_CONFIRMED and appointment.scheduled_at is not None
+                         and as_utc(appointment.scheduled_at) <= now),
+        followup_channel=appointment.followup_channel,
+        followup_sent_at=appointment.followup_sent_at,
         customer_change=("Annulé par le client" if appointment.cancelled_by == "CLIENT"
                          else "Déplacé par le client" if appointment.rescheduled_by == "CLIENT" else None),
         whatsapp_reminder_sent_at=appointment.customer_whatsapp_reminder_sent_at,
@@ -215,6 +227,43 @@ async def cancel_appointment(
     )
     await db.commit()
     return ActionResult(appointment=await _out(db, appointment, zone, now), customer_notified=notified, notify_error=error)
+
+
+# --- Lot 36 : issue du rendez-vous --------------------------------------------------------------
+
+class OutcomeRequest(BaseModel):
+    outcome: str
+
+
+class OutcomeResult(BaseModel):
+    appointment: AppointmentOut
+    vehicle_unavailable: bool
+    followup_channel: str | None
+
+
+@router.post("/{appointment_id}/outcome", response_model=OutcomeResult, dependencies=[Depends(require_role("AGENT"))])
+async def set_outcome(
+    appointment_id: UUID,
+    payload: OutcomeRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OutcomeResult:
+    from app.services.appointment_outcome import OutcomeError, record_outcome
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    appointment = await _get(db, current_user.tenant_id, appointment_id)
+    now = datetime.now(timezone.utc)
+    user_id = str(current_user.user_id)
+    try:
+        result = await record_outcome(db, tenant, appointment, payload.outcome, user_id, now=now)
+    except OutcomeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    await log_audit_event(
+        db, actor=user_id, action="APPOINTMENT_OUTCOME", tenant_id=tenant.id,
+        details={"appointment_id": str(appointment.id), "outcome": payload.outcome, **result},
+    )
+    await db.commit()
+    return OutcomeResult(appointment=await _out(db, appointment, tenant_zone(tenant), now), **result)
 
 
 # --- Lot 29 : créneaux proposés par Bob ---------------------------------------------------------

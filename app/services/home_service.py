@@ -206,6 +206,33 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
             "since": _aware(a.created_at), "action": "Confirmer",
         })
 
+    # Lot 36 — rendez-vous passés sans issue (un seul rappel groupé), et relances à faire à la main.
+    from app.models.appointment_request import OUTCOME_NO_SHOW, STATUS_CONFIRMED
+    from app.services.appointment_outcome import open_tasks
+
+    confirmed = (await db.execute(select(AppointmentRequest).where(
+        AppointmentRequest.tenant_id == tenant_id, AppointmentRequest.status == STATUS_CONFIRMED,
+        AppointmentRequest.scheduled_at.is_not(None), AppointmentRequest.scheduled_at <= now - timedelta(hours=1),
+    ))).scalars().all()
+    without_outcome = [a for a in confirmed if a.outcome is None]
+    if without_outcome:
+        count = len(without_outcome)
+        todo.append({
+            "kind": "OUTCOME", "customer": f"{count} rendez-vous passé{'s' if count > 1 else ''}",
+            "reason": "Issue à indiquer", "tone": "info",
+            "detail": "Venu, vendu, à relancer ou absent : pour mesurer vos ventes et relancer au bon moment",
+            "since": min(_aware(a.scheduled_at) for a in without_outcome), "action": "Indiquer",
+        })
+    for a in open_tasks(confirmed, now):
+        customer = customers.get(a.customer_id)
+        why = "Absent au rendez-vous" if a.outcome == OUTCOME_NO_SHOW else "Venu sans décision"
+        todo.append({
+            "kind": "CALLBACK", "conversation_id": str(a.conversation_id), "customer": _name(customer),
+            "reason": "À rappeler", "tone": "warning",
+            "detail": f"{why} : à rappeler au +{customer.whatsapp_number}" if customer else why,
+            "since": _aware(a.followup_sent_at), "action": "Voir",
+        })
+
     for o in orders:
         if o.status == OrderStatus.PENDING and _aware(o.created_at) <= now - timedelta(days=STALE_ORDER_DAYS):
             days_waiting = (now - _aware(o.created_at)).days
@@ -215,7 +242,7 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                 "detail": f"Commande de {float(o.total_amount):,.0f} {o.currency}".replace(",", " "),
                 "since": _aware(o.created_at), "action": "Voir la commande",
             })
-    order_of_kind = {"CONVERSATION": 0, "APPOINTMENT": 1, "CALLBACK": 2, "ORDER": 3}
+    order_of_kind = {"CONVERSATION": 0, "APPOINTMENT": 1, "CALLBACK": 2, "OUTCOME": 3, "ORDER": 4}
     todo.sort(key=lambda t: (order_of_kind[t["kind"]], t["since"]))
 
     # --- Entonnoir ---------------------------------------------------------------------------

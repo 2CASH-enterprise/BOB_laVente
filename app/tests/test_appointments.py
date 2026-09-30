@@ -381,8 +381,8 @@ async def test_reminder_task_emails_staff_and_customer_once():
     first = await appointment_reminders.send_due_reminders(session_factory=factory, now=evening, send=fake_send)
     second = await appointment_reminders.send_due_reminders(session_factory=factory, now=evening + timedelta(minutes=15), send=fake_send)
 
-    assert first == {"staff": 2, "customer": 1, "whatsapp": 0, "failed": 0}
-    assert second == {"staff": 0, "customer": 0, "whatsapp": 0, "failed": 0}
+    assert first == {"staff": 2, "customer": 1, "whatsapp": 0, "followups": 0, "failed": 0}
+    assert second == {"staff": 0, "customer": 0, "whatsapp": 0, "followups": 0, "failed": 0}
     staff = [m for m in outbox if m["to"] == "concession@example.com"]
     assert len(staff) == 2 and staff[0]["subject"].startswith("Rappel : rendez-vous demain")
     assert "samedi 3 octobre à 10 h" in staff[0]["body"] and "Besoin : familiale" in staff[0]["body"]

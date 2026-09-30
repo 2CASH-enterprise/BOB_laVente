@@ -156,13 +156,21 @@ async def sources_summary(db, tenant_id, since: datetime | None) -> dict:
     )).scalars().all()}
     ids = [c.id for c in customers]
     appointments: dict = {}
+    visits: dict = {}  # lot 36 : rendez-vous honorés (venus) et vendus, par client
+    sold: dict = {}
     sales: dict = {}
     if ids:
-        appointments = dict((await db.execute(
-            select(AppointmentRequest.customer_id, func.count(AppointmentRequest.id))
+        from app.models.appointment_request import OUTCOME_SOLD, VISITED_OUTCOMES
+
+        for customer_id, outcome in (await db.execute(
+            select(AppointmentRequest.customer_id, AppointmentRequest.outcome)
             .where(AppointmentRequest.tenant_id == tenant_id, AppointmentRequest.customer_id.in_(ids))
-            .group_by(AppointmentRequest.customer_id)
-        )).all())
+        )).all():
+            appointments[customer_id] = appointments.get(customer_id, 0) + 1
+            if outcome in VISITED_OUTCOMES:
+                visits[customer_id] = visits.get(customer_id, 0) + 1
+            if outcome == OUTCOME_SOLD:
+                sold[customer_id] = sold.get(customer_id, 0) + 1
         sales = {row[0]: (row[1], float(row[2] or 0)) for row in (await db.execute(
             select(Order.customer_id, func.count(Order.id), func.sum(Order.total_amount))
             .where(Order.tenant_id == tenant_id, Order.customer_id.in_(ids), Order.status == OrderStatus.PAID)
@@ -185,9 +193,12 @@ async def sources_summary(db, tenant_id, since: datetime | None) -> dict:
             if label is None:
                 continue
             row = bucket.setdefault(key, {"channel": code, "channel_label": channel_label(code), "label": label,
-                                          "customers": 0, "appointments": 0, "paid_orders": 0, "revenue": 0.0})
+                                          "customers": 0, "appointments": 0, "visits": 0, "vehicles_sold": 0,
+                                          "paid_orders": 0, "revenue": 0.0})
             row["customers"] += 1
             row["appointments"] += appointments.get(c.id, 0)
+            row["visits"] += visits.get(c.id, 0)
+            row["vehicles_sold"] += sold.get(c.id, 0)
             row["paid_orders"] += paid_count
             row["revenue"] += paid_amount
 
@@ -197,3 +208,48 @@ async def sources_summary(db, tenant_id, since: datetime | None) -> dict:
         "channels": sorted(channels.values(), key=order),
         "details": sorted(details.values(), key=order)[:30],
     }
+
+
+async def commercials_summary(db, tenant_id, since: datetime | None) -> list[dict]:
+    """
+    Lot 36 — par commercial (lien avec un email) : prospects rattachés, rendez-vous, venus, vendus.
+    Prospects : clients rattachés à son lien (créés sur la période) ; rendez-vous : pris sur la période
+    par ses prospects.
+    """
+    from sqlalchemy import select
+
+    from app.models.appointment_request import OUTCOME_SOLD, VISITED_OUTCOMES, AppointmentRequest
+    from app.models.contact_point import ContactPoint
+    from app.models.customer import Customer
+
+    links = (await db.execute(select(ContactPoint).where(
+        ContactPoint.tenant_id == tenant_id, ContactPoint.owner_email.is_not(None),
+    ))).scalars().all()
+    rows = []
+    for link in links:
+        customers = (await db.execute(select(Customer).where(
+            Customer.tenant_id == tenant_id, Customer.referred_contact_point_id == link.id,
+        ))).scalars().all()
+        ids = [c.id for c in customers]
+        prospects = sum(1 for c in customers if since is None or (c.created_at and _aware(c.created_at) >= since))
+        appointments = []
+        if ids:
+            stmt = select(AppointmentRequest).where(AppointmentRequest.tenant_id == tenant_id,
+                                                    AppointmentRequest.customer_id.in_(ids))
+            if since is not None:
+                stmt = stmt.where(AppointmentRequest.created_at >= since)
+            appointments = (await db.execute(stmt)).scalars().all()
+        visits = sum(1 for a in appointments if a.outcome in VISITED_OUTCOMES)
+        sold = sum(1 for a in appointments if a.outcome == OUTCOME_SOLD)
+        rows.append({
+            "name": link.owner_name or link.owner_email, "link": link.name, "active": link.active and link.archived_at is None,
+            "prospects": prospects, "appointments": len(appointments), "visits": visits, "vehicles_sold": sold,
+            "conversion_pct": round(sold * 100 / visits) if visits else None,
+        })
+    return sorted(rows, key=lambda r: (-r["vehicles_sold"], -r["appointments"], r["name"]))
+
+
+def _aware(value: datetime) -> datetime:
+    from datetime import timezone
+
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)

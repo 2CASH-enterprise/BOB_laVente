@@ -19,6 +19,19 @@ STATUS_REQUESTED = "REQUESTED"
 STATUS_CONFIRMED = "CONFIRMED"
 STATUS_CANCELLED = "CANCELLED"
 
+# Lot 36 — issue d'un rendez-vous passé, saisie par le conseiller.
+OUTCOME_SOLD = "SOLD"
+OUTCOME_FOLLOW_UP = "FOLLOW_UP"
+OUTCOME_NOT_INTERESTED = "NOT_INTERESTED"
+OUTCOME_NO_SHOW = "NO_SHOW"
+OUTCOMES = {
+    OUTCOME_SOLD: "Venu, vendu",
+    OUTCOME_FOLLOW_UP: "Venu, à relancer",
+    OUTCOME_NOT_INTERESTED: "Venu, pas intéressé",
+    OUTCOME_NO_SHOW: "Absent",
+}
+VISITED_OUTCOMES = frozenset({OUTCOME_SOLD, OUTCOME_FOLLOW_UP, OUTCOME_NOT_INTERESTED})
+
 
 class AppointmentRequest(Base):
     __tablename__ = "appointment_requests"
@@ -61,5 +74,12 @@ class AppointmentRequest(Base):
     cancelled_by: Mapped[str | None] = mapped_column(String(64))  # "CLIENT" ou user_id
     rescheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rescheduled_by: Mapped[str | None] = mapped_column(String(64))  # "CLIENT" ou user_id
+
+    # Lot 36 — issue du rendez-vous et relance (une seule, jamais plus).
+    outcome: Mapped[str | None] = mapped_column(String(16))
+    outcome_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome_by: Mapped[str | None] = mapped_column(String(64))
+    followup_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    followup_channel: Mapped[str | None] = mapped_column(String(16))  # "WHATSAPP", "EMAIL", "TASK"
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -270,3 +270,24 @@ def test_vehicle_sheet_fields_only_for_dealerships_and_escaped():
     assert 'if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");' in HTML
     rows = re.search(r"async function loadProducts\(\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert "esc(vehicleSummary(p.vehicle))" in rows
+
+
+# --- Lot 36 : incident — une constante déclarée deux fois bloquait tout le tableau de bord -------
+
+@pytest.mark.parametrize("page", ["app/static/dashboard/index.html", "app/static/instant-demo/index.html",
+                                  "app/static/superadmin/index.html"])
+def test_page_scripts_are_valid_javascript(page, tmp_path):
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node absent : vérification de syntaxe JavaScript impossible ici")
+    html = open(page, encoding="utf-8").read()
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+    assert scripts
+    for i, script in enumerate(scripts):
+        path = tmp_path / f"script{i}.js"
+        path.write_text(script, encoding="utf-8")
+        result = subprocess.run([node, "--check", str(path)], capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr

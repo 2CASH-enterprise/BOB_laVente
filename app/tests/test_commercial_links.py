@@ -390,7 +390,7 @@ async def test_day_before_reminder_goes_to_the_commercial_too():
     first = await appointment_reminders.send_due_reminders(session_factory=factory, now=evening, send=fake_send)
     second = await appointment_reminders.send_due_reminders(session_factory=factory, now=evening, send=fake_send)
 
-    assert first == {"staff": 1, "customer": 0, "whatsapp": 0, "failed": 0} and second["staff"] == 0
+    assert first == {"staff": 1, "customer": 0, "whatsapp": 0, "followups": 0, "failed": 0} and second["staff"] == 0
     assert sorted(m["to"] for m in outbox) == sorted(["concession@example.com", SELLER])
     await engine.dispose()
 

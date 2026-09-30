@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_online_store
+from app.services.business_type import only_dealership, only_online_store
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
@@ -133,3 +133,19 @@ async def get_sources_summary(
     summary = await sources_summary(db, current_user.tenant_id, since)
     tenant = await db.get(Tenant, current_user.tenant_id)
     return {"period": period, "currency": tenant.currency if tenant else None, **summary}
+
+
+@router.get("/commercials", dependencies=[Depends(only_dealership())])
+async def get_commercials_summary(
+    period: str = Query(default="30", pattern="^(30|90|all)$"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Lot 36 — résultats par commercial (concession)."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.services.acquisition import commercials_summary
+
+    days = _SOURCE_PERIODS[period]
+    since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
+    return {"period": period, "rows": await commercials_summary(db, current_user.tenant_id, since)}
