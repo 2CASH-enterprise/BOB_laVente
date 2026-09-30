@@ -37,10 +37,12 @@ from app.services.signal_service import classify_and_store
 from app.services.strategy_service import apply_strategy
 from app.services.handoff_service import (
     TRANSFER_MESSAGE_TYPES,
+    alert_emails,
     build_callback_alert,
     build_handoff_alert,
     build_outage_alert,
     build_reminder_alert,
+    commercial_for_customer,
     history_since_last_transfer,
     reminder_due,
 )
@@ -162,13 +164,17 @@ async def receive_webhook(
                 product = await db.get(Product, qr.product_id)
                 customer.acquisition_source = "QR"
                 customer.acquisition_detail = f"Produit scanné : {product.name}" if product else None
-        elif is_new_customer and kind == "W":
+        elif kind == "W":
             cp_stmt = select(ContactPoint).where(ContactPoint.tenant_id == tenant_id, ContactPoint.code == code)
             contact_point = (await db.execute(cp_stmt)).scalar_one_or_none()
-            if contact_point is not None:
+            if contact_point is not None and is_new_customer:
                 customer.acquisition_source = "LINK"
                 customer.acquisition_detail = contact_point.name
                 customer.acquisition_contact_point_id = contact_point.id
+            # Lot 27 — lien d'un commercial : le client lui est rattaché, même s'il était déjà connu
+            # (dernier commercial qui l'a amené). La source d'acquisition, elle, ne change jamais.
+            if contact_point is not None and contact_point.owner_email and contact_point.archived_at is None:
+                customer.referred_contact_point_id = contact_point.id
 
     incoming_message = Message(
         tenant_id=tenant_id,
@@ -192,16 +198,17 @@ async def receive_webhook(
     # Le client relance pendant qu'il attend un humain (transfert fait par Bob) : rappel au
     # commerçant, au plus une fois par heure — sinon le client reste sans réponse sans que
     # personne ne le sache.
-    reminder_email = None
+    reminder_emails: list[dict] = []
     if not is_opt_out and reminder_due(conversation):
         tenant_for_alert = await db.get(Tenant, tenant_id)
         subject, body = build_reminder_alert(customer, conversation, incoming_text)
-        reminder_email = {"to": tenant_for_alert.email, "subject": subject, "body": body}
+        commercial = await commercial_for_customer(db, customer)
+        reminder_emails = alert_emails(tenant_for_alert.email, commercial, subject, body)
         conversation.human_alert_sent_at = datetime.now(timezone.utc)
 
     await db.commit()
-    if reminder_email:
-        background_tasks.add_task(send_email, **reminder_email)
+    for email in reminder_emails:
+        background_tasks.add_task(send_email, **email)
 
     # Phase 1 (lot 12) — étiquettes du message (intentions, objections, prix proposé), pour
     # TOUS les messages texte du client, même en attente d'un humain. Jamais bloquant, et
@@ -226,7 +233,7 @@ async def receive_webhook(
 
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
-    outage_email = None
+    outage_emails: list[dict] = []
     image_outbox: list[dict] = []  # lot 26c : photos de produits demandées par Bob, envoyées après sa réponse
     if is_opt_out:
         reply_text = (
@@ -291,10 +298,10 @@ async def receive_webhook(
                 if turn.rule == "AI_OUTAGE_CALLBACK":
                     if await rate_limiter.is_allowed(f"ai-outage-callback:{tenant_id}:{customer.id}", limit=1, window_seconds=3600):
                         subject, body = build_callback_alert(customer, conversation, incoming_text)
-                        outage_email = {"to": tenant.email, "subject": subject, "body": body}
+                        outage_emails = alert_emails(tenant.email, await commercial_for_customer(db, customer), subject, body)
                 elif await rate_limiter.is_allowed(f"ai-outage:{tenant_id}", limit=1, window_seconds=3600):
                     subject, body = build_outage_alert(tenant.name)
-                    outage_email = {"to": tenant.email, "subject": subject, "body": body}
+                    outage_emails = [{"to": tenant.email, "subject": subject, "body": body}]
             elif is_dealership(tenant) and contains_financing_figure(reply_text):
                 # Lot 24 — concession : jamais de mensualité, de taux, d'apport ni de valeur de reprise
                 # annoncés par Bob. La réponse entière est remplacée ; le client est transmis à un
@@ -358,7 +365,7 @@ async def receive_webhook(
 
     # Bob vient de transmettre la conversation (outil de transfert ou négociation sans accord) :
     # le commerçant est prévenu immédiatement par email.
-    handoff_email = None
+    handoff_emails: list[dict] = []
     if conversation.status == ConversationStatus.WAITING_HUMAN:
         reason_stmt = (
             select(Message)
@@ -379,14 +386,12 @@ async def receive_webhook(
             reason = transfer.content  # négociation : le texte complet (offre, plancher) est utile
 
         subject, body = build_handoff_alert(customer, conversation, reason)
-        handoff_email = {"to": tenant.email, "subject": subject, "body": body}
+        handoff_emails = alert_emails(tenant.email, await commercial_for_customer(db, customer), subject, body)
         conversation.human_alert_sent_at = datetime.now(timezone.utc)
 
     await db.commit()
-    if handoff_email:
-        background_tasks.add_task(send_email, **handoff_email)
-    if outage_email:
-        background_tasks.add_task(send_email, **outage_email)
+    for email in handoff_emails + outage_emails:
+        background_tasks.add_task(send_email, **email)
 
     # Envoi réel vers WhatsApp (section 3 : ... -> WhatsApp API -> CLIENT). Ne doit jamais
     # faire planter le webhook si Meta est indisponible ou si le token a expiré : on journalise

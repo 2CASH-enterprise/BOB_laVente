@@ -65,11 +65,18 @@ async def can_create_qr_code(db: AsyncSession, tenant_id) -> bool:
     return await count_qr_codes(db, tenant_id) < MAX_QR_CODES_PER_TENANT
 
 
+DEALERSHIP_MAX_CONTACT_POINTS = 30  # lot 27 : un lien par commercial, plus les campagnes
+
+
 def max_contact_points(tenant) -> int | None:
-    """Liens/widgets : 1 en freemium, 10 en payant ; None = illimité (tenant de démo)."""
+    """Liens/widgets : 1 en freemium, 10 en payant, 30 pour une concession payante ; None = illimité (démo)."""
+    from app.services.business_type import is_dealership
+
     if tenant.is_demo:
         return None
-    return PAID_MAX_CONTACT_POINTS if tenant.is_paid else FREEMIUM_MAX_CONTACT_POINTS
+    if not tenant.is_paid:
+        return FREEMIUM_MAX_CONTACT_POINTS
+    return DEALERSHIP_MAX_CONTACT_POINTS if is_dealership(tenant) else PAID_MAX_CONTACT_POINTS
 
 
 async def count_contact_points(db: AsyncSession, tenant_id) -> int:

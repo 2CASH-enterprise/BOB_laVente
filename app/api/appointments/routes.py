@@ -20,6 +20,7 @@ from app.models.appointment_request import (
     AppointmentRequest,
 )
 from app.models.conversation import Conversation
+from app.models.contact_point import ContactPoint
 from app.models.customer import Customer
 from app.models.tenant import Tenant
 from app.services import appointment_service
@@ -48,6 +49,7 @@ class AppointmentOut(BaseModel):
     created_at: datetime
     customer: str
     conversation_id: UUID
+    referred_by: str | None = None  # lot 27 : commercial dont le lien a amené le client
     can_notify: bool  # le client a écrit il y a moins de 20 h : un message WhatsApp peut partir
 
 
@@ -75,6 +77,11 @@ async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: dat
     customer = await db.get(Customer, appointment.customer_id)
     conversation = await db.get(Conversation, appointment.conversation_id)
     closes_at = await reply_window_closes_at(db, conversation) if conversation is not None else None
+    referred_by = None
+    if customer is not None and customer.referred_contact_point_id is not None:
+        cp = await db.get(ContactPoint, customer.referred_contact_point_id)
+        if cp is not None and cp.tenant_id == appointment.tenant_id:
+            referred_by = cp.owner_name or cp.owner_email
     return AppointmentOut(
         id=appointment.id,
         kind=appointment.kind,
@@ -92,6 +99,7 @@ async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: dat
         created_at=appointment.created_at,
         customer=customer_display_name(customer) if customer else "Client",
         conversation_id=appointment.conversation_id,
+        referred_by=referred_by,
         can_notify=closes_at is not None and now < closes_at,
     )
 

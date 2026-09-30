@@ -36,6 +36,10 @@ class ContactPoint(Base):
     greeting: Mapped[str] = mapped_column(String(300), nullable=False)  # message pré-rempli par défaut
     position: Mapped[str] = mapped_column(String(8), nullable=False, default=POSITION_RIGHT)  # bulle du widget
 
+    # Lot 27 — lien personnel d'un commercial (concession) : ses clients lui sont signalés.
+    owner_name: Mapped[str | None] = mapped_column(String(80))
+    owner_email: Mapped[str | None] = mapped_column(String(255))  # reçoit les alertes de SES clients
+
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     click_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 

@@ -44,6 +44,43 @@ def customer_display_name(customer: Customer) -> str:
     return full_name or number or "Client"
 
 
+async def commercial_for_customer(db, customer: Customer | None):
+    """
+    Lot 27 — commercial qui a amené ce client (dernier lien commercial cliqué). Uniquement un lien
+    de la MÊME boutique, actif, non archivé et doté d'un email : un lien désactivé (commercial
+    parti) ne reçoit plus rien.
+    """
+    from app.models.contact_point import ContactPoint
+
+    if customer is None or customer.referred_contact_point_id is None:
+        return None
+    cp = await db.get(ContactPoint, customer.referred_contact_point_id)
+    if cp is None or cp.tenant_id != customer.tenant_id or not cp.active or cp.archived_at is not None:
+        return None
+    if not cp.owner_email:
+        return None
+    return cp
+
+
+def commercial_label(commercial) -> str:
+    return (commercial.owner_name or commercial.owner_email) if commercial is not None else ""
+
+
+def alert_emails(tenant_email: str | None, commercial, subject: str, body: str, **extra) -> list[dict]:
+    """
+    Destinataires d'une alerte : la boutique, plus le commercial qui a amené le client (un email
+    chacun, jamais en copie visible). Sans commercial, exactement l'alerte d'avant le lot 27.
+    """
+    if commercial is not None:
+        body = f"{body}\n\nClient amené par : {commercial_label(commercial)}"
+    emails = []
+    if tenant_email:
+        emails.append({"to": tenant_email, "subject": subject, "body": body, **extra})
+    if commercial is not None and commercial.owner_email.lower() != (tenant_email or "").lower():
+        emails.append({"to": commercial.owner_email, "subject": subject, "body": body, **extra})
+    return emails
+
+
 def conversation_link(conversation: Conversation) -> str:
     base = get_settings().public_base_url.rstrip("/")
     return f"{base}/dashboard/?conversation={conversation.id}"

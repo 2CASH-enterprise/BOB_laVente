@@ -649,6 +649,11 @@
           </select>
           <button id="cp-create-btn" class="action" onclick="createContactPoint()" style="white-space: nowrap;">Créer le lien</button>
         </div>
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-bottom: 4px;" class="cp-form">
+          <input id="cp-owner-name" class="input" placeholder="Commercial (facultatif, ex. Moussa)" maxlength="80">
+          <input id="cp-owner-email" class="input" type="email" placeholder="Email du commercial (reçoit les alertes de ses clients)" maxlength="255">
+        </div>
+        <p style="font-size: 11px; color: var(--muted); margin: 0 0 8px;">Un lien par commercial : chaque client qui arrive par son lien (ou son QR code) lui est rattaché, et il reçoit comme vous les alertes de transfert et de rendez-vous de ce client.</p>
         <div id="cp-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="cp-list" style="display: grid; gap: 14px;"></div>
       </div>
@@ -1240,6 +1245,7 @@ function appointmentCard(a, view) {
     a.trade_in ? `<li><b>Reprise :</b> ${esc(a.trade_in)}</li>` : "",
     a.financing_interest === true ? "<li><b>Financement :</b> intéressé</li>" : a.financing_interest === false ? "<li><b>Financement :</b> non</li>" : "",
     a.notes ? `<li><b>Notes :</b> ${esc(a.notes)}</li>` : "",
+    a.referred_by ? `<li><b>Amené par :</b> ${esc(a.referred_by)}</li>` : "",
   ].join("");
   const title = `${esc(a.kind_label)}${a.vehicle ? " · " + esc(a.vehicle) : ""}`;
   const when = a.scheduled_label ? `<span class="pill tone-info">${esc(a.scheduled_label)}</span>` : "";
@@ -2230,11 +2236,12 @@ async function loadContactPoints() {
           <div style="font-weight: 600;">${esc(cp.name)} ${cp.active ? "" : "<span style='font-size: 11px; color: var(--danger);'>(désactivé)</span>"}</div>
           <div style="font-size: 12px; color: var(--muted);">${cp.click_count} clic${cp.click_count > 1 ? "s" : ""} · ${cp.customer_count} client${cp.customer_count > 1 ? "s" : ""}</div>
         </div>
-        <div style="font-size: 12px; color: var(--muted); margin: 4px 0 10px;">Message : « ${esc(cp.greeting)} »</div>
+        <div style="font-size: 12px; color: var(--muted); margin: 4px 0 10px;">Message : « ${esc(cp.greeting)} »${cp.owner_email ? `<br>Commercial : <strong>${esc(cp.owner_name || "")}</strong> ${esc(cp.owner_email)}` : ""}</div>
 
         <div style="display: flex; gap: 6px; margin-bottom: 8px;">
           <input class="input" readonly value="${esc(link)}" style="font-size: 12px;" onclick="this.select()">
           <button class="action" style="white-space: nowrap; font-size: 12px;" onclick="copyText('${esc(link)}', 'Lien')">Copier le lien</button>
+          <button class="action secondary" style="white-space: nowrap; font-size: 12px;" onclick="openLinkQr('${esc(cp.id)}', false)">QR code</button>
         </div>
 
         <details style="margin-bottom: 8px;">
@@ -2242,8 +2249,9 @@ async function loadContactPoints() {
           <div style="display: flex; gap: 6px; margin-top: 8px;">
             <select class="input" id="cp-product-${cp.id}">${productOptions}</select>
             <button class="action secondary" style="white-space: nowrap; font-size: 12px;" onclick="copyProductLink('${cp.id}')">Copier</button>
+            <button class="action secondary" style="white-space: nowrap; font-size: 12px;" onclick="openLinkQr('${esc(cp.id)}', true)">QR code</button>
           </div>
-          <p style="font-size: 11px; color: var(--muted); margin: 6px 0 0;">Idéal pour une publication Facebook ou la description d'un produit du catalogue : le message indique le produit.</p>
+          <p style="font-size: 11px; color: var(--muted); margin: 6px 0 0;">Idéal pour une publication Facebook, un statut WhatsApp ou la description d'un produit du catalogue : le message indique le produit.</p>
         </details>
 
         <details style="margin-bottom: 10px;">
@@ -2256,6 +2264,7 @@ async function loadContactPoints() {
         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
           <button class="action secondary" style="font-size: 12px;" onclick="toggleContactPoint('${cp.id}', ${!cp.active})">${cp.active ? "Désactiver" : "Réactiver"}</button>
           <button class="action secondary" style="font-size: 12px;" onclick="editContactPointGreeting('${cp.id}')">Modifier le message</button>
+          <button class="action secondary" style="font-size: 12px;" onclick="editContactPointOwner('${cp.id}')">${cp.owner_email ? "Modifier le commercial" : "Attribuer à un commercial"}</button>
           <button class="action secondary" style="font-size: 12px;" onclick="archiveContactPoint('${cp.id}')">Supprimer</button>
         </div>
       </div>`;
@@ -2272,12 +2281,18 @@ async function createContactPoint() {
   const position = document.getElementById("cp-position").value;
   msg.textContent = "";
   if (!name) { msg.style.color = "var(--danger)"; msg.textContent = "Donnez un nom à ce lien (ex. Page Facebook)."; return; }
+  const ownerName = document.getElementById("cp-owner-name").value.trim();
+  const ownerEmail = document.getElementById("cp-owner-email").value.trim();
+  if (ownerName && !ownerEmail) { msg.style.color = "var(--danger)"; msg.textContent = "Indiquez l'email du commercial : c'est là qu'il reçoit les alertes de ses clients."; return; }
   const body = { name, position };
   if (greeting) body.greeting = greeting;
+  if (ownerEmail) { body.owner_email = ownerEmail; body.owner_name = ownerName; }
   try {
     await api("/api/v1/contact-points", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     document.getElementById("cp-name").value = "";
     document.getElementById("cp-greeting").value = "";
+    document.getElementById("cp-owner-name").value = "";
+    document.getElementById("cp-owner-email").value = "";
     msg.style.color = "var(--success)";
     msg.textContent = "Lien créé.";
     loadContactPoints();
@@ -2292,6 +2307,38 @@ function copyProductLink(id) {
   const sku = document.getElementById(`cp-product-${id}`).value;
   if (!cp || !sku) return;
   copyText(publicUrl(cp.short_path) + "?p=" + encodeURIComponent(sku), "Lien produit");
+}
+
+// Lot 27 — QR code d'un lien (ou d'un lien produit), à imprimer ou à poster en statut WhatsApp.
+function linkQrUrl(id, withProduct) {
+  const cp = allContactPoints.find((c) => c.id === id);
+  if (!cp) return null;
+  let url = publicUrl(cp.short_path);
+  if (withProduct) {
+    const sku = document.getElementById(`cp-product-${id}`).value;
+    if (!sku) return null;
+    url += "?p=" + encodeURIComponent(sku);
+  }
+  return `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(url)}`;
+}
+
+function openLinkQr(id, withProduct) {
+  const src = linkQrUrl(id, withProduct);
+  if (src) window.open(src, "_blank", "noopener");
+}
+
+async function editContactPointOwner(id) {
+  const cp = allContactPoints.find((c) => c.id === id);
+  const email = prompt("Email du commercial (laissez vide pour retirer le commercial) :", cp && cp.owner_email ? cp.owner_email : "");
+  if (email === null) return;
+  let name = "";
+  if (email.trim()) {
+    name = prompt("Nom du commercial :", cp && cp.owner_name ? cp.owner_name : "");
+    if (name === null) return;
+  }
+  try {
+    await patchContactPoint(id, { owner_email: email.trim(), owner_name: name.trim().slice(0, 80) });
+  } catch (e) { alert(e.message); }
 }
 
 function copyWidgetSnippet(id) {

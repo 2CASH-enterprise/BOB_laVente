@@ -2,18 +2,30 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 DEFAULT_GREETING = "Bonjour, je souhaite avoir des informations."
 
 
-class ContactPointCreate(BaseModel):
+class _OwnerFields(BaseModel):
+    """Lot 27 — commercial propriétaire du lien (facultatif). Chaîne vide = retirer."""
+
+    owner_name: str | None = Field(default=None, max_length=80)
+    owner_email: EmailStr | None = None
+
+    @field_validator("owner_email", mode="before")
+    @classmethod
+    def _empty_email_is_none(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
+
+
+class ContactPointCreate(_OwnerFields):
     name: str = Field(min_length=1, max_length=80)
     greeting: str = Field(default=DEFAULT_GREETING, min_length=1, max_length=300)
     position: Literal["LEFT", "RIGHT"] = "RIGHT"
 
 
-class ContactPointUpdate(BaseModel):
+class ContactPointUpdate(_OwnerFields):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     greeting: str | None = Field(default=None, min_length=1, max_length=300)
     position: Literal["LEFT", "RIGHT"] | None = None
@@ -29,6 +41,8 @@ class ContactPointResponse(BaseModel):
     active: bool
     click_count: int
     customer_count: int  # clients arrivés par ce point de contact
+    owner_name: str | None = None
+    owner_email: str | None = None
     short_path: str  # ex. "/w/Xk3p9Qa" — à préfixer par le domaine public côté client
     created_at: datetime | None = None
 

@@ -36,6 +36,11 @@ class Customer(Base):
     acquisition_contact_point_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("contact_points.id", ondelete="SET NULL"), index=True
     )
+    # Lot 27 — dernier commercial dont le lien a amené ce client (la source d'acquisition, elle,
+    # reste le tout premier contact). Sert à prévenir le bon commercial.
+    referred_contact_point_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("contact_points.id", ondelete="SET NULL")
+    )
     tags: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)  # note libre, éditable par un humain (section CRM.9)
 

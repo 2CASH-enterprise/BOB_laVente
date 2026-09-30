@@ -41,7 +41,7 @@ async def _send_all(factory, now: datetime, send) -> dict:
     from app.models.customer import Customer
     from app.models.tenant import Tenant
     from app.services import appointment_service
-    from app.services.handoff_service import conversation_link, customer_display_name
+    from app.services.handoff_service import alert_emails, commercial_for_customer, conversation_link, customer_display_name
     from app.services.local_time import tenant_zone
 
     async with factory() as db:
@@ -68,11 +68,14 @@ async def _send_all(factory, now: datetime, send) -> dict:
                         appointment, customer_display_name(customer) if customer else "Client", zone,
                         conversation_link(conversation),
                     )
-                    if send(to=tenant.email, subject=subject, body=body):
+                    # Lot 27 : la boutique ET le commercial qui a amené le client. Le rappel est
+                    # marqué envoyé dès que la boutique l'a reçu (le commercial est un plus).
+                    commercial = await commercial_for_customer(db, customer)
+                    results = [send(**email) for email in alert_emails(tenant.email, commercial, subject, body)]
+                    report["failed"] += results.count(False)
+                    if results and results[0]:
                         appointment.reminder_sent_at = now
                         report["staff"] += 1
-                    else:
-                        report["failed"] += 1
                 if due.customer:
                     subject, body = appointment_service.customer_reminder_email(appointment, tenant.name, zone)
                     if send(to=customer.email, subject=subject, body=body, from_name=tenant.name, reply_to=tenant.email):

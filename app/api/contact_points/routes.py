@@ -43,6 +43,7 @@ def _to_response(cp: ContactPoint, customer_count: int) -> ContactPointResponse:
         id=cp.id, code=cp.code, name=cp.name, greeting=cp.greeting, position=cp.position,
         active=cp.active, click_count=cp.click_count, customer_count=customer_count,
         short_path=f"/w/{cp.code}", created_at=cp.created_at,
+        owner_name=cp.owner_name, owner_email=cp.owner_email,
     )
 
 
@@ -119,6 +120,9 @@ async def create_contact_point(
     cp = ContactPoint(
         tenant_id=tenant.id, code=code, name=payload.name.strip(), greeting=payload.greeting.strip(),
         position=payload.position,
+        # Un commercial sans email ne recevrait rien : le nom seul n'est jamais enregistré.
+        owner_name=((payload.owner_name or "").strip() or None) if payload.owner_email else None,
+        owner_email=str(payload.owner_email).lower() if payload.owner_email else None,
     )
     db.add(cp)
     await db.commit()
@@ -137,7 +141,16 @@ async def update_contact_point(
     db: AsyncSession = Depends(get_db),
 ):
     cp = await _get_owned(db, current_user.tenant_id, contact_point_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    # Lot 27 : le commercial peut être retiré (valeur vide) ; les autres champs, jamais vidés.
+    if "owner_name" in changes:
+        cp.owner_name = (changes.pop("owner_name") or "").strip() or None
+    if "owner_email" in changes:
+        email = changes.pop("owner_email")
+        cp.owner_email = str(email).lower() if email else None
+    if cp.owner_email is None:
+        cp.owner_name = None
+    for field, value in changes.items():
         if value is None:
             continue
         setattr(cp, field, value.strip() if isinstance(value, str) else value)
