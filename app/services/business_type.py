@@ -32,7 +32,7 @@ SALES_TOOLS = frozenset({
     "get_frequently_bought_together",
 })
 # Outils propres à la concession : jamais en boutique en ligne.
-DEALERSHIP_TOOLS = frozenset({"request_appointment"})
+DEALERSHIP_TOOLS = frozenset({"request_appointment", "get_available_slots"})
 
 
 def normalize(value: str | None) -> str:

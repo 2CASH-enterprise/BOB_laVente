@@ -116,6 +116,7 @@ async def generate_ai_reply_detailed(
     llm_client: LLMClient,
     turn=None,
     image_outbox: list | None = None,
+    booking_outbox: list | None = None,
 ) -> tuple[str, str | None]:
     """
     Retourne le texte de la réponse de Bob. Ne lève jamais d'exception vers l'appelant :
@@ -129,6 +130,9 @@ async def generate_ai_reply_detailed(
     system_prompt = build_system_prompt(tenant, knowledge_entries, customer_memory)
     business_type = getattr(tenant, "business_type", None)
     executor = ToolExecutor(db, tenant.id, conversation, business_type=business_type)
+    if booking_outbox is not None:
+        # Lot 29 : un rendez-vous réservé est confirmé au client même si la réponse de Bob échoue ensuite.
+        executor.booking_outbox = booking_outbox
     tools = tools_for(business_type, TOOL_DEFINITIONS)
     # Lot 13 : consigne des règles de transmission pour CE message, et verrou du transfert.
     if turn is not None:

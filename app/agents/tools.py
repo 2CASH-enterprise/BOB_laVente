@@ -7,6 +7,7 @@ n'a aucun autre moyen d'obtenir ces informations (section 50 : le LLM comprend,
 raisonne, utilise les outils, communique ; il n'est jamais la source de vérité).
 """
 import json
+from datetime import timezone
 import logging
 import uuid
 
@@ -60,6 +61,8 @@ class ToolExecutor:
         self.products_with_photo: dict[str, str] = {}
         # Lot 26e : Bob a-t-il consulté au moins un produit pendant ce message ?
         self.looked_up_products = False
+        # Lot 29 : rendez-vous réservés par Bob pendant ce message (confirmation fixe envoyée ensuite).
+        self.booking_outbox: list = []
 
     async def execute(self, tool_name: str, tool_input: dict) -> dict:
         from app.services.business_type import tool_allowed
@@ -285,18 +288,122 @@ class ToolExecutor:
             result["unknown_products"] = unknown
         return result
 
+    async def _booking_context(self, lock: bool = False):
+        from datetime import datetime, timezone
+
+        from app.models.tenant import Tenant
+        from app.services import booking
+        from app.services.local_time import tenant_zone
+
+        tenant = await self.db.get(Tenant, self.tenant_id)
+        settings = await booking.load_settings(self.db, self.tenant_id, lock=lock)
+        return tenant, settings, tenant_zone(tenant), datetime.now(timezone.utc)
+
+    async def _tool_get_available_slots(self, tool_input: dict) -> dict:
+        """Lot 29 : créneaux réellement libres, calculés par le code (jamais par l'IA)."""
+        from datetime import date
+
+        from app.services import booking
+
+        tenant, settings, zone, now = await self._booking_context()
+        if not booking.booking_enabled(settings):
+            return {
+                "status": "no_online_booking",
+                "instruction": "Pas de créneaux à proposer : ne parle pas de créneaux au client (information "
+                               "interne). Demande-lui simplement quel jour et à quel moment il peut venir. Quand il "
+                               "répond, utilise request_appointment sans slot. Ne dis pas que tu transmets sa demande "
+                               "avant d'avoir appelé request_appointment.",
+            }
+        day, part, note = None, None, None
+        if tool_input.get("preferred_date"):
+            try:
+                day = date.fromisoformat(str(tool_input["preferred_date"]))
+            except ValueError:
+                return {"error": "preferred_date doit être au format AAAA-MM-JJ", **booking.today_for_ai(now, zone)}
+        if tool_input.get("part_of_day") in booking.PARTS_OF_DAY:
+            part = tool_input["part_of_day"]
+        slots = await booking.free_slots(self.db, tenant, settings, zone, now, day=day, part=part)
+        if not slots and (day is not None or part is not None):
+            note = "Aucun créneau libre à ce moment-là : propose plutôt ces prochains créneaux libres."
+            slots = await booking.free_slots(self.db, tenant, settings, zone, now)
+        result = {**booking.today_for_ai(now, zone), "slots": booking.slots_for_ai(slots, zone)}
+        if note:
+            result["note"] = note
+        if not slots:
+            result["instruction"] = ("Aucun créneau libre dans les 7 prochains jours : demande au client quel jour et "
+                                     "à quel moment il peut venir, puis utilise request_appointment sans slot. Ne dis "
+                                     "pas que tu transmets sa demande avant d'avoir appelé request_appointment.")
+        else:
+            result["instruction"] = ("Propose ces créneaux au client avec ces libellés exacts, et aucun autre. "
+                                     "Quand il en choisit un, appelle request_appointment avec slot = la valeur "
+                                     "« slot » de ce créneau.")
+        return result
+
+    async def _book_slot(self, tool_input: dict, kind: str) -> tuple[object | None, dict | None]:
+        """
+        Lot 29 : réserve et CONFIRME le créneau choisi, après l'avoir revérifié sous verrou.
+        Renvoie (rendez-vous, None) ou (None, erreur pour l'IA).
+        """
+        from app.services import booking
+        from app.services.local_time import format_local
+
+        tenant, settings, zone, now = await self._booking_context(lock=True)
+        if not booking.booking_enabled(settings):
+            return None, {"error": "La réservation en ligne n'est pas activée : demande ses disponibilités au "
+                                   "client et utilise request_appointment sans slot."}
+        try:
+            start = booking.parse_slot_id(tool_input.get("slot"), zone)
+        except ValueError:
+            start = None
+        if start is None or not await booking.is_bookable(self.db, tenant, settings, zone, now, start):
+            fresh = await booking.free_slots(self.db, tenant, settings, zone, now)
+            return None, {
+                "error": "Ce créneau n'est pas disponible (déjà pris, fermé ou passé).",
+                "available_slots": booking.slots_for_ai(fresh, zone),
+                "instruction": "Propose au client ces créneaux libres à la place.",
+            }
+        return (start, format_local(start, zone), now), None
+
     async def _tool_request_appointment(self, tool_input: dict) -> dict:
         """
         Lot 24 (concession) : enregistre la demande puis la transmet à un conseiller. Le transfert
         n'est pas soumis au verrou « transfert interdit » : une demande de rendez-vous concrète est
         toujours un motif légitime, et un rendez-vous que personne ne verrait serait perdu.
+
+        Lot 29 : avec un créneau (slot) proposé par get_available_slots, le rendez-vous est
+        confirmé tout de suite, sans transfert ; le client reçoit une confirmation fixe.
         """
-        from app.models.appointment_request import APPOINTMENT_KINDS, AppointmentRequest
+        from app.models.appointment_request import APPOINTMENT_KINDS, STATUS_CONFIRMED, AppointmentRequest
 
         kind = tool_input.get("kind")
         availability = (tool_input.get("availability") or "").strip()
         if kind not in APPOINTMENT_KINDS:
             return {"error": "Type de rendez-vous invalide : ESSAI, VISITE ou ESTIMATION_REPRISE"}
+        booked = None
+        if tool_input.get("slot"):
+            booked, error = await self._book_slot(tool_input, kind)
+            if error:
+                return error
+            availability = booked[1]
+        else:
+            # Lot 29b — verrou : quand la concession a des créneaux libres, Bob ne peut pas
+            # transmettre une demande en texte libre ; il doit proposer ces créneaux.
+            from app.services import booking
+
+            tenant, settings, zone, now = await self._booking_context()
+            if booking.booking_enabled(settings):
+                slots = await booking.free_slots(self.db, tenant, settings, zone, now)
+                if slots:
+                    return {
+                        "error": "Ne transmets pas cette demande : la concession a des créneaux libres.",
+                        **booking.today_for_ai(now, zone),
+                        "slots": booking.slots_for_ai(slots, zone),
+                        "instruction": (
+                            "Propose ces créneaux au client avec ces libellés exacts (ou appelle get_available_slots "
+                            "avec le jour ou le moment qu'il a indiqué). Quand il en choisit un, appelle "
+                            "request_appointment avec slot = la valeur « slot » de ce créneau."
+                        ),
+                    }
         if not availability:
             return {"error": "Demande d'abord au client quand il est disponible."}
 
@@ -319,7 +426,7 @@ class ToolExecutor:
         financing = tool_input.get("financing_interest")
         financing = financing if isinstance(financing, bool) else None
 
-        self.db.add(AppointmentRequest(
+        appointment = AppointmentRequest(
             tenant_id=self.tenant_id,
             conversation_id=self.conversation.id,
             customer_id=self.customer_id,
@@ -332,7 +439,32 @@ class ToolExecutor:
             budget=budget,
             trade_in=trade_in,
             financing_interest=financing,
-        ))
+        )
+        self.db.add(appointment)
+
+        if booked is not None:
+            start, label, now = booked
+            appointment.status = STATUS_CONFIRMED
+            appointment.scheduled_at = start.astimezone(timezone.utc)
+            appointment.confirmed_at = now
+            appointment.confirmed_by = "BOB"
+            parts = [APPOINTMENT_KINDS[kind], vehicle, label]
+            self.db.add(Message(
+                tenant_id=self.tenant_id, conversation_id=self.conversation.id, sender=MessageSender.SYSTEM,
+                message_type="appointment_booked",
+                content="Rendez-vous confirmé par Bob : " + " — ".join(p for p in parts if p),
+            ))
+            await self.db.flush()
+            self.booking_outbox.append(appointment)
+            return {
+                "status": "appointment_confirmed",
+                "when": label,
+                "instruction": (
+                    f"Le rendez-vous est confirmé ({label}). Un message de confirmation part automatiquement "
+                    "juste après ta réponse : réponds brièvement et chaleureusement, sans changer la date ni "
+                    "l'heure, et sans dire qu'un conseiller va recontacter le client."
+                ),
+            }
 
         details = [APPOINTMENT_KINDS[kind]]
         if vehicle:

@@ -617,9 +617,33 @@
 
     <section id="tab-appointments" class="hidden">
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">
-        Les rendez-vous demandés à Bob. Bob ne confirme jamais lui-même : fixez la date et l'heure, le client est prévenu sur WhatsApp.
+        Les rendez-vous obtenus par Bob. Avec les créneaux en ligne, Bob propose vos créneaux libres et confirme celui que
+        le client choisit ; sinon, fixez vous-même la date et l'heure, le client est prévenu sur WhatsApp.
         Un rappel vous est envoyé par email la veille à 18 h. <span id="appt-timezone"></span>
       </p>
+      <details class="card" id="booking-card" style="margin-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600;">Créneaux proposés par Bob <span id="booking-status" style="font-weight: 400; color: var(--muted); font-size: 13px;"></span></summary>
+        <div style="margin-top: 12px;">
+          <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-bottom: 12px;">
+            <input type="checkbox" id="booking-enabled" style="margin-top: 3px;">
+            <span>Bob propose vos créneaux libres et <strong>confirme lui-même</strong> le rendez-vous choisi par le client
+              (vous êtes prévenu par email et pouvez toujours changer l'heure ou annuler).</span>
+          </label>
+          <div id="booking-hours" style="display: grid; gap: 6px; margin-bottom: 12px;"></div>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; font-size: 14px;">
+            <label>Durée d'un rendez-vous
+              <select id="booking-slot" class="input" style="width: auto; display: inline-block; margin-left: 6px;">
+                <option value="30">30 min</option><option value="45">45 min</option><option value="60">1 h</option>
+                <option value="90">1 h 30</option><option value="120">2 h</option>
+              </select></label>
+            <label>Clients reçus en même temps
+              <input id="booking-capacity" class="input" type="number" min="1" max="20" style="width: 80px; display: inline-block; margin-left: 6px;"></label>
+          </div>
+          <button class="action" onclick="saveBookingSettings()">Enregistrer</button>
+          <div id="booking-msg" style="font-size: 13px; margin-top: 8px;"></div>
+          <div id="booking-preview" style="font-size: 13px; color: var(--muted); margin-top: 8px;"></div>
+        </div>
+      </details>
       <div class="appt-views" role="group" aria-label="Rendez-vous affichés">
         <button type="button" class="pill" data-view="pending" aria-pressed="true" onclick="loadAppointments('pending')">À confirmer</button>
         <button type="button" class="pill" data-view="confirmed" aria-pressed="false" onclick="loadAppointments('confirmed')">Confirmés</button>
@@ -1269,7 +1293,8 @@ function appointmentCard(a, view) {
   ].join("");
   const title = `${esc(a.kind_label)}${a.vehicle ? " · " + esc(a.vehicle) : ""}`;
   const when = a.scheduled_label ? `<span class="pill tone-info">${esc(a.scheduled_label)}</span>` : "";
-  const status = a.status === "CANCELLED" ? `<span class="pill tone-danger">Annulé</span>` : when;
+  const byBob = a.confirmed_by_bob && a.status === "CONFIRMED" ? ` <span class="pill tone-success">Confirmé par Bob</span>` : "";
+  const status = a.status === "CANCELLED" ? `<span class="pill tone-danger">Annulé</span>` : when + byBob;
   const notifyNote = a.can_notify ? "" : ` <span style="color: var(--warning);">(le client n'a pas écrit depuis plus de 20 h : WhatsApp ne permet pas de le prévenir, appelez-le)</span>`;
   let actions = "";
   if (view !== "closed") {
@@ -1289,6 +1314,70 @@ function appointmentCard(a, view) {
       ${actions}
       <div class="appt-actions"><button class="action secondary" onclick="jumpToCustomerConversation('${esc(a.conversation_id)}')">Voir la conversation</button></div>
     </div>`;
+}
+
+// ---- Lot 29 : créneaux proposés par Bob ----
+const BOOKING_DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
+function bookingDayRow(i, ranges) {
+  const [r1, r2] = [ranges[0] || ["", ""], ranges[1] || ["", ""]];
+  const open = ranges.length > 0;
+  const t = (id, v) => `<input type="time" class="input" id="${id}" value="${esc(v)}" step="900" style="width: 110px; display: inline-block; padding: 6px;">`;
+  return `<div class="booking-day" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px;">
+    <label style="width: 110px;"><input type="checkbox" id="bd-open-${i}" ${open ? "checked" : ""}> ${BOOKING_DAYS[i]}</label>
+    <span style="white-space: nowrap;">${t(`bd-${i}-a1`, open ? r1[0] : "09:00")} – ${t(`bd-${i}-a2`, open ? r1[1] : "18:00")}</span>
+    <span style="white-space: nowrap;"><span style="color: var(--muted); font-size: 12px;">puis</span>
+    ${t(`bd-${i}-b1`, r2[0])} – ${t(`bd-${i}-b2`, r2[1])}</span>
+  </div>`;
+}
+
+async function loadBookingSettings() {
+  try {
+    const s = await api("/api/v1/appointments/settings");
+    document.getElementById("booking-enabled").checked = s.online_booking;
+    document.getElementById("booking-slot").value = String(s.slot_minutes);
+    document.getElementById("booking-capacity").value = s.capacity;
+    document.getElementById("booking-hours").innerHTML = BOOKING_DAYS.map((_, i) => bookingDayRow(i, s.opening_hours[String(i)] || [])).join("");
+    document.getElementById("booking-status").textContent = s.online_booking ? "· activés" : "· désactivés";
+    renderBookingPreview(s);
+  } catch (e) {
+    document.getElementById("booking-msg").textContent = e.message;
+  }
+}
+
+function renderBookingPreview(s) {
+  const box = document.getElementById("booking-preview");
+  box.innerHTML = s.online_booking
+    ? (s.preview.length ? `Prochains créneaux que Bob proposerait : ${s.preview.map(esc).join(" · ")}` : "Aucun créneau libre dans les 7 prochains jours.")
+    : "";
+}
+
+async function saveBookingSettings() {
+  const msg = document.getElementById("booking-msg");
+  const hours = {};
+  for (let i = 0; i < 7; i++) {
+    if (!document.getElementById(`bd-open-${i}`).checked) continue;
+    const v = (k) => document.getElementById(`bd-${i}-${k}`).value;
+    const ranges = [[v("a1"), v("a2")]];
+    if (v("b1") && v("b2")) ranges.push([v("b1"), v("b2")]);
+    hours[String(i)] = ranges;
+  }
+  const body = {
+    online_booking: document.getElementById("booking-enabled").checked,
+    opening_hours: hours,
+    slot_minutes: Number(document.getElementById("booking-slot").value),
+    capacity: Number(document.getElementById("booking-capacity").value),
+  };
+  try {
+    const s = await api("/api/v1/appointments/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+    document.getElementById("booking-status").textContent = s.online_booking ? "· activés" : "· désactivés";
+    renderBookingPreview(s);
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
 }
 
 async function loadAppointments(view) {
@@ -1383,7 +1472,7 @@ function showTab(name) {
   if (name === "orders") loadOrders();
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
-  if (name === "appointments") loadAppointments(currentAppointmentView);
+  if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "bob") { loadBusinessType(); loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "settings") loadMfaStatus();
 }

@@ -249,6 +249,7 @@ async def receive_webhook(
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
     outage_emails: list[dict] = []
+    booking_outbox: list = []  # lot 29 : rendez-vous réservés par Bob, confirmés au client après sa réponse
     image_outbox: list[dict] = []  # lot 26c : photos de produits demandées par Bob, envoyées après sa réponse
     if is_opt_out:
         reply_text = (
@@ -291,6 +292,7 @@ async def receive_webhook(
                 llm_client=llm_client,
                 turn=turn,
                 image_outbox=image_outbox,
+                booking_outbox=booking_outbox,
             )
             if failure == FAILURE_LOOP:
                 # Anomalie (Bob tourne en rond) : un humain doit regarder → vrai transfert + alerte.
@@ -404,8 +406,25 @@ async def receive_webhook(
         handoff_emails = alert_emails(tenant.email, await commercial_for_customer(db, customer), subject, body)
         conversation.human_alert_sent_at = datetime.now(timezone.utc)
 
+    # Lot 29 — Bob a réservé un créneau : la boutique et le commercial du client sont prévenus.
+    booking_emails: list[dict] = []
+    booking_messages: list[str] = []
+    if booking_outbox:
+        from app.services import appointment_service
+        from app.services.handoff_service import conversation_link, customer_display_name
+        from app.services.local_time import tenant_zone
+
+        zone = tenant_zone(tenant)
+        commercial = await commercial_for_customer(db, customer)
+        for appointment in booking_outbox:
+            subject, body = appointment_service.booking_alert_email(
+                appointment, customer_display_name(customer), zone, conversation_link(conversation),
+            )
+            booking_emails += alert_emails(tenant.email, commercial, subject, body)
+            booking_messages.append(appointment_service.confirmation_message(appointment, tenant.name, zone))
+
     await db.commit()
-    for email in handoff_emails + outage_emails:
+    for email in handoff_emails + outage_emails + booking_emails:
         background_tasks.add_task(send_email, **email)
 
     # Envoi réel vers WhatsApp (section 3 : ... -> WhatsApp API -> CLIENT). Ne doit jamais
@@ -418,6 +437,19 @@ async def receive_webhook(
         logging.getLogger(__name__).exception(
             "Échec de l'envoi WhatsApp réel pour la conversation %s", conversation.id
         )
+
+    # Lot 29 — confirmation FIXE (jamais rédigée par l'IA) du rendez-vous réservé, après la réponse ;
+    # tracée seulement si Meta l'accepte.
+    for text in booking_messages:
+        try:
+            await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
+        except Exception:  # noqa: BLE001 — le rendez-vous reste confirmé et visible dans la page Rendez-vous
+            logging.getLogger(__name__).warning("Confirmation de rendez-vous non envoyée (conversation %s)", conversation.id)
+            continue
+        db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                       message_type="appointment_confirmed", content=text, message_metadata={"sent_by": "BOB"}))
+    if booking_messages:
+        await db.commit()
 
     # Lot 26c — photos des produits, après le texte ; chacune n'est tracée que si Meta l'accepte.
     images_sent = 0

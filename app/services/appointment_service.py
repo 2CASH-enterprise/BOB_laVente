@@ -85,6 +85,24 @@ def staff_reminder_email(appointment: AppointmentRequest, customer_name: str, zo
     return f"Rappel : rendez-vous demain avec {customer_name}", "\n".join(lines)
 
 
+def booking_alert_email(appointment: AppointmentRequest, customer_name: str, zone, link: str) -> tuple[str, str]:
+    """Lot 29 — Bob a réservé un créneau : la boutique (et le commercial) sont prévenus."""
+    when = format_local(appointment.scheduled_at, zone)
+    lines = [
+        "Bonjour,",
+        "",
+        f"Bob a fixé un rendez-vous : {subject_phrase(appointment)} avec {customer_name}, {when}.",
+        "Le client a choisi ce créneau parmi vos créneaux libres ; il a reçu la confirmation sur WhatsApp.",
+        "Pour changer l'heure ou annuler, ouvrez la page Rendez-vous (le client peut être prévenu).",
+        "",
+    ]
+    qualification = qualification_lines(appointment)
+    if qualification:
+        lines += ["Ce que Bob a appris :", *[f"- {q}" for q in qualification], ""]
+    lines.append(f"Ouvrir la conversation : {link}")
+    return f"Nouveau rendez-vous : {customer_name}, {when}", "\n".join(lines)
+
+
 def customer_reminder_email(appointment: AppointmentRequest, shop_name: str, zone) -> tuple[str, str]:
     when = format_local(appointment.scheduled_at, zone)
     body = (

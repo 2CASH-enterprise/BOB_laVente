@@ -148,7 +148,7 @@ def evaluate(
                 "Le client pose une question de paiement ou de financement. Ne donne aucun chiffre et "
                 "n'affirme pas quelles solutions existent : réponds que son conseiller pourra lui présenter "
                 "les possibilités de financement lors de sa visite, note son intérêt et propose-lui de venir "
-                "(demande ses disponibilités). Ne transfère pas pour cette question : seulement s'il insiste "
+                "(get_available_slots pour lui proposer un créneau). Ne transfère pas pour cette question : seulement s'il insiste "
                 "pour avoir des chiffres tout de suite."
             ),
         )
@@ -163,7 +163,7 @@ def evaluate(
                 instruction=(
                     "Le client parle de remise ou de prix final. N'accorde aucune remise et n'annonce aucun "
                     "prix négocié : explique que le prix se discute avec un conseiller lors de la visite, et "
-                    "propose-lui de venir (request_appointment dès qu'il donne ses disponibilités). S'il "
+                    "propose-lui de venir (get_available_slots, puis request_appointment). S'il "
                     "insiste pour avoir une réponse maintenant, utilise handoff_to_human."
                 ),
             )

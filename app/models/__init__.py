@@ -26,6 +26,7 @@ from app.models.handoff_settings import TenantHandoffSettings  # noqa: F401
 from app.models.strategy_settings import TenantStrategySettings  # noqa: F401
 from app.models.email_campaign import EmailCampaign  # noqa: F401
 from app.models.appointment_request import AppointmentRequest  # noqa: F401
+from app.models.appointment_settings import TenantAppointmentSettings  # noqa: F401
 
 __all__ = [
     "Tenant",

@@ -208,10 +208,11 @@ TOOL_DEFINITIONS = [
         # Lot 24 — concession automobile uniquement (retiré à l'IA en boutique en ligne).
         "name": "request_appointment",
         "description": (
-            "Enregistre une demande de rendez-vous à la concession (essai, visite ou estimation de "
-            "reprise) et la transmet à un conseiller, qui la confirmera au client. À utiliser dès que "
-            "le client accepte de venir et a donné ses disponibilités. Tu ne confirmes JAMAIS toi-même "
-            "une date ou une heure : dis au client qu'un conseiller va lui confirmer le rendez-vous."
+            "Enregistre un rendez-vous à la concession (essai, visite ou estimation de reprise). Avec slot "
+            "(un créneau renvoyé par get_available_slots et choisi par le client) : le rendez-vous est "
+            "confirmé immédiatement et le client reçoit automatiquement une confirmation. Sans slot (pas de "
+            "créneaux en ligne) : la demande est transmise à un conseiller, qui confirmera ; tu ne confirmes "
+            "alors JAMAIS toi-même une date ou une heure."
         ),
         "input_schema": {
             "type": "object",
@@ -221,9 +222,13 @@ TOOL_DEFINITIONS = [
                     "enum": ["ESSAI", "VISITE", "ESTIMATION_REPRISE"],
                     "description": "Type de rendez-vous",
                 },
+                "slot": {
+                    "type": "string",
+                    "description": "Créneau choisi par le client, valeur « slot » exacte renvoyée par get_available_slots (ex. 2026-10-03T10:00)",
+                },
                 "availability": {
                     "type": "string",
-                    "description": "Disponibilités données par le client, avec ses mots (ex. « samedi matin »)",
+                    "description": "Sans slot : disponibilités données par le client, avec ses mots (ex. « samedi matin »)",
                 },
                 "product_id": {"type": "string", "description": "UUID du véhicule concerné, s'il est au catalogue"},
                 "vehicle": {"type": "string", "description": "Véhicule tel que le client le désigne, sinon"},
@@ -239,7 +244,25 @@ TOOL_DEFINITIONS = [
                 },
                 "notes": {"type": "string", "description": "Autre information utile au conseiller"},
             },
-            "required": ["kind", "availability"],
+            "required": ["kind"],
+        },
+    },
+    {
+        # Lot 29 — concession : créneaux libres calculés par le code.
+        "name": "get_available_slots",
+        "description": (
+            "Donne les créneaux de rendez-vous réellement libres à la concession dans les 7 prochains jours "
+            "(heure locale). À appeler dès que le client accepte de venir, avant de proposer une date. Si le "
+            "client a donné un jour ou un moment de la journée, passe-les. Ne propose JAMAIS un créneau qui "
+            "ne vient pas de cet outil."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "preferred_date": {"type": "string", "description": "Jour souhaité par le client, au format AAAA-MM-JJ (utilise la date du jour renvoyée par l'outil pour calculer « samedi », « demain »…)"},
+                "part_of_day": {"type": "string", "enum": ["MATIN", "APRES_MIDI", "SOIR"], "description": "Moment souhaité, s'il l'a dit"},
+            },
+            "required": [],
         },
     },
     {
