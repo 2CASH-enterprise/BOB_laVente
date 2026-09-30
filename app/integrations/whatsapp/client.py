@@ -8,6 +8,8 @@ import logging
 
 import httpx
 
+from app.integrations.whatsapp.formatting import to_whatsapp
+
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -113,7 +115,7 @@ class WhatsAppClient:
             "messaging_product": "whatsapp",
             "to": to,
             "type": "text",
-            "text": {"body": body},
+            "text": {"body": to_whatsapp(body)},  # lot 31 : **gras** Markdown → *gras* WhatsApp
         }
         return await self._post("/messages", payload)
 
@@ -121,7 +123,7 @@ class WhatsAppClient:
         """Lot 26c — photo d'un produit, par son adresse publique (https)."""
         image = {"link": link}
         if caption:
-            image["caption"] = caption[:1024]
+            image["caption"] = to_whatsapp(caption)[:1024]
         payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": image}
         return await self._post("/messages", payload)
 

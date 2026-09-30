@@ -17,6 +17,7 @@ from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_mess
 from app.models.conversation import ConversationStatus, Message, MessageSender
 from app.models.product import Product
 from app.models.contact_point import ContactPoint
+from app.integrations.whatsapp.formatting import to_whatsapp
 from app.services.acquisition import ad_context_for_ai, attribution_from_referral, parse_referral
 from app.services.email_service import send_email
 from app.core.rate_limit import RateLimiter
@@ -371,6 +372,9 @@ async def receive_webhook(
         if not tenant.is_paid:
             reply_text = f"{reply_text}\n\n_Propulsé par Bob 🤖_"
 
+    # Lot 31 — texte enregistré tel qu'il part sur WhatsApp (gras *…*, puces •), pour que le tableau
+    # de bord montre exactement ce que le client a reçu.
+    reply_text = to_whatsapp(reply_text)
     ai_message = Message(
         tenant_id=tenant_id,
         conversation_id=conversation.id,

@@ -2042,7 +2042,7 @@ async function openConversation(id) {
   // Le texte vient du client (WhatsApp) : TOUJOURS échappé, sinon un message piégé pourrait
   // exécuter du code dans le dashboard du commerçant.
   document.getElementById("conv-messages").innerHTML = c.messages
-    .map((m) => `<div class="msg ${esc(m.sender)}">${esc(m.content)}${signalChips(m.signals)}</div>`)
+    .map((m) => `<div class="msg ${esc(m.sender)}">${waFormat(m.content)}${signalChips(m.signals)}</div>`)
     .join("");
   document.getElementById("btn-takeover").classList.toggle("hidden", c.status === "WAITING_HUMAN");
   document.getElementById("btn-release").classList.toggle("hidden", c.status !== "WAITING_HUMAN");
@@ -2321,6 +2321,12 @@ async function toggleMfaSetting() {
 }
 
 // --- Liens WhatsApp & widgets -------------------------------------------------------
+
+// Lot 31 : affiche le gras WhatsApp (*texte*) comme sur le téléphone du client. Le texte est
+// d'abord échappé : seules les balises <strong> ajoutées ici sont du HTML.
+function waFormat(value) {
+  return esc(value).replace(/(^|[\s(«])\*(?=\S)([^*\n]*?\S)\*(?=$|[\s.,;:!?)»])/gm, "$1<strong>$2</strong>");
+}
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
