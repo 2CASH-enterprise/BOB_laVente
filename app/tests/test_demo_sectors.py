@@ -103,7 +103,9 @@ async def test_dealership_demo_books_a_slot_and_shows_the_fixed_confirmation(cli
 
     body = r.json()
     assert body["reply"] == "Parfait, *c'est noté* !"
-    assert body["extra_messages"] == [f"Bonjour ! Votre essai (Toyota RAV4) est confirmé le {label}. À bientôt chez Auto Plus !"]
+    assert body["extra_messages"][0] == f"Bonjour ! Votre essai (Toyota RAV4) est confirmé le {label}. À bientôt chez Auto Plus !"
+    # Lot 34b : puis la demande d'email, comme sur WhatsApp.
+    assert body["extra_messages"][1].startswith("Souhaitez-vous recevoir un rappel par email") and len(body["extra_messages"]) == 2
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,10 @@ class Customer(Base):
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(255))
+    # Lot 34 — comment et quand l'email a été obtenu, et si Bob l'a déjà demandé (une seule fois).
+    email_source: Mapped[str | None] = mapped_column(String(32))  # "BOB", "WHATSAPP_MESSAGE", "MANUAL"
+    email_collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     address: Mapped[str | None] = mapped_column(String(500))
     city: Mapped[str | None] = mapped_column(String(255))
     country: Mapped[str | None] = mapped_column(String(2))

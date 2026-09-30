@@ -26,6 +26,8 @@ class CustomerDetail(BaseModel):
     last_name: str | None
     whatsapp_number: str
     email: str | None
+    email_source: str | None = None  # lot 34
+    email_collected_at: datetime | None = None
     city: str | None
     acquisition_source: str | None
     acquisition_detail: str | None
@@ -51,3 +53,4 @@ class CustomerUpdate(BaseModel):
     notes: str | None = None
     tags: list[str] | None = None
     marketing_consent: bool | None = None
+    email: str | None = None  # lot 34 : saisi à la main ; chaîne vide = retirer

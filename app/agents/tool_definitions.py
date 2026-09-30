@@ -113,6 +113,19 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        # Lot 34 — email du client final (rappel de rendez-vous, récapitulatif de commande, offres).
+        "name": "record_customer_email",
+        "description": (
+            "Enregistre l'adresse email que le client vient de te donner. N'appelle cet outil que si le "
+            "client a lui-même écrit son adresse ; jamais une adresse devinée ou complétée par toi."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"email": {"type": "string", "description": "Adresse email exacte écrite par le client"}},
+            "required": ["email"],
+        },
+    },
+    {
         "name": "share_payment_link",
         "description": (
             "Renvoie le lien de paiement de l'entreprise (Wave, Orange Money, etc.), si "

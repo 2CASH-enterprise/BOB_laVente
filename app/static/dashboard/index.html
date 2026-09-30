@@ -1954,12 +1954,15 @@ async function openCustomer(id) {
     <div class="card" style="margin-top: 14px;">
       <div class="label" style="font-weight: 600; margin-bottom: 8px;">Notes internes</div>
       <textarea id="customer-notes" class="input" rows="3" style="margin-bottom: 8px; resize: vertical;">${esc(c.notes || "")}</textarea>
+      <label for="customer-email" style="font-size: 12px; color: var(--muted);">Email du client</label>
+      <input id="customer-email" class="input" type="email" maxlength="254" value="${esc(c.email || "")}" placeholder="Pas encore d'email" style="margin-bottom: 4px;">
+      <div style="font-size: 11px; color: var(--muted); margin-bottom: 10px;">${c.email && c.email_collected_at ? `${esc(EMAIL_SOURCE_LABELS[c.email_source] || "Enregistré")} le ${new Date(c.email_collected_at).toLocaleDateString()}` : ""}</div>
       <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px;">
         <input type="checkbox" id="customer-consent" ${c.marketing_consent ? "checked" : ""}> Consentement marketing (campagnes)
       </label>
       <div style="font-size: 11px; color: var(--muted); margin-bottom: 10px;">
         ${c.marketing_consent && c.marketing_consent_given_at
-          ? `Donné le ${new Date(c.marketing_consent_given_at).toLocaleDateString()} (${c.marketing_consent_source === "AI_ASKED" ? "demandé par Bob" : "coché manuellement"})`
+          ? `Donné le ${new Date(c.marketing_consent_given_at).toLocaleDateString()} (${({ AI_ASKED: "demandé par Bob", WHATSAPP_OFFRES: "réponse « OFFRES » sur WhatsApp" })[c.marketing_consent_source] || "coché manuellement"})`
           : c.marketing_consent_withdrawn_at
           ? `Retiré le ${new Date(c.marketing_consent_withdrawn_at).toLocaleDateString()}${WITHDRAWN_SOURCE_LABELS[c.marketing_consent_withdrawn_source] ? " (" + WITHDRAWN_SOURCE_LABELS[c.marketing_consent_withdrawn_source] + ")" : ""}`
           : "Jamais demandé"}
@@ -1974,6 +1977,9 @@ async function openCustomer(id) {
   `;
 }
 
+// Lot 34 : comment l'email du client a été obtenu.
+const EMAIL_SOURCE_LABELS = { BOB: "Donné à Bob", WHATSAPP_MESSAGE: "Écrit par le client sur WhatsApp", MANUAL: "Saisi à la main" };
+
 async function saveCustomerNotes(id) {
   const msg = document.getElementById("customer-notes-msg");
   try {
@@ -1983,6 +1989,7 @@ async function saveCustomerNotes(id) {
       body: JSON.stringify({
         notes: document.getElementById("customer-notes").value,
         marketing_consent: document.getElementById("customer-consent").checked,
+        email: document.getElementById("customer-email").value.trim(),
       }),
     });
     msg.style.color = "var(--success)";

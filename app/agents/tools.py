@@ -63,6 +63,8 @@ class ToolExecutor:
         self.looked_up_products = False
         # Lot 29 : rendez-vous réservés par Bob pendant ce message (confirmation fixe envoyée ensuite).
         self.booking_outbox: list = []
+        # Lot 34b : messages fixes à envoyer après la réponse de Bob (ex. demande d'email).
+        self.message_outbox: list[str] = []
 
     async def execute(self, tool_name: str, tool_input: dict) -> dict:
         from app.services.business_type import tool_allowed
@@ -456,14 +458,18 @@ class ToolExecutor:
             ))
             await self.db.flush()
             self.booking_outbox.append(appointment)
+            from app.services.contact_capture import REASON_APPOINTMENT
+
+            instruction = (
+                f"Le rendez-vous est confirmé ({label}). Un message de confirmation part automatiquement "
+                "juste après ta réponse : réponds brièvement et chaleureusement, sans changer la date ni "
+                "l'heure, et sans dire qu'un conseiller va recontacter le client."
+            )
+            ask = await self._email_ask(REASON_APPOINTMENT)  # lot 34
             return {
                 "status": "appointment_confirmed",
                 "when": label,
-                "instruction": (
-                    f"Le rendez-vous est confirmé ({label}). Un message de confirmation part automatiquement "
-                    "juste après ta réponse : réponds brièvement et chaleureusement, sans changer la date ni "
-                    "l'heure, et sans dire qu'un conseiller va recontacter le client."
-                ),
+                "instruction": f"{instruction} {ask}" if ask else instruction,
             }
 
         details = [APPOINTMENT_KINDS[kind]]
@@ -492,9 +498,14 @@ class ToolExecutor:
             content=f"Transfert vers un humain : {reason}",
         ))
         await self.db.flush()
+        from app.services.contact_capture import REASON_APPOINTMENT
+
+        instruction = ("Dis au client que sa demande est bien notée et qu'un conseiller va lui confirmer le "
+                       "rendez-vous. Ne confirme ni date ni heure toi-même.")
+        ask = await self._email_ask(REASON_APPOINTMENT)  # lot 34
         return {
             "status": "appointment_requested",
-            "instruction": "Dis au client que sa demande est bien notée et qu'un conseiller va lui confirmer le rendez-vous. Ne confirme ni date ni heure toi-même.",
+            "instruction": f"{instruction} {ask}" if ask else instruction,
         }
 
     async def _tool_negotiate_price(self, tool_input: dict) -> dict:
@@ -543,6 +554,32 @@ class ToolExecutor:
 
         await self.db.flush()
         return {"status": "saved"}
+
+    async def _tool_record_customer_email(self, tool_input: dict) -> dict:
+        """Lot 34 : adresse vérifiée par le code avant d'être enregistrée."""
+        from app.models.customer import Customer
+        from app.services.contact_capture import SOURCE_BOB, record_email, valid_email
+
+        customer = await self.db.get(Customer, self.customer_id)
+        if customer is None:
+            return {"error": "Client introuvable"}
+        email = valid_email(tool_input.get("email"))
+        if email is None:
+            return {"error": "Adresse email invalide : demande poliment au client de la vérifier."}
+        record_email(customer, email, SOURCE_BOB)
+        await self.db.flush()
+        return {"status": "saved", "instruction": "Remercie simplement le client, sans répéter son adresse."}
+
+    async def _email_ask(self, reason: str) -> str | None:
+        """Lot 34b : la demande d'email part en message fixe ; Bob est seulement prévenu."""
+        from app.models.customer import Customer
+        from app.services.contact_capture import NOTE_FOR_BOB, request_email
+
+        text = request_email(await self.db.get(Customer, self.customer_id), reason)
+        if text is None:
+            return None
+        self.message_outbox.append(text)
+        return NOTE_FOR_BOB
 
     async def _tool_share_payment_link(self, tool_input: dict) -> dict:
         from app.models.tenant import Tenant
@@ -636,12 +673,18 @@ class ToolExecutor:
 
         await self._send_order_confirmation(order)
 
-        return {
+        from app.services.contact_capture import REASON_ORDER
+
+        result = {
             "order_id": str(order.id),
             "status": order.status.value,
             "total_amount": float(order.total_amount),
             "currency": order.currency,
         }
+        ask = await self._email_ask(REASON_ORDER)  # lot 34
+        if ask:
+            result["instruction"] = ask
+        return result
 
     async def _send_order_confirmation(self, order) -> None:
         """

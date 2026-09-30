@@ -53,9 +53,13 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
     ][:MAX_VIEWED_PRODUCTS]
 
     preferences_lines = await _format_preferences(db, tenant_id, customer_id)
+    from app.services.contact_capture import contact_lines
+
+    contact = contact_lines(await db.get(Customer, customer_id))  # lot 34
+    contact_section = ("\n\nCONTACT DU CLIENT\n" + "\n".join(contact)) if contact else ""
 
     if not order_lines and not viewed_lines and not preferences_lines:
-        return ""
+        return contact_section
 
     sections = ["MÉMOIRE CLIENT (ce client a déjà échangé avec toi par le passé)"]
     if order_lines:
@@ -72,7 +76,7 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
         "qui revient, proposer un produit déjà consulté) — mais ne mentionne jamais un détail qui n'est "
         "pas listé ci-dessus, et ne dis jamais explicitement que tu consultes un « historique »."
     )
-    return "\n\n" + "\n\n".join(sections)
+    return "\n\n" + "\n\n".join(sections) + contact_section
 
 
 async def _format_preferences(db: AsyncSession, tenant_id, customer_id) -> str:

@@ -211,6 +211,25 @@ async def receive_webhook(
     if is_opt_out:
         withdraw_marketing_consent(customer, source=WITHDRAWN_VIA_WHATSAPP_KEYWORD)
 
+    # Lot 34 — le client écrit lui-même son email alors que sa fiche n'en a pas : enregistré par le
+    # code, sans dépendre de l'IA. Jamais d'écrasement d'un email déjà connu.
+    if not customer.email:
+        from app.services.contact_capture import SOURCE_MESSAGE, extract_email, record_email
+
+        written = extract_email(incoming_text)
+        if written:
+            record_email(customer, written, SOURCE_MESSAGE)
+
+    # Lot 34b — accord explicite pour les offres : le client répond « OFFRES » (proposé dans la
+    # demande d'email). Reconnaissance déterministe, comme STOP ; jamais laissée à l'IA.
+    from app.services.contact_capture import CONSENT_SOURCE_KEYWORD, is_offers_opt_in
+
+    is_opt_in = not is_opt_out and is_offers_opt_in(incoming_text)
+    if is_opt_in:
+        from app.services.consent_service import grant_marketing_consent
+
+        grant_marketing_consent(customer, source=CONSENT_SOURCE_KEYWORD)
+
     # Le client relance pendant qu'il attend un humain (transfert fait par Bob) : rappel au
     # commerçant, au plus une fois par heure — sinon le client reste sans réponse sans que
     # personne ne le sache.
@@ -250,6 +269,7 @@ async def receive_webhook(
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
     outage_emails: list[dict] = []
+    message_outbox: list[str] = []  # lot 34b : messages fixes après la réponse (demande d'email)
     booking_outbox: list = []  # lot 29 : rendez-vous réservés par Bob, confirmés au client après sa réponse
     image_outbox: list[dict] = []  # lot 26c : photos de produits demandées par Bob, envoyées après sa réponse
     if is_opt_out:
@@ -257,6 +277,10 @@ async def receive_webhook(
             "Vous avez été désinscrit(e) de nos communications marketing. "
             "Vous pouvez continuer à nous écrire à tout moment pour toute question."
         )
+    elif is_opt_in:
+        from app.services.contact_capture import opt_in_reply
+
+        reply_text = opt_in_reply(bool(customer.email))
     elif quota_exceeded:
         reply_text = FREEMIUM_QUOTA_MESSAGE.format(company_name=tenant.name)
     else:
@@ -294,6 +318,7 @@ async def receive_webhook(
                 turn=turn,
                 image_outbox=image_outbox,
                 booking_outbox=booking_outbox,
+                message_outbox=message_outbox,
             )
             if failure == FAILURE_LOOP:
                 # Anomalie (Bob tourne en rond) : un humain doit regarder → vrai transfert + alerte.
@@ -472,6 +497,18 @@ async def receive_webhook(
         ))
         images_sent += 1
     if images_sent:
+        await db.commit()
+
+    # Lot 34b — demande d'email (message fixe), en dernier : le client la lit après le reste.
+    for text in message_outbox:
+        try:
+            await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Demande d'email non envoyée (conversation %s)", conversation.id)
+            continue
+        db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.AI,
+                       message_type="contact_request", content=text))
+    if message_outbox:
         await db.commit()
 
     return {"status": "received", "ai_reply": reply_text, "images_sent": images_sent}

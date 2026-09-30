@@ -59,6 +59,17 @@ async def update_customer(
         elif not wants_consent and customer.marketing_consent:
             withdraw_marketing_consent(customer, source=WITHDRAWN_MANUALLY)
 
+    if "email" in payload_dict:
+        from app.services.contact_capture import SOURCE_MANUAL, record_email, valid_email
+
+        raw = (payload_dict.pop("email") or "").strip()
+        if not raw:
+            customer.email, customer.email_source, customer.email_collected_at = None, None, None
+        elif (email := valid_email(raw)) is None:
+            raise HTTPException(status_code=422, detail="Adresse email invalide")
+        elif email != customer.email:
+            record_email(customer, email, SOURCE_MANUAL)
+
     for field, value in payload_dict.items():
         setattr(customer, field, value)
 

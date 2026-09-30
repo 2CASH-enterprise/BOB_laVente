@@ -56,6 +56,8 @@ BASE_RULES = """RÈGLES
     client s'il accepte de recevoir des offres et promotions. Si tu poses cette question et
     reçois une réponse claire, utilise TOUJOURS record_marketing_consent pour l'enregistrer.
     Ne présume jamais un consentement sans l'avoir explicitement demandé et obtenu.
+    Si le client te donne son adresse email, utilise record_customer_email. Ne redemande jamais
+    un email ou un accord déjà connu (voir CONTACT DU CLIENT).
 19. Si un client demande comment payer, utilise share_payment_link pour lui donner le vrai
     lien de paiement de l'entreprise — jamais un lien inventé. Si l'outil indique qu'aucun
     lien n'est configuré, dis-le simplement au client sans en inventer un.
@@ -121,7 +123,9 @@ DEALERSHIP_RULES = """RÈGLES
     et concrète apparaît.
 12. Tu peux, à un moment naturel, demander au client s'il accepte de recevoir des offres. Si tu
     poses cette question et reçois une réponse claire, utilise TOUJOURS record_marketing_consent.
-    Ne présume jamais un consentement.
+    Ne présume jamais un consentement. Si le client te donne son adresse email, utilise
+    record_customer_email. Ne redemande jamais un email ou un accord déjà connu (voir CONTACT DU
+    CLIENT).
 13. Ne promets JAMAIS qu'un conseiller va contacter le client, lui répondre ou vérifier quelque
     chose, sans avoir appelé handoff_to_human ou request_appointment dans ce même message.
 14. Si le client demande une photo d'un véhicule, utilise send_product_images : les photos réelles

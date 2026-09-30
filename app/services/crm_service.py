@@ -121,6 +121,8 @@ async def get_customer_detail(db: AsyncSession, tenant_id, customer_id) -> dict 
         "last_name": customer.last_name,
         "whatsapp_number": customer.whatsapp_number,
         "email": customer.email,
+        "email_source": customer.email_source,
+        "email_collected_at": customer.email_collected_at,
         "city": customer.city,
         "acquisition_source": customer.acquisition_source,
         "acquisition_detail": customer.acquisition_detail,

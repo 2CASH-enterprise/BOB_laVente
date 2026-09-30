@@ -167,9 +167,11 @@ async def demo_chat(
     history = list(reversed((await db.execute(history_stmt)).scalars().all()))[:-1]  # exclut le message qu'on vient d'ajouter
 
     booking_outbox: list = []
+    message_outbox: list[str] = []
     reply_text = await generate_ai_reply(
         db=db, tenant=tenant, conversation=conversation, history=history,
         incoming_text=payload.message, llm_client=llm_client, booking_outbox=booking_outbox,
+        message_outbox=message_outbox,
     )
     from app.integrations.whatsapp.formatting import to_whatsapp
     from app.services import appointment_service
@@ -178,6 +180,7 @@ async def demo_chat(
     reply_text = to_whatsapp(reply_text)  # lot 31/33 : la démo montre exactement ce que WhatsApp afficherait
     # Lot 33 : la confirmation fixe du rendez-vous, comme sur WhatsApp.
     extra = [appointment_service.confirmation_message(a, tenant.name, tenant_zone(tenant)) for a in booking_outbox]
+    extra += message_outbox  # lot 34b : demande d'email, comme sur WhatsApp
 
     db.add(
         Message(
