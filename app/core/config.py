@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     secret_key: str  # obligatoire, jamais de valeur par défaut en dur
     access_token_expire_minutes: int = 60
     algorithm: str = "HS256"
+    # Lot 30 — clé de chiffrement des jetons en base (Fernet). Facultative : sans elle, une clé est
+    # dérivée de SECRET_KEY. Si elle est ajoutée plus tard, les jetons déjà chiffrés restent lisibles.
+    token_encryption_key: str | None = None
 
     # WhatsApp (section 59)
     whatsapp_app_id: str = ""

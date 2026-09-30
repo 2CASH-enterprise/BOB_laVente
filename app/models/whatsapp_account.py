@@ -5,6 +5,7 @@ from enum import StrEnum
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.crypto import EncryptedString
 from app.core.database import Base
 
 
@@ -46,7 +47,7 @@ class WhatsAppAccount(Base):
         Enum(DisplayNameStatus, name="display_name_status"), default=DisplayNameStatus.PENDING
     )
 
-    system_user_token: Mapped[str] = mapped_column(String(2048), nullable=False)  # chiffré au repos (section 32)
+    system_user_token: Mapped[str] = mapped_column(EncryptedString(2048), nullable=False)  # chiffré au repos (lot 30)
     coexistence_mode: Mapped[bool] = mapped_column(Boolean, default=False)
 
     verification_status: Mapped[str | None] = mapped_column(String(32))
