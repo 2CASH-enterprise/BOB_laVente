@@ -26,7 +26,8 @@ def _parse_active(raw: str | None) -> bool:
 
 
 async def import_catalog_csv(
-    db: AsyncSession, tenant_id, csv_content: str, max_new_products: int | None = None
+    db: AsyncSession, tenant_id, csv_content: str, max_new_products: int | None = None,
+    with_vehicles: bool = True,
 ) -> CsvImportResponse:
     """
     max_new_products : plafond freemium (section produits) — n'empêche jamais la mise à
@@ -94,7 +95,8 @@ async def import_catalog_csv(
 
         from app.services.vehicle import normalize_vehicle, vehicle_from_csv_row
 
-        vehicle_columns = vehicle_from_csv_row(row)
+        # Lot 32 : colonnes véhicule lues seulement pour une concession (ignorées sinon).
+        vehicle_columns = vehicle_from_csv_row(row) if with_vehicles else {}
         vehicle, vehicle_errors = normalize_vehicle(vehicle_columns)
         if vehicle_errors:
             failed += 1

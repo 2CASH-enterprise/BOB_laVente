@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.business_type import only_online_store
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
@@ -56,7 +57,7 @@ async def get_analytics(
     )
 
 
-@router.get("/sales", response_model=SalesSummaryResponse)
+@router.get("/sales", response_model=SalesSummaryResponse, dependencies=[Depends(only_online_store())])
 async def get_sales_summary(
     days: int = Query(default=30, ge=1, le=365),
     current_user: CurrentUser = Depends(get_current_user),
@@ -66,7 +67,7 @@ async def get_sales_summary(
     return SalesSummaryResponse(**await sales_summary(db, current_user.tenant_id, days=days))
 
 
-@router.post("/sales/refresh", response_model=SalesSummaryResponse)
+@router.post("/sales/refresh", response_model=SalesSummaryResponse, dependencies=[Depends(only_online_store())])
 async def refresh_sales_summary(
     days: int = Query(default=30, ge=1, le=365),
     current_user: CurrentUser = Depends(get_current_user),

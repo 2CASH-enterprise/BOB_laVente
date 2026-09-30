@@ -36,4 +36,7 @@ async def import_csv(
     tenant = await db.get(Tenant, current_user.tenant_id)
     max_new = await remaining_product_slots(db, current_user.tenant_id, tenant.is_paid)
 
-    return await import_catalog_csv(db, current_user.tenant_id, content, max_new_products=max_new)
+    from app.services.business_type import is_dealership
+
+    return await import_catalog_csv(db, current_user.tenant_id, content, max_new_products=max_new,
+                                    with_vehicles=is_dealership(tenant))

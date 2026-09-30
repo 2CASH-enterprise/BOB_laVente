@@ -270,6 +270,8 @@
   .appt-actions input[type="datetime-local"] { max-width: 230px; margin: 0; }
   .appt-actions label { font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
   .tone-accent { background: var(--accent-soft); color: var(--accent); }
+  /* Lot 32 : chaque activité ne voit que ses fonctions (le serveur refuse aussi les autres). */
+  body.dealership .store-only { display: none !important; }
   .tone-success { background: var(--success-soft); color: var(--success); }
   .tone-warning { background: var(--warning-soft); color: var(--warning); }
   .tone-danger { background: var(--danger-soft); color: var(--danger); }
@@ -391,7 +393,7 @@
   <div class="segment-box">
     <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
     <h2 id="segment-title">Quel est votre secteur d'activité&nbsp;?</h2>
-    <p class="segment-sub">Bob adapte sa façon de travailler à votre métier. Vous pourrez le changer plus tard dans Réglages de Bob.</p>
+    <p class="segment-sub">Bob adapte sa façon de travailler à votre métier. Ce choix est définitif : pour le changer ensuite, il faudra contacter le support Bob.</p>
     <div class="segment-options" id="segment-options"></div>
     <div id="segment-msg" style="margin-top: 14px; font-size: 13px; text-align: center;"></div>
   </div>
@@ -467,7 +469,7 @@
       <button data-tab="conversations" data-label="Conversations" onclick="showTab('conversations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>Conversations</button>
       <button data-tab="customers" data-label="Clients" onclick="showTab('customers')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7"/></svg></span>Clients</button>
       <button data-tab="products" data-label="Produits" onclick="showTab('products')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg></span>Produits</button>
-      <button data-tab="orders" data-label="Commandes" onclick="showTab('orders')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4"/></svg></span>Commandes</button>
+      <button data-tab="orders" data-label="Commandes" class="store-only" onclick="showTab('orders')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4"/></svg></span>Commandes</button>
       <button data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden" onclick="showTab('appointments')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3v3H8z"/></svg></span>Rendez-vous</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg></span>Intégrations</button>
       <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8"/></svg></span>Base de connaissances</button>
@@ -492,7 +494,7 @@
       <div id="home-root"><p class="loading-text">Chargement de l'accueil</p></div>
       <h2 class="section-title">Détails</h2>
       <div class="grid" id="analytics-grid"></div>
-      <div class="card" id="sales-card" style="margin-top: 20px;">
+      <div class="card store-only" id="sales-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement des ventes</p>
       </div>
       <div class="card" id="signals-card" style="margin-top: 20px;">
@@ -597,7 +599,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th><th>Upsell</th><th>Gérer</th></tr></thead>
+        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
 
@@ -776,21 +778,10 @@
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">
         La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances.
         Ce que Bob sait de votre boutique se règle dans la Base de connaissances.
+        <br>Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span>
       </p>
-      <div class="card" style="max-width: 976px; margin-bottom: 16px;">
-        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Type d'activité</div>
-        <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
-          Bob adapte son objectif à votre métier : vendre sur WhatsApp, ou obtenir un rendez-vous en concession.
-        </p>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-          <select id="business-type" class="input" style="max-width: 320px; margin: 0;"></select>
-          <button class="action" onclick="saveBusinessType()">Enregistrer</button>
-          <span id="business-type-msg" style="font-size: 13px;"></span>
-        </div>
-        <p id="business-type-help" style="font-size: 12px; color: var(--muted); margin: 10px 0 0;"></p>
-      </div>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+        <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix</div>
           <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
             Bob cède progressivement jusqu'à cette remise maximale, jamais plus, jamais d'un coup.
@@ -1165,16 +1156,15 @@ function enterApp() {
 }
 
 // ---- Lot 24 : type d'activité (boutique en ligne / concession automobile) ----
-const BUSINESS_TYPE_HELP = {
-  ONLINE_STORE: "Bob répond, conseille, prend les commandes et envoie votre lien de paiement.",
-  CAR_DEALERSHIP: "Bob renseigne sur vos véhicules, qualifie le client et obtient un rendez-vous (essai, visite, reprise). Il ne prend pas de commande, ne négocie pas et ne donne jamais de chiffre de financement ou de reprise : un conseiller confirme chaque rendez-vous.",
-};
 
 let currentBusinessType = "ONLINE_STORE";
 
-function applyBusinessType(code) {
+function applyBusinessType(code, label) {
   currentBusinessType = code;
   const dealership = code === "CAR_DEALERSHIP";
+  document.body.classList.toggle("dealership", dealership);
+  const labelEl = document.getElementById("business-type-label");
+  if (labelEl && label) labelEl.textContent = label;
   // Lot 25 : la page Rendez-vous n'existe que pour les concessions.
   document.getElementById("nav-appointments").classList.toggle("hidden", !dealership);
   // Lot 26 : fiche véhicule dans l'ajout de produit et aide de l'import CSV.
@@ -1228,7 +1218,8 @@ function readVehicle(prefix) {
 async function checkBusinessTypeChosen() {
   let bt;
   try { bt = await api("/api/v1/tenants/me/business-type"); } catch (e) { return; }
-  applyBusinessType(bt.business_type);
+  const current = bt.options.find((o) => o.code === bt.business_type);
+  applyBusinessType(bt.business_type, current ? current.label : "");
   if (bt.chosen) return;
   document.getElementById("segment-options").innerHTML = bt.options
     .map((o) => `<button type="button" class="segment-option" onclick="chooseBusinessType('${esc(o.code)}')"><strong>${esc(o.label)}</strong><span>${esc(o.description)}</span></button>`)
@@ -1244,35 +1235,8 @@ async function chooseBusinessType(code) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ business_type: code }),
     });
-    applyBusinessType(code);
+    checkBusinessTypeChosen();
     document.getElementById("segment-screen").classList.add("hidden");
-  } catch (e) {
-    msg.style.color = "var(--danger)";
-    msg.textContent = e.message;
-  }
-}
-
-async function loadBusinessType() {
-  let bt;
-  try { bt = await api("/api/v1/tenants/me/business-type"); } catch (e) { return; }
-  const select = document.getElementById("business-type");
-  select.innerHTML = bt.options.map((o) => `<option value="${esc(o.code)}">${esc(o.label)}</option>`).join("");
-  select.value = bt.business_type;
-  select.onchange = () => { document.getElementById("business-type-help").textContent = BUSINESS_TYPE_HELP[select.value] || ""; };
-  select.onchange();
-}
-
-async function saveBusinessType() {
-  const msg = document.getElementById("business-type-msg");
-  try {
-    await api("/api/v1/tenants/me/business-type", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ business_type: document.getElementById("business-type").value }),
-    });
-    applyBusinessType(document.getElementById("business-type").value);
-    msg.style.color = "var(--success)";
-    msg.textContent = "Enregistré.";
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
@@ -1473,7 +1437,7 @@ function showTab(name) {
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
-  if (name === "bob") { loadBusinessType(); loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (currentBusinessType !== "CAR_DEALERSHIP") loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "settings") loadMfaStatus();
 }
 
@@ -1774,6 +1738,7 @@ function money(value, currency) {
 }
 
 async function loadSales(forceRefresh = false) {
+  if (currentBusinessType === "CAR_DEALERSHIP") return;  // lot 32 : réservé à la boutique en ligne
   const card = document.getElementById("sales-card");
   try {
     let s = forceRefresh
@@ -2131,7 +2096,7 @@ async function loadProducts() {
         <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}</td>
         <td data-label="SKU">${esc(p.sku)}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
         <td data-label="Stock">${p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
-        <td data-label="Upsell"><button class="action secondary" onclick="toggleUpsellPanel('${esc(p.id)}')">Gérer</button></td>
+        <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel('${esc(p.id)}')">Gérer</button></td>
         <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel('${esc(p.id)}')">Modifier</button></td>
       </tr>
       <tr id="upsell-row-${p.id}" class="hidden"><td colspan="7"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>

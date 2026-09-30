@@ -83,3 +83,36 @@ def tools_for(business_type: str | None, tool_definitions: list[dict]) -> list[d
             tool["input_schema"]["required"] = []
         adapted.append(tool)
     return adapted
+
+
+# --- Lot 32 : fonctions réservées à un type d'activité (verrou côté serveur) ---------------
+
+NOT_AVAILABLE = "Cette fonction n'est pas disponible pour votre type d'activité."
+
+
+def require_business(*allowed: str):
+    """
+    Dépendance FastAPI : refuse (403) une route réservée à un autre type d'activité. Masquer un
+    bouton ne suffit pas : l'appel direct à l'API doit aussi être refusé.
+    """
+    from fastapi import Depends, HTTPException
+
+    from app.core.database import get_db
+    from app.core.security import get_current_user
+
+    async def _check(current_user=Depends(get_current_user), db=Depends(get_db)) -> None:
+        from app.models.tenant import Tenant
+
+        tenant = await db.get(Tenant, current_user.tenant_id)
+        if tenant is None or normalize(tenant.business_type) not in allowed:
+            raise HTTPException(status_code=403, detail=NOT_AVAILABLE)
+
+    return _check
+
+
+def only_online_store():
+    return require_business(ONLINE_STORE)
+
+
+def only_dealership():
+    return require_business(CAR_DEALERSHIP)

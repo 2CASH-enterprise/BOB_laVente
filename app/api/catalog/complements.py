@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.business_type import only_online_store
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.product import Product
@@ -11,7 +12,7 @@ from app.models.product_complement import ProductComplement
 from app.repositories.product_repository import ProductRepository
 from app.schemas.product_complement import ProductComplementCreate, ProductComplementResponse
 
-router = APIRouter(prefix="/api/v1/products", tags=["products"])
+router = APIRouter(prefix="/api/v1/products", tags=["products"], dependencies=[Depends(only_online_store())])  # lot 32
 
 
 @router.get("/{product_id}/complements", response_model=list[ProductComplementResponse])

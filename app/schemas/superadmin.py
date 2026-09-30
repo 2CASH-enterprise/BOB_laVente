@@ -25,6 +25,7 @@ class TenantSummaryForAdmin(BaseModel):
     product_count: int
     conversation_count_this_month: int
     commission_rate: float | None
+    business_type: str = "ONLINE_STORE"  # lot 32
     created_at: datetime
 
 
@@ -42,6 +43,10 @@ class TenantPlanUpdate(BaseModel):
 
 class TenantCommissionRateUpdate(BaseModel):
     commission_rate: float | None
+
+
+class TenantBusinessTypeUpdate(BaseModel):
+    business_type: str
 
 
 class TenantActiveUpdate(BaseModel):

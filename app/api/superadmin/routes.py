@@ -11,6 +11,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.business_type import normalize as normalize_business_type
 from app.core.database import get_db
 from app.core.security import (
     CurrentSuperAdmin,
@@ -31,6 +32,7 @@ from app.schemas.superadmin import (
     SuperAdminBootstrapRequest,
     SuperAdminLoginResponse,
     TenantActiveUpdate,
+    TenantBusinessTypeUpdate,
     TenantCommissionRateUpdate,
     TenantDetailForAdmin,
     TenantPlanUpdate,
@@ -117,6 +119,7 @@ async def _build_summary(db: AsyncSession, tenant: Tenant) -> TenantSummaryForAd
         product_count=await _product_count(db, tenant.id),
         conversation_count_this_month=await _conversation_count_this_month(db, tenant.id),
         commission_rate=float(tenant.commission_rate) if tenant.commission_rate is not None else None,
+        business_type=normalize_business_type(tenant.business_type),
         created_at=tenant.created_at,
     )
 
@@ -205,6 +208,38 @@ async def update_commission_rate(
     if payload.commission_rate is not None and not (0 <= payload.commission_rate <= 100):
         raise HTTPException(status_code=400, detail="Le taux doit être compris entre 0 et 100")
     tenant.commission_rate = payload.commission_rate
+    await db.commit()
+    return await _build_summary(db, tenant)
+
+
+@router.put("/tenants/{tenant_id}/business-type", response_model=TenantSummaryForAdmin)
+async def update_tenant_business_type(
+    tenant_id: UUID,
+    payload: TenantBusinessTypeUpdate,
+    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Lot 32 — le type d'activité (boutique en ligne / concession) ne se change plus par le client
+    après l'inscription : uniquement ici, à sa demande, et toujours tracé.
+    """
+    from datetime import datetime, timezone
+
+    from app.services.audit import log_audit_event
+    from app.services.business_type import BUSINESS_TYPES
+
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant introuvable")
+    if payload.business_type not in BUSINESS_TYPES:
+        raise HTTPException(status_code=400, detail=f"Type d'activité invalide. Valeurs possibles : {list(BUSINESS_TYPES)}")
+    previous = normalize_business_type(tenant.business_type)
+    tenant.business_type = payload.business_type
+    tenant.business_type_chosen_at = tenant.business_type_chosen_at or datetime.now(timezone.utc)
+    await log_audit_event(
+        db, actor=f"superadmin:{current.superadmin_user_id}", action="BUSINESS_TYPE_CHANGED_BY_ADMIN", tenant_id=tenant.id,
+        details={"from": previous, "to": payload.business_type},
+    )
     await db.commit()
     return await _build_summary(db, tenant)
 

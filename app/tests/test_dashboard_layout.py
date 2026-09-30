@@ -205,12 +205,25 @@ def test_segment_screen_after_signup_escapes_options_and_can_be_left_by_logout()
     assert 'getElementById("segment-screen").classList.add("hidden")' in logout
 
 
-def test_business_type_card_is_first_in_bob_settings_and_loaded_with_the_tab():
+def test_business_type_is_no_longer_changeable_from_bob_settings():
+    """Lot 32 : choisi une fois à l'inscription, changé seulement par l'Admin."""
     section = _section("bob")
-    assert section.index("Type d'activité") < section.index("Négociation de prix")
-    assert "loadBusinessType();" in _show_tab_line("bob")
-    load = re.search(r"async function loadBusinessType\(\) \{(.*?)\n\}", HTML, re.S).group(1)
-    assert "${esc(o.code)}" in load and "${esc(o.label)}" in load
+    assert 'id="business-type"' not in section and "saveBusinessType" not in HTML and "loadBusinessType" not in HTML
+    assert 'id="business-type-label"' in section and "contactez le support Bob" in section
+    assert "Ce choix est définitif" in HTML
+    assert "${esc(o.code)}" in HTML and "${esc(o.label)}" in HTML  # écran de choix initial
+
+
+def test_store_only_features_are_hidden_for_dealerships():
+    assert "body.dealership .store-only { display: none !important; }" in HTML
+    nav = re.search(r"<nav>(.*?)</nav>", HTML, re.S).group(1)
+    assert 'data-tab="orders" data-label="Commandes" class="store-only"' in nav
+    assert 'class="card store-only" id="sales-card"' in HTML
+    section = _section("bob")
+    assert 'class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;">\n          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix' in section
+    assert '<th class="store-only">Upsell</th>' in HTML and 'data-label="Upsell" class="store-only"' in HTML
+    apply = re.search(r"function applyBusinessType\(code, label\) \{(.*?)\n\}", HTML, re.S).group(1)
+    assert 'document.body.classList.toggle("dealership", dealership);' in apply
 
 
 # --- Lot 25 : page Rendez-vous ------------------------------------------------------------------
@@ -218,9 +231,9 @@ def test_business_type_card_is_first_in_bob_settings_and_loaded_with_the_tab():
 def test_appointments_page_only_for_dealerships_and_loaded_with_its_tab():
     nav = re.search(r"<nav>(.*?)</nav>", HTML, re.S).group(1)
     assert 'data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden"' in nav
-    apply = re.search(r"function applyBusinessType\(code\) \{(.*?)\n\}", HTML, re.S).group(1)
+    apply = re.search(r"function applyBusinessType\(code, label\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert 'const dealership = code === "CAR_DEALERSHIP";' in apply and 'getElementById("nav-appointments").classList.toggle("hidden", !dealership)' in apply
-    assert HTML.count("applyBusinessType(") >= 4  # définition + choix initial + réglage + chargement
+    assert HTML.count("applyBusinessType(") >= 2  # définition + chargement
     assert "loadAppointments(currentAppointmentView)" in _show_tab_line("appointments")
     assert "if (item.kind === \"APPOINTMENT\") return `showTab('appointments')`" in HTML
 
@@ -250,7 +263,7 @@ def test_product_data_is_escaped_everywhere_it_is_displayed():
 
 
 def test_vehicle_sheet_fields_only_for_dealerships_and_escaped():
-    apply = re.search(r"function applyBusinessType\(code\) \{(.*?)\n\}", HTML, re.S).group(1)
+    apply = re.search(r"function applyBusinessType\(code, label\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert 'getElementById("new-vehicle-fields")' in apply and 'getElementById("csv-vehicle-help")' in apply
     fields = re.search(r"function vehicleFields\(prefix, v\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert 'value="${esc(v[key] ?? "")}"' in fields

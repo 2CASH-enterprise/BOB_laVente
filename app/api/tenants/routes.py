@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.business_type import only_online_store
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.messaging_settings import KillSwitch, OutboundMode, TenantMessagingSettings
@@ -128,6 +129,13 @@ async def update_business_type(
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+    if tenant.business_type_chosen_at is not None:
+        # Lot 32 — choisi une seule fois, à l'inscription. Un changement se demande au support Bob,
+        # qui le fait depuis l'Admin (les fonctions et les données ne sont pas les mêmes).
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Le type d'activité a déjà été choisi. Pour le changer, contactez le support Bob.",
+        )
     previous = tenant.business_type
     tenant.business_type = payload.business_type
     tenant.business_type_chosen_at = datetime.now(timezone.utc)
@@ -273,7 +281,7 @@ class NegotiationSettingsReq(BaseModel):
     max_rounds: int | None = None
 
 
-@router.get("/me/negotiation-settings", response_model=NegotiationSettingsResp)
+@router.get("/me/negotiation-settings", response_model=NegotiationSettingsResp, dependencies=[Depends(only_online_store())])
 async def get_negotiation_settings(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -291,7 +299,8 @@ async def get_negotiation_settings(
 
 
 @router.put(
-    "/me/negotiation-settings", response_model=NegotiationSettingsResp, dependencies=[Depends(require_role("ADMIN"))]
+    "/me/negotiation-settings", response_model=NegotiationSettingsResp,
+    dependencies=[Depends(require_role("ADMIN")), Depends(only_online_store())],
 )
 async def update_negotiation_settings(
     payload: NegotiationSettingsReq,

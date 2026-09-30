@@ -13,9 +13,13 @@ from app.models.product import Product
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
 
-def _checked_vehicle(raw: dict | None) -> dict | None:
+def _checked_vehicle(raw: dict | None, tenant=None) -> dict | None:
     """Lot 26 — caractéristiques normalisées ; valeur douteuse refusée plutôt qu'enregistrée."""
+    from app.services.business_type import NOT_AVAILABLE, is_dealership
     from app.services.vehicle import normalize_vehicle
+
+    if raw and tenant is not None and not is_dealership(tenant):
+        raise HTTPException(status_code=403, detail=NOT_AVAILABLE)  # lot 32 : fiche véhicule = concession
 
     vehicle, errors = normalize_vehicle(raw)
     if errors:
@@ -46,7 +50,7 @@ async def create_product(
         raise HTTPException(status_code=409, detail=f"Un produit avec le SKU '{payload.sku}' existe déjà")
 
     data = payload.model_dump()
-    data["vehicle"] = _checked_vehicle(data.get("vehicle"))
+    data["vehicle"] = _checked_vehicle(data.get("vehicle"), tenant)
     product = Product(tenant_id=current_user.tenant_id, **data)
     await repo.add(product)
     await db.commit()
@@ -139,7 +143,9 @@ async def update_product(
 
     changes = payload.model_dump(exclude_unset=True)
     if "vehicle" in changes:
-        changes["vehicle"] = _checked_vehicle(changes["vehicle"])
+        from app.models.tenant import Tenant
+
+        changes["vehicle"] = _checked_vehicle(changes["vehicle"], await db.get(Tenant, current_user.tenant_id))
     for field, value in changes.items():
         setattr(product, field, value)
 
