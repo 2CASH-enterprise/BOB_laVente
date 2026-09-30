@@ -118,6 +118,7 @@ async def generate_ai_reply_detailed(
     image_outbox: list | None = None,
     booking_outbox: list | None = None,
     message_outbox: list | None = None,
+    change_outbox: list | None = None,
 ) -> tuple[str, str | None]:
     """
     Retourne le texte de la réponse de Bob. Ne lève jamais d'exception vers l'appelant :
@@ -136,6 +137,10 @@ async def generate_ai_reply_detailed(
         executor.booking_outbox = booking_outbox
     if message_outbox is not None:
         executor.message_outbox = message_outbox  # lot 34b : messages fixes après la réponse
+    # Lot 35c : le dernier message du client, pour les verrous qui en dépendent (annulation explicite).
+    executor.incoming_text = incoming_text
+    if change_outbox is not None:
+        executor.change_outbox = change_outbox  # lot 35 : rendez-vous déplacés ou annulés par le client
     tools = tools_for(business_type, TOOL_DEFINITIONS)
     # Lot 13 : consigne des règles de transmission pour CE message, et verrou du transfert.
     if turn is not None:

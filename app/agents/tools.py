@@ -7,6 +7,7 @@ n'a aucun autre moyen d'obtenir ces informations (section 50 : le LLM comprend,
 raisonne, utilise les outils, communique ; il n'est jamais la source de vérité).
 """
 import json
+import re
 from datetime import timezone
 import logging
 import uuid
@@ -31,6 +32,21 @@ MAX_IMAGES_PER_REPLY = 3
 def has_sendable_photo(product) -> bool:
     """Une photo n'est envoyée sur WhatsApp que par une adresse publique sécurisée (https)."""
     return (getattr(product, "image_url", None) or "").strip().lower().startswith("https://")
+
+
+# Lot 35c — mots d'une annulation EXPLICITE (« annulez », « supprimez », « plus besoin »,
+# « je ne viendrai pas du tout »…). « Je ne peux plus venir lundi » n'en est pas une : c'est un report.
+_EXPLICIT_CANCEL = re.compile(
+    r"\bannul|\bsupprim|\bplus besoin\b|\blaiss\w* tomber\b|\boubli(?:ez|e|ons)\b|\bdu tout\b|\bd[ée]sist",
+    re.IGNORECASE,
+)
+
+
+_AFFIRMATIVE = re.compile(r"^\s*(oui|ok|okay|d'accord|daccord|c'est ça|exactement|volontiers|oui merci|oui svp)\b[\s.!]*$", re.IGNORECASE)
+
+
+def asks_explicit_cancellation(text: str | None) -> bool:
+    return bool(_EXPLICIT_CANCEL.search(text or ""))
 
 
 class ToolExecutor:
@@ -65,6 +81,10 @@ class ToolExecutor:
         self.booking_outbox: list = []
         # Lot 34b : messages fixes à envoyer après la réponse de Bob (ex. demande d'email).
         self.message_outbox: list[str] = []
+        # Lot 35 : rendez-vous déplacés ou annulés par le client (alerte à la boutique ensuite).
+        self.change_outbox: list[tuple] = []
+        # Lot 35c : dernier message du client (None hors conversation : aucun verrou appliqué).
+        self.incoming_text: str | None = None
 
     async def execute(self, tool_name: str, tool_input: dict) -> dict:
         from app.services.business_type import tool_allowed
@@ -507,6 +527,158 @@ class ToolExecutor:
             "status": "appointment_requested",
             "instruction": f"{instruction} {ask}" if ask else instruction,
         }
+
+    # --- Lot 35 : le prospect déplace ou annule SON rendez-vous ------------------------------------
+
+    async def _my_appointment(self, raw_id):
+        """Uniquement un rendez-vous de CE client, dans CETTE boutique, non annulé."""
+        from sqlalchemy import select
+
+        from app.models.appointment_request import STATUS_CANCELLED, AppointmentRequest
+
+        try:
+            appointment_id = uuid.UUID(str(raw_id))
+        except (ValueError, TypeError):
+            return None
+        return (await self.db.execute(select(AppointmentRequest).where(
+            AppointmentRequest.id == appointment_id,
+            AppointmentRequest.tenant_id == self.tenant_id,
+            AppointmentRequest.customer_id == self.customer_id,
+            AppointmentRequest.status != STATUS_CANCELLED,
+        ))).scalar_one_or_none()
+
+    async def _tool_get_my_appointments(self, tool_input: dict) -> dict:
+        from datetime import datetime
+
+        from sqlalchemy import select
+
+        from app.models.appointment_request import APPOINTMENT_KINDS, STATUS_CONFIRMED, STATUS_REQUESTED, AppointmentRequest
+        from app.services.local_time import as_utc, format_local
+
+        tenant, _, zone, now = await self._booking_context()
+        rows = (await self.db.execute(select(AppointmentRequest).where(
+            AppointmentRequest.tenant_id == self.tenant_id,
+            AppointmentRequest.customer_id == self.customer_id,
+            AppointmentRequest.status.in_([STATUS_CONFIRMED, STATUS_REQUESTED]),
+        ))).scalars().all()
+        items = []
+        for a in rows:
+            if a.status == STATUS_CONFIRMED and (a.scheduled_at is None or as_utc(a.scheduled_at) < now):
+                continue
+            items.append({
+                "appointment_id": str(a.id),
+                "type": APPOINTMENT_KINDS.get(a.kind, a.kind),
+                "vehicle": a.vehicle_label,
+                "when": format_local(a.scheduled_at, zone) if a.scheduled_at else None,
+                "status": "confirmé" if a.status == STATUS_CONFIRMED else "en attente de confirmation par un conseiller",
+            })
+        if not items:
+            return {"appointments": [], "instruction": "Ce client n'a aucun rendez-vous à venir : dis-le simplement."}
+        result = {"appointments": items}
+        # Lot 35b — test réel du 30/09 : Bob ne proposait pas de nouveaux créneaux. Les créneaux libres
+        # sont donnés d'office, pour qu'un déplacement se fasse sans étape oubliée.
+        from app.services import booking
+
+        settings = await booking.load_settings(self.db, self.tenant_id)
+        if booking.booking_enabled(settings):
+            slots = await booking.free_slots(self.db, tenant, settings, zone, now)
+            if slots:
+                result["available_slots"] = booking.slots_for_ai(slots, zone)
+                result["instruction"] = (
+                    "Si le client veut déplacer son rendez-vous, propose-lui TOUT DE SUITE ces créneaux libres, avec "
+                    "leurs libellés exacts (ou appelle get_available_slots avec le jour qu'il souhaite). Quand il en "
+                    "choisit un, appelle reschedule_my_appointment avec appointment_id et slot. S'il veut annuler, "
+                    "appelle cancel_my_appointment."
+                )
+        return result
+
+    async def _record_change(self, appointment, previous_when, text: str, note: str) -> None:
+        self.message_outbox.append(text)
+        self.change_outbox.append((appointment, previous_when))
+        self.db.add(Message(
+            tenant_id=self.tenant_id, conversation_id=self.conversation.id, sender=MessageSender.SYSTEM,
+            message_type="appointment_changed", content=note,
+        ))
+        await self.db.flush()
+
+    async def _confirms_proposed_cancellation(self) -> bool:
+        """« Oui » en réponse à « Préférez-vous annuler ? » : une annulation explicite aussi."""
+        from sqlalchemy import select
+
+        if not _AFFIRMATIVE.match(self.incoming_text or ""):
+            return False
+        last_ai = (await self.db.execute(
+            select(Message.content).where(Message.conversation_id == self.conversation.id, Message.sender == MessageSender.AI)
+            .order_by(Message.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        return bool(last_ai and "annul" in last_ai.lower())
+
+    async def _tool_cancel_my_appointment(self, tool_input: dict) -> dict:
+        from app.services import appointment_service, booking
+
+        appointment = await self._my_appointment(tool_input.get("appointment_id"))
+        if appointment is None:
+            return {"error": "Rendez-vous introuvable pour ce client : appelle get_my_appointments."}
+        tenant, settings, zone, now = await self._booking_context()
+        if self.incoming_text is not None and not asks_explicit_cancellation(self.incoming_text) \
+                and not await self._confirms_proposed_cancellation():
+            # Lot 35c — test réel du 30/09 : « Je ne veux plus venir lundi » a été annulé d'office. Sans
+            # demande explicite d'annulation, on propose d'abord de déplacer.
+            result = {"error": "Le client n'a pas demandé explicitement d'annuler : ne l'annule pas.",
+                      "instruction": "Propose-lui d'abord de déplacer son rendez-vous (créneaux ci-dessous, libellés "
+                                     "exacts), et demande-lui s'il préfère plutôt annuler."}
+            if booking.booking_enabled(settings):
+                result["available_slots"] = booking.slots_for_ai(
+                    await booking.free_slots(self.db, tenant, settings, zone, now), zone)
+            return result
+        previous = appointment.scheduled_at
+        appointment_service.cancel(appointment, now=now)
+        appointment.cancelled_by = "CLIENT"
+        await self._record_change(
+            appointment, previous, appointment_service.cancellation_message(appointment, tenant.name, zone),
+            f"Rendez-vous annulé par le client : {appointment_service.subject_phrase(appointment)}",
+        )
+        return {"status": "cancelled", "instruction": "L'annulation est faite et un message de confirmation part "
+                "automatiquement juste après ta réponse : réponds brièvement, sans répéter la date."}
+
+    async def _tool_reschedule_my_appointment(self, tool_input: dict) -> dict:
+        from app.models.appointment_request import STATUS_CONFIRMED
+        from app.services import appointment_service, booking
+        from app.services.local_time import format_local
+
+        appointment = await self._my_appointment(tool_input.get("appointment_id"))
+        if appointment is None:
+            return {"error": "Rendez-vous introuvable pour ce client : appelle get_my_appointments."}
+        tenant, settings, zone, now = await self._booking_context(lock=True)
+        if not booking.booking_enabled(settings):
+            return {"error": "Pas de créneaux en ligne : transmets la demande à un conseiller avec handoff_to_human."}
+        try:
+            start = booking.parse_slot_id(tool_input.get("slot"), zone)
+        except ValueError:
+            start = None
+        if start is None or not await booking.is_bookable(self.db, tenant, settings, zone, now, start, exclude_id=appointment.id):
+            fresh = await booking.free_slots(self.db, tenant, settings, zone, now)
+            return {"error": "Ce créneau n'est pas disponible (déjà pris, fermé ou passé).",
+                    "available_slots": booking.slots_for_ai(fresh, zone),
+                    "instruction": "Propose au client ces créneaux libres à la place."}
+        previous = appointment.scheduled_at
+        appointment.status = STATUS_CONFIRMED
+        appointment.scheduled_at = start.astimezone(timezone.utc)
+        appointment.confirmed_at = appointment.confirmed_at or now
+        appointment.confirmed_by = appointment.confirmed_by or "BOB"
+        appointment.availability = format_local(appointment.scheduled_at, zone)
+        appointment.rescheduled_at, appointment.rescheduled_by = now, "CLIENT"
+        # Nouvelle date : les rappels de l'ancienne ne comptent plus.
+        appointment.reminder_sent_at = appointment.customer_reminder_sent_at = None
+        appointment.customer_whatsapp_reminder_sent_at = None
+        await self._record_change(
+            appointment, previous, appointment_service.rescheduled_message(appointment, tenant.name, zone),
+            f"Rendez-vous déplacé par le client : {appointment_service.subject_phrase(appointment)} — "
+            f"{format_local(appointment.scheduled_at, zone)}",
+        )
+        return {"status": "rescheduled", "when": format_local(appointment.scheduled_at, zone),
+                "instruction": "Le rendez-vous est déplacé et un message de confirmation part automatiquement juste "
+                               "après ta réponse : réponds brièvement, sans changer la date."}
 
     async def _tool_negotiate_price(self, tool_input: dict) -> dict:
         from decimal import Decimal, InvalidOperation

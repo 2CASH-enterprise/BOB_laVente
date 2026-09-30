@@ -261,6 +261,39 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        # Lot 35 — concession : le prospect retrouve, déplace ou annule SON rendez-vous.
+        "name": "get_my_appointments",
+        "description": "Liste les rendez-vous à venir de CE client (identifiant, type, véhicule, date). À appeler dès qu'il parle de déplacer, annuler ou vérifier son rendez-vous.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "reschedule_my_appointment",
+        "description": (
+            "Déplace un rendez-vous du client vers un nouveau créneau libre qu'il a choisi (valeur « slot » exacte "
+            "renvoyée par get_available_slots). Le client reçoit automatiquement une confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "appointment_id": {"type": "string", "description": "Identifiant renvoyé par get_my_appointments"},
+                "slot": {"type": "string", "description": "Nouveau créneau choisi par le client (ex. 2026-10-03T10:00)"},
+            },
+            "required": ["appointment_id", "slot"],
+        },
+    },
+    {
+        "name": "cancel_my_appointment",
+        "description": (
+            "Annule un rendez-vous du client. Seulement s'il a clairement demandé l'annulation (pas s'il veut juste "
+            "changer de date : propose alors un autre créneau). Le client reçoit automatiquement une confirmation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"appointment_id": {"type": "string", "description": "Identifiant renvoyé par get_my_appointments"}},
+            "required": ["appointment_id"],
+        },
+    },
+    {
         # Lot 29 — concession : créneaux libres calculés par le code.
         "name": "get_available_slots",
         "description": (

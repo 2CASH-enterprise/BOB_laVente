@@ -1259,6 +1259,9 @@ function appointmentCard(a, view) {
   const when = a.scheduled_label ? `<span class="pill tone-info">${esc(a.scheduled_label)}</span>` : "";
   const byBob = a.confirmed_by_bob && a.status === "CONFIRMED" ? ` <span class="pill tone-success">Confirmé par Bob</span>` : "";
   const status = a.status === "CANCELLED" ? `<span class="pill tone-danger">Annulé</span>` : when + byBob;
+  // Lot 35 : changements faits par le prospect lui-même, et rappel WhatsApp envoyé.
+  const change = a.customer_change ? ` <span class="pill tone-warning">${esc(a.customer_change)}</span>` : "";
+  const waReminder = a.whatsapp_reminder_sent_at ? ` <span class="pill tone-info">Rappel WhatsApp envoyé</span>` : "";
   const notifyNote = a.can_notify ? "" : ` <span style="color: var(--warning);">(le client n'a pas écrit depuis plus de 20 h : WhatsApp ne permet pas de le prévenir, appelez-le)</span>`;
   let actions = "";
   if (view !== "closed") {
@@ -1272,7 +1275,7 @@ function appointmentCard(a, view) {
   }
   return `
     <div class="appt-card">
-      <div class="appt-head"><strong>${title}</strong>${status}</div>
+      <div class="appt-head"><strong>${title}</strong><span>${status}${change}${waReminder}</span></div>
       <p class="appt-meta">${esc(a.customer)} · disponibilités données : « ${esc(a.availability)} » · demandé le ${new Date(a.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</p>
       ${qualif ? `<ul class="appt-qualif">${qualif}</ul>` : ""}
       ${actions}

@@ -50,6 +50,8 @@ class AppointmentOut(BaseModel):
     created_at: datetime
     customer: str
     conversation_id: UUID
+    customer_change: str | None = None  # lot 35 : « Annulé par le client », « Déplacé par le client »
+    whatsapp_reminder_sent_at: datetime | None = None  # lot 35
     confirmed_by_bob: bool = False  # lot 29 : créneau choisi par le client et réservé par Bob
     referred_by: str | None = None  # lot 27 : commercial dont le lien a amené le client
     can_notify: bool  # le client a écrit il y a moins de 20 h : un message WhatsApp peut partir
@@ -103,6 +105,9 @@ async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: dat
         conversation_id=appointment.conversation_id,
         referred_by=referred_by,
         confirmed_by_bob=appointment.confirmed_by == "BOB",
+        customer_change=("Annulé par le client" if appointment.cancelled_by == "CLIENT"
+                         else "Déplacé par le client" if appointment.rescheduled_by == "CLIENT" else None),
+        whatsapp_reminder_sent_at=appointment.customer_whatsapp_reminder_sent_at,
         can_notify=closes_at is not None and now < closes_at,
     )
 

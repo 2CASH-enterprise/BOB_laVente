@@ -269,6 +269,7 @@ async def receive_webhook(
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
     outage_emails: list[dict] = []
+    change_outbox: list = []  # lot 35 : rendez-vous déplacés ou annulés par le client
     message_outbox: list[str] = []  # lot 34b : messages fixes après la réponse (demande d'email)
     booking_outbox: list = []  # lot 29 : rendez-vous réservés par Bob, confirmés au client après sa réponse
     image_outbox: list[dict] = []  # lot 26c : photos de produits demandées par Bob, envoyées après sa réponse
@@ -319,6 +320,7 @@ async def receive_webhook(
                 image_outbox=image_outbox,
                 booking_outbox=booking_outbox,
                 message_outbox=message_outbox,
+                change_outbox=change_outbox,
             )
             if failure == FAILURE_LOOP:
                 # Anomalie (Bob tourne en rond) : un humain doit regarder → vrai transfert + alerte.
@@ -451,6 +453,18 @@ async def receive_webhook(
             )
             booking_emails += alert_emails(tenant.email, commercial, subject, body)
             booking_messages.append(appointment_service.confirmation_message(appointment, tenant.name, zone))
+    if change_outbox:
+        # Lot 35 — le prospect a déplacé ou annulé son rendez-vous : boutique et commercial prévenus.
+        from app.services import appointment_service
+        from app.services.handoff_service import conversation_link, customer_display_name
+        from app.services.local_time import tenant_zone
+
+        commercial = await commercial_for_customer(db, customer)
+        for appointment, previous in change_outbox:
+            subject, body = appointment_service.staff_change_email(
+                appointment, customer_display_name(customer), tenant_zone(tenant), conversation_link(conversation), previous,
+            )
+            booking_emails += alert_emails(tenant.email, commercial, subject, body)
 
     await db.commit()
     for email in handoff_emails + outage_emails + booking_emails:
@@ -499,7 +513,7 @@ async def receive_webhook(
     if images_sent:
         await db.commit()
 
-    # Lot 34b — demande d'email (message fixe), en dernier : le client la lit après le reste.
+    # Lot 34b/35 — messages fixes (demande d'email, confirmation de report ou d'annulation), en dernier.
     for text in message_outbox:
         try:
             await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
@@ -507,7 +521,7 @@ async def receive_webhook(
             logging.getLogger(__name__).warning("Demande d'email non envoyée (conversation %s)", conversation.id)
             continue
         db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.AI,
-                       message_type="contact_request", content=text))
+                       message_type="auto_message", content=text))
     if message_outbox:
         await db.commit()
 

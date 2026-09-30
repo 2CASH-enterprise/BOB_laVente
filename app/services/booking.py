@@ -93,13 +93,16 @@ def _is_free(start: datetime, settings, booked: list[datetime]) -> bool:
     return overlapping < settings.capacity
 
 
-async def _booked(db, tenant_id, now: datetime) -> list[datetime]:
-    rows = (await db.execute(select(AppointmentRequest.scheduled_at).where(
+async def _booked(db, tenant_id, now: datetime, exclude_id=None) -> list[datetime]:
+    stmt = select(AppointmentRequest.scheduled_at).where(
         AppointmentRequest.tenant_id == tenant_id,
         AppointmentRequest.status == STATUS_CONFIRMED,
         AppointmentRequest.scheduled_at.is_not(None),
         AppointmentRequest.scheduled_at >= now - timedelta(hours=4),
-    ))).scalars().all()
+    )
+    if exclude_id is not None:  # lot 35 : un rendez-vous déplacé ne se bloque pas lui-même
+        stmt = stmt.where(AppointmentRequest.id != exclude_id)
+    rows = (await db.execute(stmt)).scalars().all()
     return [as_utc(r) for r in rows]
 
 
@@ -148,11 +151,11 @@ async def free_slots(db, tenant, settings, zone, now: datetime, day: date | None
     return _spread(free, limit)
 
 
-async def is_bookable(db, tenant, settings, zone, now: datetime, start: datetime) -> bool:
+async def is_bookable(db, tenant, settings, zone, now: datetime, start: datetime, exclude_id=None) -> bool:
     """Revérifié au moment de réserver : horaires, alignement, délai, horizon et places libres."""
     if start not in _candidates(settings, zone, now, day=start.date()):
         return False
-    return _is_free(start, settings, await _booked(db, tenant.id, now))
+    return _is_free(start, settings, await _booked(db, tenant.id, now, exclude_id))
 
 
 def slot_id(start: datetime) -> str:

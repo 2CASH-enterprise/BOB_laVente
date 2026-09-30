@@ -16,7 +16,7 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
-async def send_due_reminders(session_factory=None, now: datetime | None = None, send=None) -> dict:
+async def send_due_reminders(session_factory=None, now: datetime | None = None, send=None, send_whatsapp=None) -> dict:
     engine = None
     if session_factory is None:
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -29,13 +29,22 @@ async def send_due_reminders(session_factory=None, now: datetime | None = None, 
     if send is None:
         from app.services.email_service import send_email as send
     try:
-        return await _send_all(session_factory, now or datetime.now(timezone.utc), send)
+        return await _send_all(session_factory, now or datetime.now(timezone.utc), send, send_whatsapp)
     finally:
         if engine is not None:
             await engine.dispose()
 
 
-async def _send_all(factory, now: datetime, send) -> dict:
+async def _whatsapp_reminder(db, tenant, conversation, customer, text) -> bool:
+    """Lot 35 — message fixe, uniquement si la conversation est ouverte (sinon l'email suffit)."""
+    from app.services.appointment_service import send_fixed_message
+
+    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "appointment_reminder")
+    return sent
+
+
+async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
+    send_whatsapp = send_whatsapp or _whatsapp_reminder
     from app.models.appointment_request import STATUS_CONFIRMED, AppointmentRequest
     from app.models.conversation import Conversation
     from app.models.customer import Customer
@@ -51,7 +60,7 @@ async def _send_all(factory, now: datetime, send) -> dict:
             AppointmentRequest.scheduled_at > now,
         ))).scalars().all()
 
-    report = {"staff": 0, "customer": 0, "failed": 0}
+    report = {"staff": 0, "customer": 0, "whatsapp": 0, "failed": 0}
     for appointment_id in ids:
         async with factory() as db:
             appointment = await db.get(AppointmentRequest, appointment_id)
@@ -76,6 +85,24 @@ async def _send_all(factory, now: datetime, send) -> dict:
                     if results and results[0]:
                         appointment.reminder_sent_at = now
                         report["staff"] += 1
+                if due.whatsapp and customer is not None:
+                    # Lot 35 — rappel WhatsApp gratuit seulement si le prospect a écrit récemment
+                    # (fenêtre ouverte) ; sinon rien sur WhatsApp : l'email fait le rappel.
+                    from app.services.human_reply import reply_window_closes_at
+
+                    # La conversation la plus récente du client (il a pu en ouvrir une nouvelle).
+                    conversation = (await db.execute(
+                        select(Conversation).where(Conversation.tenant_id == tenant.id, Conversation.customer_id == customer.id)
+                        .order_by(Conversation.created_at.desc()).limit(1)
+                    )).scalar_one_or_none()
+                    closes_at = await reply_window_closes_at(db, conversation) if conversation else None
+                    if closes_at is not None and now < closes_at:
+                        text = appointment_service.whatsapp_reminder_message(appointment, tenant.name, zone)
+                        if await send_whatsapp(db, tenant, conversation, customer, text):
+                            appointment.customer_whatsapp_reminder_sent_at = now
+                            report["whatsapp"] += 1
+                        else:
+                            report["failed"] += 1
                 if due.customer:
                     subject, body = appointment_service.customer_reminder_email(appointment, tenant.name, zone)
                     if send(to=customer.email, subject=subject, body=body, from_name=tenant.name, reply_to=tenant.email):

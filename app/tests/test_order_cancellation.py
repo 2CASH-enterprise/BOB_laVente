@@ -293,4 +293,6 @@ def test_ai_has_no_tool_to_cancel_an_order():
     from app.agents.tool_definitions import TOOL_DEFINITIONS
 
     names = {tool["name"] for tool in TOOL_DEFINITIONS}
-    assert not any("cancel" in name or "annul" in name for name in names)
+    # Lot 35 : seule exception, le prospect annule SON rendez-vous de concession (pas une commande,
+    # et la concession peut le reconfirmer depuis la page Rendez-vous).
+    assert {name for name in names if "cancel" in name or "annul" in name} == {"cancel_my_appointment"}

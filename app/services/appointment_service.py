@@ -55,19 +55,47 @@ def cancellation_message(appointment: AppointmentRequest, shop_name: str, zone) 
 class ReminderDue:
     staff: bool
     customer: bool
+    whatsapp: bool = False  # lot 35 : tenté seulement si la conversation WhatsApp est ouverte
 
 
 def reminder_due(appointment: AppointmentRequest, now: datetime, zone, customer_email: str | None) -> ReminderDue:
     """La veille du rendez-vous (heure de la boutique), à partir de 18 h."""
     if appointment.status != STATUS_CONFIRMED or appointment.scheduled_at is None:
-        return ReminderDue(False, False)
+        return ReminderDue(False, False, False)
     local_now = as_utc(now).astimezone(zone)
     local_when = as_utc(appointment.scheduled_at).astimezone(zone)
     is_eve = local_when.date() == local_now.date() + timedelta(days=1) and local_now.hour >= REMINDER_HOUR
     return ReminderDue(
         staff=is_eve and appointment.reminder_sent_at is None,
         customer=is_eve and bool(customer_email) and appointment.customer_reminder_sent_at is None,
+        whatsapp=is_eve and appointment.customer_whatsapp_reminder_sent_at is None,
     )
+
+
+def whatsapp_reminder_message(appointment: AppointmentRequest, shop_name: str, zone) -> str:
+    """Lot 35 — message fixe (jamais rédigé par l'IA), la veille du rendez-vous."""
+    when = format_local(appointment.scheduled_at, zone)
+    return (f"Bonjour ! Petit rappel : votre {subject_phrase(appointment)} chez {shop_name} est prévu demain, "
+            f"{when}. Pour le déplacer ou l'annuler, répondez simplement à ce message.")
+
+
+def rescheduled_message(appointment: AppointmentRequest, shop_name: str, zone) -> str:
+    return f"C'est noté : votre {subject_phrase(appointment)} est déplacé au {format_local(appointment.scheduled_at, zone)}. À bientôt chez {shop_name} !"
+
+
+def staff_change_email(appointment: AppointmentRequest, customer_name: str, zone, link: str,
+                       previous_when: datetime | None) -> tuple[str, str]:
+    """Lot 35 — le prospect a déplacé ou annulé lui-même son rendez-vous en écrivant à Bob."""
+    before = format_local(previous_when, zone) if previous_when else None
+    if appointment.status == STATUS_CANCELLED:
+        subject = f"Rendez-vous annulé par le client : {customer_name}"
+        what = f"{customer_name} a annulé son rendez-vous ({subject_phrase(appointment)}{', ' + before if before else ''})."
+    else:
+        subject = f"Rendez-vous déplacé par le client : {customer_name}"
+        what = (f"{customer_name} a déplacé son rendez-vous ({subject_phrase(appointment)}) au "
+                f"{format_local(appointment.scheduled_at, zone)}{' (au lieu du ' + before + ')' if before else ''}.")
+    body = f"Bonjour,\n\n{what}\n\nOuvrir la conversation : {link}"
+    return subject, body
 
 
 def staff_reminder_email(appointment: AppointmentRequest, customer_name: str, zone, link: str) -> tuple[str, str]:

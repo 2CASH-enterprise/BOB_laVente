@@ -55,5 +55,11 @@ class AppointmentRequest(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # rappel au conseiller
     customer_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lot 35 — rappel WhatsApp au prospect (seulement si la conversation est ouverte), et
+    # changements faits par le prospect lui-même en écrivant à Bob.
+    customer_whatsapp_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[str | None] = mapped_column(String(64))  # "CLIENT" ou user_id
+    rescheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rescheduled_by: Mapped[str | None] = mapped_column(String(64))  # "CLIENT" ou user_id
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
