@@ -258,7 +258,9 @@ async def receive_webhook(
     # Phase 1 (lot 12) — étiquettes du message (intentions, objections, prix proposé), pour
     # TOUS les messages texte du client, même en attente d'un humain. Jamais bloquant, et
     # sans effet sur la réponse de Bob dans ce lot.
-    signal = await classify_and_store(db, classifier, incoming_message)
+    # Lot 45 : la concession a ses propres objections (financement, reprise, papiers, état du véhicule).
+    signal = await classify_and_store(db, classifier, incoming_message,
+                                      business_type=getattr(await db.get(Tenant, tenant_id), "business_type", None))
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
@@ -311,7 +313,7 @@ async def receive_webhook(
         # Lot 13 — règles de transmission, évaluées par le code AVANT la réponse de Bob.
         turn = await decide_turn(db, tenant, _signal_payload(signal))
         # Lot 15 — stratégie de réponse à l'objection (après les règles, jamais contre elles).
-        strategy = await apply_strategy(db, tenant_id, turn, _signal_payload(signal))
+        strategy = await apply_strategy(db, tenant_id, turn, _signal_payload(signal), business_type=tenant.business_type)
         if turn.mode == TRANSFER_NOW:
             # Transfert immédiat, message fixe, sans appel à l'IA (elle pourrait le contredire).
             conversation.status = ConversationStatus.WAITING_HUMAN

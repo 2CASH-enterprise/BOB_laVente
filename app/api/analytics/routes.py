@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
 from app.models.order import Order, OrderStatus
+from app.models.tenant import Tenant
 from app.schemas.analytics import AnalyticsResponse, SalesSummaryResponse, SignalsSummaryResponse
 from app.services.opportunity_service import recompute_tenant_opportunities, sales_summary
 
@@ -87,7 +88,8 @@ async def get_signals_summary(
     """Ce que demandent les clients, et les objections avec la conversion des opportunités concernées."""
     from app.services.signal_service import signals_summary
 
-    return SignalsSummaryResponse(**await signals_summary(db, current_user.tenant_id, days=days))
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    return SignalsSummaryResponse(**await signals_summary(db, current_user.tenant_id, days=days, business_type=tenant.business_type))
 
 
 @router.get("/strategies")
@@ -99,7 +101,8 @@ async def get_strategies_summary(
     """Stratégies utilisées et issue des opportunités concernées (taux affiché seulement au-delà du seuil)."""
     from app.services.strategy_service import strategies_summary
 
-    return await strategies_summary(db, current_user.tenant_id, days=days)
+    tenant = await db.get(Tenant, current_user.tenant_id)  # lot 45 : en concession, mesure en rendez-vous
+    return await strategies_summary(db, current_user.tenant_id, days=days, business_type=tenant.business_type)
 
 
 @router.get("/home")

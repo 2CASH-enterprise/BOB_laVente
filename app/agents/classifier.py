@@ -14,14 +14,16 @@ import json
 import logging
 from abc import ABC, abstractmethod
 
-from app.agents.taxonomy import INTENTS, OBJECTIONS
+from app.agents.taxonomy import INTENTS, OBJECTIONS, objections_for
 
 logger = logging.getLogger(__name__)
 
 MAX_MESSAGE_CHARS = 1500
 
 
-def build_classifier_prompt() -> str:
+def build_classifier_prompt(business_type: str | None = None) -> str:
+    if business_type == "CAR_DEALERSHIP":
+        return _dealership_prompt()
     intents = "\n".join(f"- {code} : {definition}" for code, (_, definition) in INTENTS.items())
     objections = "\n".join(f"- {code} : {definition}" for code, (_, definition) in OBJECTIONS.items())
     return (
@@ -67,18 +69,61 @@ CLASSIFIER_EXAMPLES: list[tuple[str, dict]] = [
 ]
 
 
-def _examples() -> str:
+def _examples(examples=None) -> str:
     return "\n".join(
-        f"« {text} » → {json.dumps(expected, ensure_ascii=False)}" for text, expected in CLASSIFIER_EXAMPLES
+        f"« {text} » → {json.dumps(expected, ensure_ascii=False)}" for text, expected in (examples or CLASSIFIER_EXAMPLES)
     )
 
 
-def normalize_classification(raw) -> dict | None:
-    """Ne garde que ce qui respecte la taxonomie. None si la réponse est inexploitable."""
+# Lot 45 — concession automobile : mêmes intentions, objections propres (taxonomie v1.3auto).
+DEALERSHIP_CLASSIFIER_EXAMPLES: list[tuple[str, dict]] = [
+    ("Je vais réfléchir", {"intents": ["AUTRE"], "objections": ["HESITATION"], "offered_amount": None}),
+    ("C'est trop cher pour moi", {"intents": ["AUTRE"], "objections": ["PRIX_TROP_ELEVE"], "offered_amount": None}),
+    ("Vous pouvez me la faire à 12 millions ?", {"intents": ["DEMANDE_REMISE"], "objections": ["PRIX_TROP_ELEVE"], "offered_amount": 12000000}),
+    ("Vous faites le crédit ? Je n'ai pas tout en cash", {"intents": ["PAIEMENT"], "objections": ["FINANCEMENT"], "offered_amount": None}),
+    ("Je peux payer en plusieurs fois ?", {"intents": ["PAIEMENT"], "objections": ["FINANCEMENT"], "offered_amount": None}),
+    ("Vous reprenez ma Corolla de 2012 ?", {"intents": ["AUTRE"], "objections": ["REPRISE"], "offered_amount": None}),
+    ("La voiture est dédouanée ? Les papiers sont en règle ?", {"intents": ["AUTRE"], "objections": ["PAPIERS"], "offered_amount": None}),
+    ("Le kilométrage est réel ? Elle a déjà eu un accident ?", {"intents": ["AUTRE"], "objections": ["ETAT_VEHICULE"], "offered_amount": None}),
+    ("Comment je sais que la voiture existe vraiment ? Je ne paie rien avant de la voir", {"intents": ["AUTRE"], "objections": ["CONFIANCE"], "offered_amount": None}),
+    ("Elle est déjà vendue ?", {"intents": ["DISPONIBILITE"], "objections": [], "offered_amount": None}),
+    ("Je cherche un SUV diesel", {"intents": ["RECHERCHE_PRODUIT"], "objections": [], "offered_amount": None}),
+    ("Je veux parler au responsable", {"intents": ["DEMANDE_HUMAIN"], "objections": [], "offered_amount": None}),
+    ("D'accord merci", {"intents": ["SALUTATION"], "objections": [], "offered_amount": None}),
+]
+
+
+def _dealership_prompt() -> str:
+    intents = "\n".join(f"- {code} : {definition}" for code, (_, definition) in INTENTS.items())
+    objections = "\n".join(f"- {code} : {definition}" for code, (_, definition) in objections_for("CAR_DEALERSHIP").items())
+    return (
+        "Tu analyses UN message qu'un client a envoyé sur WhatsApp à une concession automobile.\n"
+        "Tu ne réponds jamais au client : tu classes seulement son message.\n\n"
+        "Réponds UNIQUEMENT par un objet JSON de la forme :\n"
+        '{"intents": ["CODE", ...], "objections": ["CODE", ...], "offered_amount": nombre ou null}\n\n'
+        "Intentions possibles (une ou plusieurs ; « produit » = véhicule) :\n"
+        f"{intents}\n\n"
+        f"Objections possibles (zéro, une ou plusieurs) :\n{objections}\n\n"
+        "Règles :\n"
+        "- n'utilise que les codes ci-dessus, en majuscules ;\n"
+        "- une objection = tout ce qui freine ou retarde l'achat, y compris une hésitation sans "
+        "raison donnée ; une simple question sans doute exprimé (« elle est encore disponible ? ») "
+        "n'est pas une objection ; s'il n'y a aucun frein, liste vide ;\n"
+        "- offered_amount = le montant que le client PROPOSE de payer ou annonce comme budget "
+        "(ex. « je vous la prends à 12 millions » → 12000000) ; null s'il n'en donne aucun ;\n"
+        "- le message précédent de la concession, s'il est fourni, sert seulement à comprendre "
+        "une réponse courte (« oui », « combien ? ») ; ne classe que le message du client.\n\n"
+        f"Exemples :\n{_examples(DEALERSHIP_CLASSIFIER_EXAMPLES)}"
+    )
+
+
+def normalize_classification(raw, business_type: str | None = None) -> dict | None:
+    """Ne garde que ce qui respecte la taxonomie de l'activité. None si la réponse est inexploitable."""
     if not isinstance(raw, dict):
         return None
+    allowed = objections_for(business_type)
     intents = [c for c in dict.fromkeys(raw.get("intents") or []) if isinstance(c, str) and c in INTENTS]
-    objections = [c for c in dict.fromkeys(raw.get("objections") or []) if isinstance(c, str) and c in OBJECTIONS]
+    objections = [c for c in dict.fromkeys(raw.get("objections") or []) if isinstance(c, str) and c in allowed]
     amount = raw.get("offered_amount")
     if isinstance(amount, bool) or not isinstance(amount, (int, float)) or amount <= 0:
         amount = None
@@ -91,19 +136,25 @@ class MessageClassifier(ABC):
     model_name: str = "inconnu"
 
     @abstractmethod
-    async def _call(self, text: str, previous_shop_message: str | None) -> dict:
-        """Renvoie la réponse JSON brute du modèle."""
+    async def _call(self, text: str, previous_shop_message: str | None, system_prompt: str | None = None) -> dict:
+        """Renvoie la réponse JSON brute du modèle (consignes : celles de la boutique en ligne par défaut)."""
 
-    async def classify(self, text: str, previous_shop_message: str | None = None, timeout: float = 5.0) -> dict | None:
+    async def classify(self, text: str, previous_shop_message: str | None = None, timeout: float = 5.0,
+                       business_type: str | None = None) -> dict | None:
         text = (text or "").strip()
         if not text:
             return None
         try:
-            raw = await asyncio.wait_for(self._call(text[:MAX_MESSAGE_CHARS], previous_shop_message), timeout=timeout)
+            if business_type == "CAR_DEALERSHIP":  # lot 45 : consignes et objections de la concession
+                call = self._call(text[:MAX_MESSAGE_CHARS], previous_shop_message,
+                                  system_prompt=build_classifier_prompt(business_type))
+            else:
+                call = self._call(text[:MAX_MESSAGE_CHARS], previous_shop_message)
+            raw = await asyncio.wait_for(call, timeout=timeout)
         except Exception:  # noqa: BLE001 — jamais bloquant : pas de classification, Bob répond normalement
             logger.warning("Classification du message impossible (délai ou erreur du modèle)", exc_info=True)
             return None
-        return normalize_classification(raw)
+        return normalize_classification(raw, business_type)
 
 
 class MistralMessageClassifier(MessageClassifier):
@@ -119,13 +170,13 @@ class MistralMessageClassifier(MessageClassifier):
             self._client = Mistral(api_key=self.api_key)
         return self._client
 
-    async def _call(self, text: str, previous_shop_message: str | None) -> dict:
+    async def _call(self, text: str, previous_shop_message: str | None, system_prompt: str | None = None) -> dict:
         user = f"Message du client : {text}"
         if previous_shop_message:
             user = f"Message précédent de la boutique : {previous_shop_message[:500]}\n\n{user}"
         response = await self._get_client().chat.complete_async(
             model=self.model_name,
-            messages=[{"role": "system", "content": build_classifier_prompt()}, {"role": "user", "content": user}],
+            messages=[{"role": "system", "content": system_prompt or build_classifier_prompt()}, {"role": "user", "content": user}],
             response_format={"type": "json_object"},
             temperature=0,
             max_tokens=200,

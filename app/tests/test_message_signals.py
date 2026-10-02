@@ -33,8 +33,9 @@ class FakeClassifier(MessageClassifier):
         self.error = error
         self.calls: list[tuple] = []
 
-    async def _call(self, text, previous_shop_message):
+    async def _call(self, text, previous_shop_message, system_prompt=None):
         self.calls.append((text, previous_shop_message))
+        self.prompts = getattr(self, "prompts", []) + [system_prompt]
         if self.delay:
             await asyncio.sleep(self.delay)
         if self.error:

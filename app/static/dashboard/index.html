@@ -2221,6 +2221,25 @@ async function loadStrategies() {
       card.innerHTML = `${title}<p style="font-size: 13px; color: var(--muted); margin: 8px 0 0;">Aucune stratégie appliquée pour l'instant : elles s'appliqueront dès qu'un client exprimera un frein à l'achat.</p>`;
       return;
     }
+    if (s.measure === "APPOINTMENTS") {  // lot 45 : en concession, une stratégie se mesure aux rendez-vous obtenus
+      card.innerHTML = `${title}
+      <table style="margin-top: 10px;"><thead><tr><th>Objection</th><th>Stratégie</th><th>Utilisations</th><th>Rendez-vous obtenus</th><th>Taux</th></tr></thead><tbody>
+        ${s.strategies.map((r) => `<tr>
+          <td data-label="Objection">${esc(r.objection_label)}</td>
+          <td data-label="Stratégie">${esc(r.label)}</td>
+          <td data-label="Utilisations">${r.uses}</td>
+          <td data-label="Rendez-vous">${r.appointments} / ${r.conversations} conversation${r.conversations > 1 ? "s" : ""}</td>
+          <td data-label="Taux">${r.enough_data ? r.appointment_rate_pct + " %" : "<span style='color: var(--muted); font-size: 12px;'>Pas encore assez de données</span>"}</td>
+        </tr>`).join("")}
+      </tbody></table>
+      <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
+        Rendez-vous obtenus : demandes de rendez-vous faites dans la conversation après la stratégie. Le taux n'est
+        affiché qu'à partir de ${s.min_terminated_for_rate} conversations : en dessous, un pourcentage serait trompeur.
+        Bob alterne au hasard entre les stratégies activées (Réglages de Bob → Réponses aux objections), pour pouvoir
+        les comparer honnêtement.
+      </p>`;
+      return;
+    }
     card.innerHTML = `${title}
       <table style="margin-top: 10px;"><thead><tr><th>Objection</th><th>Stratégie</th><th>Utilisations</th><th>Opportunités payées</th><th>Conversion</th></tr></thead><tbody>
         ${s.strategies.map((r) => `<tr>
@@ -3521,7 +3540,8 @@ async function saveHandoffSettings() {
   }
 }
 
-const KNOWLEDGE_LABELS = { PAIEMENT: "sur le paiement", LIVRAISON: "sur la livraison", RETOUR: "sur les retours", GARANTIE: "sur la garantie", CONDITIONS: "sur les conditions de vente" };
+const KNOWLEDGE_LABELS = { PAIEMENT: "sur le paiement", LIVRAISON: "sur la livraison", RETOUR: "sur les retours", GARANTIE: "sur la garantie", CONDITIONS: "sur les conditions de vente",
+  ADRESSE: "sur l'adresse", HORAIRES: "sur les horaires", FAQ: "dans « Question fréquente »", AUTRE: "dans « Autre »" };  // lot 45
 
 async function loadStrategySettings() {
   const box = document.getElementById("strategy-list");

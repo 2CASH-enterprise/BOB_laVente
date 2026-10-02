@@ -152,7 +152,9 @@ def evaluate(
             ),
         )
 
-    if dealership and "PAIEMENT" in intents and "DEMANDE_REMISE" not in intents:
+    # Lot 45 : si le classificateur a reconnu l'objection « Financement », ce sont ses stratégies
+    # (réglables et mesurées) qui s'appliquent, avec les mêmes garde-fous que cette règle.
+    if dealership and "PAIEMENT" in intents and "DEMANDE_REMISE" not in intents and "FINANCEMENT" not in objections:
         # Lot 24b — incident du 29/09 : « Je peux payer en plusieurs fois ? » → Bob transférait
         # aussitôt. En concession, c'est une étape vers le rendez-vous, pas un motif de transfert.
         return TurnDecision(

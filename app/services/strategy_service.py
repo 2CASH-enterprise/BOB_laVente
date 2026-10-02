@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.strategies import (
     MIN_TERMINATED_FOR_RATE,
-    NO_KNOWLEDGE_INSTRUCTION,
     is_available,
+    no_knowledge_instruction,
     STRATEGIES,
     STRATEGIES_BY_CODE,
     select_strategy,
@@ -36,7 +36,8 @@ async def knowledge_categories(db: AsyncSession, tenant_id) -> set[str]:
     return {getattr(c, "value", c) for c in rows}
 
 
-async def apply_strategy(db: AsyncSession, tenant_id, turn, signal: dict | None, rng: random.Random | None = None):
+async def apply_strategy(db: AsyncSession, tenant_id, turn, signal: dict | None, rng: random.Random | None = None,
+                         business_type: str | None = None):
     """
     Ajoute à la consigne du message la stratégie tirée pour l'objection prioritaire.
     Les règles du lot 13 passent TOUJOURS en premier : dès qu'une règle s'applique (transfert,
@@ -49,30 +50,30 @@ async def apply_strategy(db: AsyncSession, tenant_id, turn, signal: dict | None,
         return None
     strategy, blocked_objection = select_strategy(
         signal["objections"], await disabled_strategies(db, tenant_id), rng,
-        knowledge_categories=await knowledge_categories(db, tenant_id),
+        knowledge_categories=await knowledge_categories(db, tenant_id), business_type=business_type,
     )
     if strategy is not None:
         text = strategy_instruction(strategy)
     elif blocked_objection is not None:
-        text = NO_KNOWLEDGE_INSTRUCTION
+        text = no_knowledge_instruction(business_type)
     else:
         return None
     turn.instruction = f"{turn.instruction}\n{text}" if turn.instruction else text
     return strategy
 
 
-def library_with_state(disabled: set[str], known: set[str] | None = None) -> list[dict]:
-    """Bibliothèque groupée par objection, pour l'écran de réglages."""
-    from app.agents.strategies import OBJECTION_PRIORITY
+def library_with_state(disabled: set[str], known: set[str] | None = None, business_type: str | None = None) -> list[dict]:
+    """Bibliothèque groupée par objection, pour l'écran de réglages (lot 45 : celle de l'activité)."""
+    from app.agents.strategies import priority_for
     from app.agents.taxonomy import objection_label
 
     groups = []
-    for objection in OBJECTION_PRIORITY:
-        items = strategies_for(objection)
+    for objection in priority_for(business_type):
+        items = strategies_for(objection, business_type)
         if items:
             groups.append({
                 "objection": objection,
-                "label": objection_label(objection),
+                "label": objection_label(objection, business_type),
                 "strategies": [
                     {
                         "code": s.code, "label": s.label, "description": s.description,
@@ -87,20 +88,23 @@ def library_with_state(disabled: set[str], known: set[str] | None = None) -> lis
     return groups
 
 
-def validate_disabled(disabled: list[str]) -> str | None:
-    """Message d'erreur, ou None si la liste est acceptable."""
+def validate_disabled(disabled: list[str], business_type: str | None = None) -> str | None:
+    """Message d'erreur, ou None si la liste est acceptable (contrôle sur les stratégies de l'activité)."""
+    from app.agents.strategies import priority_for
+
     unknown = [code for code in disabled if code not in STRATEGIES_BY_CODE]
     if unknown:
         return f"Stratégies inconnues : {', '.join(sorted(unknown))}"
-    for objection in {s.objection for s in STRATEGIES}:
-        if all(s.code in disabled for s in strategies_for(objection)):
+    for objection in priority_for(business_type):
+        items = strategies_for(objection, business_type)
+        if all(s.code in disabled for s in items):  # chaque objection de la liste a ses stratégies
             from app.agents.taxonomy import objection_label
 
-            return f"Gardez au moins une stratégie active pour l'objection « {objection_label(objection)} »."
+            return f"Gardez au moins une stratégie active pour l'objection « {objection_label(objection, business_type)} »."
     return None
 
 
-async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=None) -> dict:
+async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=None, business_type: str | None = None) -> dict:
     """
     Pour chaque stratégie utilisée : opportunités concernées, terminées, payées. Le taux n'est
     affiché qu'à partir de MIN_TERMINATED_FOR_RATE opportunités terminées ; en dessous, un
@@ -117,6 +121,8 @@ async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=No
 
     now = aware(now or datetime.now(timezone.utc))
     since = now - timedelta(days=days)
+    if business_type == "CAR_DEALERSHIP":
+        return await _dealership_summary(db, tenant_id, days, since)
     signals = (await db.execute(
         select(MessageSignal).where(
             MessageSignal.tenant_id == tenant_id, MessageSignal.strategy.is_not(None),
@@ -161,7 +167,7 @@ async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=No
             "code": code,
             "label": strategy.label,
             "objection": strategy.objection,
-            "objection_label": objection_label(strategy.objection),
+            "objection_label": objection_label(strategy.objection, strategy.activity),
             "uses": entry["uses"],
             "opportunities": len(opps),
             "terminated": len(terminated),
@@ -170,4 +176,68 @@ async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=No
             "conversion_rate_pct": round(len(paid) / len(terminated) * 100, 1) if enough else None,
         })
     rows.sort(key=lambda r: (r["objection_label"], -r["uses"], r["label"]))
-    return {"period_days": days, "min_terminated_for_rate": MIN_TERMINATED_FOR_RATE, "strategies": rows}
+    return {"period_days": days, "measure": "PAID", "min_terminated_for_rate": MIN_TERMINATED_FOR_RATE, "strategies": rows}
+
+
+async def _dealership_summary(db: AsyncSession, tenant_id, days: int, since) -> dict:
+    """
+    Lot 45 — en concession, rien ne se paie sur WhatsApp : une stratégie se mesure aux RENDEZ-VOUS
+    obtenus. Pour chaque stratégie : conversations où elle a servi, et parmi elles celles où une
+    demande de rendez-vous a été faite APRÈS sa première utilisation. Taux affiché seulement à partir
+    de MIN_TERMINATED_FOR_RATE conversations.
+    """
+    from datetime import timezone
+
+    from app.agents.taxonomy import objection_label
+    from app.models.appointment_request import AppointmentRequest
+    from app.models.message_signal import MessageSignal
+
+    def aware(dt):
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+    signals = (await db.execute(
+        select(MessageSignal).where(
+            MessageSignal.tenant_id == tenant_id, MessageSignal.strategy.is_not(None),
+            MessageSignal.message_created_at >= since,
+        )
+    )).scalars().all()
+    appointments = (await db.execute(
+        select(AppointmentRequest.conversation_id, AppointmentRequest.created_at).where(AppointmentRequest.tenant_id == tenant_id)
+    )).all()
+    booked: dict = {}
+    for conversation_id, created_at in appointments:
+        booked.setdefault(conversation_id, []).append(aware(created_at))
+
+    stats: dict = {}
+    for signal in signals:
+        strategy = STRATEGIES_BY_CODE.get(signal.strategy)
+        if strategy is None:
+            continue
+        entry = stats.setdefault(strategy.code, {"uses": 0, "first_use": {}})
+        entry["uses"] += 1
+        when = aware(signal.message_created_at)
+        first = entry["first_use"].get(signal.conversation_id)
+        entry["first_use"][signal.conversation_id] = when if first is None else min(first, when)
+
+    rows = []
+    for code, entry in stats.items():
+        strategy = STRATEGIES_BY_CODE[code]
+        conversations = entry["first_use"]
+        with_appointment = sum(
+            1 for conversation_id, first in conversations.items()
+            if any(created >= first for created in booked.get(conversation_id, []))
+        )
+        enough = len(conversations) >= MIN_TERMINATED_FOR_RATE
+        rows.append({
+            "code": code,
+            "label": strategy.label,
+            "objection": strategy.objection,
+            "objection_label": objection_label(strategy.objection, strategy.activity),
+            "uses": entry["uses"],
+            "conversations": len(conversations),
+            "appointments": with_appointment,
+            "enough_data": enough,
+            "appointment_rate_pct": round(with_appointment / len(conversations) * 100, 1) if enough else None,
+        })
+    rows.sort(key=lambda r: (r["objection_label"], -r["uses"], r["label"]))
+    return {"period_days": days, "measure": "APPOINTMENTS", "min_terminated_for_rate": MIN_TERMINATED_FOR_RATE, "strategies": rows}

@@ -12,7 +12,9 @@ alterner ne fait prendre aucun risque au client) et prépare l'apprentissage de 
 import random
 from dataclasses import dataclass
 
-STRATEGY_LIBRARY_VERSION = "v1"
+STRATEGY_LIBRARY_VERSION = "v2"  # lot 45 : stratégies de la concession (celles de la boutique inchangées)
+ONLINE_STORE = "ONLINE_STORE"
+CAR_DEALERSHIP = "CAR_DEALERSHIP"
 MIN_TERMINATED_FOR_RATE = 20  # en dessous, « pas encore assez de données » plutôt qu'un pourcentage trompeur
 
 GUARDRAILS = (
@@ -34,6 +36,14 @@ NO_KNOWLEDGE_INSTRUCTION = (
 )
 
 
+# Lot 45 — même consigne, dans le vocabulaire de la concession.
+DEALERSHIP_NO_KNOWLEDGE_INSTRUCTION = NO_KNOWLEDGE_INSTRUCTION.replace("la boutique", "la concession")
+
+
+def no_knowledge_instruction(business_type: str | None = None) -> str:
+    return DEALERSHIP_NO_KNOWLEDGE_INSTRUCTION if business_type == "CAR_DEALERSHIP" else NO_KNOWLEDGE_INSTRUCTION
+
+
 @dataclass(frozen=True)
 class Strategy:
     code: str
@@ -44,6 +54,7 @@ class Strategy:
     # Verrou (code, pas consigne) : la stratégie n'est tirée que si AU MOINS UNE de ces catégories
     # est renseignée dans la base de connaissances. Vide = aucune information requise.
     requires: frozenset = frozenset()
+    activity: str = ONLINE_STORE  # lot 45 : chaque stratégie appartient à une seule activité
 
 
 STRATEGIES: list[Strategy] = [
@@ -106,16 +117,151 @@ STRATEGIES: list[Strategy] = [
              "(recommend_products ou search_products), en vérifiant son stock."),
 ]
 
+# --- Lot 45 : concession automobile ---------------------------------------------------------------------
+# Bob ne vend pas la voiture sur WhatsApp : chaque stratégie vise à lever le frein avec des faits RÉELS
+# (fiche du véhicule, base de connaissances) et, quand c'est utile, à obtenir un rendez-vous. Jamais de
+# valeur de reprise, de taux, de mensualité ni de remise : cela se discute avec un conseiller.
+_VISIT = ("propose-lui de venir à la concession : get_available_slots pour lui proposer un créneau, puis "
+          "request_appointment quand il en choisit un")
+_NO_TRANSFER_FOR_MONEY = ("Ne transfère pas pour cette question (handoff_to_human) : seulement s'il insiste pour "
+                          "avoir des chiffres tout de suite.")
+_PAPERS_INFO = frozenset({"CONDITIONS", "GARANTIE", "FAQ", "AUTRE"})
+_DEALER_TRUST_INFO = frozenset({"ADRESSE", "HORAIRES", "GARANTIE", "PAIEMENT", "CONDITIONS"})
+
+
+def _auto(code, objection, label, description, instruction, requires=frozenset()):
+    return Strategy(code, objection, label, description, instruction, requires=requires, activity=CAR_DEALERSHIP)
+
+
+STRATEGIES += [
+    _auto("AUTO_PRIX_VALEUR", "PRIX_TROP_ELEVE", "Valeur",
+          "Bob explique ce qui justifie le prix avec la vraie fiche du véhicule (année, kilométrage, équipements).",
+          "Le client trouve le véhicule cher. Explique ce qui justifie ce prix en t'appuyant uniquement sur la fiche "
+          "du véhicule renvoyée par search_products (année, kilométrage, carburant, boîte, description). "
+          "N'ajoute aucun équipement ni aucun état qui n'y figure pas, et n'annonce aucune remise."),
+    _auto("AUTO_PRIX_ALTERNATIVE", "PRIX_TROP_ELEVE", "Alternative",
+          "Bob propose un véhicule comparable moins cher, s'il y en a un en stock.",
+          "Le client trouve le véhicule cher. Cherche un véhicule comparable moins cher avec search_products et "
+          "propose-le s'il existe ; sinon, dis-le simplement."),
+    _auto("AUTO_PRIX_BUDGET", "PRIX_TROP_ELEVE", "Budget",
+          "Bob demande le budget du client, le note sur sa fiche et cherche ce qui y correspond.",
+          "Le client trouve le véhicule cher. Demande-lui poliment quel budget il envisage ; quand il le donne, "
+          "note-le avec update_prospect_profile et cherche ce qui y correspond avec search_products."),
+    _auto("AUTO_PRIX_FINANCEMENT", "PRIX_TROP_ELEVE", "Paiement étalé",
+          "Bob rappelle les solutions de paiement réelles de la concession (base de connaissances).",
+          "Le client trouve le véhicule cher. Rappelle-lui les solutions de paiement de la concession, uniquement "
+          "telles qu'elles figurent dans la base de connaissances, sans aucun taux ni mensualité qui n'y figure pas. "
+          "S'il est intéressé, note-le avec update_prospect_profile (paiement : FINANCEMENT).",
+          requires=frozenset({"PAIEMENT"})),
+    _auto("AUTO_FIN_SOLUTIONS", "FINANCEMENT", "Solutions de paiement",
+          "Bob présente les solutions de paiement renseignées et note l'intérêt pour le financement.",
+          "Le client veut un financement ou payer en plusieurs fois. Présente-lui les solutions de paiement de la "
+          "concession, uniquement telles qu'elles figurent dans la base de connaissances (aucun taux, aucune "
+          "mensualité, aucun accord de crédit qui n'y figure pas). Note son intérêt avec update_prospect_profile "
+          f"(paiement : FINANCEMENT), puis {_VISIT}. {_NO_TRANSFER_FOR_MONEY}",
+          requires=frozenset({"PAIEMENT"})),
+    _auto("AUTO_FIN_VISITE", "FINANCEMENT", "Étude en rendez-vous",
+          "Bob note l'intérêt pour le financement et propose un rendez-vous pour l'étudier avec un conseiller.",
+          "Le client veut un financement ou payer en plusieurs fois. Ne donne aucun chiffre et n'affirme pas quelles "
+          "solutions existent. Note son intérêt avec update_prospect_profile (paiement : FINANCEMENT), explique "
+          f"que les possibilités de financement s'étudient avec un conseiller lors d'une visite, et {_VISIT}. "
+          f"{_NO_TRANSFER_FOR_MONEY}"),
+    _auto("AUTO_REPRISE_ESTIMATION", "REPRISE", "Estimation sur place",
+          "Bob note le véhicule à reprendre et propose une estimation à la concession, sans jamais donner de valeur.",
+          "Le client parle de reprise de son véhicule. Ne donne JAMAIS de valeur de reprise, même approximative. "
+          "Demande-lui la marque, le modèle, l'année et le kilométrage de son véhicule, note-les avec "
+          "update_prospect_profile (véhicule à reprendre), et propose une estimation à la concession : get_available_slots, "
+          "puis request_appointment (kind : ESTIMATION_REPRISE) quand il choisit un créneau."),
+    _auto("AUTO_REPRISE_ATTENTES", "REPRISE", "Comprendre ses attentes",
+          "Bob demande ce que le client espère de sa reprise et sur quoi il se base, puis propose l'estimation.",
+          "Le client parle de reprise de son véhicule ou trouve la reprise trop basse. Ne donne et ne promets "
+          "aucune valeur. Demande-lui ce qu'il espère et sur quoi il se base (état, entretien, kilométrage), "
+          "note ce qu'il dit sur son véhicule avec update_prospect_profile (véhicule à reprendre), et explique que la valeur "
+          "est fixée après inspection du véhicule à la concession ; propose une estimation (get_available_slots)."),
+    _auto("AUTO_CONFIANCE_FAITS", "CONFIANCE", "Rassurer par les faits",
+          "Bob rappelle les faits réels de la concession : adresse, horaires, garanties, conditions.",
+          "Le client doute du sérieux de la concession ou de l'annonce. Rassure-le uniquement avec des faits réels de "
+          "la base de connaissances (adresse de la concession, horaires, garanties, conditions de paiement). Ne "
+          "demande jamais d'acompte. Si une information n'y figure pas, ne l'affirme pas.",
+          requires=_DEALER_TRUST_INFO),
+    _auto("AUTO_CONFIANCE_VOIR", "CONFIANCE", "Venir voir / essayer",
+          "Bob propose de venir voir et essayer le véhicule avant tout engagement.",
+          "Le client doute du sérieux de la concession ou de l'annonce. Propose-lui de venir voir et essayer le "
+          "véhicule à la concession avant tout engagement, sans rien payer à l'avance : get_available_slots pour "
+          "lui proposer un créneau, puis request_appointment (kind : ESSAI) quand il en choisit un."),
+    _auto("AUTO_CONFIANCE_COMPRENDRE", "CONFIANCE", "Comprendre",
+          "Bob demande ce qui inquiète précisément le client, pour y répondre.",
+          "Le client doute du sérieux de la concession ou de l'annonce. Demande-lui ce qui l'inquiète précisément "
+          "(le véhicule, les papiers, le paiement), pour pouvoir lui répondre avec des faits."),
+    _auto("AUTO_PAPIERS_FAITS", "PAPIERS", "Répondre par les faits",
+          "Bob répond sur les papiers uniquement avec ce que la concession a renseigné.",
+          "Le client doute des papiers du véhicule (carte grise, dédouanement, importation). Réponds uniquement "
+          "avec ce qui figure dans la fiche du véhicule (search_products) ou dans la base de connaissances. Si sa "
+          "question précise n'y trouve pas de réponse, n'affirme rien : appelle handoff_to_human (raison : sa "
+          "question sur les papiers) et dis-lui que tu transmets sa question à la concession.",
+          requires=_PAPERS_INFO),
+    _auto("AUTO_PAPIERS_VOIR", "PAPIERS", "Voir sur place",
+          "Bob ne garantit rien et propose de venir voir le véhicule et ses documents avec un conseiller.",
+          "Le client doute des papiers du véhicule (carte grise, dédouanement, importation). N'affirme rien sur les "
+          "papiers qui ne figure pas dans la fiche du véhicule. S'il pose une question précise (« il est "
+          "dédouané ? »), appelle handoff_to_human (raison : sa question) et dis-lui que tu transmets sa question "
+          f"à la concession ; sinon, explique qu'il pourra consulter les documents sur place et {_VISIT}."),
+    _auto("AUTO_ETAT_FICHE", "ETAT_VEHICULE", "Fiche du véhicule",
+          "Bob donne les informations réelles de la fiche (kilométrage, année, description), sans rien ajouter.",
+          "Le client doute de l'état du véhicule. Donne-lui les informations réelles de sa fiche (search_products : "
+          "kilométrage, année, description). N'affirme JAMAIS qu'il n'a pas eu d'accident, que le kilométrage est "
+          "certifié ou que l'entretien est à jour si ce n'est pas écrit dans la fiche : dis honnêtement que tu n'as "
+          "pas ce détail."),
+    _auto("AUTO_ETAT_ESSAI", "ETAT_VEHICULE", "Venir inspecter / essayer",
+          "Bob propose de venir inspecter et essayer le véhicule.",
+          "Le client doute de l'état du véhicule. N'affirme rien qui ne figure pas dans sa fiche, et propose-lui "
+          "de venir l'inspecter et l'essayer à la concession : get_available_slots pour lui proposer un créneau, "
+          "puis request_appointment (kind : ESSAI) quand il en choisit un."),
+    _auto("AUTO_DELAI_ALTERNATIVE", "DELAI", "Véhicule disponible",
+          "Bob propose un véhicule comparable disponible tout de suite, s'il y en a un.",
+          "Le client trouve le délai trop long. Propose un véhicule comparable disponible tout de suite s'il en "
+          "existe un (search_products) ; sinon, indique honnêtement le délai tel qu'il figure dans la base de "
+          "connaissances, sans en inventer."),
+    _auto("AUTO_RUPTURE_SIMILAIRE", "RUPTURE_STOCK", "Véhicule similaire",
+          "Bob propose le véhicule disponible le plus proche et note la recherche du client.",
+          "Le véhicule voulu n'est plus disponible. Propose le véhicule disponible le plus proche (search_products), "
+          "et note ce que cherche le client avec update_prospect_profile (besoin)."),
+    _auto("AUTO_HESITATION_CLARIFIER", "HESITATION", "Clarifier",
+          "Bob cherche ce qui fait hésiter : le prix, le financement, le modèle ou la reprise ?",
+          "Le client hésite. Demande-lui, avec une seule question simple, ce qui le fait hésiter : plutôt le prix, "
+          "le financement, le modèle ou la reprise de son véhicule ? Propose ensuite ton aide sur ce point."),
+    _auto("AUTO_HESITATION_RESPECTER", "HESITATION", "Respecter",
+          "Bob prend acte, résume le véhicule en une phrase et reste disponible, sans insister.",
+          "Le client hésite. Respecte sa décision : résume en une phrase le véhicule qui l'intéressait et indique "
+          "que tu restes disponible. N'insiste pas et ne pose pas de question."),
+    _auto("AUTO_HESITATION_ESSAI", "HESITATION", "Essai sans engagement",
+          "Bob propose un essai sans engagement pour l'aider à se décider.",
+          "Le client hésite. Propose-lui, une seule fois et sans insister, de venir essayer le véhicule sans "
+          "engagement pour se faire une idée : get_available_slots pour lui proposer un créneau s'il accepte."),
+]
+
 STRATEGIES_BY_CODE = {s.code: s for s in STRATEGIES}
 
 # Une seule objection traitée par message : la plus bloquante d'abord.
 OBJECTION_PRIORITY = ["CONFIANCE", "RUPTURE_STOCK", "PRIX_TROP_ELEVE", "FRAIS_LIVRAISON", "DELAI", "QUALITE", "HESITATION"]
+DEALERSHIP_OBJECTION_PRIORITY = [
+    "CONFIANCE", "PAPIERS", "ETAT_VEHICULE", "RUPTURE_STOCK", "FINANCEMENT", "PRIX_TROP_ELEVE", "REPRISE", "DELAI", "HESITATION",
+]
+
+
+def _activity(business_type: str | None) -> str:
+    return CAR_DEALERSHIP if business_type == CAR_DEALERSHIP else ONLINE_STORE
+
+
+def priority_for(business_type: str | None = None) -> list[str]:
+    return DEALERSHIP_OBJECTION_PRIORITY if _activity(business_type) == CAR_DEALERSHIP else OBJECTION_PRIORITY
 
 _rng = random.Random()
 
 
-def strategies_for(objection: str) -> list[Strategy]:
-    return [s for s in STRATEGIES if s.objection == objection]
+def strategies_for(objection: str, business_type: str | None = None) -> list[Strategy]:
+    activity = _activity(business_type)
+    return [s for s in STRATEGIES if s.objection == objection and s.activity == activity]
 
 
 def is_available(strategy: Strategy, knowledge_categories: set[str]) -> bool:
@@ -127,6 +273,7 @@ def select_strategy(
     disabled: set[str],
     rng: random.Random | None = None,
     knowledge_categories: set[str] | None = None,
+    business_type: str | None = None,
 ) -> tuple[Strategy | None, str | None]:
     """
     Objection prioritaire du message, puis tirage au hasard parmi ses stratégies activées ET
@@ -135,9 +282,9 @@ def select_strategy(
     toutes bloquées faute d'informations — la consigne de repli s'applique alors —, ou (None, None).
     """
     known = knowledge_categories or set()
-    for objection in OBJECTION_PRIORITY:
+    for objection in priority_for(business_type):
         if objection in objections:
-            enabled = [s for s in strategies_for(objection) if s.code not in disabled]
+            enabled = [s for s in strategies_for(objection, business_type) if s.code not in disabled]
             available = [s for s in enabled if is_available(s, known)]
             if available:
                 return (rng or _rng).choice(available), None

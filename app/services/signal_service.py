@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.classifier import MessageClassifier
-from app.agents.taxonomy import TAXONOMY_VERSION
+from app.agents.taxonomy import taxonomy_version
 from app.core.config import get_settings
 from app.models.conversation import Message, MessageSender
 from app.models.message_signal import MessageSignal
@@ -17,8 +17,12 @@ from app.models.message_signal import MessageSignal
 logger = logging.getLogger(__name__)
 
 
-async def classify_and_store(db: AsyncSession, classifier: MessageClassifier | None, message: Message) -> MessageSignal | None:
-    """Classe un message client déjà enregistré. Ne lève jamais : en cas d'échec, rien n'est stocké."""
+async def classify_and_store(db: AsyncSession, classifier: MessageClassifier | None, message: Message,
+                             business_type: str | None = None) -> MessageSignal | None:
+    """
+    Classe un message client déjà enregistré. Ne lève jamais : en cas d'échec, rien n'est stocké.
+    Lot 45 : la concession a ses propres objections (taxonomie v1.3auto).
+    """
     if classifier is None or message.sender != MessageSender.CUSTOMER or message.message_type != "text":
         return None
     try:
@@ -34,7 +38,8 @@ async def classify_and_store(db: AsyncSession, classifier: MessageClassifier | N
         )
         previous = (await db.execute(previous_stmt)).scalar_one_or_none()
         result = await classifier.classify(
-            message.content, previous_shop_message=previous, timeout=get_settings().classifier_timeout_seconds
+            message.content, previous_shop_message=previous, timeout=get_settings().classifier_timeout_seconds,
+            business_type=business_type,
         )
         if result is None:
             return None
@@ -51,7 +56,7 @@ async def classify_and_store(db: AsyncSession, classifier: MessageClassifier | N
             objections=result["objections"],
             offered_amount=result["offered_amount"],
             model=classifier.model_name,
-            taxonomy_version=TAXONOMY_VERSION,
+            taxonomy_version=taxonomy_version(business_type),
             message_created_at=message.created_at or datetime.now(timezone.utc),
         )
         # Point de sauvegarde : en cas d'échec, SEULE l'écriture des étiquettes est annulée. Un
@@ -97,7 +102,8 @@ def _aware(dt: datetime) -> datetime:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
 
 
-async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: datetime | None = None) -> dict:
+async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: datetime | None = None,
+                          business_type: str | None = None) -> dict:
     """
     Intentions et objections de la période. Pour chaque objection : dans combien
     d'opportunités elle est apparue, et combien de ces opportunités ont été payées
@@ -105,7 +111,7 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
     """
     from datetime import timedelta
 
-    from app.agents.taxonomy import INTENTS, OBJECTIONS, intent_label, objection_label
+    from app.agents.taxonomy import INTENTS, intent_label, is_known_objection, objection_label
     from app.models.sales_opportunity import OpportunityOutcome, SalesOpportunity
 
     now = _aware(now or datetime.now(timezone.utc))
@@ -150,7 +156,7 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
                 if opp is not None:
                     intent_opps.setdefault(code, {})[opp.id] = opp
         for code in signal.objections:
-            if code in OBJECTIONS:
+            if is_known_objection(code):  # lot 45 : objections de la boutique ou de la concession
                 objection_messages[code] = objection_messages.get(code, 0) + 1
                 if opp is not None:
                     objection_opps.setdefault(code, {})[opp.id] = opp
@@ -170,7 +176,7 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
         paid = [o for o in opps if o.outcome == OpportunityOutcome.PAID]
         objections.append({
             "code": code,
-            "label": objection_label(code),
+            "label": objection_label(code, business_type),
             "messages": count,
             "opportunities": len(opps),
             "terminated": len(terminated),

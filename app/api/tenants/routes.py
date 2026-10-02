@@ -414,7 +414,8 @@ async def get_strategy_settings(
     from app.services.strategy_service import disabled_strategies, knowledge_categories, library_with_state
 
     known = await knowledge_categories(db, current_user.tenant_id)
-    return {"objections": library_with_state(await disabled_strategies(db, current_user.tenant_id), known)}
+    tenant = await db.get(Tenant, current_user.tenant_id)  # lot 45 : les stratégies de son activité
+    return {"objections": library_with_state(await disabled_strategies(db, current_user.tenant_id), known, tenant.business_type)}
 
 
 @router.put("/me/strategy-settings", dependencies=[Depends(require_role("ADMIN"))])
@@ -428,7 +429,8 @@ async def update_strategy_settings(
     from app.services.strategy_service import knowledge_categories, library_with_state, validate_disabled
 
     disabled = sorted(set(payload.disabled))
-    error = validate_disabled(disabled)
+    business_type = (await db.get(Tenant, current_user.tenant_id)).business_type
+    error = validate_disabled(disabled, business_type)
     if error:
         raise HTTPException(status_code=422, detail=error)
 
@@ -445,7 +447,7 @@ async def update_strategy_settings(
         details={"disabled": disabled},
     )
     await db.commit()
-    return {"objections": library_with_state(set(disabled), await knowledge_categories(db, current_user.tenant_id))}
+    return {"objections": library_with_state(set(disabled), await knowledge_categories(db, current_user.tenant_id), business_type)}
 
 
 # ---------------------------------------------------------------------------

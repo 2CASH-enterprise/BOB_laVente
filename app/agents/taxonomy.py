@@ -53,9 +53,65 @@ OBJECTIONS: dict[str, tuple[str, str]] = {
 }
 
 
+# Lot 45 — concession automobile : ses propres objections. « Frais de livraison » n'y a pas de sens ;
+# financement, reprise, papiers et état du véhicule sont les freins courants. Les codes communs
+# (prix, confiance, délai, rupture, hésitation) gardent leur code mais ont une définition « véhicule ».
+# La liste de la boutique en ligne (OBJECTIONS, v1.2) est STRICTEMENT inchangée.
+DEALERSHIP_TAXONOMY_VERSION = "v1.3auto"  # 8 caractères au plus (colonne taxonomy_version)
+
+DEALERSHIP_OBJECTIONS: dict[str, tuple[str, str]] = {
+    "PRIX_TROP_ELEVE": ("Prix trop élevé", "trouve le véhicule trop cher, n'a pas le budget, compare à moins cher ailleurs"),
+    "FINANCEMENT": (
+        "Financement",
+        "veut payer en plusieurs fois ou à crédit, n'a pas tout le montant comptant, demande si la "
+        "concession propose un financement",
+    ),
+    "REPRISE": (
+        "Reprise",
+        "veut faire reprendre son véhicule actuel, demande combien on le lui reprend, ou trouve la reprise trop basse",
+    ),
+    "CONFIANCE": (
+        "Confiance",
+        "doute du sérieux de la concession ou de l'annonce : arnaque, véhicule réellement disponible, "
+        "acompte demandé avant d'avoir vu le véhicule",
+    ),
+    "PAPIERS": ("Papiers du véhicule", "doute des papiers : carte grise, dédouanement, importation, documents en règle"),
+    "ETAT_VEHICULE": (
+        "État du véhicule",
+        "doute de l'état réel du véhicule : kilométrage trafiqué, accident, entretien, pannes, moteur",
+    ),
+    "DELAI": ("Délai", "trouve trop long le délai avant d'avoir le véhicule (arrivage, préparation, papiers)"),
+    "RUPTURE_STOCK": (
+        "Véhicule plus disponible",
+        "le véhicule voulu est vendu ou n'est plus disponible, ou le modèle cherché n'est pas en stock",
+    ),
+    "HESITATION": OBJECTIONS["HESITATION"],
+}
+
+
+def _is_dealership(business_type: str | None) -> bool:
+    return business_type == "CAR_DEALERSHIP"
+
+
+def objections_for(business_type: str | None = None) -> dict[str, tuple[str, str]]:
+    return DEALERSHIP_OBJECTIONS if _is_dealership(business_type) else OBJECTIONS
+
+
+def taxonomy_version(business_type: str | None = None) -> str:
+    return DEALERSHIP_TAXONOMY_VERSION if _is_dealership(business_type) else TAXONOMY_VERSION
+
+
+def is_known_objection(code: str) -> bool:
+    return code in OBJECTIONS or code in DEALERSHIP_OBJECTIONS
+
+
 def intent_label(code: str) -> str:
     return INTENTS.get(code, (code, ""))[0]
 
 
-def objection_label(code: str) -> str:
-    return OBJECTIONS.get(code, (code, ""))[0]
+def objection_label(code: str, business_type: str | None = None) -> str:
+    """Libellé dans le vocabulaire de l'activité ; sans activité : boutique, puis concession."""
+    own = objections_for(business_type)
+    if code in own:
+        return own[code][0]
+    return OBJECTIONS.get(code, DEALERSHIP_OBJECTIONS.get(code, (code, "")))[0]

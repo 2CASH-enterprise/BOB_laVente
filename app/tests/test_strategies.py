@@ -59,7 +59,7 @@ def test_every_instruction_carries_the_honesty_guardrails():
 
 def test_library_is_consistent_with_the_taxonomy():
     assert len(STRATEGIES_BY_CODE) == len(STRATEGIES)  # codes uniques
-    assert {s.objection for s in STRATEGIES} <= set(OBJECTIONS)
+    assert {s.objection for s in STRATEGIES if s.activity == "ONLINE_STORE"} <= set(OBJECTIONS)
     assert set(OBJECTION_PRIORITY) == set(OBJECTIONS)
     assert all(strategies_for(objection) for objection in OBJECTIONS)
 
