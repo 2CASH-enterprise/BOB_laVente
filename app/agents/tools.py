@@ -745,9 +745,12 @@ class ToolExecutor:
     async def _email_ask(self, reason: str) -> str | None:
         """Lot 34b : la demande d'email part en message fixe ; Bob est seulement prévenu."""
         from app.models.customer import Customer
+        from app.models.tenant import Tenant
+        from app.services.address_form import uses_tu
         from app.services.contact_capture import NOTE_FOR_BOB, request_email
 
-        text = request_email(await self.db.get(Customer, self.customer_id), reason)
+        text = request_email(await self.db.get(Customer, self.customer_id), reason,
+                             tu=uses_tu(await self.db.get(Tenant, self.tenant_id)))
         if text is None:
             return None
         self.message_outbox.append(text)
@@ -875,8 +878,11 @@ class ToolExecutor:
         try:
             item_lines = await get_order_item_lines(self.db, order.id, order.currency)
             tenant = await self.db.get(Tenant, self.tenant_id)
+            from app.services.address_form import uses_tu
+
             confirmation_text = generate_order_confirmation_text(
-                order, item_lines, tenant.name if tenant else "", tenant.payment_link if tenant else None
+                order, item_lines, tenant.name if tenant else "", tenant.payment_link if tenant else None,
+                tu=uses_tu(tenant),
             )
 
             self.db.add(

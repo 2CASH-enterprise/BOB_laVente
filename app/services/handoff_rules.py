@@ -26,6 +26,9 @@ ALLOW_TRANSFER = "ALLOW_TRANSFER"
 
 TRANSFER_MESSAGE = "Je transmets votre demande à un conseiller, qui vous répondra au plus vite."
 MISSING_CONDITIONS_MESSAGE = "Je transmets votre question à la boutique, qui vous répondra au plus vite."
+# Lot 38 — versions tutoiement (boutique en ligne qui a choisi « Tu »).
+TRANSFER_MESSAGE_TU = "Je transmets ta demande à un conseiller, qui te répondra au plus vite."
+MISSING_CONDITIONS_MESSAGE_TU = "Je transmets ta question à la boutique, qui te répondra au plus vite."
 
 # Catégories de la base de connaissances qui répondent à une question sur les conditions de vente.
 CONDITIONS_CATEGORIES = frozenset({"RETOUR", "GARANTIE", "CONDITIONS"})
@@ -38,6 +41,14 @@ OUTAGE_RETRY_LATER_MESSAGE = (
 OUTAGE_CALLBACK_MESSAGE = (
     "Désolé, je rencontre un problème technique momentané. "
     "Un conseiller va vous rappeler au plus vite, au numéro depuis lequel vous nous écrivez."
+)
+OUTAGE_RETRY_LATER_MESSAGE_TU = (
+    "Désolé, je rencontre un problème technique momentané. "
+    "Peux-tu renvoyer ton message dans quelques minutes ?"
+)
+OUTAGE_CALLBACK_MESSAGE_TU = (
+    "Désolé, je rencontre un problème technique momentané. "
+    "Un conseiller va te rappeler au plus vite, au numéro depuis lequel tu nous écris."
 )
 
 # Libellés lisibles par le commerçant (raison du transfert, étiquette dans la conversation).
@@ -63,9 +74,12 @@ RULE_LABELS = {
 
 # Message fixe au client selon la règle de transfert immédiat (défaut : TRANSFER_MESSAGE).
 TRANSFER_MESSAGES = {"MISSING_CONDITIONS": MISSING_CONDITIONS_MESSAGE}
+TRANSFER_MESSAGES_TU = {"MISSING_CONDITIONS": MISSING_CONDITIONS_MESSAGE_TU}
 
 
-def transfer_message(rule: str | None) -> str:
+def transfer_message(rule: str | None, tu: bool = False) -> str:
+    if tu:
+        return TRANSFER_MESSAGES_TU.get(rule, TRANSFER_MESSAGE_TU)
     return TRANSFER_MESSAGES.get(rule, TRANSFER_MESSAGE)
 
 
@@ -252,8 +266,8 @@ async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
     )
 
 
-def outage_message(settings: HandoffSettingsView) -> tuple[str, str]:
+def outage_message(settings: HandoffSettingsView, tu: bool = False) -> tuple[str, str]:
     """(message au client, règle tracée) selon le choix du commerçant."""
     if settings.ai_outage_policy == OUTAGE_CALLBACK:
-        return OUTAGE_CALLBACK_MESSAGE, "AI_OUTAGE_CALLBACK"
-    return OUTAGE_RETRY_LATER_MESSAGE, "AI_OUTAGE_RETRY_LATER"
+        return (OUTAGE_CALLBACK_MESSAGE_TU if tu else OUTAGE_CALLBACK_MESSAGE), "AI_OUTAGE_CALLBACK"
+    return (OUTAGE_RETRY_LATER_MESSAGE_TU if tu else OUTAGE_RETRY_LATER_MESSAGE), "AI_OUTAGE_RETRY_LATER"

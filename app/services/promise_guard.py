@@ -52,6 +52,7 @@ _PATTERNS = [
 _WAITING_FILLER = re.compile(r"^(?:un (?:instant|moment|petit instant|petit moment)|patiente[zr]?|merci de patienter|merci pour (?:ta|votre) patience)\b")
 
 NEUTRAL_REPLACEMENT = "Je reste à votre disposition si vous avez d'autres questions."
+NEUTRAL_REPLACEMENT_TU = "Je reste à ta disposition si tu as d'autres questions."  # lot 38
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])[ \t]+")
 
@@ -71,7 +72,7 @@ def contains_human_promise(text: str | None) -> bool:
     return any(p.search(normalized) for p in _PATTERNS)
 
 
-def remove_human_promises(text: str) -> str:
+def remove_human_promises(text: str, tu: bool = False) -> str:
     """Retire les phrases de promesse (et l'attente qui les accompagne) ; jamais de texte vide."""
     lines = [[s for s in _SENTENCE_SPLIT.split(line) if s.strip()] for line in (text or "").split("\n")]
     removed = False
@@ -91,4 +92,4 @@ def remove_human_promises(text: str) -> str:
             rebuilt.append("")  # garde la séparation des paragraphes
     result = "\n".join(rebuilt).strip()
     result = re.sub(r"\n{3,}", "\n\n", result)
-    return result or NEUTRAL_REPLACEMENT
+    return result or (NEUTRAL_REPLACEMENT_TU if tu else NEUTRAL_REPLACEMENT)

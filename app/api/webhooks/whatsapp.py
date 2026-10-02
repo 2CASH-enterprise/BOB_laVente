@@ -26,7 +26,6 @@ from app.core.rate_limit_dependency import get_rate_limiter
 from app.services.handoff_rules import (
     FORBID_TRANSFER,
     RULE_LABELS,
-    TRANSFER_MESSAGE,
     TRANSFER_NOW,
     decide_turn,
     load_handoff_settings,
@@ -267,7 +266,10 @@ async def receive_webhook(
 
     tenant = await db.get(Tenant, tenant_id)
 
-    from app.services.plan_limits import FREEMIUM_QUOTA_MESSAGE, is_conversation_quota_exceeded
+    from app.services.address_form import uses_tu
+    from app.services.plan_limits import FREEMIUM_QUOTA_MESSAGE, FREEMIUM_QUOTA_MESSAGE_TU, is_conversation_quota_exceeded
+
+    tu = uses_tu(tenant)  # lot 38 : messages fixes au tutoiement si la boutique l'a choisi
 
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
 
@@ -277,16 +279,15 @@ async def receive_webhook(
     booking_outbox: list = []  # lot 29 : rendez-vous réservés par Bob, confirmés au client après sa réponse
     image_outbox: list[dict] = []  # lot 26c : photos de produits demandées par Bob, envoyées après sa réponse
     if is_opt_out:
-        reply_text = (
-            "Vous avez été désinscrit(e) de nos communications marketing. "
-            "Vous pouvez continuer à nous écrire à tout moment pour toute question."
-        )
+        from app.services.contact_capture import OPT_OUT_REPLY, OPT_OUT_REPLY_TU
+
+        reply_text = OPT_OUT_REPLY_TU if tu else OPT_OUT_REPLY
     elif is_opt_in:
         from app.services.contact_capture import opt_in_reply
 
-        reply_text = opt_in_reply(bool(customer.email))
+        reply_text = opt_in_reply(bool(customer.email), tu=tu)
     elif quota_exceeded:
-        reply_text = FREEMIUM_QUOTA_MESSAGE.format(company_name=tenant.name)
+        reply_text = (FREEMIUM_QUOTA_MESSAGE_TU if tu else FREEMIUM_QUOTA_MESSAGE).format(company_name=tenant.name)
     else:
         history_stmt = (
             select(Message)
@@ -310,7 +311,7 @@ async def receive_webhook(
                 tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
                 message_type="handoff", content=f"Transfert vers un humain : Règle — {turn.rule_label}",
             ))
-            reply_text = transfer_message(turn.rule)
+            reply_text = transfer_message(turn.rule, tu=tu)
         else:
             reply_text, failure = await generate_ai_reply_detailed(
                 db=db,
@@ -332,13 +333,13 @@ async def receive_webhook(
                     tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
                     message_type="handoff", content=f"Transfert vers un humain : Règle — {RULE_LABELS['AI_LOOP']}",
                 ))
-                reply_text = TRANSFER_MESSAGE
+                reply_text = transfer_message(None, tu=tu)
                 turn.rule = "AI_LOOP"
             elif failure == FAILURE_OUTAGE:
                 # Panne du service d'IA (après les nouveaux essais) : jamais de promesse que personne
                 # ne tiendra, et pas de transfert (tous les clients seraient bloqués après la panne).
                 handoff_view = await load_handoff_settings(db, tenant_id)
-                reply_text, turn.rule = outage_message(handoff_view)
+                reply_text, turn.rule = outage_message(handoff_view, tu=tu)
                 db.add(Message(
                     tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
                     message_type="ai_outage", content=f"Panne du service d'IA — {RULE_LABELS[turn.rule]}",
@@ -376,7 +377,7 @@ async def receive_webhook(
                 # la promesse (vrai transfert, commerçant prévenu), ou la retire si une règle
                 # interdit le transfert pour ce message.
                 if turn.mode == FORBID_TRANSFER:
-                    reply_text = remove_human_promises(reply_text)
+                    reply_text = remove_human_promises(reply_text, tu=tu)
                     db.add(Message(
                         tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
                         message_type="promise_removed",

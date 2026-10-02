@@ -802,6 +802,20 @@
         <br>Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span>
       </p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Comment Bob s'adresse à vos clients</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
+            S'applique aux réponses de Bob et à tous ses messages automatiques sur WhatsApp (récapitulatif de commande, transmission à un conseiller…).
+          </p>
+          <div style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 13px;">
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="address-form" value="VOUS" onchange="showAddressPreview()"> Vouvoiement</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="address-form" value="TU" onchange="showAddressPreview()"> Tutoiement</label>
+          </div>
+          <div id="address-form-preview" style="font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;"></div>
+          <button class="action" onclick="saveAddressForm()">Enregistrer</button>
+          <div id="address-form-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+
         <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix</div>
           <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
@@ -1548,7 +1562,7 @@ function showTab(name) {
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
-  if (name === "bob") { if (currentBusinessType !== "CAR_DEALERSHIP") loadNegotiationSettings(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (currentBusinessType !== "CAR_DEALERSHIP") { loadNegotiationSettings(); loadAddressForm(); } loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "settings") loadMfaStatus();
 }
 
@@ -2928,6 +2942,41 @@ async function saveFollowupSettings() {
     });
     msg.style.color = "var(--success)";
     msg.textContent = "Enregistré.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+// ---- Lot 38 : tutoiement / vouvoiement (boutique en ligne) ----
+let addressFormOptions = [];
+
+async function loadAddressForm() {
+  const s = await api("/api/v1/tenants/me/address-form");
+  addressFormOptions = s.options;
+  document.querySelectorAll('input[name="address-form"]').forEach((r) => { r.checked = r.value === s.address_form; });
+  document.getElementById("address-form-msg").textContent = "";
+  showAddressPreview();
+}
+
+function showAddressPreview() {
+  const chosen = (document.querySelector('input[name="address-form"]:checked') || {}).value;
+  const option = addressFormOptions.find((o) => o.code === chosen);
+  document.getElementById("address-form-preview").innerHTML = option
+    ? '<div style="font-size: 11px; color: var(--muted); margin-bottom: 4px;">Exemple de messages de Bob</div>'
+      + option.preview.map((line) => `<div style="margin: 2px 0;">« ${esc(line)} »</div>`).join("")
+    : "";
+}
+
+async function saveAddressForm() {
+  const msg = document.getElementById("address-form-msg");
+  const chosen = (document.querySelector('input[name="address-form"]:checked') || {}).value;
+  try {
+    await api("/api/v1/tenants/me/address-form", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address_form: chosen }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré. Bob l'applique dès le prochain message.";
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;

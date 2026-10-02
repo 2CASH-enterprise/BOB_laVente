@@ -15,7 +15,8 @@ async def get_order_item_lines(db: AsyncSession, order_id, currency: str) -> lis
     return [f"{name} x{item.quantity} — {float(item.subtotal):,.0f} {currency}".replace(",", " ") for item, name in rows]
 
 
-def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant_name: str, payment_link: str | None) -> str:
+def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant_name: str, payment_link: str | None,
+                                      tu: bool = False) -> str:
     """
     Envoyé UNE SEULE FOIS, juste après la création de la commande — jamais un reçu de
     paiement (aucun paiement n'a encore été confirmé à ce stade, section 13/39).
@@ -24,10 +25,14 @@ def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant
     items_block = "\n".join(f"- {line}" for line in item_lines)
     total_line = f"Total : {float(order.total_amount):,.0f} {order.currency}".replace(",", " ")
 
-    payment_block = (
-        f"\n\nVous pouvez régler via : {payment_link}" if payment_link
-        else "\n\nContactez-nous pour connaître les moyens de paiement disponibles."
-    )
+    if tu:  # lot 38
+        payment_block = (f"\n\nTu peux régler via : {payment_link}" if payment_link
+                         else "\n\nContacte-nous pour connaître les moyens de paiement disponibles.")
+        follow_up = "Une fois la capture d'écran du paiement envoyée, je t'enverrai les détails de suivi."
+    else:
+        payment_block = (f"\n\nVous pouvez régler via : {payment_link}" if payment_link
+                         else "\n\nContactez-nous pour connaître les moyens de paiement disponibles.")
+        follow_up = "Une fois la capture d'écran du paiement envoyée, je vous enverrai les détails de suivi."
 
     return (
         f"✅ Commande confirmée — {tenant_name}\n"
@@ -35,7 +40,7 @@ def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant
         f"{items_block}\n\n"
         f"{total_line}"
         f"{payment_block}\n\n"
-        f"Une fois la capture d'écran du paiement envoyée, je vous enverrai les détails de suivi."
+        f"{follow_up}"
     )
 
 

@@ -446,3 +446,48 @@ async def update_strategy_settings(
     )
     await db.commit()
     return {"objections": library_with_state(set(disabled), await knowledge_categories(db, current_user.tenant_id))}
+
+
+# ---------------------------------------------------------------------------
+# Lot 38 — tutoiement / vouvoiement des clients (boutique en ligne)
+# ---------------------------------------------------------------------------
+
+class AddressFormReq(BaseModel):
+    address_form: Literal["VOUS", "TU"]
+
+
+def _address_form_response(form: str) -> dict:
+    from app.services.address_form import ADDRESS_FORMS, VOUS, preview
+
+    return {
+        "address_form": form,
+        "options": [{"code": code, "label": label, "preview": preview(code)} for code, label in ADDRESS_FORMS.items()],
+        "default": VOUS,
+    }
+
+
+@router.get("/me/address-form", dependencies=[Depends(only_online_store())])
+async def get_address_form(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    return _address_form_response(tenant.address_form)
+
+
+@router.put("/me/address-form", dependencies=[Depends(require_role("ADMIN")), Depends(only_online_store())])
+async def update_address_form(
+    payload: AddressFormReq,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Concession : refusé (403) — elle vouvoie toujours ses clients."""
+    from app.services.audit import log_audit_event
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    previous = tenant.address_form
+    tenant.address_form = payload.address_form
+    await log_audit_event(db, actor=str(current_user.user_id), action="ADDRESS_FORM_UPDATED", tenant_id=tenant.id,
+                          details={"from": previous, "to": payload.address_form})
+    await db.commit()
+    return _address_form_response(tenant.address_form)

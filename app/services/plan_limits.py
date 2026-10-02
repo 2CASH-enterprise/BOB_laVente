@@ -24,6 +24,10 @@ FREEMIUM_QUOTA_MESSAGE = (
     "Merci pour votre message ! Notre service est temporairement limité pour ce mois-ci. "
     "Contactez directement {company_name} pour continuer, ou réessayez dans quelques jours."
 )
+FREEMIUM_QUOTA_MESSAGE_TU = (  # lot 38
+    "Merci pour ton message ! Notre service est temporairement limité pour ce mois-ci. "
+    "Contacte directement {company_name} pour continuer, ou réessaie dans quelques jours."
+)
 
 
 async def count_active_products(db: AsyncSession, tenant_id) -> int:

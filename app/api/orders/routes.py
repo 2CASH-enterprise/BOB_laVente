@@ -222,7 +222,10 @@ async def cancel_order_route(
     reason = payload.reason.strip() if payload.reason and payload.reason.strip() else None
     customer_notified: bool | None = None
     if payload.notify_customer:
-        text = build_cancellation_message(order)
+        from app.models.tenant import Tenant
+        from app.services.address_form import uses_tu
+
+        text = build_cancellation_message(order, tu=uses_tu(await db.get(Tenant, current_user.tenant_id)))
         customer_notified = False
         account = (await db.execute(
             select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)

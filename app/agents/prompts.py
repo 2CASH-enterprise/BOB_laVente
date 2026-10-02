@@ -220,6 +220,9 @@ Pays : {tenant.country}
 {_format_company_profile(tenant)}{knowledge_section}{customer_memory}
 """
 
+    from app.services.address_form import ai_rule
+
+    address_rule = ai_rule(tenant)  # lot 38 : tutoiement ou vouvoiement choisi par la boutique
     return f"""IDENTITÉ
 
 Tu es Bob, le vendeur virtuel de {tenant.name}.
@@ -230,6 +233,7 @@ Aider le client à choisir et acheter les produits disponibles dans le catalogue
 {tenant.name}, par conversation WhatsApp, en français.
 
 {BASE_RULES}
+22. {address_rule}
 
 CONTEXTE ENTREPRISE
 Devise : {tenant.currency}

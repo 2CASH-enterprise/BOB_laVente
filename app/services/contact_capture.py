@@ -36,6 +36,17 @@ _ASK_TEXT = {
                   "Si oui, répondez simplement avec votre adresse email.",
 }
 _OFFERS_TEXT = "Pour recevoir aussi nos offres et nouveautés par email, ajoutez le mot OFFRES à votre réponse."
+# Lot 38 — tutoiement (boutique en ligne seulement : la concession vouvoie toujours).
+_ASK_TEXT_TU = {
+    REASON_ORDER: "Tu veux recevoir le récapitulatif de ta commande par email ? "
+                  "Si oui, réponds simplement avec ton adresse email.",
+}
+_OFFERS_TEXT_TU = "Pour recevoir aussi nos offres et nouveautés par email, ajoute le mot OFFRES à ta réponse."
+# Réponse fixe au retrait de consentement (« STOP »).
+OPT_OUT_REPLY = ("Vous avez été désinscrit(e) de nos communications marketing. "
+                 "Vous pouvez continuer à nous écrire à tout moment pour toute question.")
+OPT_OUT_REPLY_TU = ("Tu as été désinscrit(e) de nos communications marketing. "
+                    "Tu peux continuer à nous écrire à tout moment pour toute question.")
 NOTE_FOR_BOB = ("Un message automatique propose au client, juste après ta réponse, de laisser son email : "
                 "ne lui demande pas toi-même son email ni son accord pour les offres.")
 
@@ -71,7 +82,7 @@ def consent_state(customer) -> str:
     return "NEVER_ASKED"
 
 
-def request_email(customer, reason: str, now: datetime | None = None) -> str | None:
+def request_email(customer, reason: str, now: datetime | None = None, tu: bool = False) -> str | None:
     """
     Message fixe à envoyer au client après la réponse de Bob, ou None si rien n'est à demander
     (email connu, ou déjà demandé une fois). Marque la demande comme faite.
@@ -79,9 +90,10 @@ def request_email(customer, reason: str, now: datetime | None = None) -> str | N
     if customer is None or customer.email or customer.email_requested_at is not None:
         return None
     customer.email_requested_at = now or datetime.now(timezone.utc)
-    text = _ASK_TEXT[reason]
+    tu = tu and reason in _ASK_TEXT_TU
+    text = _ASK_TEXT_TU[reason] if tu else _ASK_TEXT[reason]
     if consent_state(customer) == "NEVER_ASKED":
-        text += "\n\n" + _OFFERS_TEXT
+        text += "\n\n" + (_OFFERS_TEXT_TU if tu else _OFFERS_TEXT)
     return text
 
 
@@ -102,7 +114,13 @@ def is_offers_opt_in(text: str | None) -> bool:
         and "?" not in (text or "")
 
 
-def opt_in_reply(email_known: bool) -> str:
+def opt_in_reply(email_known: bool, tu: bool = False) -> str:
+    if tu:
+        if email_known:
+            return ("C'est noté ✅ Tu recevras nos offres par email. Tu peux te désinscrire à tout moment "
+                    "en répondant STOP.")
+        return ("C'est noté ✅ Pour recevoir nos offres, indique-nous ton adresse email. Tu peux te "
+                "désinscrire à tout moment en répondant STOP.")
     if email_known:
         return ("C'est noté ✅ Vous recevrez nos offres par email. Vous pouvez vous désinscrire à tout moment "
                 "en répondant STOP.")

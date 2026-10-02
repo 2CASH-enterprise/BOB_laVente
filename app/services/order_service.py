@@ -195,8 +195,14 @@ async def cancel_order(db: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UU
     return order
 
 
-def build_cancellation_message(order: Order) -> str:
+def build_cancellation_message(order: Order, tu: bool = False) -> str:
     """Message fixe, jamais rédigé par l'IA — même numéro et même format de montant que le reçu."""
+    if tu:  # lot 38
+        return (
+            f"Ta commande n° {str(order.id)[:8].upper()} "
+            f"({float(order.total_amount):,.0f} {order.currency}) a été annulée. "
+            "N'hésite pas à nous écrire si tu as des questions."
+        )
     return (
         f"Votre commande n° {str(order.id)[:8].upper()} "
         f"({float(order.total_amount):,.0f} {order.currency}) a été annulée. "
