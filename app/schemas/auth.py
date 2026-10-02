@@ -27,6 +27,7 @@ class LoginResponse(BaseModel):
 class VerifyMfaRequest(BaseModel):
     mfa_pending_token: str
     code: str = Field(min_length=6, max_length=6)
+    remember: bool = False  # lot 37 : « Rester connecté sur cet appareil »
 
 
 class ResendMfaRequest(BaseModel):

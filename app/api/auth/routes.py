@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +32,7 @@ from app.schemas.auth import (
     TokenResponse,
     VerifyMfaRequest,
 )
+from app.services import sessions
 from app.services.audit import log_audit_event
 from app.services.email_service import send_email
 from app.services.otp_service import generate_otp, hash_otp, verify_otp
@@ -99,7 +101,9 @@ async def register_tenant(
 @router.post("/login", response_model=LoginResponse)
 async def login(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
+    remember: bool = Form(False),  # lot 37 : « Rester connecté sur cet appareil »
     db: AsyncSession = Depends(get_db),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> LoginResponse:
@@ -135,7 +139,10 @@ async def login(
         return LoginResponse(mfa_required=True, mfa_pending_token=create_mfa_pending_token(user.id))
 
     token = create_access_token(user_id=user.id, tenant_id=user.tenant_id, role=user.role.value)
-    await log_audit_event(db, actor=str(user.id), action="LOGIN_SUCCESS", tenant_id=user.tenant_id, ip_address=client_ip)
+    await log_audit_event(db, actor=str(user.id), action="LOGIN_SUCCESS", tenant_id=user.tenant_id, ip_address=client_ip,
+                          details={"remember": remember})
+    if remember:
+        sessions.set_cookie(response, await sessions.create_session(db, user, request.headers.get("user-agent")))
     await db.commit()
 
     return LoginResponse(access_token=token)
@@ -153,7 +160,7 @@ async def _send_mfa_code(db: AsyncSession, user: User) -> None:
 
 
 @router.post("/verify-mfa", response_model=TokenResponse)
-async def verify_mfa(payload: VerifyMfaRequest, request: Request, db: AsyncSession = Depends(get_db), rate_limiter: RateLimiter = Depends(get_rate_limiter)) -> TokenResponse:
+async def verify_mfa(payload: VerifyMfaRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db), rate_limiter: RateLimiter = Depends(get_rate_limiter)) -> TokenResponse:
     user_id = decode_mfa_pending_token(payload.mfa_pending_token)
     client_ip = request.client.host if request.client else "unknown"
 
@@ -182,7 +189,10 @@ async def verify_mfa(payload: VerifyMfaRequest, request: Request, db: AsyncSessi
     user.mfa_otp_expires_at = None
 
     token = create_access_token(user_id=user.id, tenant_id=user.tenant_id, role=user.role.value)
-    await log_audit_event(db, actor=str(user.id), action="LOGIN_SUCCESS", tenant_id=user.tenant_id, ip_address=client_ip, details={"mfa": True})
+    await log_audit_event(db, actor=str(user.id), action="LOGIN_SUCCESS", tenant_id=user.tenant_id, ip_address=client_ip,
+                          details={"mfa": True, "remember": payload.remember})
+    if payload.remember:  # lot 37 : la session longue ne s'ouvre qu'APRÈS le code à 6 chiffres
+        sessions.set_cookie(response, await sessions.create_session(db, user, request.headers.get("user-agent")))
     await db.commit()
 
     return TokenResponse(access_token=token)
@@ -294,8 +304,65 @@ async def reset_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Lien invalide ou expiré, refaites une demande")
 
     apply_new_password(user, payload.new_password)
+    await sessions.revoke_all(db, user.id)  # lot 37 : nouveau mot de passe → tous les appareils déconnectés
     await log_audit_event(db, actor=str(user.id), action="PASSWORD_RESET_COMPLETED", tenant_id=user.tenant_id, ip_address=client_ip)
     await db.commit()
 
     subject, body = build_password_changed_email(user.full_name)
     background_tasks.add_task(send_email, to=user.email, subject=subject, body=body)
+
+
+# ---------------------------------------------------------------------------
+# Lot 37 — « Rester connecté » : session longue par cookie protégé
+# ---------------------------------------------------------------------------
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_session(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> TokenResponse:
+    """Nouvel accès à partir de la session de cet appareil ; la clé est remplacée à chaque fois."""
+    client_ip = request.client.host if request.client else "unknown"
+    if not await rate_limiter.is_allowed(f"refresh:ip:{client_ip}", limit=60, window_seconds=60):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Trop de tentatives, réessayez plus tard")
+    session, new_raw = await sessions.use_session(db, request.cookies.get(sessions.COOKIE_NAME))
+    user = await db.get(User, session.user_id) if session is not None else None
+    tenant = await db.get(Tenant, user.tenant_id) if user is not None else None
+    if session is None or user is None or not user.active or tenant is None or not tenant.active:
+        if session is not None:
+            session.revoked_at = datetime.now(timezone.utc)  # compte suspendu : la session ne sert plus
+        await db.commit()
+        # Réponse construite ici (pas d'exception) : sinon l'effacement du cookie serait perdu.
+        failed = JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Session expirée, reconnectez-vous."})
+        sessions.clear_cookie(failed)
+        return failed
+    if new_raw is not None:
+        sessions.set_cookie(response, new_raw)
+    await db.commit()
+    return TokenResponse(access_token=create_access_token(user_id=user.id, tenant_id=user.tenant_id, role=user.role.value))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_db)) -> None:
+    """Ferme la session longue de CET appareil (sans effet s'il n'y en a pas)."""
+    await sessions.revoke(db, request.cookies.get(sessions.COOKIE_NAME))
+    await db.commit()
+    sessions.clear_cookie(response)
+
+
+@router.post("/sessions/revoke-all", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_all_sessions(
+    request: Request,
+    response: Response,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """« Déconnecter tous mes appareils » (téléphone perdu, ordinateur partagé…)."""
+    await sessions.revoke_all(db, current_user.user_id)
+    client_ip = request.client.host if request.client else "unknown"
+    await log_audit_event(db, actor=str(current_user.user_id), action="SESSIONS_REVOKED_ALL",
+                          tenant_id=current_user.tenant_id, ip_address=client_ip)
+    await db.commit()
+    sessions.clear_cookie(response)

@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bob AI — Tableau de bord</title>
+<!-- Lot 37 : Bob installable (icône sur l'écran d'accueil ou le bureau). -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1B4332">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bob">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none'%3E%3Cpolyline points='7,31 24,39.5 41,31' stroke='%23A8DCC3' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='7,23 24,31.5 41,23' stroke='%235DB88F' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolygon points='24,6.5 41,15 24,23.5 7,15' stroke='%23123D2B' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -380,6 +386,9 @@
   <h2>Connexion</h2>
   <input id="login-email" type="email" placeholder="Email">
   <input id="login-password" type="password" placeholder="Mot de passe">
+  <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0 12px;">
+    <input type="checkbox" id="login-remember" style="width: auto; margin: 0;"> Rester connecté sur cet appareil (15 jours)
+  </label>
   <button onclick="login()">Se connecter</button>
   <div id="login-error"></div>
   <p style="text-align: center; font-size: 13px; margin: 12px 0 0;">
@@ -896,6 +905,19 @@
             <input type="checkbox" id="mfa-toggle" onchange="toggleMfaSetting()"> Activer la double authentification
           </label>
           <div id="mfa-toggle-msg" style="margin-top: 8px; font-size: 13px;"></div>
+          <hr style="border: 0; border-top: 1px solid var(--border); margin: 16px 0;">
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
+            Téléphone perdu, ordinateur partagé ? Fermez la session sur tous les appareils où vous êtes resté connecté.
+          </p>
+          <button class="action secondary" onclick="revokeAllSessions()">Déconnecter tous mes appareils</button>
+        </div>
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;" id="install-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Application Bob</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
+            Ajoutez l'icône Bob sur votre téléphone ou votre ordinateur : un clic et vous êtes sur votre tableau de bord.
+          </p>
+          <button class="action hidden" id="install-btn" onclick="installApp()">Installer Bob</button>
+          <p id="install-help" style="font-size: 13px; margin: 0;"></p>
         </div>
       </div>
     </section>
@@ -928,15 +950,36 @@ syncThemeSwitch();
 function logout() {
   localStorage.removeItem("bob_token");
   token = null;
+  // Lot 37 : ferme aussi la session longue de cet appareil (cookie protégé).
+  fetch(API_BASE + "/api/v1/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   document.getElementById("app").classList.add("hidden");
   document.getElementById("segment-screen").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
 }
 
-function api(path, options = {}) {
+// Lot 37 : nouvel accès depuis la session « Rester connecté » de cet appareil (cookie protégé).
+let refreshing = null;
+function refreshSession() {
+  if (!refreshing) {
+    refreshing = fetch(API_BASE + "/api/v1/auth/refresh", { method: "POST", credentials: "same-origin" })
+      .then(async (r) => {
+        if (!r.ok) return false;
+        token = (await r.json()).access_token;
+        localStorage.setItem("bob_token", token);
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => { setTimeout(() => { refreshing = null; }, 0); });
+  }
+  return refreshing;
+}
+
+function api(path, options = {}, retried = false) {
+  const original = Object.assign({}, options);
   options.headers = Object.assign({}, options.headers, token ? { Authorization: "Bearer " + token } : {});
   return fetch(API_BASE + path, options).then(async (r) => {
     if (r.status === 401) {
+      if (!retried && await refreshSession()) return api(path, original, true);
       logout();
       throw new Error("Session expirée, reconnectez-vous.");
     }
@@ -1042,8 +1085,9 @@ async function login() {
   const password = document.getElementById("login-password").value;
   document.getElementById("login-error").textContent = "";
   try {
-    const body = new URLSearchParams({ username: email, password });
-    const res = await fetch(API_BASE + "/api/v1/auth/login", { method: "POST", body }).then((r) => {
+    const remember = document.getElementById("login-remember").checked;
+    const body = new URLSearchParams({ username: email, password, remember: String(remember) });
+    const res = await fetch(API_BASE + "/api/v1/auth/login", { method: "POST", body, credentials: "same-origin" }).then((r) => {
       if (!r.ok) throw new Error("Email ou mot de passe incorrect");
       return r.json();
     });
@@ -1105,7 +1149,8 @@ async function verifyMfa() {
     const res = await fetch(API_BASE + "/api/v1/auth/verify-mfa", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mfa_pending_token: pendingMfaToken, code }),
+      body: JSON.stringify({ mfa_pending_token: pendingMfaToken, code, remember: document.getElementById("login-remember").checked }),
+      credentials: "same-origin",
     });
     if (!res.ok) {
       const err = await res.json();
@@ -3381,6 +3426,52 @@ if (pendingResetToken) {
   showAuthScreen("reset-screen");
 } else if (token) {
   enterApp();
+} else {
+  // Lot 37 : « Rester connecté » — l'appareil a peut-être encore une session valide.
+  refreshSession().then((ok) => { if (ok) enterApp(); });
+}
+
+// ---- Lot 37 : Bob installable ----
+const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+document.getElementById("login-remember").checked = standalone;  // dans l'application installée : coché par défaut
+let installPrompt = null;
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  installPrompt = event;
+  document.getElementById("install-btn").classList.remove("hidden");
+  document.getElementById("install-help").textContent = "";
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  document.getElementById("install-btn").classList.add("hidden");
+  document.getElementById("install-help").textContent = "Bob est installé ✅";
+});
+(function installHelp() {
+  const help = document.getElementById("install-help");
+  if (standalone) { help.textContent = "Vous utilisez déjà l'application Bob ✅"; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  help.textContent = ios
+    ? "Sur iPhone : touchez le bouton Partager (le carré avec une flèche), puis « Sur l'écran d'accueil »."
+    : "Si le bouton n'apparaît pas : menu du navigateur (⋮), puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».";
+})();
+
+async function installApp() {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => null);
+  installPrompt = null;
+  document.getElementById("install-btn").classList.add("hidden");
+}
+
+async function revokeAllSessions() {
+  if (!confirm("Déconnecter tous les appareils, y compris celui-ci ?")) return;
+  try {
+    await api("/api/v1/auth/sessions/revoke-all", { method: "POST" });
+  } catch (e) { /* déjà déconnecté */ }
+  logout();
 }
 
 // ---- Embedded Signup (section 59.2/59.6) ----
