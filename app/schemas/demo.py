@@ -25,6 +25,7 @@ class DemoPromoteRequest(BaseModel):
     email: str
     password: str
     full_name: str = Field(min_length=1, max_length=255)  # lot 33 : comme la vraie inscription
+    verification_code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")  # lot 41 : email vérifié
 
 
 class DemoPromoteResponse(BaseModel):

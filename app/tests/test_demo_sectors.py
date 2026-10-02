@@ -109,7 +109,7 @@ async def test_dealership_demo_books_a_slot_and_shows_the_fixed_confirmation(cli
 
 
 @pytest.mark.asyncio
-async def test_promotion_asks_the_full_name_and_cancels_demo_appointments(client, db_session, llm):
+async def test_promotion_asks_the_full_name_and_cancels_demo_appointments(client, db_session, llm, email_code):
     created = (await _create(client, DEALER_SAMPLE, business_type="CAR_DEALERSHIP")).json()
     headers = {"Authorization": f"Bearer {created['demo_token']}"}
     tenant = await _tenant(db_session, created["tenant_id"])
@@ -122,7 +122,8 @@ async def test_promotion_asks_the_full_name_and_cancels_demo_appointments(client
     assert missing.status_code == 422
 
     r = await client.post("/api/v1/demo/promote", headers=headers,
-                          json={"full_name": " Awa Diop ", "email": "awa-demo@example.com", "password": "supersecret123"})
+                          json={"full_name": " Awa Diop ", "email": "awa-demo@example.com", "password": "supersecret123",
+                                "verification_code": await email_code("awa-demo@example.com")})
     assert r.status_code == 200
     owner = (await db_session.execute(select(User).where(User.email == "awa-demo@example.com")
                                       .execution_options(populate_existing=True))).scalar_one()

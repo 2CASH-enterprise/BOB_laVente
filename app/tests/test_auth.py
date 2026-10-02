@@ -2,13 +2,14 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_register_tenant_creates_owner(client, unique_email):
+async def test_register_tenant_creates_owner(client, unique_email, email_code):
     payload = {
         "company_name": "Boutique Test",
         "country": "SN",
         "currency": "XOF",
         "phone": "+221700000000",
         "owner_email": unique_email,
+        "verification_code": await email_code(unique_email),
         "owner_full_name": "Awa Diop",
         "owner_password": "supersecret123",
     }
@@ -20,12 +21,13 @@ async def test_register_tenant_creates_owner(client, unique_email):
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email_rejected(client, unique_email):
+async def test_register_duplicate_email_rejected(client, unique_email, email_code):
     payload = {
         "company_name": "Boutique Test",
         "country": "SN",
         "currency": "XOF",
         "owner_email": unique_email,
+        "verification_code": await email_code(unique_email),
         "owner_full_name": "Awa Diop",
         "owner_password": "supersecret123",
     }
@@ -37,12 +39,13 @@ async def test_register_duplicate_email_rejected(client, unique_email):
 
 
 @pytest.mark.asyncio
-async def test_login_success_and_wrong_password(client, unique_email):
+async def test_login_success_and_wrong_password(client, unique_email, email_code):
     register_payload = {
         "company_name": "Boutique Test",
         "country": "SN",
         "currency": "XOF",
         "owner_email": unique_email,
+        "verification_code": await email_code(unique_email),
         "owner_full_name": "Awa Diop",
         "owner_password": "supersecret123",
     }

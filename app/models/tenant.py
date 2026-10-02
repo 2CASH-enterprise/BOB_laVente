@@ -50,6 +50,8 @@ class Tenant(Base):
     business_type_chosen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 38 — « VOUS » ou « TU » envers les clients (boutique en ligne ; concession : toujours VOUS).
     address_form: Mapped[str] = mapped_column(String(8), default="VOUS", server_default="VOUS", nullable=False)
+    # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
+    onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

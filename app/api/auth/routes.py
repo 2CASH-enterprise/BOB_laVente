@@ -28,6 +28,7 @@ from app.schemas.auth import (
     RegisterTenantRequest,
     ResendMfaRequest,
     ResetPasswordRequest,
+    SignupCodeRequest,
     TenantCreatedResponse,
     TokenResponse,
     VerifyMfaRequest,
@@ -51,26 +52,84 @@ LOGIN_RATE_LIMIT = 5  # tentatives
 LOGIN_RATE_WINDOW_SECONDS = 60
 
 
+@router.get("/signup-options")
+async def signup_options() -> dict:
+    """Lot 41 — pays (avec devise habituelle), devises et activités proposés à l'inscription."""
+    from app.services.business_type import BUSINESS_TYPES
+    from app.services.countries import signup_options as options
+
+    return {**options(), "business_types": [{"code": c, **info} for c, info in BUSINESS_TYPES.items()]}
+
+
+@router.post("/signup/send-code", status_code=status.HTTP_202_ACCEPTED)
+async def send_signup_code(
+    payload: SignupCodeRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> dict:
+    """Lot 41 — code à 6 chiffres envoyé à l'adresse, avant toute création de compte."""
+    from app.services import email_verification
+
+    client_ip = request.client.host if request.client else "unknown"
+    email = email_verification.normalize(payload.email)
+    if not await rate_limiter.is_allowed(f"signup-code:ip:{client_ip}", limit=10, window_seconds=600) or \
+            not await rate_limiter.is_allowed(f"signup-code:email:{email}", limit=3, window_seconds=600):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail="Trop de codes demandés. Réessayez dans quelques minutes.")
+    if await UserRepository(db).get_by_email(str(payload.email)) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cet email est déjà utilisé")
+    code = await email_verification.new_code(db, email)
+    await db.commit()
+    subject, body = email_verification.code_email(code)
+    background_tasks.add_task(send_email, to=str(payload.email), subject=subject, body=body)
+    return {"sent": True, "expires_in_minutes": 10}
+
+
 @router.post("/register-tenant", response_model=TenantCreatedResponse, status_code=status.HTTP_201_CREATED)
 async def register_tenant(
-    payload: RegisterTenantRequest, request: Request, db: AsyncSession = Depends(get_db)
+    payload: RegisterTenantRequest, request: Request, db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> TenantCreatedResponse:
     """
     Section 6 — Ajouter une entreprise.
     Crée le tenant et son premier utilisateur, avec le rôle OWNER.
+    Lot 41 : email vérifié par code, pays et devise de la liste, activité choisie dès l'inscription.
     """
+    from app.services import email_verification
+    from app.services.business_type import BUSINESS_TYPES
+    from app.services.countries import COUNTRY_CODES, CURRENCIES
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not await rate_limiter.is_allowed(f"register:ip:{client_ip}", limit=10, window_seconds=600):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Trop de tentatives, réessayez plus tard")
+    country, currency = payload.country.upper(), payload.currency.upper()
+    if country not in COUNTRY_CODES:
+        raise HTTPException(status_code=422, detail="Pays non proposé : choisissez-le dans la liste")
+    if currency not in CURRENCIES:
+        raise HTTPException(status_code=422, detail="Devise non proposée : choisissez-la dans la liste")
+    if payload.business_type is not None and payload.business_type not in BUSINESS_TYPES:
+        raise HTTPException(status_code=422, detail="Type d'activité inconnu")
+
     repo = UserRepository(db)
     existing = await repo.get_by_email(payload.owner_email)
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cet email est déjà utilisé")
+    if not await email_verification.check_code(db, payload.owner_email, payload.verification_code):
+        await db.commit()  # l'essai raté est compté
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=email_verification.INVALID_CODE)
 
     tenant = Tenant(
         name=payload.company_name,
-        country=payload.country.upper(),
-        currency=payload.currency.upper(),
+        country=country,
+        currency=currency,
         phone=payload.phone,
         email=payload.owner_email,
     )
+    if payload.business_type is not None:  # choisi à l'inscription : définitif (lot 32)
+        tenant.business_type = payload.business_type
+        tenant.business_type_chosen_at = datetime.now(timezone.utc)
     db.add(tenant)
     await db.flush()  # obtient tenant.id sans committer
 
@@ -89,7 +148,8 @@ async def register_tenant(
         actor=str(owner.id),
         action="TENANT_REGISTERED",
         tenant_id=tenant.id,
-        details={"company_name": payload.company_name, "owner_email": payload.owner_email},
+        details={"company_name": payload.company_name, "owner_email": payload.owner_email,
+                 "business_type": payload.business_type, "email_verified": True},
         ip_address=request.client.host if request.client else None,
     )
 

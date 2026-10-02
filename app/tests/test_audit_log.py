@@ -5,12 +5,13 @@ from app.models.audit_log import AuditLog
 
 
 @pytest.mark.asyncio
-async def test_register_tenant_creates_audit_log(client, db_session, unique_email):
+async def test_register_tenant_creates_audit_log(client, db_session, unique_email, email_code):
     payload = {
         "company_name": "Boutique Test",
         "country": "SN",
         "currency": "XOF",
         "owner_email": unique_email,
+        "verification_code": await email_code(unique_email),
         "owner_full_name": "Test",
         "owner_password": "supersecret123",
     }
@@ -23,12 +24,13 @@ async def test_register_tenant_creates_audit_log(client, db_session, unique_emai
 
 
 @pytest.mark.asyncio
-async def test_login_success_and_failure_create_audit_logs(client, db_session, unique_email):
+async def test_login_success_and_failure_create_audit_logs(client, db_session, unique_email, email_code):
     payload = {
         "company_name": "Boutique Test",
         "country": "SN",
         "currency": "XOF",
         "owner_email": unique_email,
+        "verification_code": await email_code(unique_email),
         "owner_full_name": "Test",
         "owner_password": "supersecret123",
     }

@@ -51,3 +51,16 @@ async def client(db_session):
 @pytest.fixture
 def unique_email():
     return f"user_{uuid.uuid4().hex[:8]}@example.com"
+
+
+@pytest_asyncio.fixture
+async def email_code(db_session):
+    """Lot 41 — code de vérification valide pour une adresse (comme s'il avait été reçu par email)."""
+    from app.services.email_verification import new_code
+
+    async def make(email: str) -> str:
+        code = await new_code(db_session, email)
+        await db_session.commit()
+        return code
+
+    return make

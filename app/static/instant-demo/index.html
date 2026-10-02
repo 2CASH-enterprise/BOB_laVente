@@ -167,7 +167,13 @@
         <input id="promote-name" class="input" placeholder="Ton nom complet" maxlength="255" autocomplete="name" style="margin-bottom: 8px;">
         <input id="promote-email" class="input" type="email" placeholder="Ton email" autocomplete="email" style="margin-bottom: 8px;">
         <input id="promote-password" class="input" type="password" placeholder="Choisis un mot de passe" style="margin-bottom: 8px;">
-        <button class="cta" onclick="promoteAccount()" style="margin-top: 0;">Créer mon compte gratuit</button>
+        <button class="cta" id="promote-send-btn" onclick="sendPromoteCode()" style="margin-top: 0;">Recevoir mon code par email</button>
+        <div id="promote-code-step" class="hidden">
+          <p style="font-size: 12px; margin: 10px 0 6px;">Code à 6 chiffres envoyé à <strong id="promote-email-shown"></strong> (valable 10 min) :</p>
+          <input id="promote-code" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Code à 6 chiffres" style="margin-bottom: 8px; text-align: center; letter-spacing: 4px;">
+          <button class="cta" onclick="promoteAccount()" style="margin-top: 0;">Créer mon compte gratuit</button>
+          <p style="font-size: 12px; margin: 6px 0 0; text-align: center;"><a href="#" onclick="sendPromoteCode(); return false;">Renvoyer le code</a></p>
+        </div>
         <div id="promote-error" style="color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 14px;"></div>
       </div>
     </div>
@@ -387,27 +393,51 @@ function sendScenario(text) {
   sendMessage();
 }
 
-async function promoteAccount() {
+// Lot 41 — comme l'inscription : un code est envoyé par email avant de créer le vrai compte.
+function promoteFields() {
   const errorEl = document.getElementById("promote-error");
   const fullName = document.getElementById("promote-name").value.trim();
   const email = document.getElementById("promote-email").value.trim();
   const password = document.getElementById("promote-password").value;
   errorEl.textContent = "";
+  if (!fullName || !email || !password) { errorEl.textContent = "Nom, email et mot de passe requis."; return null; }
+  if (password.length < 8) { errorEl.textContent = "Le mot de passe doit contenir au moins 8 caractères."; return null; }
+  return { fullName, email, password, errorEl };
+}
 
-  if (!fullName || !email || !password) {
-    errorEl.textContent = "Nom, email et mot de passe requis.";
-    return;
+async function sendPromoteCode() {
+  const f = promoteFields();
+  if (!f) return;
+  try {
+    const res = await fetch(API_BASE + "/api/v1/auth/signup/send-code", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: f.email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 409) throw new Error("Un compte existe déjà avec cet email.");
+      throw new Error(typeof err.detail === "string" ? err.detail : "Envoi du code impossible, vérifiez l'email.");
+    }
+    document.getElementById("promote-email-shown").textContent = f.email;
+    document.getElementById("promote-send-btn").classList.add("hidden");
+    document.getElementById("promote-code-step").classList.remove("hidden");
+    document.getElementById("promote-code").focus();
+  } catch (e) {
+    f.errorEl.textContent = e.message;
   }
-  if (password.length < 8) {
-    errorEl.textContent = "Le mot de passe doit contenir au moins 8 caractères.";
-    return;
-  }
+}
+
+async function promoteAccount() {
+  const f = promoteFields();
+  if (!f) return;
+  const { fullName, email, password, errorEl } = f;
+  const code = document.getElementById("promote-code").value.trim();
+  if (!/^\d{6}$/.test(code)) { errorEl.textContent = "Saisissez le code à 6 chiffres reçu par email."; return; }
 
   try {
     const res = await fetch(API_BASE + "/api/v1/demo/promote", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + demoToken },
-      body: JSON.stringify({ full_name: fullName, email, password }),
+      body: JSON.stringify({ full_name: fullName, email, password, verification_code: code }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

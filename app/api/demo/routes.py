@@ -224,6 +224,13 @@ async def promote_demo(
     if existing is not None and existing.tenant_id != tenant.id:
         raise HTTPException(status_code=409, detail="Cet email est déjà utilisé par un autre compte")
 
+    # Lot 41 — comme l'inscription : le compte réel n'existe qu'avec une adresse vérifiée.
+    from app.services import email_verification
+
+    if not await email_verification.check_code(db, payload.email, payload.verification_code):
+        await db.commit()  # l'essai raté est compté
+        raise HTTPException(status_code=400, detail=email_verification.INVALID_CODE)
+
     owner = await db.get(User, current_user.user_id)
     owner.email = payload.email.strip().lower()
     owner.hashed_password = hash_password(payload.password)

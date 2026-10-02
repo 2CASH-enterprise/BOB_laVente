@@ -48,6 +48,13 @@ class RegisterTenantRequest(BaseModel):
     owner_email: EmailStr
     owner_full_name: str = Field(min_length=1, max_length=255)
     owner_password: str = Field(min_length=8)
+    # Lot 41 — code reçu par email (obligatoire) et activité choisie dès l'inscription.
+    verification_code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    business_type: str | None = None
+
+
+class SignupCodeRequest(BaseModel):
+    email: EmailStr
 
 
 class TenantCreatedResponse(BaseModel):

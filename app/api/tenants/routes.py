@@ -491,3 +491,78 @@ async def update_address_form(
                           details={"from": previous, "to": payload.address_form})
     await db.commit()
     return _address_form_response(tenant.address_form)
+
+
+# ---------------------------------------------------------------------------
+# Lot 41 — « Premiers pas » : ce qu'il reste à faire pour que Bob travaille
+# ---------------------------------------------------------------------------
+
+class OnboardingReq(BaseModel):
+    hidden: bool
+
+
+async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
+    """Chaque étape est cochée d'après les vraies données (jamais une case à cocher à la main)."""
+    from sqlalchemy import func
+
+    from app.models.conversation import Conversation
+    from app.models.customer import Customer
+    from app.models.product import Product
+    from app.models.whatsapp_account import WhatsAppAccount
+    from app.services.business_type import is_dealership
+
+    dealership = is_dealership(tenant)
+    has_whatsapp = (await db.execute(select(func.count(WhatsAppAccount.id)).where(
+        WhatsAppAccount.tenant_id == tenant.id))).scalar_one() > 0
+    has_products = (await db.execute(select(func.count(Product.id)).where(
+        Product.tenant_id == tenant.id, Product.active.is_(True)))).scalar_one() > 0
+    has_conversation = (await db.execute(
+        select(func.count(Conversation.id)).join(Customer, Customer.id == Conversation.customer_id)
+        .where(Conversation.tenant_id == tenant.id, Customer.whatsapp_number != "demo-web-session")
+    )).scalar_one() > 0
+    if dealership:
+        from app.services.booking import booking_enabled, load_settings
+
+        fourth = {"key": "booking", "label": "Ouvrir vos créneaux de rendez-vous", "tab": "appointments",
+                  "hint": "Vos horaires d'ouverture : Bob propose vos créneaux libres et confirme le rendez-vous.",
+                  "done": booking_enabled(await load_settings(db, tenant.id))}
+    else:
+        fourth = {"key": "payment", "label": "Ajouter votre lien de paiement", "tab": "knowledge",
+                  "hint": "Wave, Orange Money… Bob le donne au client au moment de payer.",
+                  "done": bool(tenant.payment_link)}
+    steps = [
+        {"key": "whatsapp", "label": "Connecter votre WhatsApp", "tab": "integrations",
+         "hint": "Bob répond aux messages reçus sur votre numéro WhatsApp Business.", "done": has_whatsapp},
+        {"key": "products", "label": "Ajouter vos véhicules" if dealership else "Ajouter vos produits", "tab": "products",
+         "hint": "Import d'un fichier, catalogue Facebook ou ajout un par un : Bob ne propose que ce qui existe.",
+         "done": has_products},
+        {"key": "profile", "label": "Présenter votre entreprise", "tab": "knowledge",
+         "hint": "Quelques lignes sur votre activité, vos horaires, la livraison… Bob s'en sert pour répondre.",
+         "done": bool((tenant.company_profile or "").strip())},
+        fourth,
+        {"key": "test", "label": "Tester Bob", "tab": "integrations",
+         "hint": "Écrivez à votre numéro WhatsApp depuis un autre téléphone, comme un client.", "done": has_conversation},
+    ]
+    done = sum(1 for s in steps if s["done"])
+    return {"steps": steps, "done": done, "total": len(steps), "hidden": tenant.onboarding_hidden_at is not None,
+            "show": tenant.onboarding_hidden_at is None and done < len(steps)}
+
+
+@router.get("/me/onboarding")
+async def get_onboarding(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+    return await _onboarding(db, tenant)
+
+
+@router.put("/me/onboarding")
+async def update_onboarding(payload: OnboardingReq, current_user: CurrentUser = Depends(get_current_user),
+                            db: AsyncSession = Depends(get_db)) -> dict:
+    """Masquer (ou réafficher) la carte « Premiers pas »."""
+    from datetime import datetime, timezone
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    tenant.onboarding_hidden_at = datetime.now(timezone.utc) if payload.hidden else None
+    await db.commit()
+    return await _onboarding(db, tenant)

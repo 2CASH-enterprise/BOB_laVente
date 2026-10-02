@@ -29,6 +29,7 @@ from app.models.appointment_request import AppointmentRequest  # noqa: F401
 from app.models.appointment_settings import TenantAppointmentSettings  # noqa: F401
 from app.models.user_session import UserSession  # noqa: F401
 from app.models.push_subscription import NotificationState, PushSubscription  # noqa: F401
+from app.models.email_verification import EmailVerification  # noqa: F401
 
 __all__ = [
     "Tenant",
