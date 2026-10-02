@@ -101,6 +101,49 @@ def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
     return messages
 
 
+def _local_today(tenant, now=None):
+    from datetime import datetime, timezone
+
+    from app.services.local_time import tenant_zone
+
+    return (now or datetime.now(timezone.utc)).astimezone(tenant_zone(tenant)).date()
+
+
+def _appointment_check(text, tenant, executor, date_retry_done: bool, claim_retry_done: bool):
+    """
+    Lot 44 — (correction à demander, texte fixe de remplacement). Une seule correction par sujet ;
+    si Bob se trompe encore, sa réponse est remplacée par un message fixe (jamais une erreur envoyée).
+    """
+    from app.services import appointment_guard, calendar_check
+
+    wrong = calendar_check.mismatches(text, _local_today(tenant))
+    if wrong:
+        return "DATE", (calendar_check.clarification(wrong[0]) if date_retry_done else None)
+    if appointment_guard.claims_appointment(text) and not executor.appointment_checked:
+        return "CLAIM", (appointment_guard.FALLBACK if claim_retry_done else None)
+    return None, None
+
+
+def _date_correction(text, tenant) -> str:
+    from app.services import calendar_check
+
+    wrong = calendar_check.mismatches(text, _local_today(tenant))[0]
+    return ("\n\nCONSIGNE (correction) : ta réponse contient un jour qui ne correspond pas à la date "
+            f"(le {wrong['date'].day} {calendar_check.MONTHS[wrong['date'].month - 1]} est un {wrong['real_day']}). "
+            "Ne répète jamais une date incohérente et n'enregistre rien : demande au client de préciser, avec "
+            f"exactement cette question : « {calendar_check.clarification(wrong)} »")
+
+
+def _claim_correction(text, tenant) -> str:
+    return ("\n\nCONSIGNE (correction) : tu as annoncé un rendez-vous (noté, enregistré, confirmé…) sans l'avoir "
+            "enregistré avec un outil dans ce message. S'il a choisi un créneau proposé par get_available_slots, "
+            "appelle request_appointment avec ce slot ; sinon propose-lui des créneaux (get_available_slots) ou "
+            "demande-lui quand il peut venir. Ne dis JAMAIS qu'un rendez-vous est noté ou confirmé sans l'outil.")
+
+
+_CORRECTIONS = {"DATE": _date_correction, "CLAIM": _claim_correction}
+
+
 async def generate_ai_reply(*args, **kwargs) -> str:
     """Compatibilité : seulement le texte (voir generate_ai_reply_detailed pour l'issue)."""
     text, _ = await generate_ai_reply_detailed(*args, **kwargs)
@@ -154,6 +197,12 @@ async def generate_ai_reply_detailed(
     empty_replies = 0
     photo_retry_done = False
     lookup_retry_done = False
+    # Lot 44 — concession : dates cohérentes et rendez-vous annoncé seulement s'il existe.
+    from app.services.business_type import is_dealership
+
+    dealership = is_dealership(tenant)
+    date_retry_done = False
+    claim_retry_done = False
     try:
         for _ in range(settings.max_tool_iterations):
             response = await _create_with_retries(
@@ -190,6 +239,19 @@ async def generate_ai_reply_detailed(
                     )
                     logger.warning("Bob a nié une photo existante (conversation %s) : nouvel essai", conversation.id)
                     continue
+                if text and dealership:
+                    correction, fixed = _appointment_check(text, tenant, executor, date_retry_done, claim_retry_done)
+                    if correction == "DATE":
+                        date_retry_done = True
+                    elif correction == "CLAIM":
+                        claim_retry_done = True
+                    if fixed is not None:
+                        logger.warning("Réponse de Bob remplacée (%s, conversation %s)", correction, conversation.id)
+                        text = fixed
+                    elif correction is not None:
+                        system_prompt += _CORRECTIONS[correction](text, tenant)
+                        logger.warning("Réponse de Bob à corriger (%s, conversation %s) : nouvel essai", correction, conversation.id)
+                        continue
                 if text:
                     if image_outbox is not None:
                         image_outbox.extend(executor.pending_images)  # lot 26c : seulement si Bob a répondu

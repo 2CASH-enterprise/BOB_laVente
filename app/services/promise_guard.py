@@ -65,11 +65,21 @@ def _normalize(text: str) -> str:
     )
 
 
+# Lot 44 — « Je transmets votre demande dès que vous me donnez vos disponibilités » n'est PAS une
+# promesse ferme (incident du 02/10 : transfert à tort, Bob s'est tu). « Dès que possible » en reste une,
+# et « Si vous avez des questions, un conseiller vous contactera » aussi (seules les conditions de temps comptent).
+CONDITIONAL = re.compile(
+    r"\b(?:d[èe]s que|quand|lorsque|une fois que|apr[èe]s que)\s*(?:vous|tu|tu m'|vous m'|j'aurai|j'aurais)\b"
+)
+_SENTENCE = re.compile(r"[^.!?\n]+")
+
+
 def contains_human_promise(text: str | None) -> bool:
     if not text:
         return False
     normalized = _normalize(text)
-    return any(p.search(normalized) for p in _PATTERNS)
+    return any(p.search(sentence) for sentence in _SENTENCE.findall(normalized)
+               if not CONDITIONAL.search(sentence) for p in _PATTERNS)
 
 
 def remove_human_promises(text: str, tu: bool = False) -> str:

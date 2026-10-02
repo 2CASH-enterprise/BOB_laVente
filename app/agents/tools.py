@@ -26,6 +26,8 @@ from app.services.customer_memory_service import record_product_view
 
 
 PRODUCT_DESCRIPTION_MAX_CHARS = 300
+# Lot 44 — outils qui enregistrent ou consultent réellement un rendez-vous.
+APPOINTMENT_TOOLS = frozenset({"request_appointment", "reschedule_my_appointment", "cancel_my_appointment", "get_my_appointments"})
 MAX_IMAGES_PER_REPLY = 3
 
 
@@ -50,6 +52,8 @@ def asks_explicit_cancellation(text: str | None) -> bool:
 
 
 class ToolExecutor:
+    appointment_checked = False  # lot 44
+
     def __init__(
         self,
         db: AsyncSession,
@@ -94,7 +98,12 @@ class ToolExecutor:
             return {"error": f"Outil inconnu : {tool_name}"}
         if not tool_allowed(self.business_type, tool_name):
             return {"error": f"Outil non disponible pour cette activité : {tool_name}"}
-        return await handler(tool_input)
+        result = await handler(tool_input)
+        # Lot 44 : Bob ne peut annoncer un rendez-vous (noté, confirmé, déplacé…) que s'il vient de
+        # l'enregistrer ou de le consulter avec ses outils, dans ce même message.
+        if tool_name in APPOINTMENT_TOOLS and isinstance(result, dict) and "error" not in result:
+            self.appointment_checked = True
+        return result
 
     async def _product_to_dict(self, product) -> dict:
         from app.services.vehicle import for_ai
@@ -428,6 +437,16 @@ class ToolExecutor:
                     }
         if not availability:
             return {"error": "Demande d'abord au client quand il est disponible."}
+        # Lot 44 — verrou : jamais une demande enregistrée avec un jour qui ne correspond pas à la date.
+        if not booked:
+            from app.services import calendar_check
+
+            tenant_for_date, _, zone_for_date, now_for_date = await self._booking_context()
+            wrong = calendar_check.mismatches(availability, now_for_date.astimezone(zone_for_date).date())
+            if wrong:
+                return {"error": "Le jour et la date ne correspondent pas : rien n'a été enregistré.",
+                        "instruction": "Demande au client de préciser, avec exactement cette question : "
+                                       + calendar_check.clarification(wrong[0])}
 
         product = None
         product_id = tool_input.get("product_id")

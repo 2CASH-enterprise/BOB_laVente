@@ -1825,6 +1825,7 @@ async function loadAppointments(view) {
     const data = await api(`/api/v1/appointments?view=${currentAppointmentView}`);
     document.getElementById("appt-timezone").textContent = `Heures affichées dans le fuseau de la boutique (${data.timezone}).`;
     const empty = { pending: "Aucun rendez-vous à confirmer.", confirmed: "Aucun rendez-vous à venir.", closed: "Aucun rendez-vous passé ou annulé." };
+    data.items.forEach((a) => { appointmentsById[a.id] = a; });  // lot 44 : récapitulatif avant confirmation
     list.innerHTML = data.items.length
       ? data.items.map((a) => appointmentCard(a, currentAppointmentView)).join("")
       : `<p style="color: var(--muted); font-size: 14px;">${empty[currentAppointmentView]}</p>`;
@@ -1844,10 +1845,44 @@ function showAppointmentResult(result, okText) {
   }
 }
 
+// ---- Lot 44 : récapitulatif avant de confirmer (jour écrit en toutes lettres, alertes) ----
+var appointmentsById = {};
+const FR_DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+const FR_MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+function appointmentChecks(when, a) {
+  const [datePart, timePart] = when.split("T");
+  const [y, m, d] = datePart.split("-").map(Number);
+  const [hh, mm] = timePart.split(":").map(Number);
+  const day = new Date(y, m - 1, d);
+  const label = `${FR_DAYS[day.getDay()]} ${d} ${FR_MONTHS[m - 1]} à ${hh} h${mm ? " " + String(mm).padStart(2, "0") : ""}`;
+  const warnings = [];
+  const asked = (a && a.availability ? a.availability : "").toLowerCase();
+  const askedDays = FR_DAYS.filter((name) => new RegExp(`\\b${name}\\b`).test(asked));
+  if (askedDays.length && !askedDays.includes(FR_DAYS[day.getDay()])) {
+    warnings.push(`Le client a demandé « ${a.availability} » : vous avez choisi un ${FR_DAYS[day.getDay()]}.`);
+  }
+  if (mm % 5 !== 0) warnings.push(`L'heure ${hh} h ${String(mm).padStart(2, "0")} est inhabituelle : vérifiez-la (le téléphone propose parfois l'heure actuelle).`);
+  if (new Date(y, m - 1, d, hh, mm) < new Date()) warnings.push("Cette date est déjà passée.");
+  return { label, warnings };
+}
+
 async function confirmAppointment(id) {
   const when = document.getElementById(`appt-when-${id}`).value;
   const msg = document.getElementById("appt-msg");
   if (!when) { msg.style.color = "var(--danger)"; msg.textContent = "Choisissez la date et l'heure du rendez-vous."; return; }
+  const a = appointmentsById[id];
+  const { label, warnings } = appointmentChecks(when, a);
+  const notify = document.getElementById(`appt-notify-${id}`).checked;
+  const lines = [
+    a ? `${a.kind_label}${a.vehicle ? " · " + a.vehicle : ""} avec ${a.customer}` : "",
+    `Le ${label}.`,
+    a && a.availability ? `Demande du client : « ${a.availability} »` : "",
+    notify ? "Le client sera prévenu sur WhatsApp." : "Le client ne sera pas prévenu.",
+    ...warnings.map((w) => "⚠️ " + w),
+  ].filter(Boolean);
+  if (!(await bobConfirm(warnings.length ? "Vérifiez avant de confirmer" : "Confirmer le rendez-vous ?", lines.join("\n"),
+                         { confirmLabel: warnings.length ? "Confirmer quand même" : "Confirmer" }))) return;
   try {
     const result = await api(`/api/v1/appointments/${id}/confirm`, {
       method: "POST",

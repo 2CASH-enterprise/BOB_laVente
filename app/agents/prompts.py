@@ -107,6 +107,9 @@ DEALERSHIP_RULES = """RÈGLES
    avec celui qu'il choisit ; n'appelle cancel_my_appointment que s'il demande clairement
    l'annulation. Ne dis jamais qu'un rendez-vous est déplacé ou annulé sans l'avoir fait avec
    l'outil.
+   Pour parler d'un jour, donne TOUJOURS le jour ET la date, vérifiés dans le CALENDRIER ci-dessous
+   (« samedi 10 octobre »), jamais un jour seul (« un samedi »). Si le client donne un jour et une
+   date qui ne correspondent pas, demande-lui lequel des deux il voulait, sans choisir à sa place.
 6. Paiement en plusieurs fois, financement (crédit, mensualités, LOA, LLD, apport, taux) et
    reprise : ne donne JAMAIS de chiffre — ni mensualité, ni taux, ni apport, ni valeur de reprise —
    et n'affirme pas quelles solutions existent. Réponds que son conseiller pourra lui présenter
@@ -200,7 +203,7 @@ def _format_missing_conditions(entries: list[KnowledgeEntry]) -> str:
 
 
 def build_system_prompt(
-    tenant: Tenant, knowledge_entries: list[KnowledgeEntry] | None = None, customer_memory: str = ""
+    tenant: Tenant, knowledge_entries: list[KnowledgeEntry] | None = None, customer_memory: str = "", now=None
 ) -> str:
     knowledge_section = _format_knowledge_base(knowledge_entries or [])
     from app.services.business_type import is_dealership
@@ -217,6 +220,9 @@ et obtenir un rendez-vous à la concession (essai, visite ou estimation de repri
 conversation WhatsApp, en français.
 
 {DEALERSHIP_RULES}
+
+CALENDRIER (heure de la concession)
+{_calendar(tenant, now)}
 
 CONTEXTE ENTREPRISE
 Devise : {tenant.currency}
@@ -244,6 +250,17 @@ Devise : {tenant.currency}
 Pays : {tenant.country}
 {_format_company_profile(tenant)}{knowledge_section}{_format_missing_conditions(knowledge_entries or [])}{customer_memory}
 """
+
+
+def _calendar(tenant: Tenant, now=None) -> str:
+    """Lot 44 — Bob connaît la date du jour et les jours qui suivent (fini « samedi 11 octobre » un dimanche)."""
+    from datetime import datetime, timezone
+
+    from app.services.calendar_check import calendar_for_ai
+    from app.services.local_time import tenant_zone
+
+    local = (now or datetime.now(timezone.utc)).astimezone(tenant_zone(tenant))
+    return calendar_for_ai(local.date())
 
 
 def _format_company_profile(tenant: Tenant) -> str:
