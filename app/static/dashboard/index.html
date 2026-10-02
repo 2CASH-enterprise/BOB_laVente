@@ -123,6 +123,12 @@
   .sidebar nav button .ico { width: 18px; height: 18px; display: flex; flex-shrink: 0; }
   .sidebar nav button:hover { background: var(--accent-soft); color: var(--text); }
   .sidebar nav button.active { background: var(--accent-fill); color: var(--on-accent); font-weight: 700; }
+  /* Lot 37b — tâches à faire : pastille rouge avec le nombre */
+  .nav-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: #D92D20; color: #fff;
+    font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+  .nav-count.hidden { display: none; }
+  .topbar .hamburger { position: relative; }
+  .hamburger .nav-count { position: absolute; top: -6px; right: -6px; margin: 0; box-shadow: 0 0 0 2px var(--panel); }
   .sidebar-foot { margin-top: auto; padding-top: 20px; display: flex; flex-direction: column; gap: 12px; }
   .theme-switch { display: flex; padding: 4px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); }
   .theme-switch button {
@@ -465,6 +471,7 @@
   <div class="topbar">
     <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <span class="nav-count hidden" id="menu-count" aria-hidden="true"></span>
     </button>
     <span class="topbar-title" id="topbar-title">Accueil</span>
   </div>
@@ -919,6 +926,16 @@
           <button class="action hidden" id="install-btn" onclick="installApp()">Installer Bob</button>
           <p id="install-help" style="font-size: 13px; margin: 0;"></p>
         </div>
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;" id="push-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Notifications</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
+            Une pastille rouge sur l'icône Bob indique le nombre de tâches à faire (client qui attend, rendez-vous, commande, rappel),
+            et un message vous prévient dès qu'une nouvelle arrive, même Bob fermé. À activer sur chaque appareil.
+          </p>
+          <button class="action hidden" id="push-on-btn" onclick="enablePush()">Activer les notifications sur cet appareil</button>
+          <button class="action secondary hidden" id="push-off-btn" onclick="disablePush()">Désactiver sur cet appareil</button>
+          <p id="push-status" style="font-size: 13px; margin: 8px 0 0;"></p>
+        </div>
       </div>
     </section>
   </main>
@@ -948,6 +965,8 @@ function syncThemeSwitch() {
 syncThemeSwitch();
 
 function logout() {
+  forgetPushDevice(token);  // lot 37b : cet appareil ne reçoit plus les notifications de la boutique
+  stopTaskCounts();
   localStorage.removeItem("bob_token");
   token = null;
   // Lot 37 : ferme aussi la session longue de cet appareil (cookie protégé).
@@ -984,6 +1003,8 @@ function api(path, options = {}, retried = false) {
       throw new Error("Session expirée, reconnectez-vous.");
     }
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    // Lot 37b : une action (confirmer, répondre, encaisser…) peut terminer une tâche.
+    if ((original.method || "GET").toUpperCase() !== "GET" && !path.startsWith("/api/v1/notifications")) scheduleTaskCounts();
     if (r.status === 204) return null;
     return r.json();
   });
@@ -1188,6 +1209,7 @@ function enterApp() {
   document.getElementById("app").classList.remove("hidden");
   loadTenant();
   checkBusinessTypeChosen();
+  startTaskCounts();
   if (pendingConversationId) {
     const id = pendingConversationId;
     pendingConversationId = null;
@@ -3472,6 +3494,169 @@ async function revokeAllSessions() {
     await api("/api/v1/auth/sessions/revoke-all", { method: "POST" });
   } catch (e) { /* déjà déconnecté */ }
   logout();
+}
+
+// ---- Lot 37b : tâches à faire (pastille rouge) et notifications ----
+// Nombre = ce qu'il reste à faire ; il baisse quand la tâche est faite, pas quand elle est vue.
+var TASK_NAV = {  // rubrique du menu → types de tâches
+  overview: ["callbacks"], conversations: ["conversations"], orders: ["orders"], appointments: ["appointments", "outcomes"],
+};
+// « var » : enterApp() peut s'exécuter au démarrage, avant que ce bloc soit lu.
+var taskTimer = null;
+var taskDebounce = null;
+
+function setCount(el, n) {
+  if (!el) return;
+  el.textContent = n > 99 ? "99+" : String(n);
+  el.classList.toggle("hidden", !n);
+}
+
+function showTaskCounts(c) {
+  Object.entries(TASK_NAV).forEach(([tab, kinds]) => {
+    const btn = document.querySelector(`.sidebar nav button[data-tab="${tab}"]`);
+    if (!btn) return;
+    let pill = btn.querySelector(".nav-count");
+    if (!pill) {
+      pill = document.createElement("span");
+      pill.className = "nav-count hidden";
+      btn.appendChild(pill);
+    }
+    const n = kinds.reduce((sum, k) => sum + (Number(c[k]) || 0), 0);
+    setCount(pill, n);
+    pill.setAttribute("aria-label", n + " à traiter");
+  });
+  const total = Number(c.total) || 0;
+  setCount(document.getElementById("menu-count"), total);
+  document.title = total ? `(${total > 99 ? "99+" : total}) Bob` : "Bob";
+  if (navigator.setAppBadge) {
+    (total ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(() => {});
+  }
+}
+
+async function refreshTaskCounts() {
+  if (!token) return;
+  try { showTaskCounts(await api("/api/v1/notifications/counts")); } catch (e) { /* hors ligne : on réessaiera */ }
+}
+
+function scheduleTaskCounts() {
+  clearTimeout(taskDebounce);
+  taskDebounce = setTimeout(refreshTaskCounts, 800);
+}
+
+function startTaskCounts() {
+  refreshTaskCounts();
+  clearInterval(taskTimer);
+  taskTimer = setInterval(() => { if (document.visibilityState === "visible") refreshTaskCounts(); }, 60000);
+  setTimeout(refreshPushCard, 0);
+}
+
+function stopTaskCounts() {
+  clearInterval(taskTimer);
+  clearTimeout(taskDebounce);
+  document.title = "Bob";
+  if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {});
+}
+
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshTaskCounts(); });
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (e) => { if (e.data && e.data.type === "bob-refresh-counts") refreshTaskCounts(); });
+}
+
+function pushSupported() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+function b64ToBytes(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+}
+
+async function currentPushSubscription() {
+  if (!pushSupported()) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+async function refreshPushCard() {
+  const on = document.getElementById("push-on-btn");
+  const off = document.getElementById("push-off-btn");
+  const status = document.getElementById("push-status");
+  if (!on) return;
+  on.classList.add("hidden");
+  off.classList.add("hidden");
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (!pushSupported()) {
+    status.textContent = ios && !standalone
+      ? "Sur iPhone : ajoutez d'abord Bob à l'écran d'accueil (carte « Application Bob »), puis ouvrez Bob depuis son icône pour activer les notifications."
+      : "Ce navigateur ne permet pas les notifications. Essayez Chrome, Edge ou Safari à jour.";
+    return;
+  }
+  let config = { enabled: false };
+  try { config = await api("/api/v1/notifications/push-config"); } catch (e) { /* hors ligne */ }
+  if (!config.enabled) {
+    status.textContent = "Les notifications seront bientôt disponibles. La pastille du menu est déjà à jour quand Bob est ouvert.";
+    return;
+  }
+  if (Notification.permission === "denied") {
+    status.textContent = "Notifications bloquées pour Bob : autorisez-les dans les réglages du navigateur (icône à gauche de l'adresse) ou du téléphone, puis revenez ici.";
+    return;
+  }
+  const sub = await currentPushSubscription().catch(() => null);
+  if (sub) {
+    off.classList.remove("hidden");
+    status.textContent = "Notifications activées sur cet appareil ✅";
+  } else {
+    on.classList.remove("hidden");
+    status.textContent = "";
+  }
+}
+
+async function enablePush() {
+  const status = document.getElementById("push-status");
+  try {
+    const config = await api("/api/v1/notifications/push-config");
+    if (!config.enabled) throw new Error("Notifications pas encore activées sur le serveur");
+    if (await Notification.requestPermission() !== "granted") { await refreshPushCard(); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(config.public_key) });
+    const json = sub.toJSON();
+    await api("/api/v1/notifications/subscriptions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+    await refreshPushCard();
+    refreshTaskCounts();
+  } catch (e) {
+    status.textContent = "Activation impossible : " + e.message;
+  }
+}
+
+async function disablePush() {
+  const sub = await currentPushSubscription().catch(() => null);
+  if (sub) {
+    try {
+      await api("/api/v1/notifications/subscriptions/delete", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+    } catch (e) { /* l'appareil est oublié côté navigateur quand même */ }
+    await sub.unsubscribe().catch(() => {});
+  }
+  await refreshPushCard();
+}
+
+function forgetPushDevice(authToken) {
+  currentPushSubscription().then((sub) => {
+    if (!sub) return;
+    if (authToken) {
+      fetch(API_BASE + "/api/v1/notifications/subscriptions/delete", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + authToken },
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      }).catch(() => {});
+    }
+    return sub.unsubscribe();
+  }).catch(() => {});
 }
 
 // ---- Embedded Signup (section 59.2/59.6) ----

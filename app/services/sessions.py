@@ -79,6 +79,10 @@ async def revoke_all(db, user_id, now: datetime | None = None) -> None:
     await db.execute(update(UserSession).where(
         UserSession.user_id == user_id, UserSession.revoked_at.is_(None),
     ).values(revoked_at=now or datetime.now(timezone.utc)))
+    # Lot 37b — ces appareils ne reçoivent plus non plus les notifications de la boutique.
+    from app.services.notifications import forget_user_devices
+
+    await forget_user_devices(db, user_id)
 
 
 def set_cookie(response, raw: str) -> None:

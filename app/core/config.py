@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # Lot 30 — clé de chiffrement des jetons en base (Fernet). Facultative : sans elle, une clé est
     # dérivée de SECRET_KEY. Si elle est ajoutée plus tard, les jetons déjà chiffrés restent lisibles.
     token_encryption_key: str | None = None
+    # Lot 37b — notifications sur l'appareil du commerçant (clés VAPID, générées une fois avec
+    # « python -m app.scripts.generate_vapid_keys »). Vides : pas de notification, la pastille
+    # reste à jour quand Bob est ouvert.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = ""  # « mailto:… » ; à défaut, l'adresse d'envoi des emails
 
     # WhatsApp (section 59)
     whatsapp_app_id: str = ""

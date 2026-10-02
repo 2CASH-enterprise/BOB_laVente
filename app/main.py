@@ -20,6 +20,7 @@ from app.api.knowledge.routes import router as knowledge_router
 from app.api.qrcodes.routes import router as qrcodes_router
 from app.api.superadmin.routes import router as superadmin_router
 from app.api.messages.routes import router as messages_router
+from app.api.notifications.routes import router as notifications_router
 from app.api.orders.routes import router as orders_router
 from app.api.tenants.routes import router as tenants_router
 from app.api.unsubscribe.routes import router as unsubscribe_router
@@ -52,6 +53,7 @@ app.include_router(orders_router)
 app.include_router(conversations_router)
 app.include_router(customers_router)
 app.include_router(analytics_router)
+app.include_router(notifications_router)
 app.include_router(shopify_router)
 app.include_router(meta_catalog_router)
 app.include_router(knowledge_router)

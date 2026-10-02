@@ -21,6 +21,7 @@ TASK_MODULES = [
     "app.workers.opportunities",
     "app.workers.catalog_sync",
     "app.workers.appointment_reminders",
+    "app.workers.notifications",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -40,6 +41,11 @@ celery_app.conf.beat_schedule = {
     "appointment-reminders": {
         "task": "app.workers.appointment_reminders.send_appointment_reminders_task",
         "schedule": crontab(minute="*/15"),
+    },
+    # Lot 37b — pastille et notifications : ce qui apparaît avec le temps (rendez-vous passé…).
+    "notifications-check": {
+        "task": "app.workers.notifications.check_all_task",
+        "schedule": crontab(minute="*/10"),
     },
 }
 celery_app.conf.timezone = "UTC"

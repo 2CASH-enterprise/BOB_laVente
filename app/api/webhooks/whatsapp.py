@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.classifier import MessageClassifier, get_message_classifier
+from app.services import notifications  # lot 37b
 from app.agents.dependency import get_llm_client
 from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import FAILURE_LOOP, FAILURE_OUTAGE, generate_ai_reply_detailed
@@ -142,6 +143,8 @@ async def receive_webhook(
         return {"status": "unknown_phone_number_id"}
 
     tenant_id = account.tenant_id
+    # Lot 37b — une fois la réponse envoyée à Meta : nouvelle tâche ? pastille + notification.
+    background_tasks.add_task(notifications.queue_check, tenant_id)
 
     customer_repo = CustomerRepository(db)
     customer, is_new_customer = await customer_repo.get_or_create_with_created_flag(tenant_id, parsed["from"])
