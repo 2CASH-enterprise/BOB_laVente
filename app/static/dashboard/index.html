@@ -383,6 +383,50 @@
     #login-screen, #signup-screen, #mfa-screen, #forgot-screen, #reset-screen { margin: 40px 16px; padding: 28px 20px; width: auto; }
   }
   @media (max-width: 700px) { .cp-form { grid-template-columns: 1fr !important; } }
+  /* ---- Lot 39 : infobulles, fenêtres et bannières aux couleurs de Bob ---- */
+  .tip { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; margin-left: 6px;
+    border: none; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; vertical-align: middle; flex-shrink: 0; }
+  .tip:hover, .tip[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
+  .tip:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 1px; }
+  .tip svg { width: 16px; height: 16px; }
+  .tip-bubble { position: fixed; z-index: 120; max-width: min(320px, calc(100vw - 32px)); background: var(--panel); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; font-weight: 400;
+    line-height: 1.5; text-align: left; text-transform: none; letter-spacing: normal; box-shadow: var(--shadow-hover), 0 4px 16px rgba(16, 36, 26, 0.12); }
+  .tip-bubble[hidden] { display: none; }
+  .bob-dialog-backdrop { position: fixed; inset: 0; z-index: 130; background: rgba(10, 20, 15, 0.45); display: flex; align-items: center;
+    justify-content: center; padding: 16px; animation: bob-fade 0.15s ease; }
+  .bob-dialog { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); width: 100%;
+    max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; padding: 22px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    animation: bob-rise 0.18s ease; }
+  .bob-dialog h2 { margin: 0 0 8px; font-size: 17px; line-height: 1.35; }
+  .bob-dialog .bob-dialog-text { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.55; white-space: pre-line; }
+  .bob-dialog .bob-field { margin-bottom: 12px; }
+  .bob-dialog .bob-field > label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .bob-dialog .bob-check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; margin-bottom: 12px; }
+  .bob-dialog .bob-check input { margin-top: 3px; }
+  .bob-dialog-error { color: var(--danger); font-size: 13px; margin: -4px 0 10px; }
+  .bob-dialog-error:empty { display: none; }
+  .bob-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+  button.action.danger { background: var(--danger); color: #fff; }
+  button.action.danger:hover { background: var(--danger); filter: brightness(0.92); }
+  .bob-toasts { position: fixed; z-index: 140; left: 50%; transform: translateX(-50%); bottom: calc(16px + var(--safe-bottom));
+    display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 32px)); pointer-events: none; }
+  .bob-toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border-strong); border-left: 4px solid var(--success); border-radius: var(--radius-sm); padding: 10px 12px;
+    font-size: 14px; line-height: 1.45; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); animation: bob-rise 0.18s ease; }
+  .bob-toast.error { border-left-color: var(--danger); }
+  .bob-toast.info { border-left-color: var(--info); }
+  .bob-toast span { flex: 1; word-break: break-word; }
+  .bob-toast button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 4px; }
+  @keyframes bob-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes bob-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .bob-dialog-backdrop, .bob-dialog, .bob-toast { animation: none; } }
+  @media (max-width: 600px) {
+    .bob-dialog-backdrop { align-items: flex-end; padding: 0; }
+    .bob-dialog { max-width: none; border-radius: var(--radius) var(--radius) 0 0; padding-bottom: calc(22px + var(--safe-bottom)); }
+    .bob-dialog-actions button { flex: 1; min-height: 44px; }
+    .bob-toasts { bottom: calc(12px + var(--safe-bottom)); }
+  }
 </style>
 </head>
 <body>
@@ -473,7 +517,7 @@
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       <span class="nav-count hidden" id="menu-count" aria-hidden="true"></span>
     </button>
-    <span class="topbar-title" id="topbar-title">Accueil</span>
+    <span class="topbar-title" id="topbar-title">Accueil</span><button class="tip hidden page-tip-btn"></button><span class="tip-bubble page-tip-bubble" hidden></span>
   </div>
   <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
   <aside class="sidebar" id="sidebar">
@@ -506,7 +550,7 @@
     </div>
   </aside>
   <main>
-    <div class="page-head hidden"><h1 id="page-title">Accueil</h1></div>
+    <div class="page-head hidden"><h1 style="display: flex; align-items: center;"><span id="page-title">Accueil</span><button class="tip hidden page-tip-btn"></button><span class="tip-bubble page-tip-bubble" hidden></span></h1></div>
     <section id="tab-overview">
       <div id="home-root"><p class="loading-text">Chargement de l'accueil</p></div>
       <h2 class="section-title">Détails</h2>
@@ -550,18 +594,13 @@
     <section id="tab-customers" class="hidden">
       <div class="card" style="margin-bottom: 20px;" id="sources-card">
         <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
-          <div class="label" style="font-weight: 600;">D'où viennent vos clients</div>
+          <div class="label" style="font-weight: 600;">D'où viennent vos clients<button class="tip"></button><span class="tip-bubble" hidden>Les pubs Facebook et Instagram « clic vers WhatsApp » sont reconnues automatiquement. Pour Google, YouTube, TikTok, un site ou une affiche, utilisez un lien Bob (Intégrations) et choisissez son canal. Un client qui tape lui-même votre numéro reste « Direct ».</span></div>
           <div class="sources-periods" style="display: flex; gap: 6px;">
             <button type="button" class="pill" data-period="30" aria-pressed="true" onclick="loadSources('30')">30 jours</button>
             <button type="button" class="pill" data-period="90" aria-pressed="false" onclick="loadSources('90')">90 jours</button>
             <button type="button" class="pill" data-period="all" aria-pressed="false" onclick="loadSources('all')">Depuis le début</button>
           </div>
         </div>
-        <p style="font-size: 12px; color: var(--muted); margin: 6px 0 10px;">
-          Les pubs Facebook et Instagram « clic vers WhatsApp » sont reconnues automatiquement. Pour Google, YouTube,
-          TikTok, un site ou une affiche, utilisez un lien Bob (Intégrations) et choisissez son canal. Un client qui
-          tape lui-même votre numéro reste « Direct ».
-        </p>
         <div id="sources-content"></div>
       </div>
       <div class="card dealer-only" style="margin-bottom: 20px;" id="commercials-card">
@@ -608,11 +647,7 @@
           <div id="new-product-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
         <div class="card" style="flex: 1; min-width: 280px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV</div>
-          <p style="font-size: 13px; color: var(--muted); margin-top: 0;">
-            Colonnes attendues : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE
-            <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span>
-          </p>
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span></span></div>
           <input type="file" id="csv-file-input" accept=".csv" style="margin-bottom: 10px;">
           <button class="action" onclick="importCsv()">Importer</button>
           <button class="action secondary" onclick="exportXlsx()">Exporter en Excel</button>
@@ -625,10 +660,7 @@
       </table>
 
       <div class="card" style="margin-top: 24px;">
-        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Codes QR produits (5 max)</div>
-        <p style="font-size: 12px; color: var(--muted); margin: 0 0 14px;">
-          À afficher en boutique ou en statut WhatsApp. Le QR ne change jamais — vous pouvez changer le produit ciblé à tout moment sans le réimprimer.
-        </p>
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Codes QR produits (5 max)<button class="tip"></button><span class="tip-bubble" hidden>À afficher en boutique ou en statut WhatsApp. Le QR ne change jamais — vous pouvez changer le produit ciblé à tout moment sans le réimprimer.</span></div>
         <div style="display: flex; gap: 8px; max-width: 480px; margin-bottom: 16px;">
           <select id="new-qr-product" class="input"></select>
           <button class="action" onclick="createQrCode()" style="white-space: nowrap;">Générer un QR</button>
@@ -639,11 +671,8 @@
     </section>
 
     <section id="tab-appointments" class="hidden">
-      <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">
-        Les rendez-vous obtenus par Bob. Avec les créneaux en ligne, Bob propose vos créneaux libres et confirme celui que
-        le client choisit ; sinon, fixez vous-même la date et l'heure, le client est prévenu sur WhatsApp.
-        Un rappel vous est envoyé par email la veille à 18 h. <span id="appt-timezone"></span>
-      </p>
+      <template class="page-tip-src">Les rendez-vous obtenus par Bob. Avec les créneaux en ligne, Bob propose vos créneaux libres et confirme celui que le client choisit ; sinon, fixez vous-même la date et l'heure, le client est prévenu sur WhatsApp. Un rappel vous est envoyé par email la veille à 18 h.</template>
+      <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;"><span id="appt-timezone"></span></p>
       <details class="card" id="booking-card" style="margin-bottom: 16px;">
         <summary style="cursor: pointer; font-weight: 600;">Créneaux proposés par Bob <span id="booking-status" style="font-weight: 400; color: var(--muted); font-size: 13px;"></span></summary>
         <div style="margin-top: 12px;">
@@ -697,12 +726,7 @@
       </div>
 
       <div class="card" style="margin-bottom: 20px;">
-        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Liens WhatsApp &amp; widgets <span id="cp-limit"></span></div>
-        <p style="font-size: 12px; color: var(--muted); margin: 0 0 14px;">
-          Un lien à coller partout : page et catalogue Facebook, Instagram, TikTok, statut WhatsApp, publicités…
-          Pour un site web, utilisez le code du widget (une bulle WhatsApp s'affiche). Chaque clic est compté
-          et chaque client est rattaché au lien qui l'a amené.
-        </p>
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Liens WhatsApp &amp; widgets <span id="cp-limit"></span><button class="tip"></button><span class="tip-bubble" hidden>Un lien à coller partout : page et catalogue Facebook, Instagram, TikTok, statut WhatsApp, publicités… Pour un site web, utilisez le code du widget (une bulle WhatsApp s'affiche). Chaque clic est compté et chaque client est rattaché au lien qui l'a amené. <br><br>Un lien par commercial : chaque client qui arrive par son lien (ou son QR code) lui est rattaché, et il reçoit comme vous les alertes de transfert et de rendez-vous de ce client.</span></div>
         <div style="display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; margin-bottom: 8px;" class="cp-form">
           <input id="cp-name" class="input" placeholder="Nom (ex. Page Facebook)" maxlength="80">
           <input id="cp-greeting" class="input" placeholder="Message pré-rempli (ex. Bonjour, je viens de votre page Facebook)" maxlength="300">
@@ -720,7 +744,6 @@
           <label for="cp-channel" style="font-size: 13px;">Où allez-vous publier ce lien ?</label>
           <select id="cp-channel" class="input" style="max-width: 260px;"></select>
         </div>
-        <p style="font-size: 11px; color: var(--muted); margin: 0 0 8px;">Un lien par commercial : chaque client qui arrive par son lien (ou son QR code) lui est rattaché, et il reçoit comme vous les alertes de transfert et de rendez-vous de ce client.</p>
         <div id="cp-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="cp-list" style="display: grid; gap: 14px;"></div>
       </div>
@@ -761,10 +784,7 @@
 
     <section id="tab-knowledge" class="hidden">
       <div class="card" style="margin-bottom: 20px;">
-        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Profil de l'entreprise</div>
-        <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
-          Bob s'appuie sur ces informations pour se présenter et répondre aux questions sur votre activité.
-        </p>
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Profil de l'entreprise<button class="tip"></button><span class="tip-bubble" hidden>Bob s'appuie sur ces informations pour se présenter et répondre aux questions sur votre activité.</span></div>
         <textarea id="knowledge-company-profile" class="input" rows="3" placeholder="Ex. Boutique de mode africaine à Dakar, spécialisée en tissus wax, fondée en 2020..." style="margin-bottom: 10px; resize: vertical;"></textarea>
         <input id="knowledge-website-url" placeholder="https://votre-site.com" class="input" style="margin-bottom: 10px;">
         <input id="knowledge-payment-link" placeholder="Lien de paiement (Wave, Orange Money...)" class="input" style="margin-bottom: 10px;">
@@ -796,17 +816,11 @@
     </section>
 
     <section id="tab-bob" class="hidden">
-      <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">
-        La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances.
-        Ce que Bob sait de votre boutique se règle dans la Base de connaissances.
-        <br>Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span>
-      </p>
+      <template class="page-tip-src">La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances. Ce que Bob sait de votre boutique se règle dans la Base de connaissances.</template>
+      <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span></p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
         <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Comment Bob s'adresse à vos clients</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
-            S'applique aux réponses de Bob et à tous ses messages automatiques sur WhatsApp (récapitulatif de commande, transmission à un conseiller…).
-          </p>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Comment Bob s'adresse à vos clients<button class="tip"></button><span class="tip-bubble" hidden>S'applique aux réponses de Bob et à tous ses messages automatiques sur WhatsApp (récapitulatif de commande, transmission à un conseiller…).</span></div>
           <div style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 13px;">
             <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="address-form" value="VOUS" onchange="showAddressPreview()"> Vouvoiement</label>
             <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="address-form" value="TU" onchange="showAddressPreview()"> Tutoiement</label>
@@ -817,10 +831,7 @@
         </div>
 
         <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
-            Bob cède progressivement jusqu'à cette remise maximale, jamais plus, jamais d'un coup.
-          </p>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix<button class="tip"></button><span class="tip-bubble" hidden>Bob cède progressivement jusqu'à cette remise maximale, jamais plus, jamais d'un coup.</span></div>
           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
             <input type="checkbox" id="negotiation-enabled"> Autoriser Bob à négocier
           </label>
@@ -839,11 +850,7 @@
         </div>
 
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Transmission à un humain</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
-            Ce qui décide si Bob vous passe la main. Un client qui demande à parler à une personne est
-            <strong>toujours</strong> transféré. Vous recevez un email à chaque transfert.
-          </p>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Transmission à un humain<button class="tip"></button><span class="tip-bubble" hidden>Ce qui décide si Bob vous passe la main. Un client qui demande à parler à une personne est <strong>toujours</strong> transféré. Vous recevez un email à chaque transfert. <br><br> Quand la négociation est activée, Bob négocie lui-même (ou demande au client le prix qu'il envisage), et ne transfère que si aucun accord n'est possible. <br><br> Toujours actif : une question sur les retours, échanges ou garantie vous est transmise tant que votre base de connaissances ne contient pas ces informations ; et si Bob annonce qu'un conseiller ou la boutique va revenir vers le client, la conversation vous est réellement transmise.</span></div>
           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
             <input type="checkbox" id="handoff-refund"> Transférer immédiatement les demandes de remboursement
           </label>
@@ -862,26 +869,12 @@
             <option value="RETRY_LATER">Le client est invité à renvoyer son message quelques minutes plus tard</option>
             <option value="CALLBACK">Un conseiller rappelle le client (vous recevez un email par client à rappeler)</option>
           </select>
-          <p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">
-            Quand la négociation est activée, Bob négocie lui-même (ou demande au client le prix qu'il envisage),
-            et ne transfère que si aucun accord n'est possible.
-          </p>
-          <p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">
-            Toujours actif : une question sur les retours, échanges ou garantie vous est transmise tant que votre
-            base de connaissances ne contient pas ces informations ; et si Bob annonce qu'un conseiller ou la
-            boutique va revenir vers le client, la conversation vous est réellement transmise.
-          </p>
           <button class="action" onclick="saveHandoffSettings()">Enregistrer</button>
           <div id="handoff-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
 
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Réponses aux objections</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
-            Quand un client exprime un frein (prix, hésitation, confiance…), Bob applique l'une des stratégies
-            activées ci-dessous, choisie au hasard : c'est ce qui permet de mesurer celle qui fonctionne le mieux.
-            Aucune stratégie n'autorise Bob à inventer un prix, une promotion ou une fausse urgence.
-          </p>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Réponses aux objections<button class="tip"></button><span class="tip-bubble" hidden>Quand un client exprime un frein (prix, hésitation, confiance…), Bob applique l'une des stratégies activées ci-dessous, choisie au hasard : c'est ce qui permet de mesurer celle qui fonctionne le mieux. Aucune stratégie n'autorise Bob à inventer un prix, une promotion ou une fausse urgence.</span></div>
           <div id="strategy-list"><p class="loading-text">Chargement</p></div>
           <button class="action" onclick="saveStrategySettings()">Enregistrer</button>
           <div id="strategy-msg" style="margin-top: 8px; font-size: 13px;"></div>
@@ -918,34 +911,21 @@
     <section id="tab-settings" class="hidden">
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Sécurité du compte</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
-            Un code à 6 chiffres vous sera envoyé par email à chaque connexion.
-          </p>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Sécurité du compte<button class="tip"></button><span class="tip-bubble" hidden>Un code à 6 chiffres vous sera envoyé par email à chaque connexion.</span></div>
           <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
             <input type="checkbox" id="mfa-toggle" onchange="toggleMfaSetting()"> Activer la double authentification
           </label>
           <div id="mfa-toggle-msg" style="margin-top: 8px; font-size: 13px;"></div>
           <hr style="border: 0; border-top: 1px solid var(--border); margin: 16px 0;">
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">
-            Téléphone perdu, ordinateur partagé ? Fermez la session sur tous les appareils où vous êtes resté connecté.
-          </p>
-          <button class="action secondary" onclick="revokeAllSessions()">Déconnecter tous mes appareils</button>
+          <div style="display: flex; align-items: center;"><button class="action secondary" onclick="revokeAllSessions()">Déconnecter tous mes appareils</button><button class="tip"></button><span class="tip-bubble" hidden>Téléphone perdu, ordinateur partagé ? Fermez la session sur tous les appareils où vous êtes resté connecté.</span></div>
         </div>
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;" id="install-card">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Application Bob</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
-            Ajoutez l'icône Bob sur votre téléphone ou votre ordinateur : un clic et vous êtes sur votre tableau de bord.
-          </p>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Application Bob<button class="tip"></button><span class="tip-bubble" hidden>Ajoutez l'icône Bob sur votre téléphone ou votre ordinateur : un clic et vous êtes sur votre tableau de bord.</span></div>
           <button class="action hidden" id="install-btn" onclick="installApp()">Installer Bob</button>
           <p id="install-help" style="font-size: 13px; margin: 0;"></p>
         </div>
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;" id="push-card">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Notifications</div>
-          <p style="font-size: 12px; color: var(--muted); margin: 0 0 12px;">
-            Une pastille rouge sur l'icône Bob indique le nombre de tâches à faire (client qui attend, rendez-vous, commande, rappel),
-            et un message vous prévient dès qu'une nouvelle arrive, même Bob fermé. À activer sur chaque appareil.
-          </p>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Notifications<button class="tip"></button><span class="tip-bubble" hidden>Une pastille rouge sur l'icône Bob indique le nombre de tâches à faire (client qui attend, rendez-vous, commande, rappel), et un message vous prévient dès qu'une nouvelle arrive, même Bob fermé. À activer sur chaque appareil.</span></div>
           <button class="action hidden" id="push-on-btn" onclick="enablePush()">Activer les notifications sur cet appareil</button>
           <button class="action secondary hidden" id="push-off-btn" onclick="disablePush()">Désactiver sur cet appareil</button>
           <p id="push-status" style="font-size: 13px; margin: 8px 0 0;"></p>
@@ -959,6 +939,213 @@
 // Calcule le préfixe réel sous lequel l'app est servie (ex. "/bob" via nginx, ou "" en direct).
 // Indispensable car le dashboard est monté sous /dashboard mais accédé via /bob/dashboard/ en prod.
 const API_BASE = window.location.pathname.replace(/\/dashboard\/?.*$/, "");
+
+// ---- Lot 39 : fenêtres, bannières et infobulles aux couleurs de Bob ----
+// Remplacent alert / confirm / prompt du navigateur. Les textes sont toujours insérés comme du
+// TEXTE (textContent), jamais comme du HTML : un nom de client ou de produit ne peut rien injecter.
+let bobDialogClose = null;
+
+function bobDialog({ title, message = "", confirmLabel = "Confirmer", cancelLabel = "Annuler", danger = false,
+                     fields = [], validate = null, alertOnly = false } = {}) {
+  if (bobDialogClose) bobDialogClose(null);  // une seule fenêtre à la fois
+  return new Promise((resolve) => {
+    const previousFocus = document.activeElement;
+    const backdrop = document.createElement("div");
+    backdrop.className = "bob-dialog-backdrop";
+    const box = document.createElement("div");
+    box.className = "bob-dialog";
+    box.setAttribute("role", alertOnly ? "alertdialog" : "dialog");
+    box.setAttribute("aria-modal", "true");
+    const h = document.createElement("h2");
+    h.id = "bob-dialog-title";
+    h.textContent = title;
+    box.setAttribute("aria-labelledby", h.id);
+    box.appendChild(h);
+    if (message) {
+      const p = document.createElement("p");
+      p.className = "bob-dialog-text";
+      p.id = "bob-dialog-text";
+      p.textContent = message;
+      box.setAttribute("aria-describedby", p.id);
+      box.appendChild(p);
+    }
+    const inputs = {};
+    fields.forEach((f, i) => {
+      const id = "bob-field-" + i;
+      let input;
+      if (f.type === "checkbox") {
+        const row = document.createElement("label");
+        row.className = "bob-check";
+        input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = !!f.value;
+        const span = document.createElement("span");
+        span.textContent = f.label;
+        row.append(input, span);
+        box.appendChild(row);
+      } else {
+        const wrap = document.createElement("div");
+        wrap.className = "bob-field";
+        const label = document.createElement("label");
+        label.htmlFor = id;
+        label.textContent = f.label;
+        input = document.createElement(f.type === "textarea" ? "textarea" : "input");
+        if (f.type !== "textarea") input.type = f.type || "text";
+        else input.rows = f.rows || 3;
+        input.className = "input";
+        input.value = f.value == null ? "" : f.value;
+        if (f.placeholder) input.placeholder = f.placeholder;
+        if (f.maxlength) input.maxLength = f.maxlength;
+        if (f.readonly) input.readOnly = true;
+        wrap.append(label, input);
+        box.appendChild(wrap);
+      }
+      input.id = id;
+      inputs[f.name] = input;
+    });
+    const error = document.createElement("div");
+    error.className = "bob-dialog-error";
+    error.setAttribute("role", "alert");
+    box.appendChild(error);
+    const actions = document.createElement("div");
+    actions.className = "bob-dialog-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "action secondary";
+    cancel.textContent = cancelLabel;
+    const ok = document.createElement("button");
+    ok.type = "button";
+    ok.className = "action" + (danger ? " danger" : "");
+    ok.textContent = confirmLabel;
+    if (!alertOnly) actions.appendChild(cancel);
+    actions.appendChild(ok);
+    box.appendChild(actions);
+    backdrop.appendChild(box);
+    document.body.appendChild(backdrop);
+
+    function close(value) {
+      document.removeEventListener("keydown", onKey, true);
+      backdrop.remove();
+      bobDialogClose = null;
+      if (previousFocus && previousFocus.focus) previousFocus.focus();
+      resolve(value);
+    }
+    function values() {
+      const v = {};
+      Object.entries(inputs).forEach(([name, el]) => { v[name] = el.type === "checkbox" ? el.checked : el.value; });
+      return v;
+    }
+    function submit() {
+      const v = values();
+      const problem = validate ? validate(v) : null;
+      if (problem) { error.textContent = problem; return; }
+      close(v);
+    }
+    function onKey(e) {
+      if (e.key === "Escape") { e.preventDefault(); close(alertOnly ? {} : null); return; }
+      if (e.key === "Enter" && e.target.tagName !== "TEXTAREA" && box.contains(e.target) && e.target !== cancel) {
+        e.preventDefault(); submit(); return;
+      }
+      if (e.key === "Tab") {  // le focus reste dans la fenêtre
+        const focusable = [...box.querySelectorAll("input, textarea, button")].filter((el) => !el.disabled);
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    cancel.addEventListener("click", () => close(null));
+    ok.addEventListener("click", submit);
+    backdrop.addEventListener("mousedown", (e) => { if (e.target === backdrop) close(alertOnly ? {} : null); });
+    document.addEventListener("keydown", onKey, true);
+    bobDialogClose = close;
+    const firstInput = Object.values(inputs).find((el) => el.type !== "checkbox");
+    (firstInput || (danger ? cancel : ok)).focus();
+    if (firstInput && firstInput.select && !firstInput.readOnly) firstInput.select();
+  });
+}
+
+async function bobConfirm(title, message, { confirmLabel = "Confirmer", danger = false } = {}) {
+  return (await bobDialog({ title, message, confirmLabel, danger })) !== null;
+}
+
+function bobAlert(title, message) {
+  return bobDialog({ title, message, confirmLabel: "OK", alertOnly: true });
+}
+
+function toast(text, kind = "success") {
+  let box = document.getElementById("bob-toasts");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "bob-toasts";
+    box.className = "bob-toasts";
+    box.setAttribute("aria-live", "polite");
+    document.body.appendChild(box);
+  }
+  const item = document.createElement("div");
+  item.className = "bob-toast " + kind;
+  if (kind === "error") item.setAttribute("role", "alert");
+  const span = document.createElement("span");
+  span.textContent = (kind === "success" ? "✅ " : kind === "error" ? "⚠️ " : "") + text;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.setAttribute("aria-label", "Fermer");
+  close.textContent = "✕";
+  close.addEventListener("click", () => item.remove());
+  item.append(span, close);
+  box.appendChild(item);
+  while (box.children.length > 3) box.firstChild.remove();
+  if (kind !== "error") setTimeout(() => item.remove(), 4000);  // une erreur reste jusqu'à ce qu'on la ferme
+}
+
+// Infobulles : <button class="tip"> suivi de <span class="tip-bubble" hidden>. Clic (ou doigt),
+// une seule ouverte à la fois ; Échap, un clic ailleurs ou le défilement la ferment.
+const TIP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6M12 7.5h.01"/></svg>';
+let openTip = null;
+
+function initTips(root = document) {
+  root.querySelectorAll("button.tip:not([data-ready])").forEach((btn, i) => {
+    const bubble = btn.nextElementSibling;
+    if (!bubble || !bubble.classList.contains("tip-bubble")) return;
+    btn.dataset.ready = "1";
+    btn.type = "button";
+    if (!btn.innerHTML.trim()) btn.innerHTML = TIP_ICON;
+    if (!btn.getAttribute("aria-label")) btn.setAttribute("aria-label", "En savoir plus");
+    bubble.id = bubble.id || "tip-" + Math.random().toString(36).slice(2, 9);
+    bubble.setAttribute("role", "tooltip");
+    btn.setAttribute("aria-controls", bubble.id);
+    btn.setAttribute("aria-expanded", "false");
+    btn.addEventListener("click", (e) => { e.stopPropagation(); toggleTip(btn, bubble); });
+  });
+}
+
+function closeTip() {
+  if (!openTip) return;
+  openTip.bubble.hidden = true;
+  openTip.btn.setAttribute("aria-expanded", "false");
+  openTip = null;
+}
+
+function toggleTip(btn, bubble) {
+  const wasOpen = openTip && openTip.btn === btn;
+  closeTip();
+  if (wasOpen) return;
+  bubble.hidden = false;
+  btn.setAttribute("aria-expanded", "true");
+  const r = btn.getBoundingClientRect();
+  const w = bubble.offsetWidth, hgt = bubble.offsetHeight;
+  let left = Math.min(Math.max(16, r.left + r.width / 2 - w / 2), window.innerWidth - w - 16);
+  let top = r.bottom + 8;
+  if (top + hgt > window.innerHeight - 16) top = Math.max(16, r.top - hgt - 8);  // pas de place dessous : au-dessus
+  bubble.style.left = left + "px";
+  bubble.style.top = top + "px";
+  openTip = { btn, bubble };
+}
+
+document.addEventListener("click", (e) => { if (openTip && !openTip.bubble.contains(e.target)) closeTip(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeTip(); });
+window.addEventListener("scroll", closeTip, true);
+window.addEventListener("resize", closeTip);
+initTips();
 
 let token = localStorage.getItem("bob_token") || null;
 let currentConversationId = null;
@@ -1208,9 +1395,9 @@ async function resendMfa() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mfa_pending_token: pendingMfaToken }),
     });
-    alert("Un nouveau code a été envoyé.");
+    toast("Un nouveau code a été envoyé.");
   } catch (e) {
-    alert("Échec de l'envoi, réessayez.");
+    toast("Échec de l'envoi, réessayez.", "error");
   }
 }
 
@@ -1233,7 +1420,7 @@ function enterApp() {
     history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
     showTab("conversations");
     openConversation(id).catch(() => {
-      alert("Cette conversation est introuvable dans ce compte. Vérifiez que vous êtes connecté au bon compte.");
+      bobAlert("Conversation introuvable", "Cette conversation est introuvable dans ce compte. Vérifiez que vous êtes connecté au bon compte.");
       loadConversations();
     });
     return;
@@ -1516,8 +1703,13 @@ async function setAppointmentOutcome(id, outcome) {
 }
 
 async function cancelAppointment(id, canNotify) {
-  if (!confirm("Annuler ce rendez-vous ?")) return;
-  const notify = canNotify && confirm("Prévenir le client sur WhatsApp ?");
+  const answer = await bobDialog({
+    title: "Annuler ce rendez-vous ?", confirmLabel: "Annuler le rendez-vous", cancelLabel: "Retour", danger: true,
+    message: canNotify ? "" : "Le client ne pourra pas être prévenu sur WhatsApp : il ne vous a pas écrit depuis plus de 20 h.",
+    fields: canNotify ? [{ name: "notify", type: "checkbox", label: "Prévenir le client sur WhatsApp", value: true }] : [],
+  });
+  if (answer === null) return;
+  const notify = canNotify && answer.notify;
   const msg = document.getElementById("appt-msg");
   try {
     const result = await api(`/api/v1/appointments/${id}/cancel`, {
@@ -1548,6 +1740,11 @@ function showTab(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.getElementById("topbar-title").textContent = activeBtn ? activeBtn.dataset.label : "Bob";
   document.getElementById("page-title").textContent = activeBtn ? activeBtn.dataset.label : "Bob";
+  // Lot 39 : l'explication de la page (s'il y en a une) s'ouvre avec l'ⓘ à côté du titre.
+  const pageTip = document.querySelector(`#tab-${name} > template.page-tip-src`);
+  closeTip();
+  document.querySelectorAll(".page-tip-btn").forEach((b) => b.classList.toggle("hidden", !pageTip));
+  document.querySelectorAll(".page-tip-bubble").forEach((bubble) => { bubble.innerHTML = pageTip ? pageTip.innerHTML : ""; });
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
@@ -1969,7 +2166,7 @@ async function sendCampaign() {
     msg.textContent = "Tous les champs sont requis.";
     return;
   }
-  if (!confirm("Envoyer cette campagne à tous les clients ayant consenti au marketing ?")) return;
+  if (!(await bobConfirm("Envoyer la campagne ?", "Elle part par email à tous les clients ayant accepté de recevoir vos offres. Un envoi ne peut pas être annulé.", { confirmLabel: "Envoyer" }))) return;
 
   try {
     const result = await api("/api/v1/campaigns/send", {
@@ -2225,7 +2422,7 @@ async function takeover() {
   try {
     await api(`/api/v1/conversations/${currentConversationId}/takeover`, { method: "POST" });
   } catch (e) {
-    alert("Impossible de prendre le contrôle : " + e.message);
+    toast("Impossible de prendre le contrôle : " + e.message, "error");
   }
   openConversation(currentConversationId);
 }
@@ -2234,7 +2431,7 @@ async function release() {
   try {
     await api(`/api/v1/conversations/${currentConversationId}/release`, { method: "POST" });
   } catch (e) {
-    alert("Impossible de rendre la conversation à l'IA : " + e.message);
+    toast("Impossible de rendre la conversation à Bob : " + e.message, "error");
   }
   openConversation(currentConversationId);
 }
@@ -2344,8 +2541,11 @@ async function uploadProductImage(productId) {
 }
 
 async function deleteProduct(productId) {
-  if (!confirm("Supprimer ce produit ? Il ne sera plus visible ni proposé par Bob (l'historique des commandes est conservé).")) return;
-  await api(`/api/v1/products/${productId}`, { method: "DELETE" });
+  if (!(await bobConfirm("Supprimer ce produit ?", "Il ne sera plus visible ni proposé par Bob. L'historique des commandes est conservé.", { confirmLabel: "Supprimer", danger: true }))) return;
+  try {
+    await api(`/api/v1/products/${productId}`, { method: "DELETE" });
+    toast("Produit supprimé.");
+  } catch (e) { toast(e.message, "error"); }
   loadProducts();
 }
 
@@ -2359,7 +2559,7 @@ async function exportXlsx() {
     a.download = "catalogue-bob.xlsx";
     a.click();
   } catch (e) {
-    alert(e.message);
+    toast(e.message, "error");
   }
 }
 
@@ -2414,8 +2614,11 @@ async function createQrCode() {
 }
 
 async function deleteQrCode(id) {
-  if (!confirm("Supprimer ce QR ? Il ne fonctionnera plus si déjà imprimé.")) return;
-  await api(`/api/v1/qr-codes/${id}`, { method: "DELETE" });
+  if (!(await bobConfirm("Supprimer ce QR code ?", "S'il est déjà imprimé, il ne fonctionnera plus.", { confirmLabel: "Supprimer", danger: true }))) return;
+  try {
+    await api(`/api/v1/qr-codes/${id}`, { method: "DELETE" });
+    toast("QR code supprimé.");
+  } catch (e) { toast(e.message, "error"); }
   loadQrCodes();
 }
 
@@ -2479,8 +2682,10 @@ function widgetSnippet(cp) {
 
 function copyText(text, label) {
   navigator.clipboard.writeText(text).then(
-    () => alert(label + " copié."),
-    () => prompt("Copiez manuellement :", text)
+    () => toast(label + " copié."),
+    () => bobDialog({ title: "Copiez manuellement", message: "La copie automatique n'est pas permise ici : sélectionnez le texte puis copiez-le.",
+                      fields: [{ name: "text", type: "textarea", label: label, value: text, readonly: true, rows: 4 }],
+                      confirmLabel: "Fermer", alertOnly: true })
   );
 }
 
@@ -2612,21 +2817,27 @@ function openLinkQr(id, withProduct) {
 }
 
 async function changeContactPointChannel(id, channel) {
-  try { await patchContactPoint(id, { channel }); } catch (e) { alert(e.message); }
+  try { await patchContactPoint(id, { channel }); toast("Canal enregistré."); } catch (e) { toast(e.message, "error"); }
 }
 
 async function editContactPointOwner(id) {
   const cp = allContactPoints.find((c) => c.id === id);
-  const email = prompt("Email du commercial (laissez vide pour retirer le commercial) :", cp && cp.owner_email ? cp.owner_email : "");
-  if (email === null) return;
-  let name = "";
-  if (email.trim()) {
-    name = prompt("Nom du commercial :", cp && cp.owner_name ? cp.owner_name : "");
-    if (name === null) return;
-  }
+  const answer = await bobDialog({
+    title: "Commercial de ce lien",
+    message: "Il reçoit les alertes de ses clients (transfert, rendez-vous). Laissez l'email vide pour retirer le commercial.",
+    confirmLabel: "Enregistrer",
+    fields: [
+      { name: "name", label: "Nom", value: cp && cp.owner_name ? cp.owner_name : "", maxlength: 80, placeholder: "Ex. Moussa" },
+      { name: "email", type: "email", label: "Email", value: cp && cp.owner_email ? cp.owner_email : "", maxlength: 255, placeholder: "VOTRE_EMAIL_ICI" },
+    ],
+    validate: (v) => (v.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim()) ? "Adresse email invalide." : null),
+  });
+  if (answer === null) return;
+  const email = answer.email.trim();
   try {
-    await patchContactPoint(id, { owner_email: email.trim(), owner_name: name.trim().slice(0, 80) });
-  } catch (e) { alert(e.message); }
+    await patchContactPoint(id, { owner_email: email, owner_name: email ? answer.name.trim().slice(0, 80) : "" });
+    toast(email ? "Commercial enregistré." : "Commercial retiré.");
+  } catch (e) { toast(e.message, "error"); }
 }
 
 function copyWidgetSnippet(id) {
@@ -2640,27 +2851,33 @@ async function patchContactPoint(id, changes) {
 }
 
 async function toggleContactPoint(id, active) {
-  if (!active && !confirm("Désactiver ce lien ? Il ne mènera plus vers WhatsApp et la bulle disparaîtra des sites.")) return;
-  try { await patchContactPoint(id, { active }); } catch (e) { alert(e.message); }
+  if (!active && !(await bobConfirm("Désactiver ce lien ?", "Il ne mènera plus vers WhatsApp et la bulle disparaîtra des sites.", { confirmLabel: "Désactiver", danger: true }))) return;
+  try { await patchContactPoint(id, { active }); toast(active ? "Lien réactivé." : "Lien désactivé."); } catch (e) { toast(e.message, "error"); }
 }
 
 async function editContactPointGreeting(id) {
   const cp = allContactPoints.find((c) => c.id === id);
-  const greeting = prompt("Message pré-rempli pour le client :", cp ? cp.greeting : "");
-  if (greeting === null || !greeting.trim()) return;
-  try { await patchContactPoint(id, { greeting: greeting.trim().slice(0, 300) }); } catch (e) { alert(e.message); }
+  const answer = await bobDialog({
+    title: "Message pré-rempli", message: "Le texte déjà écrit pour le client quand il ouvre WhatsApp par ce lien.",
+    confirmLabel: "Enregistrer",
+    fields: [{ name: "greeting", type: "textarea", label: "Message", value: cp ? cp.greeting : "", maxlength: 300, rows: 3 }],
+    validate: (v) => (v.greeting.trim() ? null : "Le message ne peut pas être vide."),
+  });
+  if (answer === null) return;
+  try { await patchContactPoint(id, { greeting: answer.greeting.trim().slice(0, 300) }); toast("Message enregistré."); } catch (e) { toast(e.message, "error"); }
 }
 
 async function archiveContactPoint(id) {
-  if (!confirm("Supprimer ce lien ? Il cessera de fonctionner partout où il a été partagé. Les clients déjà venus par ce lien restent dans votre CRM.")) return;
+  if (!(await bobConfirm("Supprimer ce lien ?", "Il cessera de fonctionner partout où il a été partagé. Les clients déjà venus par ce lien restent dans vos clients.", { confirmLabel: "Supprimer", danger: true }))) return;
   try {
     await api(`/api/v1/contact-points/${id}`, { method: "DELETE" });
+    toast("Lien supprimé.");
     loadContactPoints();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast(e.message, "error"); }
 }
 
 function copyQrLink(url) {
-  navigator.clipboard.writeText(url).then(() => alert("Lien copié : " + url));
+  copyText(url, "Lien");
 }
 
 function _loadImage(src, crossOrigin) {
@@ -2678,10 +2895,7 @@ async function shareQrImage(qrId) {
   if (!qr) return;
 
   if (!qr.product_image_url) {
-    alert(
-      "Ce produit n'a pas encore de photo, impossible de créer un visuel à partager.\n\n" +
-      "Ajoutez une photo à ce produit via l'import CSV (colonne IMAGE_URL), puis réessayez."
-    );
+    bobAlert("Pas encore de photo", "Ce produit n'a pas encore de photo : impossible de créer un visuel à partager.\n\nAjoutez une photo au produit (page Produits), puis réessayez.");
     return;
   }
 
@@ -2743,10 +2957,7 @@ async function shareQrImage(qrId) {
       a.click();
     }, "image/png");
   } catch (e) {
-    alert(
-      "Impossible de générer automatiquement l'image (la photo du produit ne l'autorise pas depuis ce navigateur).\n\n" +
-      "Vous pouvez faire une capture d'écran de la carte QR ci-dessus en attendant."
-    );
+    bobAlert("Image impossible à créer", "La photo du produit ne permet pas de créer l'image depuis ce navigateur.\n\nVous pouvez faire une capture d'écran de la carte QR en attendant.");
   }
 }
 
@@ -2829,7 +3040,7 @@ async function addComplement(productId) {
     });
     renderUpsellPanel(productId);
   } catch (e) {
-    alert(e.message);
+    toast(e.message, "error");
   }
 }
 
@@ -3026,7 +3237,9 @@ async function loadHandoffSettings() {
 async function saveHandoffSettings() {
   const msg = document.getElementById("handoff-msg");
   if (document.getElementById("handoff-outage").value === "CALLBACK" &&
-      !confirm("En cas de panne, chaque client recevra « Un conseiller va vous rappeler ». Vous vous engagez à rappeler chacun d'eux (vous recevrez un email par client). Confirmer ?")) return;
+      !(await bobConfirm("Rappeler les clients en cas de panne ?",
+        "En cas de panne de Bob, chaque client recevra « Un conseiller va vous rappeler ». Vous vous engagez à rappeler chacun d'eux (vous recevrez un email par client).",
+        { confirmLabel: "Je m'engage" }))) return;
   try {
     await api("/api/v1/tenants/me/handoff-settings", {
       method: "PUT",
@@ -3125,7 +3338,7 @@ async function loadIntegrationsStatus() {
 let metaLoginConfig = null;
 
 async function disconnectMetaCatalog() {
-  if (!confirm("Déconnecter le catalogue Facebook ? Vos produits restent dans Bob, mais ils ne seront plus mis à jour depuis Facebook.")) return;
+  if (!(await bobConfirm("Déconnecter le catalogue Facebook ?", "Vos produits restent dans Bob, mais ils ne seront plus mis à jour depuis Facebook.", { confirmLabel: "Déconnecter", danger: true }))) return;
   const msg = document.getElementById("meta-msg");
   try {
     await api("/api/v1/integrations/meta-catalog", { method: "DELETE" });
@@ -3356,8 +3569,11 @@ async function toggleKnowledgeActive(id, newActive) {
 }
 
 async function deleteKnowledgeEntry(id) {
-  if (!confirm("Supprimer définitivement cette entrée ?")) return;
-  await api(`/api/v1/knowledge/${id}`, { method: "DELETE" });
+  if (!(await bobConfirm("Supprimer cette entrée ?", "Bob ne pourra plus s'appuyer sur elle pour répondre. La suppression est définitive.", { confirmLabel: "Supprimer", danger: true }))) return;
+  try {
+    await api(`/api/v1/knowledge/${id}`, { method: "DELETE" });
+    toast("Entrée supprimée.");
+  } catch (e) { toast(e.message, "error"); }
   loadKnowledge();
 }
 
@@ -3397,35 +3613,43 @@ async function loadOrders() {
 }
 
 async function markOrderPaid(orderId) {
-  if (!confirm("Confirmez-vous avoir vérifié la preuve de paiement de ce client ? Cette action envoie le reçu et ne peut pas être annulée.")) return;
+  if (!(await bobConfirm("Confirmer le paiement ?", "Vous avez vérifié la preuve de paiement de ce client. Le reçu lui est envoyé, et cette action ne peut pas être annulée.", { confirmLabel: "Paiement reçu" }))) return;
   try {
     await api(`/api/v1/orders/${orderId}/mark-paid`, { method: "PUT" });
+    toast("Paiement confirmé. Le reçu a été envoyé au client.");
     loadOrders();
   } catch (e) {
-    alert(e.message);
+    toast(e.message, "error");
   }
 }
 
 async function cancelOrder(orderId) {
-  if (!confirm("Annuler cette commande ? Les articles seront remis en stock. Cette action est définitive.")) return;
-  const reason = prompt("Motif de l'annulation (facultatif, visible dans le journal) :", "");
-  if (reason === null) return;  // « Annuler » sur la saisie du motif = on renonce
-  const notify = confirm(
-    "Prévenir le client par WhatsApp ?\n\nOK = envoyer un message d'annulation\nAnnuler = ne rien envoyer\n\n" +
-    "(WhatsApp refuse ce message si le client n'a pas écrit depuis plus de 24 h.)"
-  );
+  // Lot 39 : une seule fenêtre (avant : confirmation, puis motif, puis « prévenir le client ? »).
+  const answer = await bobDialog({
+    title: "Annuler cette commande ?",
+    message: "Les articles seront remis en stock. Cette action est définitive.",
+    confirmLabel: "Annuler la commande", cancelLabel: "Retour", danger: true,
+    fields: [
+      { name: "reason", label: "Motif (facultatif, visible dans le journal)", maxlength: 300 },
+      { name: "notify", type: "checkbox", value: false,
+        label: "Prévenir le client sur WhatsApp (refusé par WhatsApp s'il n'a pas écrit depuis plus de 24 h)" },
+    ],
+  });
+  if (answer === null) return;
+  const reason = answer.reason;
+  const notify = answer.notify;
   try {
     const r = await api(`/api/v1/orders/${orderId}/cancel`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason: reason.trim() || null, notify_customer: notify }),
     });
-    if (r.customer_notified === true) alert("Commande annulée. Le client a été prévenu.");
-    else if (r.customer_notified === false) alert("Commande annulée. ⚠️ Le message au client n'a pas pu être envoyé (il n'a probablement pas écrit depuis plus de 24 h) : prévenez-le par un autre moyen.");
-    else alert("Commande annulée. Les articles ont été remis en stock.");
+    if (r.customer_notified === true) toast("Commande annulée. Le client a été prévenu.");
+    else if (r.customer_notified === false) toast("Commande annulée, mais le message au client n'a pas pu être envoyé (il n'a probablement pas écrit depuis plus de 24 h) : prévenez-le par un autre moyen.", "error");
+    else toast("Commande annulée. Les articles ont été remis en stock.");
     loadOrders();
   } catch (e) {
-    alert("Annulation impossible : " + e.message);
+    toast("Annulation impossible : " + e.message, "error");
   }
 }
 
@@ -3538,7 +3762,7 @@ async function installApp() {
 }
 
 async function revokeAllSessions() {
-  if (!confirm("Déconnecter tous les appareils, y compris celui-ci ?")) return;
+  if (!(await bobConfirm("Déconnecter tous vos appareils ?", "Y compris celui-ci : il faudra vous reconnecter partout, et les notifications seront coupées sur chaque appareil.", { confirmLabel: "Tout déconnecter", danger: true }))) return;
   try {
     await api("/api/v1/auth/sessions/revoke-all", { method: "POST" });
   } catch (e) { /* déjà déconnecté */ }
@@ -3780,7 +4004,7 @@ async function saveDisplayNumber() {
 
 function connectWhatsApp() {
   if (typeof FB === "undefined") {
-    alert("Le SDK Facebook n'est pas encore chargé, réessayez dans quelques secondes.");
+    toast("Facebook n'est pas encore chargé, réessayez dans quelques secondes.", "info");
     return;
   }
   fetch(API_BASE + "/api/v1/whatsapp/embedded-signup/config")
@@ -3791,7 +4015,7 @@ function connectWhatsApp() {
           if (response.authResponse && response.authResponse.code) {
             finishEmbeddedSignup(response.authResponse.code);
           } else {
-            alert("Connexion WhatsApp annulée ou refusée.");
+            toast("Connexion WhatsApp annulée ou refusée.", "info");
           }
         },
         {
@@ -3806,7 +4030,7 @@ function connectWhatsApp() {
 
 async function finishEmbeddedSignup(code) {
   if (!waSessionInfo || !waSessionInfo.waba_id || !waSessionInfo.phone_number_id) {
-    alert("Informations WhatsApp incomplètes reçues de Meta, réessayez.");
+    toast("Informations WhatsApp incomplètes reçues de Meta, réessayez.", "error");
     return;
   }
   try {
@@ -3820,10 +4044,10 @@ async function finishEmbeddedSignup(code) {
         business_id: waSessionInfo.business_id || null,
       }),
     });
-    alert("WhatsApp connecté avec succès !");
+    toast("WhatsApp connecté avec succès !");
     loadWhatsAppStatus();
   } catch (e) {
-    alert("Erreur lors de la connexion WhatsApp : " + e.message);
+    toast("Erreur lors de la connexion WhatsApp : " + e.message, "error");
   }
 }
 </script>

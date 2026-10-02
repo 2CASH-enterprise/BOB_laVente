@@ -188,7 +188,7 @@ def test_catalog_can_be_disconnected_after_confirmation():
     section = _section("integrations")
     assert 'id="meta-disconnect-btn"' in section
     fn = re.search(r"async function disconnectMetaCatalog\(\) \{(.*?)\n\}", HTML, re.S).group(1)
-    assert fn.strip().startswith("if (!confirm(") and 'method: "DELETE"' in fn
+    assert fn.strip().startswith("if (!(await bobConfirm(") and 'method: "DELETE"' in fn  # lot 39 : fenêtre Bob
     assert 'getElementById("meta-disconnect-btn").classList.toggle("hidden", !metaConnected)' in HTML
 
 
