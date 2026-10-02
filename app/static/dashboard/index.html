@@ -245,6 +245,26 @@
   .onboarding-step .step-hint { font-size: 13px; color: var(--muted); }
   .onboarding-step .action { margin-left: auto; flex-shrink: 0; }
   button.action.action-sm { margin-left: auto; flex-shrink: 0; min-height: 32px; padding: 6px 12px; }
+  /* Lot 48 — choix de fichier aux couleurs de Bob (le champ natif reste dessous, accessible au clavier) */
+  .file-drop { position: relative; display: flex; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 12px;
+    border: 1.5px dashed var(--border-strong); border-radius: var(--radius); background: var(--bg); cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease; }
+  .file-drop:hover, .file-drop.dragging { border-color: var(--accent); background: var(--accent-soft); }
+  .file-drop:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .file-drop.has-file { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+  .file-drop input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .file-drop .file-icon { flex-shrink: 0; width: 38px; height: 38px; border-radius: var(--radius-sm); display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); }
+  .file-drop.has-file .file-icon { background: var(--accent-fill); color: var(--on-accent); }
+  .file-drop .file-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .file-drop .file-title { font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-drop .file-hint { color: var(--muted); font-size: 12px; }
+  .file-pick { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 8px 14px; max-width: 260px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--panel); color: var(--text);
+    font-size: 13px; font-weight: 600; cursor: pointer; }
+  .file-pick:hover, .file-pick:focus-within { background: var(--accent-soft); border-color: var(--accent-soft-hover); }
+  .file-pick input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .file-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
   /* Lot 41 — inscription en étapes */
   #signup-screen { max-width: 440px; }
@@ -712,7 +732,14 @@
         </div>
         <div class="card" style="flex: 1; min-width: 280px;">
           <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span></span></div>
-          <input type="file" id="csv-file-input" accept=".csv" style="margin-bottom: 10px;">
+          <label class="file-drop" id="csv-drop">
+            <span class="file-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
+            <span class="file-text">
+              <span class="file-title" id="csv-file-name">Choisir un fichier CSV</span>
+              <span class="file-hint" id="csv-file-hint">ou glissez-le ici · fichier .csv</span>
+            </span>
+            <input type="file" id="csv-file-input" accept=".csv,text/csv" aria-label="Choisir un fichier CSV" onchange="showChosenCsv()">
+          </label>
           <button class="action" onclick="importCsv()">Importer</button>
           <button class="action secondary" onclick="exportXlsx()">Exporter en Excel</button>
           <div id="csv-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
@@ -2059,8 +2086,8 @@ function renderHome(h) {
   const k = h.kpis;
   const hello = h.first_name ? `Bonjour ${esc(h.first_name)} 👋` : "Bonjour 👋";
   const waiting = h.waiting_humans > 0
-    ? `<button class="pill tone-danger" onclick="document.getElementById('home-todo').scrollIntoView({ behavior: 'smooth' })">${h.waiting_humans} client${h.waiting_humans > 1 ? "s t'attendent" : " t'attend"}</button>`
-    : `<span class="pill tone-success">Aucun client ne t'attend</span>`;
+    ? `<button class="pill tone-danger" onclick="document.getElementById('home-todo').scrollIntoView({ behavior: 'smooth' })">${h.waiting_humans} client${h.waiting_humans > 1 ? "s vous attendent" : " vous attend"}</button>`
+    : `<span class="pill tone-success">Aucun client ne vous attend</span>`;
 
   const kpi = (icon, tone, label, value, note) => `
     <div class="card">
@@ -2107,7 +2134,7 @@ function renderHome(h) {
         <button class="action" onclick="${todoAction(t)}">${esc(t.action)}</button>
       </div>`).join("")
       + (h.todo.length > shown.length ? `<p class="card-sub" style="margin-top: 10px;">Et ${h.todo.length - shown.length} autre${h.todo.length - shown.length > 1 ? "s" : ""} : voir les conversations et ${dealer ? "les rendez-vous" : "les commandes"}.</p>` : "")
-    : `<p class="empty-state">Rien à traiter pour l'instant : Bob s'occupe de tes clients.</p>`;
+    : `<p class="empty-state">Rien à traiter pour l'instant : Bob s'occupe de vos clients.</p>`;
 
   const top = Math.max(...h.funnel.map((f) => f.value), 1);
   const funnelColors = ["var(--bar-soft)", "var(--bar-soft)", "var(--accent-light)", "var(--accent-fill)"];
@@ -2140,7 +2167,7 @@ function renderHome(h) {
 
   document.getElementById("home-root").innerHTML = `
     <div class="home-hero">
-      <div><h1>${hello}</h1><p>Voici ce que Bob a fait pour toi ces ${h.period_days} derniers jours.</p></div>
+      <div><h1>${hello}</h1><p>Voici ce que Bob a fait pour vous ces ${h.period_days} derniers jours.</p></div>
       <div class="pills"><span class="pill tone-accent">${h.ai_messages} message${h.ai_messages > 1 ? "s" : ""} traité${h.ai_messages > 1 ? "s" : ""} par Bob</span>${waiting}</div>
     </div>
     <div id="onboarding-card"></div>
@@ -2748,6 +2775,7 @@ let productsLoaded = false;
 let allQrCodes = [];
 
 async function loadProducts() {
+  initCsvDrop();  // lot 48
   const rows = document.getElementById("product-rows");
   rows.innerHTML = "<tr><td class='loading-text' colspan='7'>Chargement</td></tr>";
   allProducts = await api("/api/v1/products");
@@ -2790,7 +2818,11 @@ function renderEditPanel(productId) {
     <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${esc(p.description || "")}</textarea>
     ${currentBusinessType === "CAR_DEALERSHIP" || p.vehicle ? `<div style="max-width: 620px; margin-bottom: 10px;">${vehicleFields(`edit-${p.id}`, p.vehicle)}</div>` : ""}
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-      <input type="file" id="edit-image-${p.id}" accept="image/png,image/jpeg,image/webp" style="max-width: 240px;">
+      <label class="file-pick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 16l5-5 4 4 3-3 4 4M15 9h.01"/></svg>
+        <span id="edit-image-name-${p.id}">Choisir une photo</span>
+        <input type="file" id="edit-image-${p.id}" accept="image/png,image/jpeg,image/webp" aria-label="Choisir une photo"
+          onchange="document.getElementById('edit-image-name-${p.id}').textContent = this.files[0] ? this.files[0].name : 'Choisir une photo'">
+      </label>
       <button class="action secondary" onclick="uploadProductImage('${p.id}')">Changer la photo</button>
       <label style="font-size: 13px; display: flex; align-items: center; gap: 6px;">
         <input type="checkbox" id="edit-active-${p.id}" ${p.active ? "checked" : ""}> Actif
@@ -3385,6 +3417,42 @@ async function createProduct() {
   }
 }
 
+// Lot 48 — nom et taille du fichier choisi, glisser-déposer.
+function showChosenCsv() {
+  const input = document.getElementById("csv-file-input");
+  const file = input.files[0];
+  document.getElementById("csv-drop").classList.toggle("has-file", !!file);
+  document.getElementById("csv-file-name").textContent = file ? file.name : "Choisir un fichier CSV";
+  document.getElementById("csv-file-hint").textContent = file
+    ? `${file.size < 1024 ? file.size + " o" : Math.max(1, Math.round(file.size / 1024)) + " Ko"} · cliquez pour en choisir un autre`
+    : "ou glissez-le ici · fichier .csv";
+  document.getElementById("csv-import-msg").textContent = "";
+}
+
+function initCsvDrop() {
+  const zone = document.getElementById("csv-drop");
+  if (!zone || zone.dataset.ready) return;
+  zone.dataset.ready = "1";
+  ["dragenter", "dragover"].forEach((type) => zone.addEventListener(type, (e) => { e.preventDefault(); zone.classList.add("dragging"); }));
+  ["dragleave", "dragend"].forEach((type) => zone.addEventListener(type, () => zone.classList.remove("dragging")));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragging");
+    const file = e.dataTransfer && e.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.csv$/i.test(file.name)) {
+      const msg = document.getElementById("csv-import-msg");
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Seuls les fichiers .csv peuvent être importés.";
+      return;
+    }
+    const data = new DataTransfer();
+    data.items.add(file);
+    document.getElementById("csv-file-input").files = data.files;
+    showChosenCsv();
+  });
+}
+
 async function importCsv() {
   const msg = document.getElementById("csv-import-msg");
   const fileInput = document.getElementById("csv-file-input");
@@ -3398,6 +3466,8 @@ async function importCsv() {
   formData.append("file", fileInput.files[0]);
   try {
     const result = await api("/api/v1/catalog/import-csv", { method: "POST", body: formData });
+    fileInput.value = "";  // lot 48 : prêt pour le fichier suivant
+    showChosenCsv();
     msg.style.color = "var(--success)";
     msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour, ${result.failed} échecs.`;
     loadProducts();
