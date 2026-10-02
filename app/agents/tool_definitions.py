@@ -261,6 +261,29 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        # Lot 43 — fiche prospect (concession) : remplie au fil de la conversation, avec ou sans rendez-vous.
+        "name": "update_prospect_profile",
+        "description": (
+            "Enregistre dans la fiche du prospect ce qu'il vient de dire sur son projet d'achat. Appelle-le dès "
+            "qu'une information NOUVELLE et concrète apparaît, sans rien deviner ni compléter. N'envoie que les "
+            "champs que le client a réellement donnés. Ne remplace pas request_appointment."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "need": {"type": "string", "description": "Type de véhicule et usage, avec ses mots (ex. « SUV familial pour la ville »)"},
+                "condition": {"type": "string", "enum": ["NEUF", "OCCASION", "INDIFFERENT"],
+                              "description": "Neuf ou occasion, si le client l'a dit"},
+                "budget": {"type": "string", "description": "Budget, avec ses mots (ex. « 15 à 20 millions »)"},
+                "payment": {"type": "string", "enum": ["COMPTANT", "FINANCEMENT", "A_DEFINIR"],
+                            "description": "Paiement comptant ou financement, si le client l'a dit"},
+                "timeline": {"type": "string", "enum": ["MOINS_1_MOIS", "UN_A_3_MOIS", "PLUS_3_MOIS", "NE_SAIT_PAS"],
+                             "description": "Quand il compte acheter : sous 1 mois, dans 1 à 3 mois, plus de 3 mois, ou il ne sait pas"},
+                "trade_in": {"type": "string", "description": "Véhicule à reprendre : marque, modèle, année, kilométrage"},
+            },
+        },
+    },
+    {
         # Lot 35 — concession : le prospect retrouve, déplace ou annule SON rendez-vous.
         "name": "get_my_appointments",
         "description": "Liste les rendez-vous à venir de CE client (identifiant, type, véhicule, date). À appeler dès qu'il parle de déplacer, annuler ou vérifier son rendez-vous.",

@@ -447,6 +447,13 @@ class ToolExecutor:
         need, budget, trade_in = _text("need", 300), _text("budget", 100), _text("trade_in", 300)
         financing = tool_input.get("financing_interest")
         financing = financing if isinstance(financing, bool) else None
+        # Lot 43 — la fiche prospect garde aussi ces informations (même sans autre rendez-vous ensuite).
+        from app.services import prospect as prospect_service
+
+        await prospect_service.update_profile(self.db, self.tenant_id, self.customer_id, {
+            "need": need, "budget": budget, "trade_in": trade_in,
+            "payment": None if financing is None else ("FINANCEMENT" if financing else None),
+        })
 
         appointment = AppointmentRequest(
             tenant_id=self.tenant_id,
@@ -763,6 +770,19 @@ class ToolExecutor:
         if tenant is None or not tenant.payment_link:
             return {"error": "Aucun lien de paiement configuré par cette entreprise"}
         return {"payment_link": tenant.payment_link}
+
+    async def _tool_update_prospect_profile(self, tool_input: dict) -> dict:
+        """Lot 43 (concession) : fiche prospect remplie au fil de la conversation."""
+        from app.services import prospect
+
+        fields = {k: tool_input.get(k) for k in ("need", "condition", "budget", "payment", "timeline", "trade_in")}
+        if all(v is None for v in fields.values()):
+            return {"error": "Aucune information à enregistrer."}
+        _, rejected = await prospect.update_profile(self.db, self.tenant_id, self.customer_id, fields)
+        if rejected:
+            return {"status": "partially_saved", "rejected": rejected,
+                    "instruction": "Ces valeurs n'ont pas été comprises : n'insiste pas, continue la conversation."}
+        return {"status": "saved", "instruction": "Continue naturellement ; ne récite pas la fiche au client."}
 
     async def _tool_update_customer_profile(self, tool_input: dict) -> dict:
         from app.models.customer import Customer

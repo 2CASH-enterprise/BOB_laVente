@@ -73,9 +73,11 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
             try:
                 if due.staff:
                     conversation = await db.get(Conversation, appointment.conversation_id)
+                    from app.services.prospect import build_fiche
+
                     subject, body = appointment_service.staff_reminder_email(
                         appointment, customer_display_name(customer) if customer else "Client", zone,
-                        conversation_link(conversation),
+                        conversation_link(conversation), await build_fiche(db, tenant, customer, now),
                     )
                     # Lot 27 : la boutique ET le commercial qui a amené le client. Le rappel est
                     # marqué envoyé dès que la boutique l'a reçu (le commercial est un plus).

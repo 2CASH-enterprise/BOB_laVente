@@ -385,7 +385,8 @@ async def test_reminder_task_emails_staff_and_customer_once():
     assert second == {"staff": 0, "customer": 0, "whatsapp": 0, "followups": 0, "failed": 0}
     staff = [m for m in outbox if m["to"] == "concession@example.com"]
     assert len(staff) == 2 and staff[0]["subject"].startswith("Rappel : rendez-vous demain")
-    assert "samedi 3 octobre à 10 h" in staff[0]["body"] and "Besoin : familiale" in staff[0]["body"]
+    assert "samedi 3 octobre à 10 h" in staff[0]["body"] and "Véhicule recherché : familiale" in staff[0]["body"]
+    assert "Fiche prospect" in staff[0]["body"] and "Score commercial : " in staff[0]["body"]  # lot 43
     [customer_mail] = [m for m in outbox if m["to"] == "client@example.com"]
     assert "Rappel de votre rendez-vous chez Auto Plus" == customer_mail["subject"]
     await engine.dispose()

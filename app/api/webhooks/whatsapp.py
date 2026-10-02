@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.classifier import MessageClassifier, get_message_classifier
 from app.services import notifications  # lot 37b
+from app.services.prospect import build_fiche, hot_alert_emails  # lot 43
 from app.agents.dependency import get_llm_client
 from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import FAILURE_LOOP, FAILURE_OUTAGE, generate_ai_reply_detailed
@@ -444,7 +445,7 @@ async def receive_webhook(
         else:
             reason = transfer.content  # négociation : le texte complet (offre, plancher) est utile
 
-        subject, body = build_handoff_alert(customer, conversation, reason)
+        subject, body = build_handoff_alert(customer, conversation, reason, await build_fiche(db, tenant, customer))
         handoff_emails = alert_emails(tenant.email, await commercial_for_customer(db, customer), subject, body)
         conversation.human_alert_sent_at = datetime.now(timezone.utc)
 
@@ -461,6 +462,7 @@ async def receive_webhook(
         for appointment in booking_outbox:
             subject, body = appointment_service.booking_alert_email(
                 appointment, customer_display_name(customer), zone, conversation_link(conversation),
+                await build_fiche(db, tenant, customer),
             )
             booking_emails += alert_emails(tenant.email, commercial, subject, body)
             booking_messages.append(appointment_service.confirmation_message(appointment, tenant.name, zone))
@@ -479,6 +481,8 @@ async def receive_webhook(
 
     # Lot 40 — email donné pendant la réponse de Bob (outil record_customer_email) : même récapitulatif.
     recap_emails = [r for r in [await recap_to_send(db, tenant, customer)] if r is not None]
+    # Lot 43 — concession : prospect devenu chaud sans rendez-vous → fiche au commercial (une fois).
+    recap_emails += await hot_alert_emails(db, tenant, customer, conversation)
     await db.commit()
     for email in handoff_emails + outage_emails + booking_emails + recap_emails:
         background_tasks.add_task(send_email, **email)

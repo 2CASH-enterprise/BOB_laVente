@@ -1688,8 +1688,24 @@ async function chooseBusinessType(code) {
 // ---- Lot 25 : rendez-vous (concession) ----
 let currentAppointmentView = "pending";
 
+// ---- Lot 43 : fiche prospect et score (concession) ----
+const SCORE_TONES = { VENDU: "tone-success", CHAUD: "tone-danger", TIEDE: "tone-warning", FROID: "tone-info" };
+
+function scorePill(p) {
+  return `<span class="pill ${SCORE_TONES[p.score] || "tone-info"}" title="${esc(p.reasons.join(", "))}">${p.score === "CHAUD" ? "🔥 " : ""}${esc(p.score_label)}</span>`;
+}
+
+function ficheItems(p, skip = []) {
+  return p.lines
+    .map((line) => line.split(" : "))
+    .filter(([label]) => !skip.includes(label))
+    .map(([label, ...rest]) => `<li><b>${esc(label)} :</b> ${esc(rest.join(" : "))}</li>`)
+    .join("");
+}
+
 function appointmentCard(a, view) {
-  const qualif = [
+  const qualif = a.prospect ? ficheItems(a.prospect, ["Prospect", "Téléphone", "Véhicule visé"]) + (a.notes ? `<li><b>Notes :</b> ${esc(a.notes)}</li>` : "")
+    + (a.referred_by ? `<li><b>Amené par :</b> ${esc(a.referred_by)}</li>` : "") : [
     a.need ? `<li><b>Besoin :</b> ${esc(a.need)}</li>` : "",
     a.budget ? `<li><b>Budget :</b> ${esc(a.budget)}</li>` : "",
     a.trade_in ? `<li><b>Reprise :</b> ${esc(a.trade_in)}</li>` : "",
@@ -1697,6 +1713,7 @@ function appointmentCard(a, view) {
     a.notes ? `<li><b>Notes :</b> ${esc(a.notes)}</li>` : "",
     a.referred_by ? `<li><b>Amené par :</b> ${esc(a.referred_by)}</li>` : "",
   ].join("");
+  const scoreBadge = a.prospect ? " " + scorePill(a.prospect) : "";
   const title = `${esc(a.kind_label)}${a.vehicle ? " · " + esc(a.vehicle) : ""}`;
   const when = a.scheduled_label ? `<span class="pill tone-info">${esc(a.scheduled_label)}</span>` : "";
   const byBob = a.confirmed_by_bob && a.status === "CONFIRMED" ? ` <span class="pill tone-success">Confirmé par Bob</span>` : "";
@@ -1727,7 +1744,7 @@ function appointmentCard(a, view) {
   }
   return `
     <div class="appt-card">
-      <div class="appt-head"><strong>${title}</strong><span>${status}${change}${waReminder}${outcomePill}</span></div>
+      <div class="appt-head"><strong>${title}</strong><span>${status}${change}${waReminder}${outcomePill}${scoreBadge}</span></div>
       <p class="appt-meta">${esc(a.customer)} · disponibilités données : « ${esc(a.availability)} » · demandé le ${new Date(a.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</p>
       ${qualif ? `<ul class="appt-qualif">${qualif}</ul>` : ""}
       ${actions}${followup}${outcomeButtons}
@@ -2495,6 +2512,13 @@ async function openCustomer(id) {
       <div class="card"><div class="value">${c.products_viewed_count}</div><div class="label">Produits consultés</div></div>
       <div class="card"><div class="value">${esc(c.acquisition_channel_label || acquisitionLabel(c.acquisition_source))}</div><div class="label">Source${c.acquisition_detail ? " : " + esc(c.acquisition_detail) : ""}</div></div>
     </div>
+
+    ${c.prospect ? `
+    <div class="card" style="margin-top: 14px;">
+      <div class="label" style="font-weight: 600; margin-bottom: 6px;">Fiche prospect ${scorePill(c.prospect)}</div>
+      <p style="font-size: 12px; color: var(--muted); margin: 0 0 8px;">Score : ${esc(c.prospect.reasons.join(", "))}.</p>
+      <ul class="appt-qualif" style="margin: 0;">${ficheItems(c.prospect, ["Prospect", "Téléphone", "Score commercial"])}</ul>
+    </div>` : ""}
 
     ${prefLines.length ? `
     <div class="card" style="margin-top: 14px;">

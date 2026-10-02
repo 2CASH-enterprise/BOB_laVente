@@ -35,6 +35,7 @@ SALES_TOOLS = frozenset({
 DEALERSHIP_TOOLS = frozenset({
     "request_appointment", "get_available_slots",
     "get_my_appointments", "reschedule_my_appointment", "cancel_my_appointment",  # lot 35
+    "update_prospect_profile",  # lot 43 : fiche prospect
 })
 
 

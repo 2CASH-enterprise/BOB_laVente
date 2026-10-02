@@ -86,7 +86,11 @@ def conversation_link(conversation: Conversation) -> str:
     return f"{base}/dashboard/?conversation={conversation.id}"
 
 
-def build_handoff_alert(customer: Customer, conversation: Conversation, reason: str | None) -> tuple[str, str]:
+def build_handoff_alert(customer: Customer, conversation: Conversation, reason: str | None,
+                        fiche: dict | None = None) -> tuple[str, str]:
+    from app.services.prospect import fiche_block
+
+    block = fiche_block(fiche)  # lot 43 : fiche prospect (concession), vide sinon
     name = customer_display_name(customer)
     if reason and reason.startswith("Rendez-vous à confirmer"):
         # Lot 24 — concession : la demande de rendez-vous est l'information utile, en tête.
@@ -99,7 +103,7 @@ def build_handoff_alert(customer: Customer, conversation: Conversation, reason: 
             f"Demande : {reason}\n\n"
             "Vous pouvez lui répondre directement depuis la conversation, puis la rendre à Bob "
             "(bouton « Rendre à l'IA »).\n\n"
-            f"Ouvrir la conversation : {conversation_link(conversation)}",
+            f"{block}Ouvrir la conversation : {conversation_link(conversation)}",
         )
     subject = f"Un client attend votre réponse : {name}"
     body = (
@@ -109,7 +113,7 @@ def build_handoff_alert(customer: Customer, conversation: Conversation, reason: 
         f"Raison : {reason or 'Non précisée'}\n\n"
         "Bob ne répondra plus à ce client tant que vous ne lui aurez pas rendu la conversation "
         "(bouton « Rendre à l'IA »).\n\n"
-        f"Ouvrir la conversation : {conversation_link(conversation)}"
+        f"{block}Ouvrir la conversation : {conversation_link(conversation)}"
     )
     return subject, body
 

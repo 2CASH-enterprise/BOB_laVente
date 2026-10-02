@@ -25,6 +25,7 @@ from app.models.conversation import Conversation
 from app.models.contact_point import ContactPoint
 from app.models.customer import Customer
 from app.models.tenant import Tenant
+from app.services.prospect import build_fiche  # lot 43
 from app.services import appointment_service
 from app.services.audit import log_audit_event
 from app.services.handoff_service import customer_display_name
@@ -61,6 +62,7 @@ class AppointmentOut(BaseModel):
     confirmed_by_bob: bool = False  # lot 29 : créneau choisi par le client et réservé par Bob
     referred_by: str | None = None  # lot 27 : commercial dont le lien a amené le client
     can_notify: bool  # le client a écrit il y a moins de 20 h : un message WhatsApp peut partir
+    prospect: dict | None = None  # lot 43 : fiche prospect et score (Chaud / Tiède / Froid)
 
 
 class AppointmentList(BaseModel):
@@ -121,7 +123,14 @@ async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: dat
                          else "Déplacé par le client" if appointment.rescheduled_by == "CLIENT" else None),
         whatsapp_reminder_sent_at=appointment.customer_whatsapp_reminder_sent_at,
         can_notify=closes_at is not None and now < closes_at,
+        prospect=_public_fiche(await build_fiche(db, await db.get(Tenant, appointment.tenant_id), customer, now)),
     )
+
+
+def _public_fiche(fiche: dict | None) -> dict | None:
+    if not fiche:
+        return None
+    return {k: fiche[k] for k in ("score", "score_label", "reasons", "lines")}
 
 
 async def _get(db: AsyncSession, tenant_id, appointment_id: UUID) -> AppointmentRequest:

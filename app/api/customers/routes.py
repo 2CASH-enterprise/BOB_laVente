@@ -31,7 +31,20 @@ async def get_customer(
     detail = await get_customer_detail(db, current_user.tenant_id, customer_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Client introuvable")
-    return CustomerDetail(**detail)
+    return CustomerDetail(**detail, prospect=await _prospect(db, current_user.tenant_id, customer_id))
+
+
+async def _prospect(db, tenant_id, customer_id) -> dict | None:
+    """Lot 43 — fiche prospect et score (concession), pour ce client de CETTE boutique."""
+    from app.models.customer import Customer
+    from app.models.tenant import Tenant
+    from app.services.prospect import build_fiche
+
+    customer = await db.get(Customer, customer_id)
+    if customer is None or customer.tenant_id != tenant_id:
+        return None
+    fiche = await build_fiche(db, await db.get(Tenant, tenant_id), customer)
+    return {k: fiche[k] for k in ("score", "score_label", "reasons", "lines")} if fiche else None
 
 
 @router.put("/{customer_id}", response_model=CustomerDetail, dependencies=[Depends(require_role("AGENT"))])
@@ -76,4 +89,4 @@ async def update_customer(
     await db.commit()
 
     detail = await get_customer_detail(db, current_user.tenant_id, customer_id)
-    return CustomerDetail(**detail)
+    return CustomerDetail(**detail, prospect=await _prospect(db, current_user.tenant_id, customer_id))

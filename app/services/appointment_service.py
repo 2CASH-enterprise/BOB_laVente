@@ -98,7 +98,8 @@ def staff_change_email(appointment: AppointmentRequest, customer_name: str, zone
     return subject, body
 
 
-def staff_reminder_email(appointment: AppointmentRequest, customer_name: str, zone, link: str) -> tuple[str, str]:
+def staff_reminder_email(appointment: AppointmentRequest, customer_name: str, zone, link: str,
+                         fiche: dict | None = None) -> tuple[str, str]:
     when = format_local(appointment.scheduled_at, zone)
     lines = [
         "Bonjour,",
@@ -107,13 +108,19 @@ def staff_reminder_email(appointment: AppointmentRequest, customer_name: str, zo
         "",
     ]
     qualification = qualification_lines(appointment)
-    if qualification:
+    if fiche:  # lot 43 : la fiche prospect complète, avec son score
+        from app.services.prospect import fiche_block
+
+        lines.append(fiche_block(fiche).rstrip("\n"))
+        lines.append("")
+    elif qualification:
         lines += ["Ce que Bob a appris :", *[f"- {q}" for q in qualification], ""]
     lines.append(f"Ouvrir la conversation : {link}")
     return f"Rappel : rendez-vous demain avec {customer_name}", "\n".join(lines)
 
 
-def booking_alert_email(appointment: AppointmentRequest, customer_name: str, zone, link: str) -> tuple[str, str]:
+def booking_alert_email(appointment: AppointmentRequest, customer_name: str, zone, link: str,
+                        fiche: dict | None = None) -> tuple[str, str]:
     """Lot 29 — Bob a réservé un créneau : la boutique (et le commercial) sont prévenus."""
     when = format_local(appointment.scheduled_at, zone)
     lines = [
@@ -125,7 +132,12 @@ def booking_alert_email(appointment: AppointmentRequest, customer_name: str, zon
         "",
     ]
     qualification = qualification_lines(appointment)
-    if qualification:
+    if fiche:  # lot 43
+        from app.services.prospect import fiche_block
+
+        lines.append(fiche_block(fiche).rstrip("\n"))
+        lines.append("")
+    elif qualification:
         lines += ["Ce que Bob a appris :", *[f"- {q}" for q in qualification], ""]
     lines.append(f"Ouvrir la conversation : {link}")
     return f"Nouveau rendez-vous : {customer_name}, {when}", "\n".join(lines)
