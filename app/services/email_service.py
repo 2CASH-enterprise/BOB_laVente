@@ -12,6 +12,7 @@ Expéditeur :
 import logging
 import re
 import smtplib
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, parseaddr
 
@@ -57,11 +58,21 @@ def build_message(
     from_name: str | None = None,
     reply_to: str | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> MIMEText:
+) -> MIMEMultipart:
+    """
+    Lot 40 — deux versions dans le même email : le texte (lu par les messageries simples, et
+    version de secours) et le HTML aux couleurs de Bob ou de la boutique, construit à partir du
+    texte (app/services/email_layout.py). Email de la boutique à son client : from_name renseigné.
+    """
+    from app.services.email_layout import render_html
+
     settings = get_settings()
     display_name = _sanitize_display_name(from_name if from_name is not None else settings.smtp_from_name)
 
-    msg = MIMEText(body, _charset="utf-8")
+    msg = MIMEMultipart("alternative")
+    msg.attach(MIMEText(body, "plain", _charset="utf-8"))
+    for_customer = from_name is not None
+    msg.attach(MIMEText(render_html(subject, body, display_name or "Bob", for_customer), "html", _charset="utf-8"))
     msg["Subject"] = subject
     msg["From"] = formataddr((display_name, settings.smtp_from_email), charset="utf-8") if display_name else settings.smtp_from_email
     msg["To"] = to

@@ -131,13 +131,18 @@ def booking_alert_email(appointment: AppointmentRequest, customer_name: str, zon
     return f"Nouveau rendez-vous : {customer_name}, {when}", "\n".join(lines)
 
 
-def customer_reminder_email(appointment: AppointmentRequest, shop_name: str, zone) -> tuple[str, str]:
+def customer_reminder_email(appointment: AppointmentRequest, shop_name: str, zone, powered_by: bool = False) -> tuple[str, str]:
+    from app.services.email_layout import customer_footer
+
     when = format_local(appointment.scheduled_at, zone)
     body = (
         "Bonjour,\n\n"
-        f"Nous vous rappelons votre rendez-vous chez {shop_name} : {subject_phrase(appointment)}, {when}.\n\n"
-        "Un empêchement ? Écrivez-nous simplement sur WhatsApp.\n\n"
+        f"Nous vous rappelons votre rendez-vous chez {shop_name} :\n\n"
+        f"Rendez-vous : {subject_phrase(appointment)}\n"
+        f"Date : {when}\n\n"
+        "Un empêchement ? Écrivez-nous simplement sur WhatsApp ou répondez à cet email.\n\n"
         f"À demain,\n{shop_name}"
+        + customer_footer(shop_name, powered_by)
     )
     return f"Rappel de votre rendez-vous chez {shop_name}", body
 

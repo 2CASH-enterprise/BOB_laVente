@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.repositories.order_repository import OrderRepository
 from app.schemas.delivery import DeliveryResponse, DeliveryUpdate
 from app.schemas.order import OrderCancelRequest, OrderCancelResponse, OrderCreateRequest, OrderDetailResponse, OrderResponse
 from app.services.audit import log_audit_event
+from app.services.email_service import send_email
 from app.services.order_service import (
     OrderCreationError,
     build_cancellation_message,
@@ -145,6 +146,7 @@ async def update_delivery(
 @router.put("/{order_id}/mark-paid", response_model=OrderDetailResponse, dependencies=[Depends(require_role("AGENT"))])
 async def mark_order_paid(
     order_id: UUID,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -189,11 +191,18 @@ async def mark_order_paid(
         except Exception:  # noqa: BLE001 — un échec d'envoi ne doit jamais bloquer la confirmation
             pass
 
+    # Lot 40 — le reçu part aussi par email si le client a donné son adresse (une seule fois).
+    from app.services.order_emails import receipt_to_send
+
+    receipt_mail = await receipt_to_send(db, tenant, customer, order)
+
     await log_audit_event(
         db, actor=str(current_user.user_id), action="ORDER_MARKED_PAID", tenant_id=current_user.tenant_id,
-        details={"order_id": str(order_id)},
+        details={"order_id": str(order_id), "receipt_emailed": receipt_mail is not None},
     )
     await db.commit()
+    if receipt_mail is not None:
+        background_tasks.add_task(send_email, **receipt_mail)
 
     return await _build_order_detail(db, order)
 

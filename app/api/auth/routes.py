@@ -155,7 +155,9 @@ async def _send_mfa_code(db: AsyncSession, user: User) -> None:
     send_email(
         to=user.email,
         subject="Votre code de connexion Bob",
-        body=f"Votre code de vérification est : {code}\n\nIl expire dans 10 minutes. Si vous n'êtes pas à l'origine de cette tentative de connexion, ignorez cet email.",
+        # Lot 40 : le code seul sur sa ligne s'affiche en grand dans l'email.
+        body=(f"Bonjour,\n\nVoici votre code de connexion à Bob :\n\n{code}\n\nIl expire dans 10 minutes. "
+              "Si vous n'êtes pas à l'origine de cette tentative de connexion, ignorez cet email : votre compte reste protégé."),
     )
 
 

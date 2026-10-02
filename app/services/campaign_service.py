@@ -26,14 +26,16 @@ async def get_eligible_customers(db: AsyncSession, tenant_id) -> list[Customer]:
     return list((await db.execute(stmt)).scalars().all())
 
 
-def _build_email_body(body_text: str, wa_link: str | None, shop_name: str, unsubscribe_url: str) -> str:
+def _build_email_body(body_text: str, wa_link: str | None, shop_name: str, unsubscribe_url: str,
+                      tu: bool = False, powered_by: bool = False) -> str:
+    from app.services.email_layout import customer_footer
+
     body = f"{body_text}\n\n👉 Discuter sur WhatsApp : {wa_link}" if wa_link else body_text
     # Pied de page fixe, jamais reformulé : obligation légale pour tout email marketing.
-    return (
-        f"{body}\n\n—\n"
-        f"Vous recevez cet email car vous avez accepté de recevoir les offres de {shop_name}.\n"
-        f"Se désinscrire : {unsubscribe_url}"
-    )
+    # Lot 38/40 : au tutoiement si la boutique l'a choisi ; « Propulsé par Bob » au plan gratuit.
+    why = (f"Tu reçois cet email car tu as accepté de recevoir les offres de {shop_name}." if tu
+           else f"Vous recevez cet email car vous avez accepté de recevoir les offres de {shop_name}.")
+    return body + customer_footer(shop_name, powered_by, [why, f"Se désinscrire : {unsubscribe_url}"])
 
 
 def _unsubscribe_headers(unsubscribe_url: str) -> dict[str, str]:
@@ -61,13 +63,16 @@ async def send_campaign(
     # commerce, et ses réponses partent directement chez le commerçant (Reply-To).
     tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
 
+    from app.services.address_form import uses_tu
+
     sent_count = 0
     for customer in customers:
         unsubscribe_url = build_unsubscribe_url(customer.id)  # lien PERSONNEL à chaque destinataire
         ok = send_email(
             to=customer.email,
             subject=subject,
-            body=_build_email_body(body_text, wa_link, tenant.name, unsubscribe_url),
+            body=_build_email_body(body_text, wa_link, tenant.name, unsubscribe_url,
+                                   tu=uses_tu(tenant), powered_by=not tenant.is_paid),
             from_name=tenant.name,
             reply_to=tenant.email,
             extra_headers=_unsubscribe_headers(unsubscribe_url),

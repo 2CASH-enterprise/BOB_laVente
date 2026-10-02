@@ -52,16 +52,19 @@ def whatsapp_text(appointment, shop_name: str) -> str:
             f"{_vehicle(appointment)} ? Nous restons à votre disposition pour un nouvel essai ou toute information.")
 
 
-def email_text(appointment, shop_name: str) -> tuple[str, str]:
+def email_text(appointment, shop_name: str, powered_by: bool = False) -> tuple[str, str]:
+    from app.services.email_layout import customer_footer
+
+    footer = customer_footer(shop_name, powered_by)
     if appointment.outcome == OUTCOME_NO_SHOW:
         return (f"Votre rendez-vous chez {shop_name}",
                 f"Bonjour,\n\nNous ne vous avons pas vu pour votre {subject_phrase(appointment)}. Souhaitez-vous "
                 "choisir un autre créneau ? Répondez simplement à cet email ou écrivez-nous sur WhatsApp.\n\n"
-                f"À bientôt,\n{shop_name}")
+                f"À bientôt,\n{shop_name}" + footer)
     return (f"Merci pour votre visite chez {shop_name}",
             f"Bonjour,\n\nMerci encore pour votre visite. Avez-vous des questions sur {_vehicle(appointment)} ? "
             "Nous restons à votre disposition pour un nouvel essai ou toute information : répondez simplement à "
-            f"cet email ou écrivez-nous sur WhatsApp.\n\nÀ bientôt,\n{shop_name}")
+            f"cet email ou écrivez-nous sur WhatsApp.\n\nÀ bientôt,\n{shop_name}" + footer)
 
 
 def followup_due(appointment, now: datetime, zone) -> bool:
@@ -104,7 +107,7 @@ async def send_followup(db, tenant, appointment, now: datetime, send_email=None,
             channel = CHANNEL_WHATSAPP
     if channel == CHANNEL_TASK and customer is not None and customer.email \
             and (appointment.outcome == OUTCOME_NO_SHOW or customer.marketing_consent):
-        subject, body = email_text(appointment, tenant.name)
+        subject, body = email_text(appointment, tenant.name, powered_by=not tenant.is_paid)
         if send_email(to=customer.email, subject=subject, body=body, from_name=tenant.name, reply_to=tenant.email):
             channel = CHANNEL_EMAIL
     appointment.followup_sent_at = now

@@ -45,6 +45,9 @@ class Order(Base):
     # Date du clic « Paiement reçu » du commerçant. Absente pour les commandes payées avant
     # l'ajout de ce champ : jamais inventée après coup.
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lot 40 — emails au client : récapitulatif (promis quand Bob demande l'email) et reçu, une seule fois.
+    recap_emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    receipt_emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

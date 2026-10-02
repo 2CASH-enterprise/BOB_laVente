@@ -104,7 +104,8 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
                         else:
                             report["failed"] += 1
                 if due.customer:
-                    subject, body = appointment_service.customer_reminder_email(appointment, tenant.name, zone)
+                    subject, body = appointment_service.customer_reminder_email(appointment, tenant.name, zone,
+                                                                                powered_by=not tenant.is_paid)
                     if send(to=customer.email, subject=subject, body=body, from_name=tenant.name, reply_to=tenant.email):
                         appointment.customer_reminder_sent_at = now
                         report["customer"] += 1

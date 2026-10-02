@@ -153,7 +153,7 @@ def build_outage_alert(tenant_name: str) -> tuple[str, str]:
         "Les clients qui écrivent reçoivent un message d'excuse les invitant à renvoyer leur message "
         "dans quelques minutes. Bob reprendra automatiquement dès que le service sera rétabli.\n\n"
         "Vous recevez au plus un email de ce type par heure. Si vous préférez rappeler vous-même les "
-        "clients pendant une panne, choisissez « Un conseiller rappelle le client » dans Paramètres → "
+        "clients pendant une panne, choisissez « Un conseiller rappelle le client » dans Réglages de Bob → "
         "Transmission à un humain."
     )
     return subject, body

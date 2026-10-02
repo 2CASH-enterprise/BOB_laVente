@@ -42,9 +42,8 @@ def build_reset_email(full_name: str, link: str) -> tuple[str, str]:
     subject = "Réinitialisation de votre mot de passe Bob"
     body = (
         f"Bonjour {full_name},\n\n"
-        "Vous avez demandé à réinitialiser le mot de passe de votre compte Bob.\n"
-        "Cliquez sur le lien ci-dessous pour choisir un nouveau mot de passe :\n\n"
-        f"{link}\n\n"
+        "Vous avez demandé à réinitialiser le mot de passe de votre compte Bob.\n\n"
+        f"Choisir un nouveau mot de passe : {link}\n\n"
         f"Ce lien est valable {RESET_TOKEN_TTL_MINUTES} minutes et ne peut être utilisé qu'une seule fois.\n\n"
         "Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet email : "
         "votre mot de passe actuel reste inchangé."

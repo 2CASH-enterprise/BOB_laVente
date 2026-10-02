@@ -243,6 +243,13 @@ async def receive_webhook(
         reminder_emails = alert_emails(tenant_for_alert.email, commercial, subject, body)
         conversation.human_alert_sent_at = datetime.now(timezone.utc)
 
+    # Lot 40 — le client vient de donner son email : récapitulatif de sa commande en cours (promis par Bob).
+    from app.services.order_emails import recap_to_send
+
+    recap = await recap_to_send(db, await db.get(Tenant, tenant_id), customer)
+    if recap is not None:
+        reminder_emails.append(recap)
+
     await db.commit()
     for email in reminder_emails:
         background_tasks.add_task(send_email, **email)
@@ -470,8 +477,10 @@ async def receive_webhook(
             )
             booking_emails += alert_emails(tenant.email, commercial, subject, body)
 
+    # Lot 40 — email donné pendant la réponse de Bob (outil record_customer_email) : même récapitulatif.
+    recap_emails = [r for r in [await recap_to_send(db, tenant, customer)] if r is not None]
     await db.commit()
-    for email in handoff_emails + outage_emails + booking_emails:
+    for email in handoff_emails + outage_emails + booking_emails + recap_emails:
         background_tasks.add_task(send_email, **email)
 
     # Envoi réel vers WhatsApp (section 3 : ... -> WhatsApp API -> CLIENT). Ne doit jamais
