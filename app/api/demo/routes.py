@@ -212,7 +212,7 @@ async def promote_demo(
     if tenant is None:
         raise HTTPException(status_code=404, detail="Session de démo introuvable")
     if not tenant.is_demo:
-        raise HTTPException(status_code=400, detail="Ce tenant est déjà un compte réel")
+        raise HTTPException(status_code=400, detail="Ce compte n'est plus un compte de démonstration")
 
     if not payload.email.strip() or "@" not in payload.email:
         raise HTTPException(status_code=400, detail="Email invalide")

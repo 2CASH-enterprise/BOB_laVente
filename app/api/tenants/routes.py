@@ -48,7 +48,7 @@ async def get_my_tenant(
     """
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
     return tenant
 
 
@@ -60,7 +60,7 @@ async def update_tenant_profile(
 ) -> Tenant:
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(tenant, field, value)
@@ -109,7 +109,7 @@ async def get_business_type(
     """Lot 24 — type d'activité de la boutique, et s'il a déjà été choisi (écran d'après inscription)."""
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
     return _business_type_response(tenant)
 
 
@@ -128,7 +128,7 @@ async def update_business_type(
         raise HTTPException(status_code=422, detail="Type d'activité inconnu")
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
     if tenant.business_type_chosen_at is not None:
         # Lot 32 — choisi une seule fois, à l'inscription. Un changement se demande au support Bob,
         # qui le fait depuis l'Admin (les fonctions et les données ne sont pas les mêmes).
@@ -554,7 +554,7 @@ async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
 async def get_onboarding(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant introuvable")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
     return await _onboarding(db, tenant)
 
 

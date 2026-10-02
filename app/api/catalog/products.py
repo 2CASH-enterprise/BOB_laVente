@@ -47,7 +47,7 @@ async def create_product(
     repo = ProductRepository(db)
     existing = await repo.get_by_sku(current_user.tenant_id, payload.sku)
     if existing is not None:
-        raise HTTPException(status_code=409, detail=f"Un produit avec le SKU '{payload.sku}' existe déjà")
+        raise HTTPException(status_code=409, detail=f"Un produit avec la référence « {payload.sku} » existe déjà")
 
     data = payload.model_dump()
     data["vehicle"] = _checked_vehicle(data.get("vehicle"), tenant)

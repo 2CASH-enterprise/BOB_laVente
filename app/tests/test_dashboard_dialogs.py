@@ -80,7 +80,7 @@ def test_explanations_moved_into_infobulles():
 
 def test_warnings_stay_visible():
     bubbles = " ".join(_bubbles())
-    for text in ("Envoyé uniquement aux clients ayant explicitement accepté", "Nécessite le mode d'envoi"):
+    for text in ("Envoyé uniquement aux clients ayant explicitement accepté", "doit être activé sur votre compte"):
         assert text in HTML and text not in bubbles, text
 
 

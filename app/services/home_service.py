@@ -129,9 +129,11 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                         if conversion is not None and prev_sales is not None else None)
 
     from app.models.tenant import Tenant
+    from app.services.business_type import is_dealership
 
     tenant = await db.get(Tenant, tenant_id)
     currency = tenant.currency if tenant else ""
+    dealership = is_dealership(tenant)  # lot 47 : l'accueil parle rendez-vous et ventes, pas paiements
 
     kpis = {
         "paid": {"value": float(paid_now), "delta_pct": _delta_pct(float(paid_now), float(paid_prev))},
@@ -233,7 +235,7 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
             "since": _aware(a.followup_sent_at), "action": "Voir",
         })
 
-    for o in orders:
+    for o in ([] if dealership else orders):  # lot 47 : pas de commande à relancer en concession
         if o.status == OrderStatus.PENDING and _aware(o.created_at) <= now - timedelta(days=STALE_ORDER_DAYS):
             days_waiting = (now - _aware(o.created_at)).days
             todo.append({
@@ -261,14 +263,28 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
         if m.sender == MessageSender.CUSTOMER and _aware(m.created_at) >= since:
             per_day.setdefault(_aware(m.created_at).date(), set()).add(m.conversation_id)
     paid_days = {paid_moment(o).date() for o in orders if o.status == OrderStatus.PAID and paid_moment(o) >= since}
+    appointment_days: set = set()
+    if dealership:
+        from app.models.appointment_request import AppointmentRequest as _Appointment
+
+        appointment_days = {_aware(created).date() for created in (await db.execute(
+            select(_Appointment.created_at).where(_Appointment.tenant_id == tenant_id, _Appointment.created_at >= since)
+        )).scalars()}
     for i in range(days):
         day = start_day + timedelta(days=i)
-        daily.append({"date": day.isoformat(), "conversations": len(per_day.get(day, ())), "sale": day in paid_days})
+        daily.append({"date": day.isoformat(), "conversations": len(per_day.get(day, ())), "sale": day in paid_days,
+                      "appointment": day in appointment_days})
 
     # --- Activité récente ------------------------------------------------------------------
-    activity = await _activity(db, tenant_id, now, customers, messages, orders)
+    activity = await _activity(db, tenant_id, now, customers, messages, [] if dealership else orders,
+                               business_type=tenant.business_type if tenant else None)
+    if dealership:
+        kpis, funnel = await _dealership_figures(db, tenant_id, since, prev_since, now, current_convs, previous_convs, kpis)
+        activity = sorted(activity + await _dealership_activity(db, tenant_id, now, customers),
+                          key=lambda e: e["at"], reverse=True)[:ACTIVITY_LIMIT]
 
     return {
+        "business_type": "CAR_DEALERSHIP" if dealership else "ONLINE_STORE",
         "first_name": first_name,
         "period_days": days,
         "currency": currency,
@@ -296,7 +312,7 @@ async def _conversion_between(db: AsyncSession, tenant_id, start: datetime, end:
     return round(sum(1 for r in terminated if r.outcome == OpportunityOutcome.PAID) / len(terminated) * 100, 1)
 
 
-async def _activity(db, tenant_id, now, customers, messages, orders) -> list[dict]:
+async def _activity(db, tenant_id, now, customers, messages, orders, business_type: str | None = None) -> list[dict]:
     from app.agents.strategies import STRATEGIES_BY_CODE
     from app.agents.taxonomy import objection_label
 
@@ -343,9 +359,75 @@ async def _activity(db, tenant_id, now, customers, messages, orders) -> list[dic
         for code in s.objections or []:
             strategy = STRATEGIES_BY_CODE.get(s.strategy) if s.strategy else None
             detail = f"Réponse de Bob : {strategy.label}" if strategy else "Détectée par Bob"
-            events.append({"kind": "OBJECTION", "title": f"Objection : {objection_label(code).lower()}",
+            events.append({"kind": "OBJECTION", "title": f"Objection : {objection_label(code, business_type).lower()}",
                            "detail": detail, "at": _aware(s.message_created_at)})
             break  # une ligne par message
 
     events.sort(key=lambda e: e["at"], reverse=True)
     return events[:ACTIVITY_LIMIT]
+
+
+# --- Lot 47 : concession automobile -------------------------------------------------------------------
+# Rien ne se paie sur WhatsApp : l'accueil mesure les rendez-vous obtenus et les ventes conclues
+# (issue « vendu » du lot 36), jamais « encaissé » ni « en attente de paiement ».
+VISITED = ("SOLD", "FOLLOW_UP", "NOT_INTERESTED")  # le prospect est venu (tout sauf « absent »)
+
+
+def _rate(part: int, whole: int) -> float | None:
+    return round(min(part, whole) / whole * 100, 1) if whole else None
+
+
+async def _dealership_figures(db, tenant_id, since, prev_since, now, current_convs, previous_convs, kpis) -> tuple[dict, list]:
+    from app.models.appointment_request import OUTCOME_SOLD, AppointmentRequest
+
+    rows = (await db.execute(select(AppointmentRequest).where(
+        AppointmentRequest.tenant_id == tenant_id,
+    ))).scalars().all()
+    end = now + timedelta(seconds=1)
+
+    def requested(start, stop):
+        return [a for a in rows if start <= _aware(a.created_at) < stop]
+
+    def sold(start, stop):
+        return [a for a in rows if a.outcome == OUTCOME_SOLD and a.outcome_at and start <= _aware(a.outcome_at) < stop]
+
+    current, previous = requested(since, end), requested(prev_since, since)
+    sold_now, sold_prev = sold(since, end), sold(prev_since, since)
+    rate_now = _rate(len({a.conversation_id for a in current} & current_convs), len(current_convs))
+    rate_prev = _rate(len({a.conversation_id for a in previous} & previous_convs), len(previous_convs))
+    dealer_kpis = {
+        "appointments": {"value": len(current), "delta_pct": _delta_pct(len(current), len(previous)),
+                         "to_confirm": sum(1 for a in rows if a.status == "REQUESTED")},
+        "sold": {"value": len(sold_now), "delta_pct": _delta_pct(len(sold_now), len(sold_prev))},
+        "appointment_rate": {
+            "value": rate_now,
+            "delta_points": round(rate_now - rate_prev, 1) if rate_now is not None and rate_prev is not None else None,
+            "with_appointment": len({a.conversation_id for a in current} & current_convs),
+            "conversations": len(current_convs),
+        },
+        "conversations": kpis["conversations"],
+    }
+    funnel = [
+        {"key": "conversations", "label": "Conversations", "value": len(current_convs)},
+        {"key": "appointments", "label": "Rendez-vous demandés", "value": len(current)},
+        {"key": "visited", "label": "Venus au rendez-vous", "value": sum(1 for a in current if a.outcome in VISITED)},
+        {"key": "sold", "label": "Vendus", "value": sum(1 for a in current if a.outcome == OUTCOME_SOLD)},
+    ]
+    return dealer_kpis, funnel
+
+
+async def _dealership_activity(db, tenant_id, now, customers) -> list[dict]:
+    from app.models.appointment_request import APPOINTMENT_KINDS, OUTCOME_SOLD, AppointmentRequest
+
+    since = now - timedelta(days=ACTIVITY_DAYS)
+    events = []
+    for a in (await db.execute(select(AppointmentRequest).where(AppointmentRequest.tenant_id == tenant_id))).scalars():
+        name = _name(customers.get(a.customer_id))
+        what = " · ".join(p for p in (APPOINTMENT_KINDS.get(a.kind, a.kind), a.vehicle_label) if p)
+        if _aware(a.created_at) >= since:
+            events.append({"kind": "APPOINTMENT", "title": "Rendez-vous demandé", "detail": f"{name} · {what}",
+                           "at": _aware(a.created_at)})
+        if a.outcome == OUTCOME_SOLD and a.outcome_at and _aware(a.outcome_at) >= since:
+            events.append({"kind": "SALE", "title": "Vente conclue",
+                           "detail": f"{name} · {a.vehicle_label}" if a.vehicle_label else name, "at": _aware(a.outcome_at)})
+    return events

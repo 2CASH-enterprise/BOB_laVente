@@ -700,7 +700,7 @@
         <div class="card" style="flex: 1; min-width: 280px;">
           <div class="label" style="margin-bottom: 12px; font-weight: 600;">Ajouter un produit</div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <input id="new-product-sku" placeholder="SKU" class="input">
+            <input id="new-product-sku" placeholder="Référence (ex. REF-001)" class="input">
             <input id="new-product-name" placeholder="Nom" class="input">
             <input id="new-product-price" placeholder="Prix" type="number" class="input">
             <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input" maxlength="3">
@@ -711,7 +711,7 @@
           <div id="new-product-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
         <div class="card" style="flex: 1; min-width: 280px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span></span></div>
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span></span></div>
           <input type="file" id="csv-file-input" accept=".csv" style="margin-bottom: 10px;">
           <button class="action" onclick="importCsv()">Importer</button>
           <button class="action secondary" onclick="exportXlsx()">Exporter en Excel</button>
@@ -719,7 +719,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Nom</th><th>SKU</th><th>Prix</th><th>Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
+        <thead><tr><th>Nom</th><th>Référence</th><th>Prix</th><th>Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
 
@@ -947,7 +947,8 @@
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Relances automatiques</div>
           <p style="font-size: 12px; color: var(--muted); margin-top: 0 0 10px;">
-            Nécessite le mode d'envoi « Commercial autorisé » (section 56) — sinon aucune relance n'est envoyée.
+            Bob écrit de lui-même aux clients qui n'ont pas répondu. Pour cela, l'envoi de messages commerciaux
+            doit être activé sur votre compte (demandez-le à l'équipe Bob) : sans cela, aucune relance n'est envoyée.
           </p>
           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
             <input type="checkbox" id="followup-enabled"> Activer les relances
@@ -2005,10 +2006,13 @@ const HOME_ICONS = {
   receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4",
   flag: "M4 21V4h13l-2 4 2 4H4",
   swap: "M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4",
+  calendar: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4",  // lot 47
+  key: "M15 9a3 3 0 1 0 0-.01M13 11l-9 9M7 17l2 2M10 14l2 2",
 };
 const ACTIVITY_STYLE = {
   PAYMENT: ["wallet", "tone-success"], CUSTOMER: ["users", "tone-info"], ORDER: ["receipt", "tone-accent"],
   TRANSFER: ["swap", "tone-danger"], OBJECTION: ["flag", "tone-warning"],
+  APPOINTMENT: ["calendar", "tone-info"], SALE: ["key", "tone-success"],  // lot 47 : concession
 };
 
 function homeIcon(name, size = 18) {
@@ -2064,8 +2068,21 @@ function renderHome(h) {
       <div class="kpi-value">${value}</div>
       <div class="kpi-note">${note}</div>
     </div>`;
+  const dealer = h.business_type === "CAR_DEALERSHIP";  // lot 47 : rendez-vous et ventes, pas de paiement
   const conv = k.conversion;
-  const kpis = [
+  const kpis = dealer ? [
+    kpi("calendar", "tone-success", "Rendez-vous obtenus", `${k.appointments.value}`,
+      k.appointments.delta_pct !== null ? deltaNote(k.appointments.delta_pct, "%", "")
+        : `${k.appointments.to_confirm} à confirmer`),
+    kpi("key", "tone-warning", "Véhicules vendus", `${k.sold.value}`,
+      k.sold.delta_pct !== null ? deltaNote(k.sold.delta_pct, "%", "") : "Selon l'issue indiquée après chaque rendez-vous"),
+    kpi("target", "tone-info", "Taux de rendez-vous", k.appointment_rate.value === null ? "—" : `${frNumber(k.appointment_rate.value)} <small>%</small>`,
+      k.appointment_rate.delta_points !== null ? deltaNote(k.appointment_rate.delta_points, "pts", "")
+        : `${k.appointment_rate.with_appointment} conversation${k.appointment_rate.with_appointment > 1 ? "s" : ""} sur ${k.appointment_rate.conversations} avec un rendez-vous`),
+    kpi("chat", "tone-accent", "Conversations", `${k.conversations.value}`,
+      k.conversations.delta_pct !== null ? deltaNote(k.conversations.delta_pct, "%", "")
+        : `dont ${k.conversations.bob_only} gérée${k.conversations.bob_only > 1 ? "s" : ""} par Bob seul`),
+  ].join("") : [
     kpi("wallet", "tone-success", "Encaissé", frMoney(k.paid.value, h.currency), deltaNote(k.paid.delta_pct, "%", "Pas de comparaison possible")),
     kpi("clock", "tone-warning", "En attente de paiement", frMoney(k.pending.value, h.currency),
       `${k.pending.count} commande${k.pending.count > 1 ? "s" : ""} non payée${k.pending.count > 1 ? "s" : ""}`),
@@ -2089,7 +2106,7 @@ function renderHome(h) {
         <span class="todo-since">depuis ${elapsed(t.since)}</span>
         <button class="action" onclick="${todoAction(t)}">${esc(t.action)}</button>
       </div>`).join("")
-      + (h.todo.length > shown.length ? `<p class="card-sub" style="margin-top: 10px;">Et ${h.todo.length - shown.length} autre${h.todo.length - shown.length > 1 ? "s" : ""} : voir les conversations et les commandes.</p>` : "")
+      + (h.todo.length > shown.length ? `<p class="card-sub" style="margin-top: 10px;">Et ${h.todo.length - shown.length} autre${h.todo.length - shown.length > 1 ? "s" : ""} : voir les conversations et ${dealer ? "les rendez-vous" : "les commandes"}.</p>` : "")
     : `<p class="empty-state">Rien à traiter pour l'instant : Bob s'occupe de tes clients.</p>`;
 
   const top = Math.max(...h.funnel.map((f) => f.value), 1);
@@ -2105,8 +2122,9 @@ function renderHome(h) {
 
   const maxDay = Math.max(...h.daily.map((d) => d.conversations), 1);
   const dayLabel = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-  const bars = h.daily.map((d) => `<div class="${d.sale ? "sale" : ""}" style="height: ${d.conversations / maxDay * 100}%;"
-      title="${dayLabel(d.date)} : ${d.conversations} conversation${d.conversations > 1 ? "s" : ""}${d.sale ? " · vente payée" : ""}"></div>`).join("");
+  const marked = (d) => dealer ? d.appointment : d.sale;
+  const bars = h.daily.map((d) => `<div class="${marked(d) ? "sale" : ""}" style="height: ${d.conversations / maxDay * 100}%;"
+      title="${dayLabel(d.date)} : ${d.conversations} conversation${d.conversations > 1 ? "s" : ""}${marked(d) ? (dealer ? " · rendez-vous demandé" : " · vente payée") : ""}"></div>`).join("");
   const axis = [0, Math.floor(h.daily.length / 2), h.daily.length - 1].map((i) => `<span>${dayLabel(h.daily[i].date)}</span>`).join("");
 
   const activity = h.activity.length
@@ -2133,15 +2151,15 @@ function renderHome(h) {
         ${todo}
       </div>
       <div class="card">
-        <div class="card-head"><div><h2>Entonnoir de vente</h2><p class="card-sub">De la première question au paiement</p></div></div>
+        <div class="card-head"><div><h2>${dealer ? "Parcours des prospects" : "Entonnoir de vente"}</h2><p class="card-sub">${dealer ? "De la première question à la vente" : "De la première question au paiement"}</p></div></div>
         ${funnel}
       </div>
     </div>
     <div class="home-row">
       <div class="card span-2 chart-card">
         <div class="card-head" style="align-items: flex-start;">
-          <div><h2>Conversations par jour</h2><p class="card-sub">Les jours avec au moins une vente payée sont mis en évidence</p></div>
-          <div class="legend"><span><i style="background: var(--bar-soft);"></i>Conversations</span><span><i style="background: var(--accent-fill);"></i>Jour avec vente</span></div>
+          <div><h2>Conversations par jour</h2><p class="card-sub">${dealer ? "Les jours avec au moins une demande de rendez-vous sont mis en évidence" : "Les jours avec au moins une vente payée sont mis en évidence"}</p></div>
+          <div class="legend"><span><i style="background: var(--bar-soft);"></i>Conversations</span><span><i style="background: var(--accent-fill);"></i>${dealer ? "Jour avec rendez-vous" : "Jour avec vente"}</span></div>
         </div>
         <div class="bars" role="img" aria-label="Conversations par jour sur ${h.period_days} jours">${bars}</div>
         <div class="bars-axis">${axis}</div>
@@ -2738,7 +2756,7 @@ async function loadProducts() {
     .map(
       (p) => `<tr>
         <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}</td>
-        <td data-label="SKU">${esc(p.sku)}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
+        <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
         <td data-label="Stock">${p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
         <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel('${esc(p.id)}')">Gérer</button></td>
         <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel('${esc(p.id)}')">Modifier</button></td>
@@ -3033,7 +3051,7 @@ async function loadContactPoints() {
           <summary style="cursor: pointer; font-size: 13px;">Code pour un site web (widget)</summary>
           <textarea class="input" readonly rows="2" style="font-family: monospace; font-size: 11px; margin-top: 8px; width: 100%;" onclick="this.select()">${esc(widgetSnippet(cp))}</textarea>
           <button class="action secondary" style="font-size: 12px; margin-top: 6px;" onclick="copyWidgetSnippet('${cp.id}')">Copier le code</button>
-          <p style="font-size: 11px; color: var(--muted); margin: 6px 0 0;">À coller une seule fois avant &lt;/body&gt;. Sur une page produit, ajoutez <code>data-bob-product="SKU"</code>. Vos modifications s'appliquent sur le site en quelques minutes, sans recoller le code.</p>
+          <p style="font-size: 11px; color: var(--muted); margin: 6px 0 0;">À coller une seule fois avant &lt;/body&gt;. Sur une page produit, ajoutez <code>data-bob-product="REF-001"</code> (la référence du produit). Vos modifications s'appliquent sur le site en quelques minutes, sans recoller le code.</p>
         </details>
 
         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
@@ -3351,7 +3369,7 @@ async function createProduct() {
   if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");
   if (!payload.sku || !payload.name || !payload.price || !payload.currency) {
     msg.style.color = "var(--danger)";
-    msg.textContent = "SKU, nom, prix et devise sont obligatoires.";
+    msg.textContent = "Référence, nom, prix et devise sont obligatoires.";
     return;
   }
   try {

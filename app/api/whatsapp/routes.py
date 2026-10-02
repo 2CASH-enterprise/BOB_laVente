@@ -79,7 +79,7 @@ async def embedded_signup_callback(
     existing_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
     existing = (await db.execute(existing_stmt)).scalar_one_or_none()
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Un compte WhatsApp est déjà connecté pour ce tenant")
+        raise HTTPException(status_code=409, detail="Un numéro WhatsApp est déjà connecté à votre compte")
 
     # Échange réel code -> access_token, puis abonnement de l'app au WABA du client
     # (section 59.5 — condition pour recevoir ses webhooks, sinon aucun message n'arrivera
@@ -124,7 +124,7 @@ async def get_whatsapp_account(
     result = await db.execute(stmt)
     account = result.scalar_one_or_none()
     if account is None:
-        raise HTTPException(status_code=404, detail="Aucun compte WhatsApp connecté pour ce tenant")
+        raise HTTPException(status_code=404, detail="Aucun numéro WhatsApp n'est connecté à votre compte")
     return account
 
 
@@ -144,7 +144,7 @@ async def update_display_phone_number(
     stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
     account = (await db.execute(stmt)).scalar_one_or_none()
     if account is None:
-        raise HTTPException(status_code=404, detail="Aucun compte WhatsApp connecté pour ce tenant")
+        raise HTTPException(status_code=404, detail="Aucun numéro WhatsApp n'est connecté à votre compte")
 
     account.display_phone_number = digits
     await db.commit()
