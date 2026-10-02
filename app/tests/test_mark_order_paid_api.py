@@ -47,13 +47,30 @@ async def test_mark_order_paid_via_api(client, db_session, unique_email):
 
 
 @pytest.mark.asyncio
-async def test_mark_order_paid_generates_receipt_message(client, db_session, unique_email):
+async def test_mark_order_paid_generates_receipt_message(client, db_session, unique_email, monkeypatch):
     from app.models.conversation import Conversation, ConversationStatus
+
+    class _Accepted:  # lot 49 : le reçu n'est tracé que si WhatsApp l'a accepté
+        def __init__(self, **kw):
+            pass
+
+        async def send_text_message(self, **kw):
+            return {}
+
+    monkeypatch.setattr("app.api.orders.routes.WhatsAppClient", _Accepted)
 
     tenant, product, customer = await _setup(db_session, unique_email)
     conversation = Conversation(tenant_id=tenant.id, customer_id=customer.id, status=ConversationStatus.ACTIVE)
     db_session.add(conversation)
     await db_session.flush()
+    from app.models.conversation import Message as _Message, MessageSender
+    from app.models.whatsapp_account import WhatsAppAccount
+
+    db_session.add(WhatsAppAccount(tenant_id=tenant.id, waba_id="w", phone_number_id="pn-receipt", system_user_token="t"))
+
+    # Lot 49 : le client a écrit il y a moins de 20 h — le reçu peut partir sur WhatsApp.
+    db_session.add(_Message(tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.CUSTOMER,
+                            message_type="text", content="J'ai payé"))
     order = await create_order(
         db=db_session, tenant_id=tenant.id, customer_id=customer.id,
         items=[{"product_id": str(product.id), "quantity": 1}], delivery_address=None, payment_method=None,

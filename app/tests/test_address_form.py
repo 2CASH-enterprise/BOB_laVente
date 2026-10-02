@@ -190,6 +190,13 @@ async def test_cancellation_message_uses_the_setting(client, db_session, monkeyp
     customer = Customer(tenant_id=tenant.id, whatsapp_number="221700000012")
     db_session.add(customer)
     await db_session.flush()
+    from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
+
+    conversation = Conversation(tenant_id=tenant.id, customer_id=customer.id, status=ConversationStatus.ACTIVE)
+    db_session.add(conversation)
+    await db_session.flush()
+    db_session.add(Message(tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.CUSTOMER,
+                           message_type="text", content="Bonjour"))  # lot 49 : fenêtre de 20 h ouverte
     order = Order(tenant_id=tenant.id, customer_id=customer.id, status=OrderStatus.PENDING, total_amount=1000, currency="XOF")
     db_session.add(order)
     await db_session.commit()

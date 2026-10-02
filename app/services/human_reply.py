@@ -55,3 +55,20 @@ async def ensure_reply_window_open(db: AsyncSession, conversation: Conversation,
             "la réponse libre est fermée. Elle se rouvrira dès que le client vous réécrira.",
             409,
         )
+
+
+async def customer_window_open(db: AsyncSession, tenant_id, customer_id, now: datetime | None = None) -> bool:
+    """
+    Lot 49 — règle unique pour TOUT message WhatsApp qui ne répond pas à un message qui vient
+    d'arriver (reçu, annulation, rappel, relance…) : il ne part que dans les 20 h qui suivent le
+    dernier message du client, toutes conversations confondues. Sinon : email, ou rien.
+    """
+    if customer_id is None:
+        return False
+    last = (await db.execute(select(func.max(Message.created_at)).join(
+        Conversation, Conversation.id == Message.conversation_id,
+    ).where(
+        Message.tenant_id == tenant_id, Conversation.tenant_id == tenant_id,
+        Conversation.customer_id == customer_id, Message.sender == MessageSender.CUSTOMER,
+    ))).scalar_one_or_none()
+    return last is not None and (now or datetime.now(timezone.utc)) < _as_utc(last) + HUMAN_REPLY_WINDOW

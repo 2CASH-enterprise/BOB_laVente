@@ -240,3 +240,30 @@ async def send_fixed_message(
         message_type=message_type, content=text, message_metadata={"sent_by": user_id},
     ))
     return True, None
+
+
+async def notify_customer(db: AsyncSession, tenant, conversation, customer, text: str, user_id: str,
+                          message_type: str, subject: str, send_email=None) -> tuple[bool, str | None, str | None]:
+    """
+    Lot 49 — prévenir le client : WhatsApp seulement dans les 20 h qui suivent son dernier message
+    (send_fixed_message), sinon par email s'il a donné son adresse (message de service : pas besoin
+    de l'accord marketing). Renvoie (prévenu, raison si non prévenu, canal « WHATSAPP » | « EMAIL »).
+    """
+    import asyncio
+
+    sent, error = (False, "Conversation introuvable.") if conversation is None or customer is None else \
+        await send_fixed_message(db, tenant, conversation, customer, text, user_id, message_type)
+    if sent:
+        return True, None, "WHATSAPP"
+    if customer is not None and customer.email:
+        from app.services.email_layout import customer_footer
+
+        if send_email is None:
+            from app.services.email_service import send_email
+        mail = {"to": customer.email, "subject": subject, "body": text + customer_footer(tenant.name, not tenant.is_paid),
+                "from_name": tenant.name, "reply_to": tenant.email}
+        if await asyncio.to_thread(send_email, **mail):
+            return True, None, "EMAIL"
+    if error and customer is not None and not customer.email:
+        error += " Le client n'a pas donné d'email."
+    return False, error, None

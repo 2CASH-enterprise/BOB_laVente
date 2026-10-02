@@ -29,7 +29,9 @@ async def _setup(db_session, email: str, followup_enabled=True, outbound_mode=Ou
     db_session.add(
         TenantFollowupSettings(tenant_id=tenant.id, enabled=followup_enabled, first_followup_hours=24, second_followup_hours=72)
     )
-    customer = Customer(tenant_id=tenant.id, whatsapp_number="221700000000")
+    # Lot 49 : la relance part par email, seulement avec un email ET l'accord pour les offres.
+    customer = Customer(tenant_id=tenant.id, whatsapp_number="221700000000", email="client@example.com",
+                        marketing_consent=True)
     db_session.add(customer)
     await db_session.flush()
     await db_session.commit()
@@ -39,6 +41,15 @@ async def _setup(db_session, email: str, followup_enabled=True, outbound_mode=Ou
 
 def _now():
     return datetime.now(timezone.utc)
+
+
+class _Mailbox:
+    def __init__(self):
+        self.sent = []
+
+    def __call__(self, **mail):
+        self.sent.append(mail)
+        return True
 
 
 @pytest.mark.asyncio
@@ -123,8 +134,9 @@ async def test_run_followups_sends_and_advances_stage(db_session, unique_email):
     await db_session.commit()
     await db_session.refresh(conv)
 
-    sent = await run_followups_for_tenant(db_session, tenant.id)
-    assert sent == 1
+    mailbox = _Mailbox()
+    sent = await run_followups_for_tenant(db_session, tenant.id, send_email=mailbox)
+    assert sent == 1 and [m["to"] for m in mailbox.sent] == ["client@example.com"]
 
     await db_session.refresh(conv)
     assert conv.followup_stage == 1
@@ -135,7 +147,7 @@ async def test_run_followups_sends_and_advances_stage(db_session, unique_email):
     from app.models.conversation import Message
 
     messages = (await db_session.execute(select(Message).where(Message.conversation_id == conv.id))).scalars().all()
-    assert any(m.message_type == "followup" for m in messages)
+    assert any(m.message_type == "followup_email" for m in messages)
 
 
 @pytest.mark.asyncio
@@ -153,8 +165,8 @@ async def test_run_followups_skipped_when_disabled(db_session, unique_email):
 
 
 @pytest.mark.asyncio
-async def test_run_followups_skipped_when_outbound_not_commercial(db_session, unique_email):
-    """Respecte le garde-fou section 56 : sans mode commercial activé, pas d'envoi proactif."""
+async def test_relance_never_depends_on_the_whatsapp_commercial_mode(db_session, unique_email):
+    """Lot 49 : la relance est un email ; le mode d'envoi WhatsApp ne la bloque plus (et elle n'utilise jamais WhatsApp)."""
     tenant, customer = await _setup(db_session, unique_email, outbound_mode=OutboundMode.AI_PLUS_HUMAN)
     conv = Conversation(
         tenant_id=tenant.id, customer_id=customer.id, status=ConversationStatus.ACTIVE,
@@ -163,8 +175,8 @@ async def test_run_followups_skipped_when_outbound_not_commercial(db_session, un
     db_session.add(conv)
     await db_session.commit()
 
-    sent = await run_followups_for_tenant(db_session, tenant.id)
-    assert sent == 0
+    sent = await run_followups_for_tenant(db_session, tenant.id, send_email=_Mailbox())
+    assert sent == 1
 
 
 @pytest.mark.asyncio
@@ -180,7 +192,7 @@ async def test_second_followup_after_first(db_session, unique_email):
     await db_session.commit()
     await db_session.refresh(conv)
 
-    sent = await run_followups_for_tenant(db_session, tenant.id)
+    sent = await run_followups_for_tenant(db_session, tenant.id, send_email=_Mailbox())
     assert sent == 1
     await db_session.refresh(conv)
     assert conv.followup_stage == 2

@@ -972,28 +972,42 @@
         </div>
 
         <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Relances automatiques</div>
-          <p style="font-size: 12px; color: var(--muted); margin-top: 0 0 10px;">
-            Bob écrit de lui-même aux clients qui n'ont pas répondu. Pour cela, l'envoi de messages commerciaux
-            doit être activé sur votre compte (demandez-le à l'équipe Bob) : sans cela, aucune relance n'est envoyée.
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Relances par email<button class="tip"></button><span class="tip-bubble" hidden>Quand un client ne répond plus, Bob lui envoie un email personnalisé (son prénom, le produit ou le véhicule qu'il regardait, votre message et votre offre du moment), avec un bouton pour reprendre la discussion sur WhatsApp. Les relances ne partent jamais sur WhatsApp : passé 20 h sans message du client, WhatsApp n'accepte plus de message libre.</span></div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 10px;" id="followup-audience">
+            Seuls les clients qui ont donné leur email et accepté de recevoir vos offres reçoivent ces emails.
           </p>
           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
-            <input type="checkbox" id="followup-enabled"> Activer les relances
+            <input type="checkbox" id="followup-enabled"> Activer les relances par email
           </label>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
             <div>
-              <label style="font-size: 12px; color: var(--muted);">1ʳᵉ relance après (h)</label>
-              <input id="followup-first-hours" type="number" class="input">
+              <label style="font-size: 12px; color: var(--muted);" for="followup-first-hours">1ʳᵉ relance après (heures)</label>
+              <input id="followup-first-hours" type="number" min="1" max="720" class="input">
             </div>
             <div>
-              <label style="font-size: 12px; color: var(--muted);">2ᵉ relance après (h)</label>
-              <input id="followup-second-hours" type="number" class="input">
+              <label style="font-size: 12px; color: var(--muted);" for="followup-second-hours">2ᵉ relance après (heures)</label>
+              <input id="followup-second-hours" type="number" min="1" max="720" class="input">
             </div>
           </div>
-          <label style="font-size: 12px; color: var(--muted);">Message de la 1ʳᵉ relance</label>
-          <textarea id="followup-first-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
-          <label style="font-size: 12px; color: var(--muted);">Message de la 2ᵉ relance</label>
-          <textarea id="followup-second-message" class="input" rows="2" style="margin-bottom: 8px; resize: vertical;"></textarea>
+          <label style="font-size: 12px; color: var(--muted);" for="followup-first-message">Message du 1ᵉʳ email</label>
+          <textarea id="followup-first-message" class="input" rows="2" maxlength="1000" style="margin-bottom: 8px; resize: vertical;"></textarea>
+          <label style="font-size: 12px; color: var(--muted);" for="followup-second-message">Message du 2ᵉ email</label>
+          <textarea id="followup-second-message" class="input" rows="2" maxlength="1000" style="margin-bottom: 12px; resize: vertical;"></textarea>
+          <div class="label" style="font-size: 13px; font-weight: 600; margin-bottom: 4px;">Offre du moment (facultatif)</div>
+          <p style="font-size: 12px; color: var(--muted); margin: 0 0 6px;">Remise, soldes, jeu concours… Bob la cite telle quelle et n'invente jamais d'offre. Videz le champ pour ne plus l'afficher.</p>
+          <textarea id="followup-offer-text" class="input" rows="2" maxlength="500" placeholder="Ex. -10 % sur tous les articles jusqu'à dimanche" style="margin-bottom: 8px; resize: vertical;"></textarea>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+            <div>
+              <label style="font-size: 12px; color: var(--muted);" for="followup-offer-code">Code promo</label>
+              <input id="followup-offer-code" class="input" maxlength="40" placeholder="Ex. RENTREE10">
+            </div>
+            <div>
+              <label style="font-size: 12px; color: var(--muted);" for="followup-offer-ends">Fin de l'offre</label>
+              <input id="followup-offer-ends" type="date" class="input">
+            </div>
+          </div>
+          <button class="action secondary" onclick="previewFollowup(1)" style="margin-bottom: 8px;">Aperçu du 1ᵉʳ email</button>
+          <button class="action secondary" onclick="previewFollowup(2)" style="margin-bottom: 8px;">Aperçu du 2ᵉ email</button>
           <button class="action" onclick="saveFollowupSettings()">Enregistrer</button>
           <div id="followup-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
@@ -1759,15 +1773,19 @@ function appointmentCard(a, view) {
         ${Object.entries(APPT_OUTCOME_LABELS).map(([code, label]) =>
           `<button class="action ${a.outcome === code ? "" : "secondary"}" onclick="setAppointmentOutcome('${esc(a.id)}', '${code}')">${esc(label)}</button>`).join("")}
       </div>` : "";
-  const notifyNote = a.can_notify ? "" : ` <span style="color: var(--warning);">(le client n'a pas écrit depuis plus de 20 h : WhatsApp ne permet pas de le prévenir, appelez-le)</span>`;
+  // Lot 49 : WhatsApp dans les 20 h qui suivent le dernier message du client, sinon email, sinon téléphone.
+  const notifyVia = a.can_notify ? "WhatsApp" : a.can_email ? "email" : null;
+  const notifyNote = notifyVia === "email"
+    ? ` <span style="color: var(--muted);">(il ne vous a pas écrit depuis plus de 20 h : il sera prévenu par email)</span>`
+    : notifyVia ? "" : ` <span style="color: var(--warning);">(il ne vous a pas écrit depuis plus de 20 h et n'a pas donné d'email : appelez-le)</span>`;
   let actions = "";
   if (view !== "closed") {
     actions = `
       <div class="appt-actions">
         <input type="datetime-local" class="input" id="appt-when-${esc(a.id)}" aria-label="Date et heure du rendez-vous">
-        <label><input type="checkbox" id="appt-notify-${esc(a.id)}" ${a.can_notify ? "checked" : "disabled"}> Prévenir le client sur WhatsApp</label>${notifyNote}
+        <label><input type="checkbox" id="appt-notify-${esc(a.id)}" ${notifyVia ? "checked" : "disabled"}> Prévenir le client${notifyVia ? (notifyVia === "email" ? " par email" : " sur WhatsApp") : ""}</label>${notifyNote}
         <button class="action" onclick="confirmAppointment('${esc(a.id)}')">${a.status === "CONFIRMED" ? "Changer la date" : "Confirmer"}</button>
-        <button class="action secondary" onclick="cancelAppointment('${esc(a.id)}', ${a.can_notify ? "true" : "false"})">Annuler</button>
+        <button class="action secondary" onclick="cancelAppointment('${esc(a.id)}', ${notifyVia ? `'${notifyVia}'` : "null"})">Annuler</button>
       </div>`;
   }
   return `
@@ -1869,7 +1887,9 @@ function showAppointmentResult(result, okText) {
     msg.textContent = `${okText} Le client n'a pas été prévenu : ${result.notify_error || "envoi impossible"}`;
   } else {
     msg.style.color = "var(--success)";
-    msg.textContent = result.customer_notified ? `${okText} Le client a été prévenu sur WhatsApp.` : okText;
+    msg.textContent = result.customer_notified
+      ? `${okText} Le client a été prévenu ${result.notified_by === "EMAIL" ? "par email (il ne vous a pas écrit depuis plus de 20 h)" : "sur WhatsApp"}.`
+      : okText;
   }
 }
 
@@ -1951,11 +1971,12 @@ async function setAppointmentOutcome(id, outcome) {
   }
 }
 
-async function cancelAppointment(id, canNotify) {
+async function cancelAppointment(id, notifyVia) {
+  const canNotify = !!notifyVia;  // lot 49 : « WhatsApp » (dans les 20 h) ou « email »
   const answer = await bobDialog({
     title: "Annuler ce rendez-vous ?", confirmLabel: "Annuler le rendez-vous", cancelLabel: "Retour", danger: true,
-    message: canNotify ? "" : "Le client ne pourra pas être prévenu sur WhatsApp : il ne vous a pas écrit depuis plus de 20 h.",
-    fields: canNotify ? [{ name: "notify", type: "checkbox", label: "Prévenir le client sur WhatsApp", value: true }] : [],
+    message: canNotify ? "" : "Le client ne pourra pas être prévenu : il ne vous a pas écrit depuis plus de 20 h et n'a pas donné d'email.",
+    fields: canNotify ? [{ name: "notify", type: "checkbox", label: `Prévenir le client ${notifyVia === "email" ? "par email" : "sur WhatsApp"}`, value: true }] : [],
   });
   if (answer === null) return;
   const notify = canNotify && answer.notify;
@@ -3511,6 +3532,14 @@ async function loadFollowupSettings() {
   document.getElementById("followup-second-hours").value = s.second_followup_hours;
   document.getElementById("followup-first-message").value = s.first_message;
   document.getElementById("followup-second-message").value = s.second_message;
+  document.getElementById("followup-offer-text").value = s.offer_text || "";
+  document.getElementById("followup-offer-code").value = s.offer_code || "";
+  document.getElementById("followup-offer-ends").value = s.offer_ends_on || "";
+  // Lot 49 : combien de clients peuvent réellement recevoir ces emails.
+  const n = s.eligible_recipients;
+  document.getElementById("followup-audience").textContent = n
+    ? `${n} client${n > 1 ? "s ont" : " a"} donné ${n > 1 ? "leur" : "son"} email et accepté vos offres : ${n > 1 ? "ils peuvent" : "il peut"} recevoir ces emails.`
+    : "Aucun client n'a encore donné son email et accepté vos offres : aucune relance ne partira tant que ce n'est pas le cas. Bob le leur propose au fil des conversations.";
 }
 
 async function saveFollowupSettings() {
@@ -3521,6 +3550,9 @@ async function saveFollowupSettings() {
     second_followup_hours: parseInt(document.getElementById("followup-second-hours").value, 10),
     first_message: document.getElementById("followup-first-message").value.trim(),
     second_message: document.getElementById("followup-second-message").value.trim(),
+    offer_text: document.getElementById("followup-offer-text").value.trim(),
+    offer_code: document.getElementById("followup-offer-code").value.trim(),
+    offer_ends_on: document.getElementById("followup-offer-ends").value || null,
   };
   try {
     await api("/api/v1/tenants/me/followup-settings", {
@@ -3534,6 +3566,14 @@ async function saveFollowupSettings() {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
   }
+}
+
+// Lot 49 — aperçu de l'email (client fictif « Awa »), d'après les réglages ENREGISTRÉS.
+async function previewFollowup(stage) {
+  try {
+    const p = await api(`/api/v1/tenants/me/followup-preview?stage=${stage}`);
+    await bobAlert(`Objet : ${p.subject}`, `${p.body}\n\n(Aperçu avec un client fictif, d'après les réglages enregistrés.)`);
+  } catch (e) { toast(e.message, "error"); }
 }
 
 // ---- Lot 38 : tutoiement / vouvoiement (boutique en ligne) ----
@@ -4010,7 +4050,7 @@ async function cancelOrder(orderId) {
     fields: [
       { name: "reason", label: "Motif (facultatif, visible dans le journal)", maxlength: 300 },
       { name: "notify", type: "checkbox", value: false,
-        label: "Prévenir le client sur WhatsApp (refusé par WhatsApp s'il n'a pas écrit depuis plus de 24 h)" },
+        label: "Prévenir le client (sur WhatsApp s'il vous a écrit il y a moins de 20 h, sinon par email)" },
     ],
   });
   if (answer === null) return;
@@ -4022,8 +4062,8 @@ async function cancelOrder(orderId) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason: reason.trim() || null, notify_customer: notify }),
     });
-    if (r.customer_notified === true) toast("Commande annulée. Le client a été prévenu.");
-    else if (r.customer_notified === false) toast("Commande annulée, mais le message au client n'a pas pu être envoyé (il n'a probablement pas écrit depuis plus de 24 h) : prévenez-le par un autre moyen.", "error");
+    if (r.customer_notified === true) toast(r.notified_by === "EMAIL" ? "Commande annulée. Le client a été prévenu par email." : "Commande annulée. Le client a été prévenu sur WhatsApp.");
+    else if (r.customer_notified === false) toast("Commande annulée, mais le client n'a pas pu être prévenu : il ne vous a pas écrit depuis plus de 20 h et n'a pas donné d'email. Prévenez-le par un autre moyen.", "error");
     else toast("Commande annulée. Les articles ont été remis en stock.");
     loadOrders();
   } catch (e) {

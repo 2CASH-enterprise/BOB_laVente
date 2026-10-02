@@ -55,3 +55,4 @@ class OrderCancelRequest(BaseModel):
 class OrderCancelResponse(OrderDetailResponse):
     # None = non demandé ; True = accepté par WhatsApp ; False = refusé (ex. hors fenêtre de 24 h)
     customer_notified: bool | None = None
+    notified_by: str | None = None  # lot 49 : "WHATSAPP" (dans les 20 h) ou "EMAIL"

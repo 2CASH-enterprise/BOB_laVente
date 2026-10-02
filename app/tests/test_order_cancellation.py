@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.models.audit_log import AuditLog
-from app.models.conversation import Conversation, ConversationStatus, Message
+from app.models.conversation import MessageSender, Conversation, ConversationStatus, Message
 from app.models.customer import Customer
 from app.models.delivery import Delivery, DeliveryStatus
 from app.models.order import Order, OrderStatus
@@ -29,6 +29,10 @@ async def _setup(db_session, email: str, role=Role.OWNER):
     await db_session.flush()
     conversation = Conversation(tenant_id=tenant.id, customer_id=customer.id, status=ConversationStatus.ACTIVE)
     db_session.add(conversation)
+    await db_session.flush()
+    # Lot 49 : le client vient d'écrire — la fenêtre de 20 h est ouverte, WhatsApp est permis.
+    db_session.add(Message(tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.CUSTOMER,
+                           message_type="text", content="Bonjour"))
     await db_session.commit()
     return tenant, phone, case, customer, conversation
 

@@ -73,14 +73,14 @@ def test_explanations_moved_into_infobulles():
                  "Un lien par commercial", "Ce qui décide si Bob vous passe la main", "Toujours actif : une question sur les retours",
                  "Quand un client exprime un frein", "Bob s'appuie sur ces informations", "S'applique aux réponses de Bob",
                  "Les pubs Facebook et Instagram", "Un code à 6 chiffres vous sera envoyé", "Téléphone perdu",
-                 "Ajoutez l'icône Bob", "Une pastille rouge"):
+                 "Ajoutez l'icône Bob", "Une pastille rouge", "Quand un client ne répond plus, Bob lui envoie un email"):
         assert text in bubbles, text
         assert HTML.count(text) == 1, f"texte en double (resté visible ?) : {text}"
 
 
 def test_warnings_stay_visible():
     bubbles = " ".join(_bubbles())
-    for text in ("Envoyé uniquement aux clients ayant explicitement accepté", "doit être activé sur votre compte"):
+    for text in ("Envoyé uniquement aux clients ayant explicitement accepté", "accepté de recevoir vos offres reçoivent ces emails"):
         assert text in HTML and text not in bubbles, text
 
 
@@ -97,5 +97,5 @@ def test_page_explanations_open_from_the_page_title():
 def test_every_infobulle_button_has_its_bubble():
     markup = HTML[:HTML.index("<script>", HTML.index("<body"))]
     assert len(re.findall(r'<button class="tip(?: hidden page-tip-btn)?"></button><span class="tip-bubble', markup)) \
-        == len(re.findall(r'<button class="tip', markup)) == 15
+        == len(re.findall(r'<button class="tip', markup)) == 16  # lot 49 : relances par email
     assert "initTips();" in SCRIPT

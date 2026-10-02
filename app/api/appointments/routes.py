@@ -62,6 +62,7 @@ class AppointmentOut(BaseModel):
     confirmed_by_bob: bool = False  # lot 29 : créneau choisi par le client et réservé par Bob
     referred_by: str | None = None  # lot 27 : commercial dont le lien a amené le client
     can_notify: bool  # le client a écrit il y a moins de 20 h : un message WhatsApp peut partir
+    can_email: bool = False  # lot 49 : sinon, le client peut être prévenu par email
     prospect: dict | None = None  # lot 43 : fiche prospect et score (Chaud / Tiède / Froid)
 
 
@@ -83,6 +84,7 @@ class ActionResult(BaseModel):
     appointment: AppointmentOut
     customer_notified: bool | None  # None : on n'a pas demandé à prévenir le client
     notify_error: str | None = None
+    notified_by: str | None = None  # lot 49 : « WHATSAPP » (dans les 20 h) ou « EMAIL »
 
 
 async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: datetime) -> AppointmentOut:
@@ -123,6 +125,7 @@ async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: dat
                          else "Déplacé par le client" if appointment.rescheduled_by == "CLIENT" else None),
         whatsapp_reminder_sent_at=appointment.customer_whatsapp_reminder_sent_at,
         can_notify=closes_at is not None and now < closes_at,
+        can_email=bool(customer is not None and customer.email),
         prospect=_public_fiche(await build_fiche(db, await db.get(Tenant, appointment.tenant_id), customer, now)),
     )
 
@@ -190,20 +193,21 @@ async def confirm_appointment(
 
     user_id = str(current_user.user_id)
     appointment_service.confirm(appointment, scheduled, user_id, now=now)
-    notified, error = None, None
+    notified, error, channel = None, None, None
     if payload.notify_customer:
         conversation = await db.get(Conversation, appointment.conversation_id)
         customer = await db.get(Customer, appointment.customer_id)
         text = appointment_service.confirmation_message(appointment, tenant.name, zone)
-        notified, error = await appointment_service.send_fixed_message(
+        notified, error, channel = await appointment_service.notify_customer(
             db, tenant, conversation, customer, text, user_id, "appointment_confirmed",
+            subject=f"Votre rendez-vous est confirmé — {tenant.name}",
         )
     await log_audit_event(
         db, actor=user_id, action="APPOINTMENT_CONFIRMED", tenant_id=tenant.id,
-        details={"appointment_id": str(appointment.id), "scheduled_at": scheduled.isoformat(), "customer_notified": notified},
+        details={"appointment_id": str(appointment.id), "scheduled_at": scheduled.isoformat(), "customer_notified": notified, "notified_by": channel},
     )
     await db.commit()
-    return ActionResult(appointment=await _out(db, appointment, zone, now), customer_notified=notified, notify_error=error)
+    return ActionResult(appointment=await _out(db, appointment, zone, now), customer_notified=notified, notify_error=error, notified_by=channel)
 
 
 @router.post("/{appointment_id}/cancel", response_model=ActionResult, dependencies=[Depends(require_role("AGENT"))])
@@ -221,21 +225,22 @@ async def cancel_appointment(
     zone = tenant_zone(tenant)
     now = datetime.now(timezone.utc)
     user_id = str(current_user.user_id)
-    notified, error = None, None
+    notified, error, channel = None, None, None
     if payload.notify_customer:
         conversation = await db.get(Conversation, appointment.conversation_id)
         customer = await db.get(Customer, appointment.customer_id)
         text = appointment_service.cancellation_message(appointment, tenant.name, zone)
-        notified, error = await appointment_service.send_fixed_message(
+        notified, error, channel = await appointment_service.notify_customer(
             db, tenant, conversation, customer, text, user_id, "appointment_cancelled",
+            subject=f"Votre rendez-vous est annulé — {tenant.name}",
         )
     appointment_service.cancel(appointment, now=now)
     await log_audit_event(
         db, actor=user_id, action="APPOINTMENT_CANCELLED", tenant_id=tenant.id,
-        details={"appointment_id": str(appointment.id), "customer_notified": notified},
+        details={"appointment_id": str(appointment.id), "customer_notified": notified, "notified_by": channel},
     )
     await db.commit()
-    return ActionResult(appointment=await _out(db, appointment, zone, now), customer_notified=notified, notify_error=error)
+    return ActionResult(appointment=await _out(db, appointment, zone, now), customer_notified=notified, notify_error=error, notified_by=channel)
 
 
 # --- Lot 36 : issue du rendez-vous --------------------------------------------------------------

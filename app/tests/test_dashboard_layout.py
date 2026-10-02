@@ -23,7 +23,7 @@ def _show_tab_line(tab: str) -> str:
 
 @pytest.mark.parametrize("tab, cards", [
     ("integrations", ["Compte WhatsApp Business", "Liens WhatsApp &amp; widgets", "Shopify", "Catalogue Facebook (Meta)"]),
-    ("bob", ["Négociation de prix", "Transmission à un humain", "Réponses aux objections", "Relances automatiques"]),
+    ("bob", ["Négociation de prix", "Transmission à un humain", "Réponses aux objections", "Relances par email"]),
     ("settings", ["Sécurité du compte"]),
     ("products", ["Ajouter un produit", "Importer un catalogue CSV", "Codes QR produits"]),
 ])
@@ -245,7 +245,7 @@ def test_appointment_cards_escape_everything_from_customers_and_bob():
         assert f"esc({field})" in card, field
     for raw in ("${a.need}", "${a.notes}", "${a.customer}", "${a.availability}", "${a.vehicle}"):
         assert raw not in card
-    assert '${a.can_notify ? "checked" : "disabled"}' in card  # prévenir le client : coché par défaut
+    assert '${notifyVia ? "checked" : "disabled"}' in card  # prévenir le client : coché par défaut
 
 
 # --- Lot 26 : fiches véhicules, et produits enfin échappés -------------------------------------

@@ -173,23 +173,29 @@ async def mark_order_paid(
     # Le message n'est persisté dans l'historique QUE si la commande est liée à une
     # conversation (ex. commande créée par l'IA) — une commande créée depuis le dashboard
     # sans conversation associée n'a pas cette contrainte, mais l'envoi WhatsApp reste tenté.
-    if order.conversation_id is not None:
+    from app.services.human_reply import customer_window_open
+
+    account_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
+    account = (await db.execute(account_stmt)).scalar_one_or_none()
+    customer = await db.get(Customer, order.customer_id)
+    receipt_sent = False
+    # Lot 49 — WhatsApp seulement dans les 20 h qui suivent le dernier message du client ;
+    # sinon, le reçu part par email (ci-dessous) si le client a donné son adresse.
+    if account is not None and customer is not None \
+            and await customer_window_open(db, current_user.tenant_id, customer.id):
+        try:
+            wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+            await wa_client.send_text_message(to=customer.whatsapp_number, body=receipt_text)
+            receipt_sent = True
+        except Exception:  # noqa: BLE001 — un échec d'envoi ne doit jamais bloquer la confirmation
+            pass
+    if receipt_sent and order.conversation_id is not None:  # jamais de reçu « envoyé » qui n'est pas parti
         db.add(
             Message(
                 tenant_id=current_user.tenant_id, conversation_id=order.conversation_id,
                 sender=MessageSender.SYSTEM, message_type="receipt", content=receipt_text,
             )
         )
-
-    account_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
-    account = (await db.execute(account_stmt)).scalar_one_or_none()
-    customer = await db.get(Customer, order.customer_id)
-    if account is not None and customer is not None:
-        try:
-            wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
-            await wa_client.send_text_message(to=customer.whatsapp_number, body=receipt_text)
-        except Exception:  # noqa: BLE001 — un échec d'envoi ne doit jamais bloquer la confirmation
-            pass
 
     # Lot 40 — le reçu part aussi par email si le client a donné son adresse (une seule fois).
     from app.services.order_emails import receipt_to_send
@@ -198,7 +204,7 @@ async def mark_order_paid(
 
     await log_audit_event(
         db, actor=str(current_user.user_id), action="ORDER_MARKED_PAID", tenant_id=current_user.tenant_id,
-        details={"order_id": str(order_id), "receipt_emailed": receipt_mail is not None},
+        details={"order_id": str(order_id), "receipt_emailed": receipt_mail is not None, "receipt_whatsapp": receipt_sent},
     )
     await db.commit()
     if receipt_mail is not None:
@@ -230,6 +236,8 @@ async def cancel_order_route(
 
     reason = payload.reason.strip() if payload.reason and payload.reason.strip() else None
     customer_notified: bool | None = None
+    notified_by: str | None = None
+    cancel_mail = None
     if payload.notify_customer:
         from app.models.tenant import Tenant
         from app.services.address_form import uses_tu
@@ -240,15 +248,33 @@ async def cancel_order_route(
             select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
         )).scalar_one_or_none()
         customer = await db.get(Customer, order.customer_id)
-        if account is not None and customer is not None:
+        from app.services.human_reply import customer_window_open
+
+        # Lot 49 — WhatsApp seulement dans les 20 h ; sinon email (message de service, sans accord marketing).
+        if account is not None and customer is not None \
+                and await customer_window_open(db, current_user.tenant_id, customer.id):
             try:
                 wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
                 await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
-                customer_notified = True
+                customer_notified, notified_by = True, "WHATSAPP"
             except Exception:  # noqa: BLE001 — l'annulation reste valable même si le message est refusé
                 customer_notified = False
-        # Trace dans l'historique uniquement si le message est réellement parti.
-        if customer_notified and order.conversation_id is not None:
+        if not customer_notified and customer is not None and customer.email:
+            from app.services.email_layout import customer_footer
+            from app.services.email_service import send_email as _send_email
+
+            tenant_row = await db.get(Tenant, current_user.tenant_id)
+            cancel_mail = {
+                "to": customer.email, "subject": f"Commande annulée — {tenant_row.name}",
+                "body": text + customer_footer(tenant_row.name, not tenant_row.is_paid, tu=uses_tu(tenant_row)),
+                "from_name": tenant_row.name, "reply_to": tenant_row.email,
+            }
+            import asyncio
+
+            customer_notified = bool(await asyncio.to_thread(_send_email, **cancel_mail))
+            notified_by = "EMAIL" if customer_notified else None
+        # Trace dans l'historique uniquement si le message WhatsApp est réellement parti.
+        if notified_by == "WHATSAPP" and order.conversation_id is not None:
             db.add(Message(
                 tenant_id=current_user.tenant_id, conversation_id=order.conversation_id,
                 sender=MessageSender.SYSTEM, message_type="order_cancelled", content=text,
@@ -256,9 +282,9 @@ async def cancel_order_route(
 
     await log_audit_event(
         db, actor=str(current_user.user_id), action="ORDER_CANCELLED", tenant_id=current_user.tenant_id,
-        details={"order_id": str(order_id), "reason": reason, "customer_notified": customer_notified},
+        details={"order_id": str(order_id), "reason": reason, "customer_notified": customer_notified, "notified_by": notified_by},
     )
     await db.commit()
 
     detail = await _build_order_detail(db, order)
-    return OrderCancelResponse(**detail.model_dump(), customer_notified=customer_notified)
+    return OrderCancelResponse(**detail.model_dump(), customer_notified=customer_notified, notified_by=notified_by)

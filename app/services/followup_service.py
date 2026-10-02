@@ -4,10 +4,11 @@ Relance automatique des conversations abandonnées (section 23).
 Séquence : conversation sans réponse -> attente N1 heures -> première relance ->
 attente N2 heures -> deuxième relance -> STOP (jamais de troisième relance).
 
-Chaque envoi passe par le même garde-fou que tout envoi proactif (section 56) :
-permission CAN_SEND_PROACTIVE_MESSAGE, qui exige outbound_mode == COMMERCIAL_ENABLED.
-Une relance n'est donc jamais envoyée si le tenant n'a pas explicitement activé les
-envois commerciaux — cohérent avec la maîtrise des coûts WhatsApp déjà en place.
+Lot 49 — les relances partent par EMAIL, jamais sur WhatsApp : passé 20 h sans message du
+client, WhatsApp n'accepte plus de message libre. L'email (personnalisé, avec l'offre du moment
+saisie par le commerçant) invite à reprendre la discussion sur WhatsApp. Il ne part qu'aux
+clients qui ont donné leur email ET accepté de recevoir les offres, avec un lien de
+désinscription. L'activation des relances par le commerçant suffit : aucun envoi WhatsApp.
 """
 import logging
 from datetime import datetime, timedelta, timezone
@@ -15,12 +16,10 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.whatsapp.client import WhatsAppClient
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
 from app.models.customer import Customer
 from app.models.followup_settings import TenantFollowupSettings
 from app.models.whatsapp_account import WhatsAppAccount
-from app.services.messaging_guard import OutboundDenied, Permission, check_and_log_outbound
 
 logger = logging.getLogger(__name__)
 
@@ -70,46 +69,121 @@ async def send_followup(
     conversation: Conversation,
     settings: TenantFollowupSettings,
     now: datetime | None = None,
+    send_email=None,
 ) -> bool:
-    """Retourne True si la relance a bien été envoyée, False si refusée par les garde-fous."""
+    """
+    Lot 49 — la relance part par EMAIL, jamais sur WhatsApp (au-delà de 20 h, WhatsApp exige un
+    modèle payant et approuvé). Seulement si le client a donné son email ET accepté les offres.
+    L'étape avance dans tous les cas : un client sans email n'est jamais retenté en boucle.
+    Retourne True si l'email est parti.
+    """
+    from app.models.tenant import Tenant
+
     now = now or datetime.now(timezone.utc)
-    message_text = settings.first_message if conversation.followup_stage == 0 else settings.second_message
-
-    try:
-        await check_and_log_outbound(
-            db, tenant_id=tenant_id, requested_by="SYSTEM", permission=Permission.CAN_SEND_PROACTIVE_MESSAGE
-        )
-    except OutboundDenied:
-        await db.commit()
-        return False
-
-    account_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == tenant_id)
-    account = (await db.execute(account_stmt)).scalar_one_or_none()
+    stage = conversation.followup_stage
+    tenant = await db.get(Tenant, tenant_id)
     customer = await db.get(Customer, conversation.customer_id)
-
-    if account is not None and customer is not None:
+    sent = False
+    if tenant is not None and customer is not None and customer.tenant_id == tenant_id \
+            and customer.email and customer.marketing_consent:
+        mail = await build_followup_email(db, tenant, customer, settings, stage, now)
+        if send_email is None:
+            from app.services.email_service import send_email
         try:
-            wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
-            await wa_client.send_text_message(to=customer.whatsapp_number, body=message_text)
+            sent = bool(send_email(**mail))
         except Exception:  # noqa: BLE001 — jamais interrompre le traitement des autres conversations
-            logger.exception("Échec d'envoi de relance pour la conversation %s", conversation.id)
-
-    db.add(
-        Message(
-            tenant_id=tenant_id,
-            conversation_id=conversation.id,
-            sender=MessageSender.SYSTEM,
-            message_type="followup",
-            content=message_text,
-        )
-    )
-    conversation.followup_stage += 1
+            logger.exception("Échec d'envoi de la relance par email (conversation %s)", conversation.id)
+        if sent:
+            db.add(Message(
+                tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                message_type="followup_email", content=f"Relance envoyée par email : « {mail['subject']} »",
+            ))
+    conversation.followup_stage = stage + 1
     conversation.last_followup_at = now
     await db.commit()
-    return True
+    return sent
 
 
-async def run_followups_for_tenant(db: AsyncSession, tenant_id, now: datetime | None = None) -> int:
+def active_offer(settings: TenantFollowupSettings, today) -> dict | None:
+    """L'offre saisie par le commerçant, seulement si elle n'est pas terminée."""
+    text = (settings.offer_text or "").strip()
+    if not text or (settings.offer_ends_on is not None and settings.offer_ends_on < today):
+        return None
+    return {"text": text, "code": (settings.offer_code or "").strip() or None, "ends_on": settings.offer_ends_on}
+
+
+async def _last_viewed(db: AsyncSession, tenant_id, customer_id) -> str | None:
+    from app.models.customer_product_view import CustomerProductView
+    from app.models.product import Product
+
+    row = (await db.execute(
+        select(Product.name).join(CustomerProductView, CustomerProductView.product_id == Product.id).where(
+            CustomerProductView.tenant_id == tenant_id, CustomerProductView.customer_id == customer_id,
+            Product.tenant_id == tenant_id, Product.active.is_(True),
+        ).order_by(CustomerProductView.last_viewed_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    return row
+
+
+_UNSET = object()
+
+
+async def build_followup_email(db: AsyncSession, tenant, customer, settings: TenantFollowupSettings, stage: int,
+                               now: datetime, viewed=_UNSET) -> dict:
+    """
+    Email personnalisé : prénom, produit ou véhicule regardé, message et offre du commerçant, bouton
+    « Reprendre sur WhatsApp », désinscription. Texte fixe assemblé par le code : Bob n'invente rien.
+    """
+    from urllib.parse import quote
+
+    from app.services.address_form import uses_tu
+    from app.services.business_type import is_dealership
+    from app.services.campaign_service import _build_email_body, _unsubscribe_headers
+    from app.services.unsubscribe_service import build_unsubscribe_url
+
+    tu = uses_tu(tenant)
+    first = (customer.first_name or "").strip()
+    offer = active_offer(settings, now.date())
+    if viewed is _UNSET:
+        viewed = await _last_viewed(db, tenant.id, customer.id)
+    account = (await db.execute(select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == tenant.id))).scalar_one_or_none()
+
+    if offer:
+        subject = (f"{first}, une offre pour toi chez {tenant.name}" if tu else f"{first}, une offre pour vous chez {tenant.name}") \
+            if first else f"Une offre {'pour toi' if tu else 'pour vous'} chez {tenant.name}"
+    elif stage == 0:
+        subject = f"{first}, on reprend notre échange ?" if first else f"{tenant.name} : on reprend notre échange ?"
+    else:
+        subject = f"{tenant.name} {'t' + chr(39) + 'attend' if tu else 'vous attend'} toujours"
+
+    lines = [f"Bonjour {first}," if first else "Bonjour,", ""]
+    lines.append((settings.first_message if stage == 0 else settings.second_message).strip())
+    if viewed:
+        what = "le véhicule" if is_dealership(tenant) else "l'article"
+        lines += ["", f"{'Tu regardais' if tu else 'Vous regardiez'} {what} « {viewed} ». "
+                      f"{'Il t' + chr(39) + 'intéresse' if tu else 'Il vous intéresse'} toujours ?"]
+    if offer:
+        lines += ["", f"Offre du moment : {offer['text']}"]
+        if offer["code"]:
+            lines.append(f"Code promo : {offer['code']}")
+        if offer["ends_on"]:
+            lines.append(f"Valable jusqu'au : {offer['ends_on'].strftime('%d/%m/%Y')}")
+    wa_link = None
+    if account is not None and account.display_phone_number:
+        digits = "".join(ch for ch in account.display_phone_number if ch.isdigit())
+        hello = "Bonjour, je reviens vers vous suite à votre email"
+        wa_link = f"https://wa.me/{digits}?text={quote(hello)}"
+    unsubscribe_url = build_unsubscribe_url(customer.id)
+    body = _build_email_body("\n".join(lines), None, tenant.name, unsubscribe_url, tu=tu, powered_by=not tenant.is_paid)
+    if wa_link:
+        cta = f"\n\nReprendre sur WhatsApp : {wa_link}"
+        separator = body.index("\n\n—") if "\n\n—" in body else len(body)
+        body = body[:separator] + cta + body[separator:]
+    return {"to": customer.email, "subject": subject, "body": body, "from_name": tenant.name,
+            "reply_to": tenant.email, "extra_headers": _unsubscribe_headers(unsubscribe_url)}
+
+
+async def run_followups_for_tenant(db: AsyncSession, tenant_id, now: datetime | None = None, send_email=None) -> int:
     """Retourne le nombre de relances effectivement envoyées pour ce tenant."""
     from app.models.tenant import Tenant
 
@@ -126,6 +200,16 @@ async def run_followups_for_tenant(db: AsyncSession, tenant_id, now: datetime | 
     eligible = await find_eligible_conversations(db, tenant_id, settings, now=now)
     sent_count = 0
     for conversation in eligible:
-        if await send_followup(db, tenant_id, conversation, settings, now=now):
+        if await send_followup(db, tenant_id, conversation, settings, now=now, send_email=send_email):
             sent_count += 1
     return sent_count
+
+
+async def eligible_recipients(db: AsyncSession, tenant_id) -> int:
+    """Clients qui peuvent recevoir une relance par email : email donné ET offres acceptées."""
+    from sqlalchemy import func
+
+    return (await db.execute(select(func.count(Customer.id)).where(
+        Customer.tenant_id == tenant_id, Customer.email.is_not(None), Customer.email != "",
+        Customer.marketing_consent.is_(True),
+    ))).scalar_one()

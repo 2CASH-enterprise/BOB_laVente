@@ -1,9 +1,10 @@
+from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -214,16 +215,45 @@ class FollowupSettingsResp(BaseModel):
     first_message: str
     second_followup_hours: int
     second_message: str
+    offer_text: str | None = None  # lot 49 : offre du moment, citée dans les emails de relance
+    offer_code: str | None = None
+    offer_ends_on: date | None = None
+    eligible_recipients: int = 0  # clients avec email ET accord pour les offres
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class FollowupSettingsReq(BaseModel):
     enabled: bool | None = None
-    first_followup_hours: int | None = None
-    first_message: str | None = None
-    second_followup_hours: int | None = None
-    second_message: str | None = None
+    first_followup_hours: int | None = Field(default=None, ge=1, le=720)
+    first_message: str | None = Field(default=None, min_length=1, max_length=1000)
+    second_followup_hours: int | None = Field(default=None, ge=1, le=720)
+    second_message: str | None = Field(default=None, min_length=1, max_length=1000)
+    offer_text: str | None = Field(default=None, max_length=500)
+    offer_code: str | None = Field(default=None, max_length=40)
+    offer_ends_on: date | None = None
+
+
+async def _followup_settings(db, tenant_id):
+    from app.models.followup_settings import TenantFollowupSettings
+
+    settings = (await db.execute(
+        select(TenantFollowupSettings).where(TenantFollowupSettings.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if settings is None:
+        settings = TenantFollowupSettings(tenant_id=tenant_id)
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
+    return settings
+
+
+async def _followup_response(db, tenant_id, settings) -> FollowupSettingsResp:
+    from app.services.followup_service import eligible_recipients
+
+    out = FollowupSettingsResp.model_validate(settings)
+    out.eligible_recipients = await eligible_recipients(db, tenant_id)
+    return out
 
 
 @router.get("/me/followup-settings", response_model=FollowupSettingsResp)
@@ -231,16 +261,7 @@ async def get_followup_settings(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.followup_settings import TenantFollowupSettings
-
-    stmt = select(TenantFollowupSettings).where(TenantFollowupSettings.tenant_id == current_user.tenant_id)
-    settings = (await db.execute(stmt)).scalar_one_or_none()
-    if settings is None:
-        settings = TenantFollowupSettings(tenant_id=current_user.tenant_id)
-        db.add(settings)
-        await db.commit()
-        await db.refresh(settings)
-    return settings
+    return await _followup_response(db, current_user.tenant_id, await _followup_settings(db, current_user.tenant_id))
 
 
 @router.put(
@@ -251,20 +272,41 @@ async def update_followup_settings(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.followup_settings import TenantFollowupSettings
-
-    stmt = select(TenantFollowupSettings).where(TenantFollowupSettings.tenant_id == current_user.tenant_id)
-    settings = (await db.execute(stmt)).scalar_one_or_none()
-    if settings is None:
-        settings = TenantFollowupSettings(tenant_id=current_user.tenant_id)
-        db.add(settings)
-
+    settings = await _followup_settings(db, current_user.tenant_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field in ("offer_text", "offer_code") and isinstance(value, str):
+            value = value.strip() or None  # champ vidé = plus d'offre
+        if field in ("first_message", "second_message") and isinstance(value, str):
+            value = value.strip()
+            if not value:
+                raise HTTPException(status_code=422, detail="Le message de relance ne peut pas être vide.")
         setattr(settings, field, value)
-
     await db.commit()
     await db.refresh(settings)
-    return settings
+    return await _followup_response(db, current_user.tenant_id, settings)
+
+
+@router.get("/me/followup-preview")
+async def preview_followup_email(
+    stage: int = Query(default=1, ge=1, le=2),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lot 49 — aperçu de l'email de relance, avec un client fictif (rien n'est envoyé)."""
+    import uuid as _uuid
+    from datetime import datetime as _dt, timezone as _tz
+
+    from app.models.customer import Customer
+    from app.models.product import Product
+    from app.services.followup_service import build_followup_email
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    settings = await _followup_settings(db, current_user.tenant_id)
+    sample = (await db.execute(select(Product.name).where(
+        Product.tenant_id == current_user.tenant_id, Product.active.is_(True)).limit(1))).scalar_one_or_none()
+    fake = Customer(id=_uuid.uuid4(), tenant_id=tenant.id, whatsapp_number="0", first_name="Awa", email="client@exemple.com")
+    mail = await build_followup_email(db, tenant, fake, settings, stage - 1, _dt.now(_tz.utc), viewed=sample)
+    return {"subject": mail["subject"], "body": mail["body"]}
 
 
 class NegotiationSettingsResp(BaseModel):
