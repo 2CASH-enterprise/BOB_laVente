@@ -23,6 +23,8 @@ from app.models.whatsapp_account import WhatsAppAccount
 
 logger = logging.getLogger(__name__)
 
+FOLLOWUP_MAX_AGE = timedelta(days=14)
+
 
 def _ensure_aware(dt: datetime) -> datetime:
     """SQLite (tests) renvoie parfois des datetime naïfs même sur une colonne timezone=True ;
@@ -44,6 +46,8 @@ async def find_eligible_conversations(
         Conversation.tenant_id == tenant_id,
         Conversation.status == ConversationStatus.ACTIVE,
         Conversation.last_message_at.is_not(None),
+        # Lot 50 — jamais de relance pour une vieille conversation (activation des relances, reprise…).
+        Conversation.last_message_at >= now - FOLLOWUP_MAX_AGE,
     )
     candidates = list((await db.execute(stmt)).scalars().all())
 

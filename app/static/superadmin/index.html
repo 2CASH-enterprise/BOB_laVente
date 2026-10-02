@@ -62,6 +62,18 @@
   </header>
   <main>
     <div class="grid" id="stats-grid"></div>
+    <section id="ai-costs" style="margin-bottom: 28px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px;">
+        <h2 style="font-size: 16px; margin: 0;">Coûts IA <span style="font-weight: 400; color: var(--muted); font-size: 13px;">— estimation d'après les tokens réellement consommés</span></h2>
+        <label style="font-size: 13px;">Mois <input type="month" id="ai-month" class="input" style="width: auto; margin: 0; padding: 6px 8px;" onchange="loadAiCosts()"></label>
+      </div>
+      <div class="grid" id="ai-totals"></div>
+      <div style="overflow-x: auto;"><table>
+        <thead><tr><th>Entreprise</th><th>Conversations</th><th>Appels IA</th><th>Tokens envoyés</th><th>dont cache</th><th>Tokens reçus</th><th>Coût estimé</th><th>Par conversation</th></tr></thead>
+        <tbody id="ai-rows"></tbody>
+      </table></div>
+      <p style="font-size: 12px; color: var(--muted); margin: 8px 0 0;" id="ai-note"></p>
+    </section>
     <table>
       <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Activité</th><th>Statut</th><th>Produits</th><th>Conversations (mois)</th><th>Commission</th><th>Créé le</th></tr></thead>
       <tbody id="tenant-rows"></tbody>
@@ -86,6 +98,7 @@ function enterApp() {
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   loadStats();
+  loadAiCosts();
   loadTenants();
 }
 
@@ -158,6 +171,39 @@ async function loadStats() {
   `;
 }
 
+// Lot 50 — coût IA par boutique : tokens réellement facturés par Mistral (le cache coûte 10 % du prix).
+function fmtInt(n) { return Number(n || 0).toLocaleString("fr-FR"); }
+function fmtUsd(n, digits = 2) {
+  if (n === null || n === undefined) return "—";
+  const d = Math.abs(n) > 0 && Math.abs(n) < 1 ? Math.max(digits, 4) : digits;  // petits montants : 4 décimales
+  return `${Number(n).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d })} $`;
+}
+function fmtPct(n) { return n === null || n === undefined ? "—" : `${Number(n).toLocaleString("fr-FR")} %`; }
+async function loadAiCosts() {
+  const input = document.getElementById("ai-month");
+  const rows = document.getElementById("ai-rows");
+  rows.innerHTML = "<tr><td colspan='8'>Chargement…</td></tr>";
+  try {
+    const d = await api(`/api/v1/superadmin/ai-costs${input.value ? `?month=${encodeURIComponent(input.value)}` : ""}`);
+    if (!input.value) input.value = d.month;
+    const t = d.totals;
+    document.getElementById("ai-totals").innerHTML = `
+      <div class="card"><div class="value">${fmtUsd(t.cost_usd)}</div><div class="label">Coût IA estimé (${esc(d.month)})</div></div>
+      <div class="card"><div class="value">${fmtInt(t.conversations)}</div><div class="label">Conversations avec IA</div></div>
+      <div class="card"><div class="value">${t.conversations ? fmtUsd(t.cost_usd / t.conversations, 4) : "—"}</div><div class="label">Coût moyen par conversation</div></div>
+      <div class="card"><div class="value">${fmtPct(t.cache_rate_pct)}</div><div class="label">Tokens servis par le cache</div></div>`;
+    rows.innerHTML = d.rows.map((r) => `<tr${r.cost_usd > d.threshold_usd ? ' style="background: #FBEFDB;"' : ""}>
+        <td>${esc(r.tenant)}${r.unpriced_models.length ? ` <span class="badge demo" title="Modèle sans prix connu">${esc(r.unpriced_models.join(", "))}</span>` : ""}</td>
+        <td>${fmtInt(r.conversations)}</td><td>${fmtInt(r.calls)}</td><td>${fmtInt(r.prompt_tokens)}</td>
+        <td>${fmtInt(r.cached_tokens)}${r.cache_rate_pct === null ? "" : ` <span style="color: var(--muted);">(${fmtPct(r.cache_rate_pct)})</span>`}</td>
+        <td>${fmtInt(r.completion_tokens)}</td><td><strong>${fmtUsd(r.cost_usd)}</strong></td><td>${fmtUsd(r.cost_per_conversation_usd, 4)}</td>
+      </tr>`).join("") || "<tr><td colspan='8'>Aucun appel à l'IA ce mois-ci.</td></tr>";
+    document.getElementById("ai-note").textContent =
+      `Prix Mistral appliqués : Small 0,15 $ / 0,60 $, Medium 0,40 $ / 2,00 $, Large 0,50 $ / 1,50 $ par million de tokens (entrée / sortie) ; tokens du cache à 10 % du prix d'entrée. Ligne surlignée : au-delà de ${d.threshold_usd} $ ce mois-ci (un email d'alerte est envoyé une fois par mois).`;
+  } catch (e) {
+    rows.innerHTML = `<tr><td colspan='8' style="color: var(--danger);">${esc(e.message)}</td></tr>`;
+  }
+}
 const PLANS = ["FREE", "INDEPENDANT", "STARTER", "PRO", "ENTERPRISE"];
 // Lot 32 : le type d'activité ne se change plus que d'ici, à la demande du client.
 const BUSINESS_TYPES = { ONLINE_STORE: "Boutique en ligne", CAR_DEALERSHIP: "Concession auto" };

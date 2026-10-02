@@ -24,7 +24,8 @@ def test_nightly_opportunity_task_is_scheduled_and_registered():
     assert nightly.hour == {2} and nightly.minute == {30}
 
 
-def test_followups_stay_disabled_until_redesigned():
-    """Relances désactivées volontairement (fenêtre 24 h WhatsApp, absence de limite d'ancienneté)."""
+def test_followups_and_budget_alerts_are_scheduled_and_registered():
+    """Lot 50 — relances réactivées (email uniquement, conversations de moins de 14 jours) + alerte de budget IA."""
     scheduled = {entry["task"] for entry in celery_app.conf.beat_schedule.values()}
-    assert "app.workers.followups.check_followups_task" not in scheduled
+    for task in ("app.workers.followups.check_followups_task", "app.workers.llm_budget.check_budgets_task"):
+        assert task in scheduled and task in _registered_tasks()

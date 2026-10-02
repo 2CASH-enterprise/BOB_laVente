@@ -17,6 +17,7 @@ from app.models.followup_settings import TenantFollowupSettings  # noqa: F401
 from app.models.negotiation_settings import TenantNegotiationSettings  # noqa: F401
 from app.models.negotiation import Negotiation  # noqa: F401
 from app.models.customer_product_view import CustomerProductView  # noqa: F401
+from app.models.llm_usage import LlmBudgetAlert, LlmUsage  # noqa: F401 — lot 50
 from app.models.delivery import Delivery  # noqa: F401
 from app.models.product_qr_code import ProductQrCode  # noqa: F401
 from app.models.contact_point import ContactPoint  # noqa: F401
@@ -55,6 +56,8 @@ __all__ = [
     "TenantNegotiationSettings",
     "Negotiation",
     "CustomerProductView",
+    "LlmUsage",
+    "LlmBudgetAlert",
     "Delivery",
     "ProductQrCode",
     "EmailCampaign",

@@ -259,8 +259,18 @@ async def receive_webhook(
     # TOUS les messages texte du client, même en attente d'un humain. Jamais bloquant, et
     # sans effet sur la réponse de Bob dans ce lot.
     # Lot 45 : la concession a ses propres objections (financement, reprise, papiers, état du véhicule).
-    signal = await classify_and_store(db, classifier, incoming_message,
-                                      business_type=getattr(await db.get(Tenant, tenant_id), "business_type", None))
+    # Lot 50 — limite par client : au-delà de 30 messages en une heure, plus d'appel à l'IA (ni analyse,
+    # ni réponse) ; un message fixe une seule fois, puis silence jusqu'à la fin de l'heure.
+    from app.services import usage_guard
+
+    rate = await usage_guard.customer_rate_limit(db, tenant_id, customer.id)
+    if rate == usage_guard.SILENT:
+        await db.commit()
+        return {"status": "received_rate_limited"}
+    signal = None
+    if rate == usage_guard.OK:
+        signal = await classify_and_store(db, classifier, incoming_message,
+                                          business_type=getattr(await db.get(Tenant, tenant_id), "business_type", None))
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
@@ -296,6 +306,10 @@ async def receive_webhook(
         from app.services.contact_capture import opt_in_reply
 
         reply_text = opt_in_reply(bool(customer.email), tu=tu)
+    elif rate == usage_guard.NOTIFY:
+        reply_text = usage_guard.RATE_LIMIT_MESSAGE_TU if tu else usage_guard.RATE_LIMIT_MESSAGE
+        db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                       message_type="rate_limited", content="Trop de messages en une heure : Bob fait une pause d'une heure"))
     elif quota_exceeded:
         reply_text = (FREEMIUM_QUOTA_MESSAGE_TU if tu else FREEMIUM_QUOTA_MESSAGE).format(company_name=tenant.name)
     else:

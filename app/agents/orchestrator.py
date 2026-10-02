@@ -86,6 +86,21 @@ async def _create_with_retries(llm_client: LLMClient, **kwargs) -> dict:
             attempt += 1
 
 
+def record_usage(db, tenant_id, conversation_id, kind: str, model: str | None, response: dict | None) -> None:
+    """Lot 50 — tokens d'un appel (jamais le texte). Sans effet si le fournisseur ne les donne pas."""
+    usage = (response or {}).get("usage") if isinstance(response, dict) else None
+    if not usage:
+        return
+    from app.models.llm_usage import LlmUsage
+
+    try:
+        db.add(LlmUsage(tenant_id=tenant_id, conversation_id=conversation_id, kind=kind, model=(model or "inconnu")[:64],
+                        prompt_tokens=int(usage.get("prompt_tokens") or 0), cached_tokens=int(usage.get("cached_tokens") or 0),
+                        completion_tokens=int(usage.get("completion_tokens") or 0)))
+    except Exception:  # noqa: BLE001 — la mesure ne doit jamais empêcher Bob de répondre
+        logger.warning("Consommation de l'IA non enregistrée (conversation %s)", conversation_id)
+
+
 def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
     """
     Mémoire conversationnelle (section 13) : convertit l'historique en base au format
@@ -194,6 +209,18 @@ async def generate_ai_reply_detailed(
     messages = _history_to_anthropic_messages(history)
     messages.append({"role": "user", "content": incoming_text})
 
+    # Lot 50 — cache de Mistral : une clé par boutique (consignes et outils identiques d'un client à
+    # l'autre). Les fakes de test et Anthropic n'en reçoivent pas.
+    from app.services.llm_costs import reply_cache_key
+
+    cache_key = reply_cache_key(tenant.id) if getattr(llm_client, "supports_cache_key", False) else None
+
+    def call_kwargs(system: str) -> dict:
+        kwargs = {"system": system, "messages": messages, "tools": tools}
+        if cache_key:
+            kwargs["cache_key"] = cache_key
+        return kwargs
+
     empty_replies = 0
     photo_retry_done = False
     lookup_retry_done = False
@@ -205,9 +232,8 @@ async def generate_ai_reply_detailed(
     claim_retry_done = False
     try:
         for _ in range(settings.max_tool_iterations):
-            response = await _create_with_retries(
-                llm_client, system=system_prompt, messages=messages, tools=tools
-            )
+            response = await _create_with_retries(llm_client, **call_kwargs(system_prompt))
+            record_usage(db, tenant.id, conversation.id, "REPLY", getattr(llm_client, "model", None), response)
             content_blocks = response.get("content", [])
             stop_reason = response.get("stop_reason")
 

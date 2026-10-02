@@ -43,6 +43,10 @@ async def classify_and_store(db: AsyncSession, classifier: MessageClassifier | N
         )
         if result is None:
             return None
+        if result.get("usage"):  # lot 50 : tokens de l'analyse, pour le coût par boutique
+            from app.agents.orchestrator import record_usage
+
+            record_usage(db, message.tenant_id, message.conversation_id, "CLASSIFIER", classifier.model_name, result)
     except Exception:  # noqa: BLE001
         logger.exception("Échec de la classification du message %s", message.id)
         return None

@@ -151,10 +151,14 @@ class MessageClassifier(ABC):
             else:
                 call = self._call(text[:MAX_MESSAGE_CHARS], previous_shop_message)
             raw = await asyncio.wait_for(call, timeout=timeout)
+            usage = raw.pop("_usage", None) if isinstance(raw, dict) else None  # lot 50
         except Exception:  # noqa: BLE001 — jamais bloquant : pas de classification, Bob répond normalement
             logger.warning("Classification du message impossible (délai ou erreur du modèle)", exc_info=True)
             return None
-        return normalize_classification(raw, business_type)
+        result = normalize_classification(raw, business_type)
+        if result is not None and usage:
+            result["usage"] = usage
+        return result
 
 
 class MistralMessageClassifier(MessageClassifier):
@@ -174,17 +178,27 @@ class MistralMessageClassifier(MessageClassifier):
         user = f"Message du client : {text}"
         if previous_shop_message:
             user = f"Message précédent de la boutique : {previous_shop_message[:500]}\n\n{user}"
+        from app.services.llm_costs import classifier_cache_key, usage_from_mistral
+
+        # Lot 50 — consignes identiques pour toutes les boutiques d'une même activité : une clé de cache
+        # par activité (les consignes de la concession ne sont envoyées que pour une concession).
+        activity = "CAR_DEALERSHIP" if system_prompt else "ONLINE_STORE"
         response = await self._get_client().chat.complete_async(
             model=self.model_name,
             messages=[{"role": "system", "content": system_prompt or build_classifier_prompt()}, {"role": "user", "content": user}],
             response_format={"type": "json_object"},
             temperature=0,
             max_tokens=200,
+            prompt_cache_key=classifier_cache_key(activity),
         )
         content = response.choices[0].message.content
         if isinstance(content, list):
             content = "".join(getattr(chunk, "text", "") for chunk in content)
-        return json.loads(content or "{}")
+        raw = json.loads(content or "{}")
+        usage = usage_from_mistral(getattr(response, "usage", None))
+        if isinstance(raw, dict) and usage:
+            raw["_usage"] = usage
+        return raw
 
 
 def get_message_classifier() -> MessageClassifier | None:

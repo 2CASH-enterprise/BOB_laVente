@@ -13,15 +13,16 @@ settings = get_settings()
 # fichier app/workers/tasks.py qui n'existe pas, et ne trouvait donc AUCUNE tâche — le worker
 # refusait silencieusement les relances et le calcul des opportunités (« unregistered task »).
 #
-# Les relances automatiques (app.workers.followups) ne sont VOLONTAIREMENT PAS activées : elles
-# n'ont en réalité jamais tourné, et les activer en l'état enverrait des messages libres hors de
-# la fenêtre de 24 h de WhatsApp (refusés par Meta, mais enregistrés comme « envoyés »), sans
-# limite d'ancienneté des conversations. À réactiver après refonte (modèles Meta, garde-fous).
+# Lot 50 — les relances sont réactivées : depuis le lot 49 elles partent par EMAIL (jamais sur
+# WhatsApp), seulement aux clients qui ont accepté les offres, et seulement pour des conversations
+# de moins de 14 jours (followup_service.FOLLOWUP_MAX_AGE).
 TASK_MODULES = [
     "app.workers.opportunities",
     "app.workers.catalog_sync",
     "app.workers.appointment_reminders",
     "app.workers.notifications",
+    "app.workers.followups",
+    "app.workers.llm_budget",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -46,6 +47,16 @@ celery_app.conf.beat_schedule = {
     "notifications-check": {
         "task": "app.workers.notifications.check_all_task",
         "schedule": crontab(minute="*/10"),
+    },
+    # Lot 49/50 — relances par email des conversations restées sans réponse (boutiques qui les ont activées).
+    "email-followups": {
+        "task": "app.workers.followups.check_followups_task",
+        "schedule": crontab(minute="*/15"),
+    },
+    # Lot 50 — alerte au Super Admin si le coût IA d'une boutique dépasse le seuil du mois.
+    "llm-budget-alerts": {
+        "task": "app.workers.llm_budget.check_budgets_task",
+        "schedule": crontab(minute=5),
     },
 }
 celery_app.conf.timezone = "UTC"

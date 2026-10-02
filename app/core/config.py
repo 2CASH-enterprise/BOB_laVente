@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     max_tool_iterations: int = 5
     # Nouveaux essais du modèle principal sur erreur passagère (secondes d'attente avant chacun).
     llm_retry_delays: list[float] = [1.0, 3.0]
+    # Lot 50 — alerte au Super Admin quand le coût IA estimé d'une boutique dépasse ce montant ($/mois).
+    llm_monthly_alert_usd: float = 20.0
 
 
 @lru_cache

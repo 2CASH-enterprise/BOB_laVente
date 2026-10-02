@@ -268,3 +268,29 @@ async def platform_stats(
         total_customers=total_customers, total_conversations_this_month=total_conversations_this_month,
         total_orders=total_orders,
     )
+
+
+@router.get("/ai-costs")
+async def ai_costs(
+    month: str | None = None,
+    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Lot 50 — coût IA estimé par boutique pour un mois (« 2026-10 », mois en cours par défaut) :
+    appels, tokens envoyés / servis par le cache / reçus, coût, coût par conversation, taux de cache.
+    """
+    import re
+
+    from app.core.config import get_settings
+    from app.services.llm_usage_service import costs_by_tenant, month_bounds
+
+    if month is not None and not re.fullmatch(r"20\d\d-(0[1-9]|1[0-2])", month):
+        raise HTTPException(status_code=422, detail="Mois attendu au format AAAA-MM.")
+    start, end, label = month_bounds(month)
+    rows = await costs_by_tenant(db, start, end)
+    totals = {key: sum(r[key] for r in rows) for key in ("calls", "conversations", "prompt_tokens", "cached_tokens",
+                                                         "completion_tokens")}
+    totals["cost_usd"] = round(sum(r["cost_usd"] for r in rows), 4)
+    totals["cache_rate_pct"] = round(totals["cached_tokens"] / totals["prompt_tokens"] * 100, 1) if totals["prompt_tokens"] else None
+    return {"month": label, "threshold_usd": get_settings().llm_monthly_alert_usd, "rows": rows, "totals": totals}

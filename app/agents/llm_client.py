@@ -7,6 +7,10 @@ from typing import Any
 
 
 class LLMClient(ABC):
+    # Lot 50 — le client accepte-t-il une clé de cache (prompt_cache_key de Mistral) ?
+    supports_cache_key = False
+    model = "inconnu"
+
     @abstractmethod
     async def create_message(
         self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1024
@@ -24,6 +28,8 @@ class MistralLLMClient(LLMClient):
     et les garde-fous restent identiques : seule cette classe traduit le format interne
     (inspiré d'Anthropic) vers l'API Mistral, et traduit sa réponse en retour.
     """
+
+    supports_cache_key = True  # lot 50 : cache des consignes et des outils (90 % moins cher)
 
     def __init__(self, api_key: str, model: str):
         self.api_key = api_key
@@ -85,17 +91,23 @@ class MistralLLMClient(LLMClient):
         return mistral_messages
 
     async def create_message(
-        self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1024
+        self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], max_tokens: int = 1024,
+        cache_key: str | None = None,
     ) -> dict[str, Any]:
         import json
 
+        from app.services.llm_costs import usage_from_mistral
+
         client = self._get_client()
+        extra = {"prompt_cache_key": cache_key} if cache_key else {}
         response = await client.chat.complete_async(
             model=self.model,
             messages=self._to_mistral_messages(system, messages),
             tools=self._to_mistral_tools(tools) if tools else None,
             max_tokens=max_tokens,
+            **extra,
         )
+        usage = usage_from_mistral(getattr(response, "usage", None))  # lot 50 : tokens réellement facturés
 
         choice = response.choices[0]
         message = choice.message
@@ -107,7 +119,7 @@ class MistralLLMClient(LLMClient):
                 if isinstance(args, str):
                     args = json.loads(args) if args else {}
                 content_blocks.append({"type": "tool_use", "id": tc.id, "name": tc.function.name, "input": args})
-            return {"content": content_blocks, "stop_reason": "tool_use"}
+            return {"content": content_blocks, "stop_reason": "tool_use", "usage": usage}
 
         text = message.content
         chunk_types: list[str] = []
@@ -117,7 +129,8 @@ class MistralLLMClient(LLMClient):
         # Lot 22 : motif de fin et nature du contenu, pour diagnostiquer une réponse vide
         # (jamais le texte lui-même).
         diagnostic = {"finish_reason": str(getattr(choice, "finish_reason", None)), "chunk_types": chunk_types}
-        return {"content": [{"type": "text", "text": text or ""}], "stop_reason": "end_turn", "diagnostic": diagnostic}
+        return {"content": [{"type": "text", "text": text or ""}], "stop_reason": "end_turn", "diagnostic": diagnostic,
+                "usage": usage}
 
 
 class AnthropicLLMClient(LLMClient):
