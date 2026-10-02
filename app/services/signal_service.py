@@ -148,6 +148,7 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
     intent_opps: dict = {}
     objection_messages: dict = {}
     objection_opps: dict = {}
+    objection_first: dict = {}  # lot 46 : objection → {conversation : première apparition}
     for signal in signals:
         opp = opportunity_of(signal)
         for code in signal.intents:
@@ -158,6 +159,10 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
         for code in signal.objections:
             if is_known_objection(code):  # lot 45 : objections de la boutique ou de la concession
                 objection_messages[code] = objection_messages.get(code, 0) + 1
+                seen = objection_first.setdefault(code, {})
+                when = _aware(signal.message_created_at)
+                previous = seen.get(signal.conversation_id)
+                seen[signal.conversation_id] = when if previous is None else min(previous, when)
                 if opp is not None:
                     objection_opps.setdefault(code, {})[opp.id] = opp
 
@@ -185,10 +190,46 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
         })
     objections.sort(key=lambda item: (-item["opportunities"], -item["messages"], item["label"]))
 
+    extra = {}
+    if business_type == "CAR_DEALERSHIP":
+        extra = await _with_appointments(db, tenant_id, objections, objection_first)
+
     return {
+        **extra,
         "period_days": days,
         "classified_messages": len(signals),
         "customer_messages": len(customer_text_messages),
         "intents": intents,
         "objections": objections,
     }
+
+
+async def _with_appointments(db: AsyncSession, tenant_id, objections: list[dict], first_seen: dict) -> dict:
+    """
+    Lot 46 — concession : pour chaque frein, conversations où il est apparu et, parmi elles, celles où
+    une demande de rendez-vous a été faite APRÈS sa première apparition. Taux affiché seulement à partir
+    du même seuil que les stratégies (en dessous, un pourcentage serait trompeur).
+    """
+    from app.agents.strategies import MIN_TERMINATED_FOR_RATE
+    from app.models.appointment_request import AppointmentRequest
+
+    booked: dict = {}
+    for conversation_id, created_at in (await db.execute(
+        select(AppointmentRequest.conversation_id, AppointmentRequest.created_at).where(AppointmentRequest.tenant_id == tenant_id)
+    )).all():
+        booked.setdefault(conversation_id, []).append(_aware(created_at))
+    for item in objections:
+        conversations = first_seen.get(item["code"], {})
+        with_appointment = sum(
+            1 for conversation_id, first in conversations.items()
+            if any(created >= first for created in booked.get(conversation_id, []))
+        )
+        enough = len(conversations) >= MIN_TERMINATED_FOR_RATE
+        item.update({
+            "conversations": len(conversations),
+            "appointments": with_appointment,
+            "enough_data": enough,
+            "appointment_rate_pct": round(with_appointment / len(conversations) * 100, 1) if enough else None,
+        })
+    objections.sort(key=lambda item: (-item["conversations"], -item["messages"], item["label"]))
+    return {"measure": "APPOINTMENTS", "min_conversations_for_rate": MIN_TERMINATED_FOR_RATE}

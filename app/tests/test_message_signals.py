@@ -367,7 +367,8 @@ async def test_signals_api(client, db_session, unique_email):
     await _setup(db_session, unique_email, "pn-sig-11")
     r = await client.get("/api/v1/analytics/signals", headers=await _headers(client, unique_email))
     assert r.status_code == 200
-    assert r.json() == {"period_days": 30, "classified_messages": 0, "customer_messages": 0, "intents": [], "objections": []}
+    assert r.json() == {"period_days": 30, "classified_messages": 0, "customer_messages": 0, "intents": [], "objections": [],
+                        "measure": "PAID", "min_conversations_for_rate": None}  # lot 46 : mesure de la boutique
     assert (await client.get("/api/v1/analytics/signals")).status_code == 401
 
 

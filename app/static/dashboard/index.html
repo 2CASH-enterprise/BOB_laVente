@@ -2308,12 +2308,18 @@ async function loadSignals() {
         <div style="background: var(--track); border-radius: 6px; height: 10px; overflow: hidden;"><div style="width: ${Math.round(i.messages / max * 100)}%; height: 100%; background: var(--accent);"></div></div>
         <span style="text-align: right;">${i.messages}</span>
       </div>`).join("") || "<p style='font-size: 13px; color: var(--muted);'>—</p>";
-    const objections = s.objections.length
-      ? `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Opportunités</th><th>Payées</th><th>Conversion</th></tr></thead><tbody>
+    const byAppointments = s.measure === "APPOINTMENTS";  // lot 46 : en concession, on mesure les rendez-vous obtenus
+    const objections = !s.objections.length
+      ? "<p style='font-size: 13px; color: var(--muted);'>Aucune objection détectée sur la période.</p>"
+      : byAppointments
+      ? `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Conversations</th><th>Rendez-vous obtenus</th><th>Taux</th></tr></thead><tbody>
+          ${s.objections.map((o) => `<tr><td data-label="Objection">${esc(o.label)}</td><td data-label="Conversations">${o.conversations}</td>
+            <td data-label="Rendez-vous">${o.appointments}</td><td data-label="Taux">${o.enough_data ? o.appointment_rate_pct + " %" : "<span style='color: var(--muted); font-size: 12px;'>Pas encore assez de données</span>"}</td></tr>`).join("")}
+         </tbody></table>`
+      : `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Opportunités</th><th>Payées</th><th>Conversion</th></tr></thead><tbody>
           ${s.objections.map((o) => `<tr><td data-label="Objection">${esc(o.label)}</td><td data-label="Opportunités">${o.opportunities}</td>
             <td data-label="Payées">${o.paid}</td><td data-label="Conversion">${o.conversion_rate_pct === null ? "—" : o.conversion_rate_pct + " %"}</td></tr>`).join("")}
-         </tbody></table>`
-      : "<p style='font-size: 13px; color: var(--muted);'>Aucune objection détectée sur la période.</p>";
+         </tbody></table>`;
     card.innerHTML = `
       <div class="label" style="font-weight: 600;">Ce que demandent vos clients — ${s.period_days} derniers jours</div>
       <p style="font-size: 12px; color: var(--muted); margin: 4px 0 12px;">${s.classified_messages} message${s.classified_messages > 1 ? "s" : ""} analysé${s.classified_messages > 1 ? "s" : ""} sur ${s.customer_messages}.</p>
@@ -2323,7 +2329,9 @@ async function loadSignals() {
       <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
         Étiquettes déduites automatiquement par une IA : ce sont des indications, qui peuvent se tromper.
         Vous pouvez les vérifier sous chaque message client, dans l'onglet Conversations.
-        Conversion = opportunités payées ÷ opportunités terminées où ce frein est apparu.
+        ${byAppointments
+          ? `Rendez-vous obtenus = conversations où une demande de rendez-vous a été faite après l'apparition de ce frein. Le taux n'est affiché qu'à partir de ${s.min_conversations_for_rate} conversations.`
+          : "Conversion = opportunités payées ÷ opportunités terminées où ce frein est apparu."}
       </p>`;
   } catch (e) {
     card.innerHTML = `<p style="color: var(--danger); font-size: 13px;">Impossible de charger l'analyse des messages : ${esc(e.message)}</p>`;

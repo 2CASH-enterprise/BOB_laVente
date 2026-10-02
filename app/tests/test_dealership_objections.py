@@ -459,3 +459,104 @@ async def test_analytics_api_uses_the_dealership_vocabulary(client, db_session):
 
     assert strategies["measure"] == "APPOINTMENTS" and strategies["strategies"][0]["appointments"] == 1
     assert [o["label"] for o in signals["objections"]] == ["Véhicule plus disponible"]
+
+
+# --- Lot 46 : freins à l'achat mesurés en rendez-vous (page Analyse) ------------------------------------------
+
+@pytest.mark.asyncio
+async def test_dealership_objections_are_measured_in_appointments(db_session):
+    tenant = await _tenant(db_session, "o46a@auto.sn")
+    await _uses(db_session, tenant, "AUTO_REPRISE_ESTIMATION", 4, booked=1, booked_before=2)
+    await _uses(db_session, tenant, "AUTO_PAPIERS_VOIR", 1, booked=0)
+
+    summary = await signals_summary(db_session, tenant.id, now=NOW, business_type=CAR_DEALERSHIP)
+
+    assert summary["measure"] == "APPOINTMENTS" and summary["min_conversations_for_rate"] == MIN_TERMINATED_FOR_RATE
+    reprise, papiers = summary["objections"]  # trié par conversations
+    assert reprise["label"] == "Reprise" and reprise["messages"] == 8
+    assert reprise["conversations"] == 4 and reprise["appointments"] == 1  # un rendez-vous d'avant ne compte pas
+    assert reprise["enough_data"] is False and reprise["appointment_rate_pct"] is None
+    assert papiers["conversations"] == 1 and papiers["appointments"] == 0
+
+
+@pytest.mark.asyncio
+async def test_dealership_objection_rate_from_the_threshold_and_first_appearance(db_session):
+    tenant = await _tenant(db_session, "o46b@auto.sn")
+    other = await _tenant(db_session, "o46c@auto.sn")
+    await _uses(db_session, tenant, "AUTO_FIN_VISITE", MIN_TERMINATED_FOR_RATE - 1, booked=4)
+    await _uses(db_session, other, "AUTO_FIN_VISITE", 3, booked=3)
+    # une conversation de plus : rendez-vous ENTRE les deux apparitions du frein → compte (première apparition)
+    await _uses(db_session, tenant, "AUTO_FIN_SOLUTIONS", 1, booked=0)
+    conversation = (await db_session.execute(
+        select(Conversation).join(MessageSignal, MessageSignal.conversation_id == Conversation.id)
+        .where(Conversation.tenant_id == tenant.id, MessageSignal.strategy == "AUTO_FIN_SOLUTIONS")
+    )).scalars().first()
+    db_session.add(AppointmentRequest(tenant_id=tenant.id, conversation_id=conversation.id, customer_id=conversation.customer_id,
+                                      kind="VISITE", availability="lundi", status="REQUESTED",
+                                      created_at=NOW - timedelta(days=3) + timedelta(minutes=5)))
+    await db_session.commit()
+
+    [row] = (await signals_summary(db_session, tenant.id, now=NOW, business_type=CAR_DEALERSHIP))["objections"]
+
+    assert row["conversations"] == MIN_TERMINATED_FOR_RATE and row["appointments"] == 5
+    assert row["enough_data"] is True and row["appointment_rate_pct"] == 25.0
+
+
+@pytest.mark.asyncio
+async def test_store_objection_summary_is_unchanged(db_session):
+    tenant = await _tenant(db_session, "o46d@shop.sn", business_type="ONLINE_STORE")
+    await _uses(db_session, tenant, "HESITATION_CLARIFIER", 2, booked=2)
+
+    summary = await signals_summary(db_session, tenant.id, now=NOW, business_type="ONLINE_STORE")
+
+    assert "min_conversations_for_rate" not in summary
+    [row] = summary["objections"]
+    assert "appointments" not in row and "paid" in row
+
+
+@pytest.mark.asyncio
+async def test_signals_api_carries_the_appointment_measure(client, db_session):
+    tenant = await _tenant(db_session, "o46e@auto.sn")
+    await _uses(db_session, tenant, "AUTO_ETAT_FICHE", 1, booked=1)
+    await _tenant(db_session, "o46f@shop.sn", business_type="ONLINE_STORE")
+
+    dealer = (await client.get("/api/v1/analytics/signals?days=365", headers=await _headers(client, "o46e@auto.sn"))).json()
+    shop = (await client.get("/api/v1/analytics/signals?days=365", headers=await _headers(client, "o46f@shop.sn"))).json()
+
+    assert dealer["measure"] == "APPOINTMENTS"
+    assert dealer["objections"][0]["appointments"] == 1 and dealer["objections"][0]["conversations"] == 1
+    assert shop["measure"] == "PAID" and shop["min_conversations_for_rate"] is None
+
+
+def test_dashboard_objection_table_for_a_dealership():
+    html = (Path(__file__).resolve().parents[1] / "static" / "dashboard" / "index.html").read_text(encoding="utf-8")
+    start = html.index("const byAppointments")
+    body = html[start:html.index("Impossible de charger l'analyse des messages", start)]
+    assert 's.measure === "APPOINTMENTS"' in body and "Rendez-vous obtenus" in body
+    assert "o.appointment_rate_pct" in body and "o.enough_data" in body and "s.min_conversations_for_rate" in body
+    assert "<th>Payées</th>" in body  # la boutique garde son tableau
+
+
+@pytest.mark.asyncio
+async def test_dealership_objections_are_sorted_by_conversations(db_session):
+    tenant = await _tenant(db_session, "o46g@auto.sn")
+    await _uses(db_session, tenant, "AUTO_REPRISE_ATTENTES", 2, booked=0)  # 2 conversations, 4 messages
+    await _uses(db_session, tenant, "AUTO_PAPIERS_FAITS", 1, booked=0)  # 1 conversation…
+    conversation = (await db_session.execute(
+        select(MessageSignal.conversation_id).where(MessageSignal.tenant_id == tenant.id, MessageSignal.strategy == "AUTO_PAPIERS_FAITS")
+    )).scalars().first()
+    customer_id = (await db_session.get(Conversation, conversation)).customer_id
+    for i in range(4):  # … mais 6 messages
+        message = Message(tenant_id=tenant.id, conversation_id=conversation, sender=MessageSender.CUSTOMER, message_type="text",
+                          content="…", created_at=NOW - timedelta(days=2, minutes=i))
+        db_session.add(message)
+        await db_session.flush()
+        db_session.add(MessageSignal(tenant_id=tenant.id, conversation_id=conversation, message_id=message.id, intents=["AUTRE"],
+                                     objections=["PAPIERS"], model="f", taxonomy_version="v1.3auto",
+                                     message_created_at=message.created_at))
+    await db_session.commit()
+    assert customer_id
+
+    rows = (await signals_summary(db_session, tenant.id, now=NOW, business_type=CAR_DEALERSHIP))["objections"]
+
+    assert [(r["code"], r["conversations"], r["messages"]) for r in rows] == [("REPRISE", 2, 4), ("PAPIERS", 1, 6)]

@@ -58,6 +58,11 @@ class ObjectionStat(BaseModel):
     terminated: int
     paid: int
     conversion_rate_pct: float | None
+    # Lot 46 — concession : rien ne se paie sur WhatsApp, on mesure les rendez-vous obtenus.
+    conversations: int | None = None
+    appointments: int | None = None
+    enough_data: bool | None = None
+    appointment_rate_pct: float | None = None
 
 
 class SignalsSummaryResponse(BaseModel):
@@ -68,3 +73,5 @@ class SignalsSummaryResponse(BaseModel):
     customer_messages: int
     intents: list[IntentStat]
     objections: list[ObjectionStat]
+    measure: str = "PAID"  # lot 46 : « APPOINTMENTS » en concession
+    min_conversations_for_rate: int | None = None
