@@ -113,11 +113,15 @@ async def release_conversation(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation introuvable")
     # Seul l'agent qui a pris la main (ou un rôle supérieur) peut la relâcher.
-    if conversation.assigned_agent != current_user.user_id and current_user.role not in ("MANAGER", "ADMIN", "OWNER"):
+    # Lot 51 : une pause due à une réponse depuis le téléphone n'appartient à personne, tout agent peut la lever.
+    paused_by_phone = conversation.assigned_agent is None and conversation.phone_reply_at is not None
+    if not paused_by_phone and conversation.assigned_agent != current_user.user_id \
+            and current_user.role not in ("MANAGER", "ADMIN", "OWNER"):
         raise HTTPException(status_code=403, detail="Seul l'agent en charge peut rendre la conversation à l'IA")
 
     conversation.status = ConversationStatus.ACTIVE
     conversation.assigned_agent = None
+    conversation.phone_reply_at = None  # lot 51 : Bob reprend, même après une réponse depuis le téléphone
     db.add(
         Message(
             tenant_id=current_user.tenant_id,

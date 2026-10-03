@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -27,6 +27,9 @@ class TenantSummaryForAdmin(BaseModel):
     commission_rate: float | None
     business_type: str = "ONLINE_STORE"  # lot 32
     created_at: datetime
+    # Lot 51 — abonnement : dernier jour payé (vide = pas d'échéance) et état de Bob (pause, rappel).
+    paid_until: date | None = None
+    bob_status: dict | None = None
 
 
 class TenantDetailForAdmin(TenantSummaryForAdmin):
@@ -51,6 +54,10 @@ class TenantBusinessTypeUpdate(BaseModel):
 
 class TenantActiveUpdate(BaseModel):
     active: bool
+
+
+class TenantPaidUntilUpdate(BaseModel):
+    paid_until: date | None
 
 
 class PlatformStats(BaseModel):

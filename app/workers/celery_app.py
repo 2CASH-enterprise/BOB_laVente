@@ -23,6 +23,7 @@ TASK_MODULES = [
     "app.workers.notifications",
     "app.workers.followups",
     "app.workers.llm_budget",
+    "app.workers.billing",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -57,6 +58,11 @@ celery_app.conf.beat_schedule = {
     "llm-budget-alerts": {
         "task": "app.workers.llm_budget.check_budgets_task",
         "schedule": crontab(minute=5),
+    },
+    # Lot 51 — échéance de l'abonnement : emails au commerçant (7 jours avant, jour de grâce, pause).
+    "billing-notices": {
+        "task": "app.workers.billing.check_billing_task",
+        "schedule": crontab(minute=20),
     },
 }
 celery_app.conf.timezone = "UTC"

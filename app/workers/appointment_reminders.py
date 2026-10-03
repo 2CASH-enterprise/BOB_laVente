@@ -51,6 +51,7 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
     from app.models.tenant import Tenant
     from app.services import appointment_service
     from app.services.handoff_service import alert_emails, commercial_for_customer, conversation_link, customer_display_name
+    from app.services.bob_pause import is_paused
     from app.services.local_time import tenant_zone
 
     async with factory() as db:
@@ -65,7 +66,7 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
         async with factory() as db:
             appointment = await db.get(AppointmentRequest, appointment_id)
             tenant = await db.get(Tenant, appointment.tenant_id) if appointment else None
-            if appointment is None or tenant is None or not tenant.active:
+            if appointment is None or tenant is None or is_paused(tenant, now):  # lot 51 : Bob en pause
                 continue
             customer = await db.get(Customer, appointment.customer_id)
             zone = tenant_zone(tenant)
@@ -127,7 +128,7 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
         async with factory() as db:
             appointment = await db.get(AppointmentRequest, appointment_id)
             tenant = await db.get(Tenant, appointment.tenant_id) if appointment else None
-            if appointment is None or tenant is None or not tenant.active:
+            if appointment is None or tenant is None or is_paused(tenant, now):  # lot 51 : Bob en pause
                 continue
             if not appointment_outcome.followup_due(appointment, now, tenant_zone(tenant)):
                 continue

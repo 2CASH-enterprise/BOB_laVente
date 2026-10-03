@@ -40,6 +40,10 @@ class Conversation(Base):
     # Dernière alerte email envoyée au commerçant pour cette attente (transfert ou rappel) :
     # permet de limiter les rappels à un par heure.
     human_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lot 51 — coexistence : dernière réponse du vendeur tapée dans l'application WhatsApp Business de son
+    # téléphone. Tant qu'elle est renseignée, Bob est en pause sur la conversation ; il reprend si le
+    # client réécrit 2 h après (app/services/coexistence.py). Remise à vide quand Bob reprend.
+    phone_reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

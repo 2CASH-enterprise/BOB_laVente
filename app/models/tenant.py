@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, Numeric, String, Text, Uuid, func
+from sqlalchemy import Date, DateTime, Enum, Numeric, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -43,6 +43,12 @@ class Tenant(Base):
     plan_assigned_by: Mapped[str] = mapped_column(String(64), default="AUTO")
 
     active: Mapped[bool] = mapped_column(default=True)
+    # Lot 51 — abonnement : dernier jour payé, saisi par le Super Admin (vide = pas d'échéance, Bob ne se
+    # met jamais en pause pour impayé). Règles dans app/services/bob_pause.py. Le dernier email d'échéance
+    # envoyé (WARNING / GRACE / PAUSED) est noté avec la date qu'il concernait : une nouvelle date repart à zéro.
+    paid_until: Mapped[date | None] = mapped_column(Date)
+    billing_notice_stage: Mapped[str | None] = mapped_column(String(16))
+    billing_notice_for: Mapped[date | None] = mapped_column(Date)
 
     # Lot 24 — type d'activité (app/services/business_type.py). chosen_at vide = le commerçant
     # n'a pas encore choisi (l'écran « Votre secteur » s'affiche après l'inscription).

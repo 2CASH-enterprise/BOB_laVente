@@ -194,6 +194,10 @@ async def run_followups_for_tenant(db: AsyncSession, tenant_id, now: datetime | 
     tenant = await db.get(Tenant, tenant_id)
     if tenant is None or not tenant.is_paid:
         return 0  # relances réservées aux plans payants (freemium exclu)
+    from app.services.bob_pause import is_paused
+
+    if is_paused(tenant, now):
+        return 0  # lot 51 : Bob en pause (boutique suspendue ou abonnement non renouvelé)
 
     settings_stmt = select(TenantFollowupSettings).where(TenantFollowupSettings.tenant_id == tenant_id)
     settings = (await db.execute(settings_stmt)).scalar_one_or_none()

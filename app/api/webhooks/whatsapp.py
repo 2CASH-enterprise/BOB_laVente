@@ -130,6 +130,17 @@ async def receive_webhook(
     except json.JSONDecodeError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload JSON invalide") from None
 
+    # Lot 51 — coexistence : copie d'un message tapé par le vendeur dans l'application WhatsApp Business
+    # de son téléphone. Enregistré comme réponse du vendeur, et Bob se met en pause sur la conversation.
+    from app.services import coexistence
+
+    echoes = coexistence.parse_echoes(payload)
+    if echoes:
+        tenant_ids = await coexistence.record_echoes(db, echoes)
+        for echo_tenant_id in set(tenant_ids):
+            background_tasks.add_task(notifications.queue_check, echo_tenant_id)
+        return {"status": "phone_reply_recorded", "recorded": len(tenant_ids)}
+
     parsed = parse_whatsapp_message(payload)
     if parsed is None:
         # Accusé de statut (delivered/read) ou payload non pertinent : on accuse réception sans traiter.
@@ -151,6 +162,10 @@ async def receive_webhook(
 
     conversation_repo = ConversationRepository(db)
     conversation = await conversation_repo.get_or_create_active(tenant_id, customer.id)
+
+    # Lot 51 — le vendeur avait répondu depuis son téléphone, puis plus rien pendant 2 h : Bob reprend.
+    if coexistence.resume_due(conversation, datetime.now(timezone.utc)):
+        coexistence.resume(db, conversation)
 
     # Section 23 — un client qui répond n'est plus « abandonné » : on repart de zéro.
     if conversation.followup_stage != 0:
@@ -262,6 +277,13 @@ async def receive_webhook(
     # Lot 50 — limite par client : au-delà de 30 messages en une heure, plus d'appel à l'IA (ni analyse,
     # ni réponse) ; un message fixe une seule fois, puis silence jusqu'à la fin de l'heure.
     from app.services import usage_guard
+
+    # Lot 51 — Bob en pause pour toute la boutique (suspendue, ou abonnement non renouvelé) : le message
+    # est enregistré, le commerçant le voit et peut répondre ; aucune réponse ni analyse (aucun coût d'IA).
+    from app.services import bob_pause
+
+    if bob_pause.is_paused(await db.get(Tenant, tenant_id)):
+        return {"status": "received_bob_paused"}
 
     rate = await usage_guard.customer_rate_limit(db, tenant_id, customer.id)
     if rate == usage_guard.SILENT:

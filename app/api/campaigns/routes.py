@@ -42,7 +42,12 @@ async def send_campaign_endpoint(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _require_paid_tenant(db, current_user.tenant_id)
+    tenant = await _require_paid_tenant(db, current_user.tenant_id)
+    from app.services import bob_pause
+
+    reason = bob_pause.pause_reason(tenant)
+    if reason is not None:  # lot 51
+        raise HTTPException(status_code=403, detail=bob_pause.PAUSED_ACTION_MESSAGE[reason])
 
     result = await send_campaign(
         db, current_user.tenant_id, current_user.user_id,

@@ -75,7 +75,7 @@
       <p style="font-size: 12px; color: var(--muted); margin: 8px 0 0;" id="ai-note"></p>
     </section>
     <table>
-      <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Activité</th><th>Statut</th><th>Produits</th><th>Conversations (mois)</th><th>Commission</th><th>Créé le</th></tr></thead>
+      <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Activité</th><th>Statut de Bob</th><th>Payé jusqu'au</th><th>Produits</th><th>Conversations (mois)</th><th>Commission</th><th>Créé le</th></tr></thead>
       <tbody id="tenant-rows"></tbody>
     </table>
   </main>
@@ -233,7 +233,7 @@ async function changeBusinessType(tenantId, select, previous) {
 
 async function loadTenants() {
   const rows = document.getElementById("tenant-rows");
-  rows.innerHTML = "<tr><td colspan='9'>Chargement…</td></tr>";
+  rows.innerHTML = "<tr><td colspan='10'>Chargement…</td></tr>";
   const tenants = await api("/api/v1/superadmin/tenants");
   rows.innerHTML = tenants
     .map(
@@ -246,7 +246,11 @@ async function loadTenants() {
         <td><select class="plan-select" onchange="changeBusinessType('${esc(t.id)}', this, '${esc(t.business_type)}')">
           ${Object.entries(BUSINESS_TYPES).map(([code, label]) => `<option value="${code}" ${code === t.business_type ? "selected" : ""}>${label}</option>`).join("")}
         </select></td>
-        <td><span class="badge ${t.active ? "active" : "inactive"}">${t.active ? "Actif" : "Suspendu"}</span></td>
+        <td>${bobStatusBadge(t)}
+          <button class="small" onclick="toggleActive('${esc(t.id)}', ${t.active ? "false" : "true"}, '${esc(t.name)}')">${t.active ? "Suspendre" : "Réactiver"}</button></td>
+        <td><input type="date" value="${esc(t.paid_until || "")}" title="Dernier jour payé. Vide : pas d'échéance (Bob ne se met jamais en pause pour impayé)."
+            style="padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px;"
+            onchange="changePaidUntil('${esc(t.id)}', this.value)"></td>
         <td>${t.product_count}</td>
         <td>${t.conversation_count_this_month}</td>
         <td>
@@ -257,7 +261,47 @@ async function loadTenants() {
         <td>${new Date(t.created_at).toLocaleDateString()}</td>
       </tr>`
     )
-    .join("") || "<tr><td colspan='9'>Aucune entreprise</td></tr>";
+    .join("") || "<tr><td colspan='10'>Aucune entreprise</td></tr>";
+}
+
+// Lot 51 — état de Bob : actif, rappel d'échéance, jour de grâce, en pause (impayé) ou boutique suspendue.
+function bobStatusBadge(t) {
+  const st = t.bob_status || {};
+  if (st.reason === "SUSPENDED") return '<span class="badge inactive">Suspendu</span>';
+  if (st.reason === "UNPAID") return '<span class="badge inactive" title="Abonnement non renouvelé">En pause (impayé)</span>';
+  if (st.stage === "GRACE") return '<span class="badge demo" title="Bob se met en pause demain">Jour de grâce</span>';
+  if (st.stage === "WARNING") return '<span class="badge demo">Échéance proche</span>';
+  return '<span class="badge active">Actif</span>';
+}
+
+async function toggleActive(tenantId, active, name) {
+  const question = active
+    ? `Réactiver « ${name} » ? Bob recommencera à répondre à ses clients.`
+    : `Suspendre « ${name} » ?\n\nBob arrête immédiatement de répondre à ses clients, et les relances, campagnes et rappels de rendez-vous s'arrêtent. Les messages des clients restent enregistrés.`;
+  if (!confirm(question)) return;
+  try {
+    await api(`/api/v1/superadmin/tenants/${tenantId}/active`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active }),
+    });
+  } catch (e) {
+    alert(e.message);
+  }
+  loadTenants();
+}
+
+async function changePaidUntil(tenantId, value) {
+  try {
+    await api(`/api/v1/superadmin/tenants/${tenantId}/paid-until`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paid_until: value || null }),
+    });
+  } catch (e) {
+    alert(e.message);
+  }
+  loadTenants();
 }
 
 async function changePlan(tenantId, plan) {

@@ -140,6 +140,8 @@ def reminder_due(conversation: Conversation, now: datetime | None = None) -> boo
     """
     if conversation.status != ConversationStatus.WAITING_HUMAN or conversation.assigned_agent is not None:
         return False
+    if getattr(conversation, "phone_reply_at", None) is not None:
+        return False  # lot 51 : le vendeur répond déjà depuis son téléphone, inutile de le relancer
     last = conversation.human_alert_sent_at
     if last is None:
         return True

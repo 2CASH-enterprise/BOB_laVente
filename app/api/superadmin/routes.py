@@ -11,6 +11,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import bob_pause
 from app.services.business_type import normalize as normalize_business_type
 from app.core.database import get_db
 from app.core.security import (
@@ -35,6 +36,7 @@ from app.schemas.superadmin import (
     TenantBusinessTypeUpdate,
     TenantCommissionRateUpdate,
     TenantDetailForAdmin,
+    TenantPaidUntilUpdate,
     TenantPlanUpdate,
     TenantSummaryForAdmin,
 )
@@ -121,6 +123,7 @@ async def _build_summary(db: AsyncSession, tenant: Tenant) -> TenantSummaryForAd
         commission_rate=float(tenant.commission_rate) if tenant.commission_rate is not None else None,
         business_type=normalize_business_type(tenant.business_type),
         created_at=tenant.created_at,
+        paid_until=tenant.paid_until, bob_status=bob_pause.status(tenant).as_dict(),
     )
 
 
@@ -187,6 +190,25 @@ async def update_tenant_active(
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant introuvable")
     tenant.active = payload.active
+    await db.commit()
+    return await _build_summary(db, tenant)
+
+
+@router.put("/tenants/{tenant_id}/paid-until", response_model=TenantSummaryForAdmin)
+async def update_tenant_paid_until(
+    tenant_id: UUID,
+    payload: TenantPaidUntilUpdate,
+    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Lot 51 — dernier jour payé de l'abonnement (vide = pas d'échéance). Repousser la date relance Bob
+    immédiatement ; les emails d'échéance repartent à zéro pour la nouvelle date.
+    """
+    tenant = await db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant introuvable")
+    tenant.paid_until = payload.paid_until
     await db.commit()
     return await _build_summary(db, tenant)
 

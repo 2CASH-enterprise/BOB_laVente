@@ -27,6 +27,8 @@ class TenantResponse(BaseModel):
     company_profile: str | None
     payment_link: str | None
     active: bool
+    # Lot 51 — Bob en pause pour toute la boutique, ou échéance proche : bandeau du tableau de bord.
+    bob_status: dict | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,7 +44,7 @@ class TenantProfileUpdate(BaseModel):
 async def get_my_tenant(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> Tenant:
+) -> TenantResponse:
     """
     Retourne UNIQUEMENT le tenant de l'utilisateur authentifié.
     Aucun tenant_id n'est accepté en paramètre : impossible de consulter un autre tenant (section 30).
@@ -50,7 +52,9 @@ async def get_my_tenant(
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
-    return tenant
+    from app.services import bob_pause
+
+    return TenantResponse.model_validate(tenant).model_copy(update={"bob_status": bob_pause.status(tenant).as_dict()})
 
 
 @router.put("/me/profile", response_model=TenantResponse, dependencies=[Depends(require_role("ADMIN"))])
