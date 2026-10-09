@@ -75,7 +75,7 @@ async def _customer(db, tenant, email="client@example.com", consent=True, first_
 # Chaque envoi WhatsApp du code est listé ici, avec sa justification. Un nouvel envoi fait échouer ce test
 # tant qu'on n'a pas vérifié qu'il respecte la règle des 20 h.
 SEND_SITES = {
-    "api/webhooks/whatsapp.py": 4,      # réponses au message que le client vient d'envoyer (fenêtre ouverte)
+    "api/webhooks/whatsapp.py": 5,      # réponses au message que le client vient d'envoyer (fenêtre ouverte) ; lot 57 : accusé de réception
     "agents/tools.py": 1,               # confirmation de commande pendant la conversation (idem)
     "api/messages/routes.py": 1,        # réponse humaine : ensure_reply_window_open
     "services/appointment_service.py": 1,  # messages fixes : ensure_reply_window_open (puis email)

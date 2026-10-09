@@ -295,10 +295,35 @@ async def receive_webhook(
     if rate == usage_guard.OK:
         signal = await classify_and_store(db, classifier, incoming_message, business_type=business_type)
 
+    # Lot 57 — courtier (CIMA 01-24, art. 11) : une réclamation ou un sinistre est enregistré par le CODE dans le
+    # registre (référence, heure), même si un humain a déjà la main ; le cabinet est prévenu par email et le
+    # client reçoit un accusé de réception fixe. Un message de plus sur une fiche ouverte s'y rattache.
+    complaint_ack = None
+    if signal is not None and "RECLAMATION" in (signal.intents or []):
+        from app.services.business_type import is_insurance
+
+        complaint_tenant = await db.get(Tenant, tenant_id)
+        if is_insurance(complaint_tenant):
+            from app.services import insurance_complaints
+            from app.services.handoff_service import conversation_link
+
+            complaint, created = await insurance_complaints.record_from_whatsapp(
+                db, complaint_tenant, customer, conversation, incoming_text)
+            if created:
+                complaint.notified_at = datetime.now(timezone.utc)
+                subject, body = insurance_complaints.alert_email(complaint_tenant, customer, complaint,
+                                                                 conversation_link(conversation))
+                for email in alert_emails(complaint_tenant.email, await commercial_for_customer(db, customer), subject, body):
+                    background_tasks.add_task(send_email, **email)
+                complaint_ack = (complaint, insurance_complaints.acknowledgement(complaint_tenant, complaint))
+            await db.commit()
+
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
         # le message reste en base sans réponse automatique. Le retrait de consentement, lui,
         # est déjà enregistré ci-dessus, indépendamment de cette branche.
+        if complaint_ack is not None:  # lot 57 : l'accusé de réception part quand même (fenêtre ouverte)
+            await _send_complaint_ack(db, await db.get(Tenant, tenant_id), conversation, customer, *complaint_ack)
         return {"status": "received"}
 
     try:
@@ -585,4 +610,27 @@ async def receive_webhook(
     if message_outbox:
         await db.commit()
 
+    # Lot 57 — accusé de réception de la réclamation, après la réponse de Bob (texte fixe, jamais rédigé par l'IA).
+    if complaint_ack is not None:
+        complaint, text = complaint_ack
+        try:
+            await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
+        except Exception:  # noqa: BLE001 — la réclamation reste enregistrée ; le cabinet a la référence par email
+            logging.getLogger(__name__).warning("Accusé de réception non envoyé (réclamation %s)", complaint.id)
+        else:
+            complaint.acknowledged_at = datetime.now(timezone.utc)
+            db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                           message_type="complaint_ack", content=text, message_metadata={"sent_by": "BOB"}))
+            await db.commit()
+
     return {"status": "received", "ai_reply": reply_text, "images_sent": images_sent}
+
+
+async def _send_complaint_ack(db, tenant, conversation, customer, complaint, text) -> None:
+    """Lot 57 — accusé de réception quand Bob ne répond pas (un humain a déjà la main)."""
+    from app.services.appointment_service import send_fixed_message
+
+    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "complaint_ack")
+    if sent:
+        complaint.acknowledged_at = datetime.now(timezone.utc)
+    await db.commit()

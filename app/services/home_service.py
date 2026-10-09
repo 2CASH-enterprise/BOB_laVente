@@ -298,7 +298,27 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                 "since": datetime.combine(c.expires_on, datetime.min.time(), tzinfo=timezone.utc),
                 "action": "Voir le contrat",
             })
-    order_of_kind = {"CONVERSATION": 0, "QUOTE": 1, "RENEWAL": 2, "APPOINTMENT": 3, "CALLBACK": 4, "OUTCOME": 5, "ORDER": 6}
+        # Lot 57 — réclamations et sinistres pas encore pris en charge, et celles en retard (CIMA, art. 11).
+        from app.models.insurance_complaint import InsuranceComplaint
+        from app.services import insurance_complaints
+
+        for c in (await db.execute(select(InsuranceComplaint).where(
+            InsuranceComplaint.tenant_id == tenant_id, InsuranceComplaint.status.in_(insurance_complaints.OPEN),
+        ))).scalars().all():
+            late = insurance_complaints.is_overdue(c, today)
+            if c.status != insurance_complaints.RECEIVED and not late:
+                continue
+            reason = f"{insurance_complaints.KINDS[c.kind]} en retard" if late else insurance_complaints.KINDS[c.kind]
+            todo.append({
+                "kind": "COMPLAINT", "complaint_id": str(c.id),
+                "conversation_id": str(c.conversation_id) if c.conversation_id else None,
+                "customer": _name(customers.get(c.customer_id)) if customers.get(c.customer_id) else "Client",
+                "reason": reason, "tone": "danger", "hot": late,
+                "detail": _short(f"{c.reference} · {c.subject}"),
+                "since": _aware(c.received_at), "action": "Voir la réclamation",
+            })
+    order_of_kind = {"CONVERSATION": 0, "COMPLAINT": 1, "QUOTE": 2, "RENEWAL": 3, "APPOINTMENT": 4, "CALLBACK": 5,
+                     "OUTCOME": 6, "ORDER": 7}
     todo.sort(key=lambda t: (order_of_kind[t["kind"]], not t.get("hot", False), t["since"]))
 
     # --- Entonnoir ---------------------------------------------------------------------------

@@ -68,6 +68,8 @@ class Tenant(Base):
     # et jour du dernier récapitulatif des échéances envoyé au cabinet (un seul email par jour).
     renewal_reminders_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     renewal_digest_on: Mapped[date | None] = mapped_column(Date)
+    # Lot 57 — délai de réponse aux réclamations annoncé au client, en jours ouvrés (CIMA 01-24, art. 11).
+    complaint_delay_days: Mapped[int] = mapped_column(default=10, server_default="10", nullable=False)
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

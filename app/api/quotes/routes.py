@@ -31,7 +31,7 @@ class AdvanceIn(BaseModel):
     lost_reason: str | None = Field(None, max_length=insurance.LOST_REASON_MAX)
 
 
-def _out(request: QuoteRequest, customer: Customer | None, prospect: dict | None = None) -> dict:
+def _out(request: QuoteRequest, customer: Customer | None, prospect: dict | None = None, tenant=None) -> dict:
     from app.services.handoff_service import customer_display_name
 
     return {
@@ -44,6 +44,8 @@ def _out(request: QuoteRequest, customer: Customer | None, prospect: dict | None
         "lines": insurance.request_lines(request)[2:],  # assurance et type de client : déjà dans leurs colonnes
         # Lot 54 (CIMA) : étapes horodatées, et score du prospect (règles fixes, expliquées).
         "trace": insurance.trace_lines(request),
+        # Lot 57 (CIMA, art. 10) : risque situé hors du pays du cabinet.
+        "warning": insurance.domiciliation_warning(tenant, request),
         "consent_at": request.consent_at,
         "prospect": {k: prospect[k] for k in ("score", "score_label", "reasons")} if prospect else None,
         "status": request.status,
@@ -78,7 +80,8 @@ async def list_quote_requests(
 
     prospects = await insurance_prospect.for_customers(
         db, await db.get(Tenant, current_user.tenant_id), {customer.id for _, customer in rows})
-    return [_out(request, customer, prospects.get(customer.id)) for request, customer in rows]
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    return [_out(request, customer, prospects.get(customer.id), tenant) for request, customer in rows]
 
 
 @router.post("/{request_id}/handle")
@@ -103,8 +106,9 @@ async def handle_quote_request(
     from app.models.tenant import Tenant
     from app.services import insurance_prospect
 
-    prospects = await insurance_prospect.for_customers(db, await db.get(Tenant, current_user.tenant_id), [request.customer_id])
-    return _out(request, await db.get(Customer, request.customer_id), prospects.get(request.customer_id))
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    prospects = await insurance_prospect.for_customers(db, tenant, [request.customer_id])
+    return _out(request, await db.get(Customer, request.customer_id), prospects.get(request.customer_id), tenant)
 
 
 @router.post("/{request_id}/status", dependencies=[Depends(require_role("AGENT"))])
@@ -135,5 +139,6 @@ async def advance_quote_request(
     from app.services.notifications import queue_check
 
     queue_check(current_user.tenant_id)
-    prospects = await insurance_prospect.for_customers(db, await db.get(Tenant, current_user.tenant_id), [request.customer_id])
-    return _out(request, await db.get(Customer, request.customer_id), prospects.get(request.customer_id))
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    prospects = await insurance_prospect.for_customers(db, tenant, [request.customer_id])
+    return _out(request, await db.get(Customer, request.customer_id), prospects.get(request.customer_id), tenant)

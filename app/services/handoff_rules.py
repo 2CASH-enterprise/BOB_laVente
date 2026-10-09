@@ -248,7 +248,8 @@ def _insurance_rule(intents: set, objections: set) -> TurnDecision | None:
                 "Le client exprime une réclamation ou parle d'un sinistre. Ne réponds pas sur le fond et ne promets "
                 "aucune prise en charge. Appelle handoff_to_human (raison : sa réclamation ou son sinistre) et dis-lui "
                 "que tu transmets au cabinet ; si les INFORMATIONS DU CABINET indiquent un contact pour les "
-                "réclamations, donne-le lui."
+                "réclamations, donne-le lui. Ne donne ni numéro de référence ni délai : un message séparé les "
+                "envoie au client juste après ta réponse."
             ),
         )
     if "DEMANDE_REMISE" in intents:

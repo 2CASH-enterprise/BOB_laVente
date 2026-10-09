@@ -30,14 +30,15 @@ from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER
 
 logger = logging.getLogger(__name__)
 
-KINDS = ("conversations", "appointments", "outcomes", "orders", "callbacks", "quotes", "renewals")
+KINDS = ("conversations", "appointments", "outcomes", "orders", "callbacks", "quotes", "renewals", "complaints")
 DEALERSHIP_ONLY = frozenset({"appointments", "outcomes"})  # secteurs à rendez-vous (concession, courtier)
 STORE_ONLY = frozenset({"orders"})
-INSURANCE_ONLY = frozenset({"quotes", "renewals"})  # lot 53 : cotations à traiter ; lot 55 : échéances de contrats
+INSURANCE_ONLY = frozenset({"quotes", "renewals", "complaints"})  # lots 53, 55, 57 : cotations, échéances, réclamations
 
 # Titre de la notification selon le type de la nouvelle tâche (ordre = priorité).
 TITLES = {
     "conversations": "Un client attend votre réponse",
+    "complaints": "Nouvelle réclamation à traiter",  # lot 57 : juste après un client qui attend
     "appointments": "Nouveau rendez-vous à confirmer",
     "orders": "Nouvelle commande",
     "callbacks": "Client à rappeler",
@@ -122,6 +123,9 @@ async def task_counts(db, tenant, now: datetime | None = None) -> dict:
             from app.services.insurance_contracts import to_handle_count
 
             counts["renewals"] = await to_handle_count(db, tenant, now)  # lot 55
+            from app.services import insurance_complaints
+
+            counts["complaints"] = await insurance_complaints.to_handle_count(db, tenant, now)  # lot 57
     else:
         counts["orders"] = (await db.execute(select(func.count(Order.id)).where(
             Order.tenant_id == tenant_id, Order.status == OrderStatus.PENDING,

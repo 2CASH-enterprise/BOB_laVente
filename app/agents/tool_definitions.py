@@ -380,6 +380,9 @@ TOOL_DEFINITIONS = [
                     "le client dit « fin du mois » ou « dans deux semaines » ; jamais devinée")},
                 "current_term": {"type": "string", "enum": ["MENSUEL", "TRIMESTRIEL", "SEMESTRIEL", "ANNUEL"],
                                  "description": "Durée de son contrat actuel, s'il la donne"},
+                "risk_country": {"type": "string", "description": (
+                    "Pays où se trouve ce qu'il faut assurer (véhicule, logement, entreprise, marchandises), si le "
+                    "client le dit")},
                 "budget": {"type": "string", "description": "Budget que le client envisage, avec ses mots (ne le répète jamais)"},
                 "payment_wish": {"type": "string", "description": "Ce que le client souhaite pour le paiement, avec ses mots"},
                 "consent": {"type": "boolean", "description": (

@@ -69,7 +69,7 @@ def test_every_task_kind_has_an_alert_and_a_page():
         assert f'id="tab-{re.search(kind + r": \"(\w+)\"", tabs).group(1)}"' in HTML
     assert dict(re.findall(r'(\w+): "(\w+)"', tabs)) == {
         "conversations": "conversations", "appointments": "appointments", "outcomes": "appointments", "orders": "orders",
-        "callbacks": "overview", "quotes": "quotes", "renewals": "contracts"}
+        "callbacks": "overview", "quotes": "quotes", "renewals": "contracts", "complaints": "complaints"}
     # Même ordre de priorité que les notifications du téléphone
     order = re.findall(r"^  (\w+): \[", labels, re.M)
     assert order == list(TITLES)

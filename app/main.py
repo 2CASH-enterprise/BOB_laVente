@@ -27,6 +27,7 @@ from app.api.unsubscribe.routes import router as unsubscribe_router
 from app.api.appointments.routes import router as appointments_router
 from app.api.quotes.routes import router as quotes_router  # lot 53
 from app.api.contracts.routes import router as contracts_router  # lot 55
+from app.api.complaints.routes import router as complaints_router  # lot 57
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from app.api.whatsapp.routes import router as whatsapp_router
 from app.core.config import get_settings
@@ -68,6 +69,7 @@ app.include_router(unsubscribe_router)
 app.include_router(appointments_router)
 app.include_router(quotes_router)
 app.include_router(contracts_router)
+app.include_router(complaints_router)
 
 _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():

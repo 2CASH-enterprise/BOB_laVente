@@ -61,7 +61,12 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
     from app.models.tenant import Tenant
     from app.services.insurance_contracts import memory_for_bob
 
-    contact_section += await memory_for_bob(db, await db.get(Tenant, tenant_id), customer_id)
+    tenant = await db.get(Tenant, tenant_id)
+    contact_section += await memory_for_bob(db, tenant, customer_id)
+    # Lot 57 — numéro d'un autre pays que le cabinet : Bob demande où se trouve le risque (CIMA, art. 10).
+    from app.services.insurance import risk_country_hint
+
+    contact_section += risk_country_hint(tenant, await db.get(Customer, customer_id))
 
     if not order_lines and not viewed_lines and not preferences_lines:
         return contact_section

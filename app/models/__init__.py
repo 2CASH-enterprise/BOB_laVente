@@ -64,3 +64,4 @@ __all__ = [
 ]
 from app.models.quote_request import QuoteRequest  # noqa: F401 — lot 53
 from app.models.insurance_contract import InsuranceContract  # noqa: F401 — lot 55
+from app.models.insurance_complaint import InsuranceComplaint  # noqa: F401 — lot 57

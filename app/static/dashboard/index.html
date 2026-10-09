@@ -345,6 +345,9 @@
   .contracts-setting { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 4px 0 0; }
   .contracts-setting input { margin-top: 3px; }
   .contract-card.contract-due { border-left: 4px solid var(--warning); }
+  .contract-card.complaint-late { border-left: 4px solid var(--danger); }
+  .complaint-subject { white-space: pre-line; }
+  .quote-warning { font-size: 13px; color: var(--warning); margin: 8px 0 0; overflow-wrap: anywhere; }
   .contract-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
   .contract-who { min-width: 0; overflow-wrap: anywhere; }
   .contract-facts { font-size: 13px; color: var(--muted); margin: 8px 0 0; overflow-wrap: anywhere; }
@@ -669,6 +672,7 @@
       <button data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden" onclick="showTab('appointments')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3v3H8z"/></svg></span>Rendez-vous</button>
       <button data-tab="quotes" data-label="Demandes de cotation" id="nav-quotes" class="insurance-only" onclick="showTab('quotes')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6zM9 12l2 2 4-4"/></svg></span>Demandes de cotation</button>
       <button data-tab="contracts" data-label="Contrats" id="nav-contracts" class="insurance-only" onclick="showTab('contracts')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg></span>Contrats</button>
+      <button data-tab="complaints" data-label="Réclamations" id="nav-complaints" class="insurance-only" onclick="showTab('complaints')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12zM12 8v4M12 16h.01"/></svg></span>Réclamations</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg></span>Intégrations</button>
       <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8"/></svg></span>Base de connaissances</button>
       <button data-tab="bob" data-label="Réglages de Bob" onclick="showTab('bob')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M5 9h14a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a1 1 0 0 1 1-1zM9 14h.01M15 14h.01M2 13v3M22 13v3"/></svg></span>Réglages de Bob</button>
@@ -869,6 +873,24 @@
         <span>Bob rappelle automatiquement le client avant l'échéance (un seul message, sans aucun montant)</span>
       </label>
       <div id="contract-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
+    </section>
+
+    <section id="tab-complaints" class="hidden">
+      <template class="page-tip-src">Le registre des réclamations et des sinistres, exigé par le règlement CIMA 01-24 (article 11). Quand un client se plaint ou déclare un sinistre sur WhatsApp, Bob l'enregistre ici avec une référence, transmet la conversation au cabinet et envoie au client un accusé de réception (avec le délai de réponse pour une réclamation). Ajoutez aussi celles reçues par téléphone, email ou au cabinet. Rien n'est jamais supprimé.</template>
+      <div class="contracts-stats" id="complaints-stats"></div>
+      <div class="appt-views" role="group" aria-label="Réclamations affichées">
+        <button type="button" class="pill" data-complaint-view="todo" aria-pressed="true" onclick="loadComplaints('todo')">À traiter</button>
+        <button type="button" class="pill" data-complaint-view="progress" aria-pressed="false" onclick="loadComplaints('progress')">En cours</button>
+        <button type="button" class="pill" data-complaint-view="late" aria-pressed="false" onclick="loadComplaints('late')">En retard</button>
+        <button type="button" class="pill" data-complaint-view="resolved" aria-pressed="false" onclick="loadComplaints('resolved')">Traitées</button>
+        <button type="button" class="pill" data-complaint-view="all" aria-pressed="false" onclick="loadComplaints('all')">Toutes</button>
+      </div>
+      <div class="contracts-toolbar">
+        <button class="action" onclick="openComplaintDialog()">Ajouter une réclamation</button>
+        <button class="action secondary" onclick="exportComplaints()">Exporter le registre (CSV)</button>
+        <button class="action secondary" onclick="editComplaintDelay()">Délai de réponse : <span id="complaint-delay">10</span> jours ouvrés</button>
+      </div>
+      <div id="complaint-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
     </section>
 
     <section id="tab-appointments" class="hidden">
@@ -2210,7 +2232,7 @@ function showTab(name) {
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
-  ["overview", "conversations", "customers", "products", "orders", "appointments", "quotes", "contracts", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
+  ["overview", "conversations", "customers", "complaints", "products", "orders", "appointments", "quotes", "contracts", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
@@ -2224,6 +2246,7 @@ function showTab(name) {
   if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
+  if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
   if (name === "settings") loadMfaStatus();
 }
 
@@ -2311,6 +2334,7 @@ function todoAction(item) {
   if (item.kind === "ORDER") return `showTab('orders')`;
   if (item.kind === "QUOTE") return `showTab('quotes')`;  // lot 53
   if (item.kind === "RENEWAL") return `currentContractView = 'todo'; showTab('contracts')`;  // lot 55
+  if (item.kind === "COMPLAINT") return `currentComplaintView = 'all'; showTab('complaints')`;  // lot 57
   if (item.kind === "APPOINTMENT") return `showTab('appointments')`;
   if (item.kind === "OUTCOME") return `showTab('appointments'); loadAppointments('closed')`;
   return `jumpToCustomerConversation('${esc(item.conversation_id)}')`;
@@ -3711,6 +3735,7 @@ async function loadQuotes(view) {
         <span style="font-size: 13px; color: var(--muted);">${esc(q.status_label)} · ${new Date(q.submitted_at || q.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>
       </div>
       ${q.prospect ? `<p style="font-size: 12px; color: var(--muted); margin: 8px 0 0;">Score : ${esc(q.prospect.reasons.join(", "))}.</p>` : ""}
+      ${q.warning ? `<p class="quote-warning">⚠️ ${esc(q.warning)}</p>` : ""}
       <ul style="margin: 10px 0; padding-left: 18px; font-size: 14px;">${q.lines.map((l) => `<li>${esc(l)}</li>`).join("") || "<li>Aucune information pour l'instant</li>"}</ul>
       ${(q.trace || []).length ? `<p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">${q.trace.map(esc).join(" · ")}</p>` : (q.status === "DRAFT" ? `<p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">Pas encore transmise : Bob attend les informations utiles et l'accord du client.</p>` : "")}
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -4012,6 +4037,169 @@ async function downloadContractTemplate() {
     const link = document.createElement("a");
     link.href = url;
     link.download = "modele_contrats.csv";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// ---- Lot 57 : registre des réclamations et des sinistres (courtier, CIMA 01-24 art. 11) ----
+var currentComplaintView = "todo";
+var complaintMeta = { kinds: [], channels: [], complaint_delay_days: 10 };
+var complaintRows = {};
+
+async function loadComplaints(view) {
+  currentComplaintView = view || currentComplaintView || "todo";
+  document.querySelectorAll("[data-complaint-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.complaintView === currentComplaintView)));
+  const box = document.getElementById("complaint-list");
+  box.innerHTML = '<p class="loading-text">Chargement des réclamations</p>';
+  let data;
+  try { data = await api("/api/v1/complaints?view=" + encodeURIComponent(currentComplaintView)); } catch (e) {
+    box.innerHTML = `<p class="empty-state">${esc(e.message)}</p>`;
+    return;
+  }
+  complaintMeta = data;
+  document.getElementById("complaint-delay").textContent = data.complaint_delay_days;
+  const c = data.counts;
+  const stat = (label, value, tone) => `<div class="contracts-stat"><span class="contracts-stat-value ${tone}">${value}</span><span>${label}</span></div>`;
+  document.getElementById("complaints-stats").innerHTML = stat("à traiter", c.todo, c.todo ? "tone-text-danger" : "")
+    + stat("en cours", c.progress, "") + stat("en retard", c.late, c.late ? "tone-text-danger" : "")
+    + stat("jours ouvrés pour répondre", data.complaint_delay_days, "");
+  renderComplaints(data);
+}
+
+function complaintDueTag(c) {
+  if (c.status === "RESOLVED") return `<span class="tag tone-success">Traitée</span>`;
+  if (!c.due_on) return `<span class="tag tone-info">${esc(c.status_label)}</span>`;
+  const due = new Date(c.due_on + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  if (c.overdue) return `<span class="tag tone-danger">En retard · réponse attendue le ${esc(due)}</span>`;
+  return `<span class="tag ${c.days_left <= 2 ? "tone-warning" : "tone-info"}">Réponse avant le ${esc(due)}</span>`;
+}
+
+function renderComplaints(data) {
+  const box = document.getElementById("complaint-list");
+  complaintRows = {};
+  const empty = { todo: "Aucune réclamation à traiter.", progress: "Aucune réclamation en cours.", late: "Aucune réclamation en retard.",
+    resolved: "Aucune réclamation traitée pour l'instant.", all: "Le registre est vide." };
+  if (!data.complaints.length) { box.innerHTML = `<p class="empty-state">${empty[currentComplaintView]}</p>`; return; }
+  const when = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  box.innerHTML = data.complaints.map((c) => {
+    complaintRows[c.id] = c;
+    const steps = [`Reçue le ${when(c.received_at)} (${c.channel_label})`];
+    if (c.acknowledged_at) steps.push(`accusé de réception envoyé le ${when(c.acknowledged_at)}`);
+    if (c.started_at) steps.push(`prise en charge le ${when(c.started_at)}`);
+    if (c.resolved_at) steps.push(`traitée le ${when(c.resolved_at)}`);
+    return `
+    <div class="card contract-card${c.overdue ? " complaint-late" : c.status === "RECEIVED" ? " contract-due" : ""}">
+      <div class="contract-head">
+        <div class="contract-who"><strong>${esc(c.reference)}</strong> · ${esc(c.customer)} <span class="pill ${c.kind === "SINISTRE" ? "tone-warning" : "tone-info"}">${esc(c.kind_label)}</span></div>
+        ${complaintDueTag(c)}
+      </div>
+      <p class="contract-note complaint-subject">${esc(c.subject)}</p>
+      ${c.follow_ups ? `<p class="contract-facts">${c.follow_ups} message${c.follow_ups > 1 ? "s" : ""} du client depuis, dans la conversation.</p>` : ""}
+      ${c.resolution ? `<p class="contract-note"><strong>Réponse apportée :</strong> ${esc(c.resolution)}</p>` : ""}
+      <p class="contract-facts">${steps.map(esc).join(" · ")}</p>
+      <div class="contract-actions">
+        ${c.status === "RECEIVED" ? `<button class="action" onclick="startComplaint('${esc(c.id)}')">Prendre en charge</button>` : ""}
+        ${c.status !== "RESOLVED" ? `<button class="action${c.status === "RECEIVED" ? " secondary" : ""}" onclick="resolveComplaint('${esc(c.id)}')">Marquer traitée</button>` : ""}
+        ${c.status !== "RESOLVED" ? `<button class="action secondary" onclick="changeComplaintKind('${esc(c.id)}')">Changer le type</button>` : ""}
+        ${c.conversation_id ? `<button class="action secondary" onclick="jumpToCustomerConversation('${esc(c.conversation_id)}')">Voir la conversation</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function openComplaintDialog() {
+  if (!complaintMeta.kinds.length) { try { complaintMeta = await api("/api/v1/complaints?view=all"); } catch (e) { toast(e.message, "error"); return; } }
+  const today = new Date().toISOString().slice(0, 10);
+  const answer = await bobDialog({
+    title: "Ajouter une réclamation", confirmLabel: "Enregistrer",
+    message: "Pour une réclamation reçue par téléphone, email ou au cabinet. Elle reçoit une référence et une date limite de réponse.",
+    fields: [
+      { name: "phone", label: "Téléphone du client", type: "tel", placeholder: "+225 07 00 00 00 00", hint: "Le client est retrouvé par son numéro, ou créé." },
+      { name: "first_name", label: "Prénom", maxlength: 255 }, { name: "last_name", label: "Nom", maxlength: 255 },
+      { name: "kind", label: "Type", type: "select", options: complaintMeta.kinds, value: "RECLAMATION" },
+      { name: "channel", label: "Reçue par", type: "select", options: complaintMeta.channels, value: "PHONE" },
+      { name: "received_on", label: "Reçue le", type: "date", value: today },
+      { name: "subject", label: "Objet de la réclamation", type: "textarea", rows: 3, maxlength: 1000 },
+    ],
+    validate: (v) => !v.phone.trim() ? "Indiquez le téléphone du client." : (v.subject.trim().length < 3 ? "Décrivez la réclamation en quelques mots." : null),
+  });
+  if (answer === null) return;
+  try {
+    const r = await api("/api/v1/complaints", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(answer) });
+    toast(`Réclamation enregistrée : ${r.reference}.`);
+  } catch (e) {
+    toast(e.message, "error");
+    return;
+  }
+  loadComplaints(currentComplaintView);
+}
+
+async function complaintStep(id, path, body, done) {
+  try {
+    await api(`/api/v1/complaints/${id}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    toast(done);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  loadComplaints(currentComplaintView);
+}
+
+function startComplaint(id) {
+  complaintStep(id, "start", null, "Réclamation prise en charge.");
+}
+
+async function resolveComplaint(id) {
+  const c = complaintRows[id];
+  if (!c) return;
+  const answer = await bobDialog({
+    title: `Réclamation ${c.reference} traitée`, confirmLabel: "Enregistrer",
+    message: "Résumez la réponse apportée au client : elle reste dans le registre, avec la date.",
+    fields: [{ name: "resolution", label: "Réponse apportée", type: "textarea", rows: 4, maxlength: 2000 }],
+    validate: (v) => v.resolution.trim().length < 5 ? "Indiquez la réponse apportée au client." : null,
+  });
+  if (answer === null) return;
+  complaintStep(id, "resolve", { resolution: answer.resolution.trim() }, "Réclamation traitée.");
+}
+
+async function changeComplaintKind(id) {
+  const c = complaintRows[id];
+  if (!c) return;
+  const answer = await bobDialog({
+    title: "Changer le type", message: "Une réclamation a une date limite de réponse ; un sinistre suit les délais de l'assureur.",
+    confirmLabel: "Enregistrer", fields: [{ name: "kind", label: "Type", type: "select", options: complaintMeta.kinds, value: c.kind }],
+  });
+  if (answer === null || answer.kind === c.kind) return;
+  complaintStep(id, "kind", { kind: answer.kind }, "Type modifié.");
+}
+
+async function editComplaintDelay() {
+  const answer = await bobDialog({
+    title: "Délai de réponse aux réclamations", confirmLabel: "Enregistrer",
+    message: "Annoncé au client dans l'accusé de réception. Il vaut pour les réclamations reçues ensuite. Faites-le confirmer par votre compagnie.",
+    fields: [{ name: "days", label: "Jours ouvrés (1 à 60)", type: "number", value: String(complaintMeta.complaint_delay_days || 10) }],
+    validate: (v) => { const n = Number(v.days); return Number.isInteger(n) && n >= 1 && n <= 60 ? null : "Entre 1 et 60 jours ouvrés."; },
+  });
+  if (answer === null) return;
+  try {
+    await api("/api/v1/complaints/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ complaint_delay_days: Number(answer.days) }) });
+    toast("Délai enregistré.");
+  } catch (e) {
+    toast(e.message.startsWith("Rôle insuffisant") ? "Seul un administrateur peut changer ce délai." : e.message, "error");
+  }
+  loadComplaints(currentComplaintView);
+}
+
+async function exportComplaints() {
+  try {
+    const r = await fetch(API_BASE + "/api/v1/complaints/export.csv", { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error("Export impossible pour le moment.");
+    const url = URL.createObjectURL(await r.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "registre_reclamations.csv";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (e) {
@@ -4898,6 +5086,7 @@ var TASK_NAV = {  // rubrique du menu → types de tâches
   overview: ["callbacks"], conversations: ["conversations"], orders: ["orders"], appointments: ["appointments", "outcomes"],
   quotes: ["quotes"],  // lot 53
   contracts: ["renewals"],  // lot 55
+  complaints: ["complaints"],  // lot 57
 };
 // « var » : enterApp() peut s'exécuter au démarrage, avant que ce bloc soit lu.
 var taskTimer = null;
@@ -4982,6 +5171,7 @@ function stopTaskCounts() {
 // jamais les tâches déjà là à l'ouverture. Texte général : jamais le nom ni le message d'un client.
 var TASK_ALERT_LABELS = {  // [une, plusieurs] — même ordre de priorité que les notifications du téléphone
   conversations: ["Un client attend votre réponse", (n) => `${n} clients attendent votre réponse`],
+  complaints: ["Nouvelle réclamation à traiter", (n) => `${n} réclamations à traiter`],
   appointments: ["Nouveau rendez-vous à confirmer", (n) => `${n} nouveaux rendez-vous à confirmer`],
   orders: ["Nouvelle commande", (n) => `${n} nouvelles commandes`],
   callbacks: ["Client à rappeler", (n) => `${n} clients à rappeler`],
@@ -4990,7 +5180,7 @@ var TASK_ALERT_LABELS = {  // [une, plusieurs] — même ordre de priorité que 
   renewals: ["Échéance de contrat à préparer", (n) => `${n} échéances de contrat à préparer`],
 };
 var TASK_ALERT_TAB = { conversations: "conversations", appointments: "appointments", outcomes: "appointments",
-  orders: "orders", callbacks: "overview", quotes: "quotes", renewals: "contracts" };
+  orders: "orders", callbacks: "overview", quotes: "quotes", renewals: "contracts", complaints: "complaints" };
 var SOUND_GAP_MS = 10000;  // au plus un son toutes les 10 secondes, tous onglets confondus
 var lastTaskCounts = null;   // null = premier relevé depuis l'ouverture : il sert de référence, sans alerte
 var pendingAlert = {};       // nouvelles tâches pas encore vues dans la fenêtre ouverte
@@ -5119,6 +5309,7 @@ function openTaskAlert(kind) {
   closeTaskAlert();
   if (tab === "contracts") currentContractView = "todo";
   if (tab === "quotes") currentQuoteView = "todo";
+  if (tab === "complaints") currentComplaintView = "todo";
   showTab(tab);
 }
 

@@ -60,6 +60,8 @@ FIELDS = {
     # pour le conseiller, jamais commentés par Bob.
     "current_expiry": ("Échéance du contrat actuel", "date", None),
     "current_term": ("Durée du contrat actuel", "choice", TERMS),
+    # Lot 57 (CIMA 01-24, art. 10) : pays où se trouve le bien ou l'activité à assurer (code ISO si connu).
+    "risk_country": ("Pays du risque", "country", 60),
     "budget": ("Budget envisagé par le client", "text", 80),
     "payment_wish": ("Souhait du client pour le paiement", "text", 150),
 }
@@ -128,6 +130,8 @@ def _clean_value(key: str, value):
         return parsed.isoformat() if parsed else None
     if kind == "choice":
         return value if isinstance(value, str) and value in limit else None
+    if kind == "country":
+        return parse_country(value)
     if kind == "int":
         try:
             number = int(str(value).strip())
@@ -161,7 +165,77 @@ def display_value(key: str, value) -> str:
         return parsed.strftime("%d/%m/%Y") if parsed else str(value)  # ancienne valeur libre (lot 53) : telle quelle
     if kind == "choice":
         return FIELDS[key][2].get(value, str(value))
+    if kind == "country":
+        return country_name(value)
     return str(value)
+
+
+# --- Lot 57 : domiciliation des risques (CIMA 01-24, art. 10) ----------------------------------------
+
+def _plain_name(text: str) -> str:
+    text = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z]+", " ", text).strip()
+
+
+def _country_names() -> dict:
+    from app.services.countries import COUNTRIES
+
+    names = {_plain_name(name): code for code, name, _ in COUNTRIES}
+    names.update({"cote d ivoire": "CI", "ivory coast": "CI", "rci": "CI", "rdc": "CD", "congo kinshasa": "CD",
+                  "congo brazzaville": "CG", "guinee conakry": "GN", "burkina": "BF"})
+    return names
+
+
+def parse_country(value) -> str | None:
+    """Code ISO d'un pays proposé à l'inscription (nom ou code), sinon le nom donné tel quel (60 caractères)."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    from app.services.countries import COUNTRY_CODES
+
+    raw = value.strip()
+    if raw.upper() in COUNTRY_CODES:
+        return raw.upper()
+    code = _country_names().get(_plain_name(raw))
+    return code or " ".join(raw.split())[:60]
+
+
+def country_name(value) -> str:
+    from app.services.countries import COUNTRIES
+
+    return next((name for code, name, _ in COUNTRIES if code == value), str(value or ""))
+
+
+def country_from_phone(number: str | None) -> str | None:
+    """Pays de l'indicatif d'un numéro WhatsApp (aucun indicatif de la liste n'est le début d'un autre)."""
+    from app.services.insurance_contracts import DIAL_CODES
+
+    digits = "".join(ch for ch in str(number or "") if ch.isdigit())
+    return next((code for code, prefix in DIAL_CODES.items()
+                 if digits.startswith(prefix) and len(digits) > len(prefix) + 6), None)
+
+
+def domiciliation_warning(tenant, request) -> str | None:
+    """Risque situé hors du pays du cabinet : l'assureur doit y être agréé (jamais un refus de Bob)."""
+    risk = (request.details or {}).get("risk_country")
+    if not risk or tenant is None or risk == tenant.country:
+        return None
+    return (f"Risque situé hors de {country_name(tenant.country)} ({country_name(risk)}) : vérifiez que l'assureur y "
+            "est agréé avant toute proposition (domiciliation des risques, CIMA 01-24, art. 10).")
+
+
+def risk_country_hint(tenant, customer) -> str:
+    """Consigne variable pour Bob : numéro d'un autre pays que le cabinet → demander où se trouve le risque."""
+    from app.services.business_type import is_insurance
+
+    if tenant is None or customer is None or not is_insurance(tenant):
+        return ""
+    phone_country = country_from_phone(customer.whatsapp_number)
+    if phone_country is None or phone_country == tenant.country:
+        return ""
+    return (f"\n\nPAYS DU CLIENT : son numéro a l'indicatif de {country_name(phone_country)}, pas de "
+            f"{country_name(tenant.country)}. Avant de transmettre une demande, demande-lui naturellement dans quel pays "
+            "se trouve ce qu'il veut assurer (véhicule, logement, entreprise…) et note-le avec update_insurance_request "
+            "(risk_country). Ne refuse jamais sa demande pour cette raison : le cabinet vérifiera.")
 
 
 def structure_label(tenant) -> str | None:
@@ -343,6 +417,7 @@ def quote_email(tenant, customer, request, link: str, score: str | None = None) 
         f"Client : {who}",
         *request_lines(request),
         *([f"Score commercial : {score}"] if score else []),
+        *([f"⚠️ {warning}"] if (warning := domiciliation_warning(tenant, request)) else []),
         *trace_lines(request),
         "",
         "Bob a proposé au client un appel ou un rendez-vous au cabinet. Il ne lui a donné aucun prix.",

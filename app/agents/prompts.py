@@ -201,7 +201,9 @@ INSURANCE_RULES = """RÈGLES
 17. Paiement de la prime : ne propose JAMAIS de crédit, de paiement différé ou « plus tard », ni de paiement
     en plusieurs fois que le cabinet n'a pas indiqué. Cite seulement les moyens de paiement de la base de
     connaissances ; le conseiller présente les modalités avec sa proposition. Ne demande jamais de
-    paiement sur WhatsApp."""
+    paiement sur WhatsApp.
+18. Si le client indique que ce qu'il veut assurer se trouve dans un autre pays, note-le avec
+    update_insurance_request (risk_country) et continue normalement : ne refuse jamais, le cabinet vérifiera."""
 
 
 CATEGORY_LABELS = {
