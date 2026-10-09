@@ -23,7 +23,7 @@ VIEWS = {"todo": (insurance.STATUS_SUBMITTED,), "handled": (insurance.STATUS_HAN
          "draft": (insurance.STATUS_DRAFT,), "all": (insurance.STATUS_SUBMITTED, insurance.STATUS_HANDLED, insurance.STATUS_DRAFT)}
 
 
-def _out(request: QuoteRequest, customer: Customer | None) -> dict:
+def _out(request: QuoteRequest, customer: Customer | None, prospect: dict | None = None) -> dict:
     from app.services.handoff_service import customer_display_name
 
     return {
@@ -34,6 +34,10 @@ def _out(request: QuoteRequest, customer: Customer | None) -> dict:
         "branch_label": insurance.branch_label(request.branch),
         "client_type": request.client_type,
         "lines": insurance.request_lines(request)[2:],  # assurance et type de client : déjà dans leurs colonnes
+        # Lot 54 (CIMA) : étapes horodatées, et score du prospect (règles fixes, expliquées).
+        "trace": insurance.trace_lines(request),
+        "consent_at": request.consent_at,
+        "prospect": {k: prospect[k] for k in ("score", "score_label", "reasons")} if prospect else None,
         "status": request.status,
         "status_label": insurance.STATUS_LABELS.get(request.status, request.status),
         "submitted_at": request.submitted_at,
@@ -56,7 +60,12 @@ async def list_quote_requests(
                QuoteRequest.status.in_(VIEWS[view]))
         .order_by(QuoteRequest.created_at.desc()).limit(200)
     )).all()
-    return [_out(request, customer) for request, customer in rows]
+    from app.models.tenant import Tenant
+    from app.services import insurance_prospect
+
+    prospects = await insurance_prospect.for_customers(
+        db, await db.get(Tenant, current_user.tenant_id), {customer.id for _, customer in rows})
+    return [_out(request, customer, prospects.get(customer.id)) for request, customer in rows]
 
 
 @router.post("/{request_id}/handle")
@@ -78,4 +87,8 @@ async def handle_quote_request(
     await log_audit_event(db, actor=str(current_user.user_id), action="QUOTE_REQUEST_HANDLED",
                           tenant_id=current_user.tenant_id, details={"quote_request_id": str(request.id)})
     await db.commit()
-    return _out(request, await db.get(Customer, request.customer_id))
+    from app.models.tenant import Tenant
+    from app.services import insurance_prospect
+
+    prospects = await insurance_prospect.for_customers(db, await db.get(Tenant, current_user.tenant_id), [request.customer_id])
+    return _out(request, await db.get(Customer, request.customer_id), prospects.get(request.customer_id))

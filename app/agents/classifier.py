@@ -24,6 +24,8 @@ MAX_MESSAGE_CHARS = 1500
 def build_classifier_prompt(business_type: str | None = None) -> str:
     if business_type == "CAR_DEALERSHIP":
         return _dealership_prompt()
+    if business_type == "INSURANCE_BROKER":
+        return _insurance_prompt()
     intents = "\n".join(f"- {code} : {definition}" for code, (_, definition) in INTENTS.items())
     objections = "\n".join(f"- {code} : {definition}" for code, (_, definition) in OBJECTIONS.items())
     return (
@@ -117,6 +119,49 @@ def _dealership_prompt() -> str:
     )
 
 
+# Lot 54 — courtier / agent d'assurance : mêmes intentions, objections propres (taxonomie v1.4assu).
+INSURANCE_CLASSIFIER_EXAMPLES: list[tuple[str, dict]] = [
+    ("Je vais réfléchir", {"intents": ["AUTRE"], "objections": ["HESITATION"], "offered_amount": None}),
+    ("C'est combien l'assurance auto ?", {"intents": ["DEMANDE_PRIX"], "objections": [], "offered_amount": None}),
+    ("Les assurances c'est trop cher", {"intents": ["AUTRE"], "objections": ["PRIX_TROP_ELEVE"], "offered_amount": None}),
+    ("Je n'ai que 50 000 par an pour ça", {"intents": ["AUTRE"], "objections": ["PRIX_TROP_ELEVE"], "offered_amount": 50000}),
+    ("J'ai déjà une assurance chez Sunu", {"intents": ["AUTRE"], "objections": ["DEJA_ASSURE"], "offered_amount": None}),
+    ("Les assureurs ne paient jamais quand il y a un accident", {"intents": ["AUTRE"], "objections": ["CONFIANCE"], "offered_amount": None}),
+    ("Je n'en ai pas besoin, il ne m'arrivera rien", {"intents": ["AUTRE"], "objections": ["PAS_BESOIN"], "offered_amount": None}),
+    ("Je vais d'abord comparer avec d'autres assureurs", {"intents": ["AUTRE"], "objections": ["COMPARAISON"], "offered_amount": None}),
+    ("Je peux payer en plusieurs fois ?", {"intents": ["PAIEMENT"], "objections": ["PAIEMENT"], "offered_amount": None}),
+    ("J'ai eu un accident hier, comment je déclare le sinistre ?", {"intents": ["RECLAMATION"], "objections": [], "offered_amount": None}),
+    ("Je veux assurer ma Corolla", {"intents": ["INTENTION_ACHAT"], "objections": [], "offered_amount": None}),
+    ("Je veux parler à un conseiller", {"intents": ["DEMANDE_HUMAIN"], "objections": [], "offered_amount": None}),
+    ("D'accord merci", {"intents": ["SALUTATION"], "objections": [], "offered_amount": None}),
+]
+
+
+def _insurance_prompt() -> str:
+    intents = "\n".join(f"- {code} : {definition}" for code, (_, definition) in INTENTS.items())
+    objections = "\n".join(f"- {code} : {definition}" for code, (_, definition) in objections_for("INSURANCE_BROKER").items())
+    return (
+        "Tu analyses UN message qu'un client a envoyé sur WhatsApp à un cabinet ou une agence d'assurance.\n"
+        "Tu ne réponds jamais au client : tu classes seulement son message.\n\n"
+        "Réponds UNIQUEMENT par un objet JSON de la forme :\n"
+        '{"intents": ["CODE", ...], "objections": ["CODE", ...], "offered_amount": nombre ou null}\n\n'
+        "Intentions possibles (une ou plusieurs ; « produit » = assurance, « acheter » = souscrire, "
+        "RECLAMATION = mécontentement ou déclaration d'un sinistre) :\n"
+        f"{intents}\n\n"
+        f"Objections possibles (zéro, une ou plusieurs) :\n{objections}\n\n"
+        "Règles :\n"
+        "- n'utilise que les codes ci-dessus, en majuscules ;\n"
+        "- une objection = tout ce qui freine ou retarde la souscription, y compris une hésitation sans "
+        "raison donnée ; une simple question (« ça couvre quoi ? ») n'est pas une objection ; s'il n'y a "
+        "aucun frein, liste vide ;\n"
+        "- offered_amount = le budget ou la prime que le client annonce lui-même (« je n'ai que 50 000 » → "
+        "50000) ; null s'il n'en donne aucun ;\n"
+        "- le message précédent du cabinet, s'il est fourni, sert seulement à comprendre une réponse courte "
+        "(« oui », « combien ? ») ; ne classe que le message du client.\n\n"
+        f"Exemples :\n{_examples(INSURANCE_CLASSIFIER_EXAMPLES)}"
+    )
+
+
 def normalize_classification(raw, business_type: str | None = None) -> dict | None:
     """Ne garde que ce qui respecte la taxonomie de l'activité. None si la réponse est inexploitable."""
     if not isinstance(raw, dict):
@@ -145,7 +190,7 @@ class MessageClassifier(ABC):
         if not text:
             return None
         try:
-            if business_type == "CAR_DEALERSHIP":  # lot 45 : consignes et objections de la concession
+            if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER"):  # lots 45 / 54 : consignes de l'activité
                 call = self._call(text[:MAX_MESSAGE_CHARS], previous_shop_message,
                                   system_prompt=build_classifier_prompt(business_type))
             else:

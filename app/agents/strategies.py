@@ -12,9 +12,10 @@ alterner ne fait prendre aucun risque au client) et prépare l'apprentissage de 
 import random
 from dataclasses import dataclass
 
-STRATEGY_LIBRARY_VERSION = "v2"  # lot 45 : stratégies de la concession (celles de la boutique inchangées)
+STRATEGY_LIBRARY_VERSION = "v3"  # lot 54 : stratégies du courtier (boutique et concession inchangées)
 ONLINE_STORE = "ONLINE_STORE"
 CAR_DEALERSHIP = "CAR_DEALERSHIP"
+INSURANCE_BROKER = "INSURANCE_BROKER"
 MIN_TERMINATED_FOR_RATE = 20  # en dessous, « pas encore assez de données » plutôt qu'un pourcentage trompeur
 
 GUARDRAILS = (
@@ -40,7 +41,18 @@ NO_KNOWLEDGE_INSTRUCTION = (
 DEALERSHIP_NO_KNOWLEDGE_INSTRUCTION = NO_KNOWLEDGE_INSTRUCTION.replace("la boutique", "la concession")
 
 
+# Lot 54 — courtier : ce qui manque ne s'invente pas non plus (paiement, conditions, garanties).
+INSURANCE_NO_KNOWLEDGE_INSTRUCTION = (
+    "Le client pose une question sur des conditions que le cabinet n'a pas renseignées. N'affirme AUCUNE "
+    "condition (moyens de paiement, garanties, exclusions, délais, prise en charge). Si le client pose une "
+    "question précise, appelle l'outil handoff_to_human (raison : sa question) et dis-lui que tu transmets sa "
+    "question au cabinet ; sinon, demande-lui ce qui l'inquiète."
+)
+
+
 def no_knowledge_instruction(business_type: str | None = None) -> str:
+    if business_type == INSURANCE_BROKER:
+        return INSURANCE_NO_KNOWLEDGE_INSTRUCTION
     return DEALERSHIP_NO_KNOWLEDGE_INSTRUCTION if business_type == "CAR_DEALERSHIP" else NO_KNOWLEDGE_INSTRUCTION
 
 
@@ -240,6 +252,111 @@ STRATEGIES += [
           "engagement pour se faire une idée : get_available_slots pour lui proposer un créneau s'il accepte."),
 ]
 
+# --- Lot 54 : courtier / agent d'assurance ---------------------------------------------------------------
+# Bob ne vend pas le contrat et ne donne aucun prix : chaque stratégie lève le frein avec des faits RÉELS
+# (produits du cabinet, base de connaissances, informations du cabinet) et vise une demande de cotation
+# transmise ou un appel / rendez-vous avec un conseiller. Règlement CIMA : jamais de crédit ni de paiement
+# différé, jamais de promesse de prise en charge, jamais de dénigrement d'un autre assureur.
+_CALL = ("propose-lui qu'un conseiller l'appelle ou un rendez-vous au cabinet : get_available_slots pour lui "
+         "proposer un créneau, puis request_appointment (APPEL ou CABINET) quand il en choisit un")
+_INSURANCE_TRUST_INFO = frozenset({"ADRESSE", "HORAIRES", "CONDITIONS", "FAQ", "AUTRE"})
+
+
+def _assu(code, objection, label, description, instruction, requires=frozenset()):
+    return Strategy(code, objection, label, description, instruction, requires=requires, activity=INSURANCE_BROKER)
+
+
+STRATEGIES += [
+    _assu("ASSU_PRIX_ADAPTER", "PRIX_TROP_ELEVE", "Adapter les garanties",
+          "Bob explique que le prix dépend des garanties choisies et demande ce qui compte le plus pour le client.",
+          "Le client trouve l'assurance chère. Ne donne AUCUN montant. Explique simplement que le prix dépend des "
+          "garanties choisies et que le conseiller peut lui proposer une formule adaptée à son budget. Demande-lui ce "
+          "qui compte le plus pour lui (les garanties essentielles, une protection plus complète…), note sa réponse "
+          f"avec update_insurance_request (couverture souhaitée), puis {_CALL}."),
+    _assu("ASSU_PRIX_VALEUR", "PRIX_TROP_ELEVE", "Ce qui est protégé",
+          "Bob rappelle ce que l'assurance protège concrètement, d'après la description du produit.",
+          "Le client trouve l'assurance chère. Ne donne AUCUN montant. Rappelle-lui en une ou deux phrases ce que "
+          "l'assurance protège concrètement, uniquement d'après la description du produit (search_products) ; "
+          "n'ajoute aucune garantie qui n'y figure pas. Propose ensuite une proposition personnalisée, sans engagement."),
+    _assu("ASSU_PRIX_BUDGET", "PRIX_TROP_ELEVE", "Budget",
+          "Bob demande le budget envisagé et le transmet au conseiller, sans jamais le commenter.",
+          "Le client trouve l'assurance chère. Demande-lui poliment quel budget il envisage, pour que le conseiller "
+          "lui propose ce qui y correspond. Quand il le donne, note-le avec update_insurance_request (budget) SANS "
+          "répéter le montant dans ta réponse et sans dire s'il suffit."),
+    _assu("ASSU_DEJA_ECHEANCE", "DEJA_ASSURE", "Préparer l'échéance",
+          "Bob note l'assureur actuel, l'échéance et la durée du contrat, pour préparer une proposition à temps.",
+          "Le client a déjà une assurance. Ne critique jamais son assureur actuel. Demande-lui la date d'échéance de "
+          "son contrat et sa durée (mensuel, trimestriel, semestriel ou annuel), note-les avec update_insurance_request "
+          "(assureur actuel, échéance, durée), et explique que le conseiller peut lui préparer une proposition avant "
+          "l'échéance, sans engagement, pour qu'il puisse comparer."),
+    _assu("ASSU_DEJA_BILAN", "DEJA_ASSURE", "Vérifier sa couverture",
+          "Bob propose au client de vérifier avec un conseiller s'il est bien couvert, sans engagement.",
+          "Le client a déjà une assurance. Ne critique jamais son assureur actuel. Demande-lui ce que couvre son "
+          "contrat actuel, et propose-lui de faire le point avec un conseiller pour vérifier qu'il est bien couvert, "
+          f"sans engagement : {_CALL}."),
+    _assu("ASSU_CONFIANCE_FAITS", "CONFIANCE", "Rassurer par les faits",
+          "Bob rappelle les faits réels du cabinet : statut, agrément, adresse, horaires, conditions.",
+          "Le client doute du sérieux de l'assurance ou du cabinet. Rassure-le uniquement avec des faits réels : "
+          "les INFORMATIONS DU CABINET (statut, compagnie, numéro d'agrément) et la base de connaissances (adresse, "
+          "horaires, conditions). Ne promets JAMAIS qu'un sinistre sera pris en charge : explique que les garanties et "
+          "les exclusions sont écrites dans le contrat et que le conseiller les lui présente avant tout engagement.",
+          requires=_INSURANCE_TRUST_INFO),
+    _assu("ASSU_CONFIANCE_CONSEILLER", "CONFIANCE", "Rencontrer un conseiller",
+          "Bob propose de rencontrer un conseiller qui présente les garanties et exclusions avant tout engagement.",
+          "Le client doute du sérieux de l'assurance ou du cabinet. Ne promets JAMAIS qu'un sinistre sera pris en "
+          "charge. Explique qu'un conseiller lui présentera, avant tout engagement, ce que le contrat couvre et ne "
+          f"couvre pas, et qu'il pourra poser toutes ses questions ; {_CALL}."),
+    _assu("ASSU_CONFIANCE_COMPRENDRE", "CONFIANCE", "Comprendre",
+          "Bob demande ce qui inquiète précisément le client, pour y répondre.",
+          "Le client doute du sérieux de l'assurance ou du cabinet. Demande-lui ce qui l'inquiète précisément (une "
+          "mauvaise expérience, la prise en charge d'un sinistre, le cabinet), pour pouvoir lui répondre avec des faits."),
+    _assu("ASSU_BESOIN_SITUATION", "PAS_BESOIN", "Partir de sa situation",
+          "Bob pose une question sur la situation du client pour voir ce qui est réellement exposé, sans dramatiser.",
+          "Le client ne voit pas l'utilité de s'assurer. Ne fais jamais peur et n'invente aucun risque. Pose-lui une "
+          "seule question sur sa situation (famille, véhicule, logement, activité) pour comprendre ce qui compte pour "
+          "lui ; si un produit du cabinet y répond, présente-le en une phrase, d'après sa description."),
+    _assu("ASSU_BESOIN_RESPECTER", "PAS_BESOIN", "Respecter",
+          "Bob prend acte et reste disponible ; il rappelle seulement une obligation légale si le produit l'indique.",
+          "Le client ne voit pas l'utilité de s'assurer. Respecte son avis : si la description du produit indique "
+          "qu'une garantie est obligatoire (par exemple la responsabilité civile automobile), rappelle-le simplement, "
+          "sans menace ; sinon, indique que tu restes disponible. N'insiste pas."),
+    _assu("ASSU_COMPARER_PROPOSITION", "COMPARAISON", "Comparer sans engagement",
+          "Bob encourage la comparaison et propose une proposition écrite du cabinet pour comparer.",
+          "Le client veut comparer. Encourage-le : c'est normal. Ne critique jamais un autre assureur et ne donne "
+          "aucun prix. Propose-lui de recevoir une proposition personnalisée du cabinet, sans engagement, pour "
+          "comparer sur des bases claires : continue à réunir les informations utiles (update_insurance_request)."),
+    _assu("ASSU_COMPARER_CRITERES", "COMPARAISON", "Critères de choix",
+          "Bob aide le client à comparer sur les bons critères : garanties, exclusions, franchise, service sinistre.",
+          "Le client veut comparer. Aide-le, sans aucun chiffre, à comparer sur les bons critères : les garanties "
+          "incluses, les exclusions, la franchise, l'assistance et la gestion des sinistres. Demande-lui ce qui compte "
+          f"le plus pour lui, note-le (update_insurance_request, couverture souhaitée), puis {_CALL}."),
+    _assu("ASSU_PAIEMENT_CONSEILLER", "PAIEMENT", "Voir avec le conseiller",
+          "Bob note le souhait du client ; les modalités de paiement sont présentées par le conseiller.",
+          "Le client veut payer la prime en plusieurs fois, plus tard ou à crédit. Ne promets JAMAIS de crédit, de "
+          "paiement différé ni de paiement en plusieurs fois : le cabinet n'accorde pas de crédit. Note son souhait "
+          "avec update_insurance_request (souhait pour le paiement) et explique que le conseiller lui présentera les "
+          f"modalités de paiement possibles avec sa proposition ; {_CALL}."),
+    _assu("ASSU_PAIEMENT_FAITS", "PAIEMENT", "Moyens acceptés",
+          "Bob cite uniquement les moyens de paiement renseignés par le cabinet, jamais de crédit.",
+          "Le client veut payer la prime en plusieurs fois, plus tard ou à crédit. Ne promets JAMAIS de crédit ni de "
+          "paiement différé. Cite uniquement les moyens et modalités de paiement figurant dans la base de "
+          "connaissances, sans rien ajouter, et note son souhait avec update_insurance_request (souhait pour le "
+          "paiement). Le conseiller confirmera les modalités avec la proposition.",
+          requires=frozenset({"PAIEMENT"})),
+    _assu("ASSU_HESITATION_CLARIFIER", "HESITATION", "Clarifier",
+          "Bob cherche ce qui fait hésiter : le prix, les garanties ou la confiance ?",
+          "Le client hésite. Demande-lui, avec une seule question simple, ce qui le fait hésiter : plutôt le prix, ce "
+          "que couvre l'assurance, ou la confiance ? Propose ensuite ton aide sur ce point."),
+    _assu("ASSU_HESITATION_RESPECTER", "HESITATION", "Respecter",
+          "Bob prend acte, résume le besoin en une phrase et reste disponible, sans insister.",
+          "Le client hésite. Respecte sa décision : résume en une phrase son besoin d'assurance et indique que tu "
+          "restes disponible. N'insiste pas et ne pose pas de question."),
+    _assu("ASSU_HESITATION_APPEL", "HESITATION", "Appel sans engagement",
+          "Bob propose, une seule fois, un court appel sans engagement avec un conseiller.",
+          "Le client hésite. Propose-lui, une seule fois et sans insister, un court appel sans engagement avec un "
+          "conseiller pour répondre à ses questions : get_available_slots pour lui proposer un créneau s'il accepte."),
+]
+
 STRATEGIES_BY_CODE = {s.code: s for s in STRATEGIES}
 
 # Une seule objection traitée par message : la plus bloquante d'abord.
@@ -247,14 +364,20 @@ OBJECTION_PRIORITY = ["CONFIANCE", "RUPTURE_STOCK", "PRIX_TROP_ELEVE", "FRAIS_LI
 DEALERSHIP_OBJECTION_PRIORITY = [
     "CONFIANCE", "PAPIERS", "ETAT_VEHICULE", "RUPTURE_STOCK", "FINANCEMENT", "PRIX_TROP_ELEVE", "REPRISE", "DELAI", "HESITATION",
 ]
+INSURANCE_OBJECTION_PRIORITY = [
+    "CONFIANCE", "PAS_BESOIN", "PAIEMENT", "PRIX_TROP_ELEVE", "DEJA_ASSURE", "COMPARAISON", "HESITATION",
+]
 
 
 def _activity(business_type: str | None) -> str:
-    return CAR_DEALERSHIP if business_type == CAR_DEALERSHIP else ONLINE_STORE
+    if business_type in (CAR_DEALERSHIP, INSURANCE_BROKER):
+        return business_type
+    return ONLINE_STORE
 
 
 def priority_for(business_type: str | None = None) -> list[str]:
-    return DEALERSHIP_OBJECTION_PRIORITY if _activity(business_type) == CAR_DEALERSHIP else OBJECTION_PRIORITY
+    return {CAR_DEALERSHIP: DEALERSHIP_OBJECTION_PRIORITY,
+            INSURANCE_BROKER: INSURANCE_OBJECTION_PRIORITY}.get(_activity(business_type), OBJECTION_PRIORITY)
 
 _rng = random.Random()
 
@@ -294,5 +417,15 @@ def select_strategy(
     return None, None
 
 
+# Lot 54 — garde-fous du courtier (règlement CIMA : ni prix, ni promesse de prise en charge, ni crédit).
+INSURANCE_GUARDRAILS = (
+    "Garde-fous : n'invente jamais de garantie, de condition ni d'avis client ; ne donne jamais de prime, de tarif "
+    "ni de montant ; ne promets jamais qu'un sinistre sera pris en charge ; ne propose jamais de crédit ni de "
+    "paiement différé ; ne critique aucun assureur ; pas de fausse urgence ; n'insiste pas si le client refuse "
+    "clairement."
+)
+
+
 def strategy_instruction(strategy: Strategy) -> str:
-    return f"{strategy.instruction}\n{GUARDRAILS}"
+    guardrails = INSURANCE_GUARDRAILS if strategy.activity == INSURANCE_BROKER else GUARDRAILS
+    return f"{strategy.instruction}\n{guardrails}"

@@ -103,6 +103,10 @@
           <span class="t">🚗 Concession automobile</span>
           <span class="d">Bob renseigne sur vos véhicules, qualifie le client et fixe un rendez-vous d'essai.</span>
         </button>
+        <button type="button" class="sector-option" onclick="chooseSector('INSURANCE_BROKER')">
+          <span class="t">🛡️ Courtier / agent d'assurance</span>
+          <span class="d">Bob qualifie le besoin, prépare la demande de cotation et propose un appel ou un rendez-vous. Jamais de prix.</span>
+        </button>
       </div>
     </div>
 
@@ -124,7 +128,17 @@
       </div>
     </div>
 
-    <div class="field">
+    <div class="field hidden" id="structure-field">
+      <label for="insurance-structure">Vous êtes</label>
+      <select id="insurance-structure" class="input">
+        <option value="COURTIER">Cabinet de courtage</option>
+        <option value="AGENCE_GENERALE">Agence générale</option>
+        <option value="AGENT">Agent d'assurance</option>
+      </select>
+      <div class="hint" style="font-size: 12px; color: #8a8f98; margin-top: 6px;">Vos produits d'assurance sont créés pour vous (auto, santé, habitation, voyage…), sans aucun prix : Bob ne donne jamais de tarif.</div>
+    </div>
+
+    <div class="field" id="catalog-field">
       <label>Votre catalogue (CSV ou export Excel enregistré en CSV)</label>
       <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
         <div class="icon">📁</div>
@@ -137,13 +151,13 @@
 
     <button class="cta" id="create-btn" onclick="createDemo()">Créer mon vendeur IA</button>
     <div id="setup-error"></div>
-    <a class="sample-link" onclick="useSampleCatalog(event)" href="#">Pas de fichier sous la main ? Essayer avec un catalogue d'exemple</a>
+    <a class="sample-link" id="sample-link" onclick="useSampleCatalog(event)" href="#">Pas de fichier sous la main ? Essayer avec un catalogue d'exemple</a>
     </div>
   </div>
 
   <div id="import-result">
     <div class="check">✅</div>
-    <h2>Votre vendeur IA est prêt !</h2>
+    <h2 id="ready-title">Votre vendeur IA est prêt !</h2>
     <div class="stats">
       <div><div class="stat-value" id="stat-imported">0</div><div class="stat-label" id="stat-imported-label">PRODUITS IMPORTÉS</div></div>
       <div><div class="stat-value" id="stat-available">0</div><div class="stat-label">DISPONIBLES</div></div>
@@ -241,6 +255,18 @@ Toyota Hilux,21000000,Double cabine 4x4,1,Toyota,Hilux,2020,88000,Diesel,Manuell
       ["📷 Photo", "Vous avez une photo ?"],
     ],
   },
+  // Lot 54 — démo courtier : pas de fichier, les produits d'assurance par défaut sont créés côté serveur.
+  INSURANCE_BROKER: {
+    label: "Courtier / agent d'assurance", status: "● Assistant IA en ligne", company: "Assur Conseil", items: "PRODUITS D'ASSURANCE",
+    noCatalog: true,
+    scenarios: [
+      ["🚗 Assurance auto", "Bonjour, je veux assurer ma voiture"],
+      ["👨‍👩‍👧 Santé famille", "Je cherche une assurance santé pour ma famille"],
+      ["💬 Trop cher", "Les assurances c'est trop cher"],
+      ["🔁 Déjà assuré", "J'ai déjà une assurance, mon contrat finit dans 10 jours"],
+      ["💳 Paiement", "Je peux payer en plusieurs fois ?"],
+    ],
+  },
 };
 
 function esc(value) {
@@ -270,7 +296,12 @@ function chooseSector(code) {
   selectedSector = code;
   const sector = SECTORS[code];
   document.getElementById("sector-label").textContent = sector.label;
-  document.getElementById("company-name").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar" : "Ex. Boutique ABC";
+  document.getElementById("company-name").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar"
+    : code === "INSURANCE_BROKER" ? "Ex. Assur Conseil Abidjan" : "Ex. Boutique ABC";
+  // Lot 54 — courtier : statut à la place du fichier catalogue.
+  document.getElementById("catalog-field").classList.toggle("hidden", !!sector.noCatalog);
+  document.getElementById("sample-link").classList.toggle("hidden", !!sector.noCatalog);
+  document.getElementById("structure-field").classList.toggle("hidden", !sector.noCatalog);
   document.getElementById("sector-step").classList.add("hidden");
   document.getElementById("company-step").classList.remove("hidden");
   selectedFile = null;
@@ -328,7 +359,8 @@ async function createDemo() {
   if (!selectedSector) { changeSector(); return; }
 
   if (!companyName) { errorEl.textContent = "Indiquez le nom de votre entreprise."; return; }
-  if (!selectedFile) { errorEl.textContent = "Choisissez un fichier catalogue (ou essayez l'exemple)."; return; }
+  const noCatalog = !!SECTORS[selectedSector].noCatalog;
+  if (!selectedFile && !noCatalog) { errorEl.textContent = "Choisissez un fichier catalogue (ou essayez l'exemple)."; return; }
 
   btn.disabled = true;
   btn.textContent = "Création en cours…";
@@ -338,7 +370,8 @@ async function createDemo() {
   formData.append("currency", currency);
   formData.append("country", country);
   formData.append("business_type", selectedSector);
-  formData.append("file", selectedFile);
+  if (noCatalog) formData.append("insurance_structure", document.getElementById("insurance-structure").value);
+  else formData.append("file", selectedFile);
 
   try {
     const res = await fetch(API_BASE + "/api/v1/demo/create", { method: "POST", body: formData });
@@ -354,6 +387,7 @@ async function createDemo() {
     document.getElementById("chat-company-name").textContent = companyName;
     const sector = SECTORS[selectedSector];
     document.getElementById("stat-imported-label").textContent = sector.items;
+    document.getElementById("ready-title").textContent = sector.noCatalog ? "Votre assistant IA est prêt !" : "Votre vendeur IA est prêt !";
     document.getElementById("chat-status").textContent = sector.status;
     document.getElementById("scenarios").innerHTML = sector.scenarios
       .map(([label, text], i) => `<button class="scenario-btn" data-i="${i}">${esc(label)}</button>`).join("");

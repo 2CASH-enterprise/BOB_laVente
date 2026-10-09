@@ -109,7 +109,8 @@ def test_insurance_tools_never_show_a_price():
 def test_prompt_of_the_cabinet():
     tenant = Tenant(name="Cabinet Kouassi", country="CI", currency="XOF", email="x@y.ci", business_type=INSURANCE_BROKER)
     prompt = build_system_prompt(tenant, now=datetime(2026, 10, 9, 10, tzinfo=timezone.utc))
-    assert "assistant virtuel de Cabinet Kouassi, cabinet de courtage / agence d'assurance" in prompt
+    # Lot 54 : sans statut renseigné, « intermédiaire en assurance » (plus jamais « courtage / agence » à la fois).
+    assert "assistant virtuel de Cabinet Kouassi, intermédiaire en assurance." in prompt
     assert "Ne donne JAMAIS de montant" in prompt and "update_insurance_request" in prompt and "kind APPEL ou CABINET" in prompt
     assert "Vouvoie TOUJOURS" in prompt and "CALENDRIER (heure du cabinet)" in prompt
     assert "concession" not in prompt.lower() and "Devise" not in prompt
@@ -179,8 +180,13 @@ async def test_quote_request_is_submitted_by_the_code_once_complete(db_session):
     assert not first["submitted_now"] and first["missing"] == ["Usage"] and first["request"].status == "DRAFT"
     assert first["request"].details == {"vehicle": "Toyota Corolla", "vehicle_year": 2019}
 
-    done = await insurance.update_request(db_session, tenant.id, customer.id, conversation.id,
-                                          {"branch": "AUTO", "usage": "privé", "vehicle_year": "deux mille", "current_insurer": "NSIA"}, now)
+    complete = await insurance.update_request(db_session, tenant.id, customer.id, conversation.id,
+                                              {"branch": "AUTO", "usage": "privé", "vehicle_year": "deux mille", "current_insurer": "NSIA"}, now)
+    # Lot 54 (CIMA) : complète, mais rien ne part sans l'accord du client.
+    assert not complete["submitted_now"] and complete["needs_consent"] and complete["request"].status == "DRAFT"
+    done = await insurance.update_request(db_session, tenant.id, customer.id, conversation.id, {"branch": "AUTO", "consent": True}, now)
+    assert done["submitted_now"] and done["request"].consent_at == now and not done["needs_consent"]
+    done["rejected"] = complete["rejected"]
     assert done["submitted_now"] and done["request"].status == "SUBMITTED" and done["request"].submitted_at == now
     assert done["rejected"] == ["vehicle_year"] and done["request"].details["vehicle_year"] == 2019  # jamais écrasé par une valeur douteuse
 
@@ -210,7 +216,11 @@ def test_value_cleaning():
     assert insurance._clean_value("persons_count", "-1") is None and insurance._clean_value("persons_count", 100001) is None
     assert insurance._clean_value("persons_count", " 4 ") == 4 and insurance._clean_value("persons_count", 0) == 0
     assert insurance._clean_value("vehicle", 12) is None and insurance._clean_value("vehicle", "   ") is None
-    assert insurance._clean_value("current_expiry", "x" * 100) == "x" * 60
+    # Lot 54 : l'échéance est une vraie date, la durée une valeur de la liste ; jamais devinées.
+    assert insurance._clean_value("current_expiry", "x" * 100) is None
+    assert insurance._clean_value("current_expiry", " 2026-10-25 ") == "2026-10-25"
+    assert insurance._clean_value("current_expiry", "2026-13-01") is None and insurance._clean_value("current_expiry", "1999-01-01") is None
+    assert insurance._clean_value("current_term", "MENSUEL") == "MENSUEL" and insurance._clean_value("current_term", "HEBDO") is None
 
 
 @pytest.mark.asyncio
@@ -233,8 +243,10 @@ async def test_the_tool_guides_bob(db_session):
 
     partial = await executor.execute("update_insurance_request", {"branch": "HABITATION", "occupancy": "locataire"})
     assert partial["missing"] == ["Type de logement"] and "il manque : Type de logement" in partial["instruction"]
-    sent = await executor.execute("update_insurance_request", {"branch": "HABITATION", "housing_type": "appartement", "ages": 5})
-    assert sent["status"] == "quote_request_sent" and "appel" in sent["instruction"] and sent["not_understood"] == ["ages"]
+    ready = await executor.execute("update_insurance_request", {"branch": "HABITATION", "housing_type": "appartement", "ages": 5})
+    assert ready["status"] == "consent_needed" and "consent=true" in ready["instruction"] and ready["not_understood"] == ["ages"]
+    sent = await executor.execute("update_insurance_request", {"branch": "HABITATION", "consent": True})
+    assert sent["status"] == "quote_request_sent" and "appel" in sent["instruction"]
     more = await executor.execute("update_insurance_request", {"branch": "HABITATION", "coverage": "vol"})
     assert more["status"] == "quote_request_updated"
     notes = (await db_session.execute(select(Message.content).where(Message.message_type == "quote_request"))).scalars().all()
@@ -287,7 +299,8 @@ def _payload(pnid, sender, text):
 async def test_whatsapp_quote_request_reaches_the_cabinet_once(client, db_session, wire):  # noqa: F811
     tenant = await _cabinet(db_session)
     state = wire({"intents": ["AUTRE"], "objections": []}, [
-        tool_use_response("update_insurance_request", {"branch": "SANTE", "persons_count": 3, "ages": "35, 33 et 6 ans"}),
+        tool_use_response("update_insurance_request", {"branch": "SANTE", "persons_count": 3, "ages": "35, 33 et 6 ans",
+                                                       "consent": True}),
         text_response("C'est transmis ! Préférez-vous un appel ou un rendez-vous au cabinet ?"),
         text_response("Très bien, je note."),
     ])
@@ -302,10 +315,12 @@ async def test_whatsapp_quote_request_reaches_the_cabinet_once(client, db_sessio
     body = mails[0]["body"]
     assert "Nombre de personnes : 3" in body and "Âges : 35, 33 et 6 ans" in body and "aucun prix" in body
     assert "/dashboard/?conversation=" in body
-    # Pas d'analyse des messages pour le courtier tant que sa liste d'objections n'existe pas (lot 54).
+    assert "Accord du client pour la transmission : " in body and "Transmise au cabinet : " in body  # lot 54 (CIMA)
+    # Lot 54 : les messages du courtier sont analysés avec SA liste d'objections.
     from app.models.message_signal import MessageSignal
 
-    assert (await db_session.execute(select(MessageSignal))).first() is None
+    versions = (await db_session.execute(select(MessageSignal.taxonomy_version))).scalars().all()
+    assert versions == ["v1.4assu", "v1.4assu"]
 
 
 @pytest.mark.asyncio
@@ -383,10 +398,10 @@ async def test_quote_requests_api(client, db_session):
     other = await _cabinet(db_session)
     customer, conversation = await _conversation(db_session, cabinet)
     sent = await insurance.update_request(db_session, cabinet.id, customer.id, conversation.id,
-                                          {"branch": "SCOLAIRE", "children_count": 2, "client_type": "PARTICULIER"})
+                                          {"branch": "SCOLAIRE", "children_count": 2, "client_type": "PARTICULIER", "consent": True})
     draft = await insurance.update_request(db_session, cabinet.id, customer.id, conversation.id, {"branch": "AUTO"})
     o_customer, o_conv = await _conversation(db_session, other)
-    await insurance.update_request(db_session, other.id, o_customer.id, o_conv.id, {"branch": "SCOLAIRE", "children_count": 1})
+    await insurance.update_request(db_session, other.id, o_customer.id, o_conv.id, {"branch": "SCOLAIRE", "children_count": 1, "consent": True})
     await db_session.commit()
     headers = await _headers(client, cabinet)
 
@@ -419,10 +434,11 @@ async def test_tasks_and_home_of_the_cabinet(client, db_session):
     cabinet = await _cabinet(db_session)
     customer, conversation = await _conversation(db_session, cabinet)
     await insurance.update_request(db_session, cabinet.id, customer.id, conversation.id,
-                                   {"branch": "MOTO", "vehicle": "Yamaha", "usage": "livraison"})
+                                   {"branch": "MOTO", "vehicle": "Yamaha", "usage": "livraison", "consent": True})
     other = await _cabinet(db_session)  # une autre boutique ne compte jamais
     o_customer, o_conv = await _conversation(db_session, other)
-    await insurance.update_request(db_session, other.id, o_customer.id, o_conv.id, {"branch": "SCOLAIRE", "children_count": 1})
+    await insurance.update_request(db_session, other.id, o_customer.id, o_conv.id, {"branch": "SCOLAIRE", "children_count": 1,
+                                                                                  "consent": True})
     # Un rendez-vous à confirmer passe APRÈS la demande de cotation dans « À traiter ».
     db_session.add(AppointmentRequest(tenant_id=cabinet.id, customer_id=customer.id, conversation_id=conversation.id,
                                       kind="APPEL", availability="lundi", status="REQUESTED"))
@@ -434,8 +450,11 @@ async def test_tasks_and_home_of_the_cabinet(client, db_session):
     assert home["business_type"] == INSURANCE_BROKER and "appointments" in home["kpis"]
     assert [t["kind"] for t in home["todo"]] == ["QUOTE", "APPOINTMENT"]
     [quote] = [t for t in home["todo"] if t["kind"] == "QUOTE"]
-    assert quote["detail"] == "Assurance moto" and quote["action"] == "Préparer la cotation"
-    assert [f["label"] for f in home["funnel"]] == ["Conversations", "Rendez-vous demandés", "Rendez-vous honorés", "Contrats souscrits"]
+    # Lot 54 : cotation transmise + appel prévu = prospect chaud, signalé dans la tâche.
+    assert quote["detail"] == "Assurance moto · 🔥 demande de cotation transmise, appel ou rendez-vous prévu"
+    assert quote["reason"] == "Prospect chaud" and quote["tone"] == "danger" and quote["action"] == "Préparer la cotation"
+    # Lot 54 : la cotation est l'étape clé du courtier.
+    assert [f["label"] for f in home["funnel"]] == ["Conversations", "Demandes de cotation", "Rendez-vous et appels", "Contrats souscrits"]
 
     store = await _cabinet(db_session, business_type=ONLINE_STORE)
     assert (await task_counts(db_session, store))["quotes"] == 0
@@ -519,13 +538,6 @@ async def test_order_recap_never_for_the_cabinet(db_session):
     assert await recap_to_send(db_session, cabinet, customer) is None
 
 
-@pytest.mark.asyncio
-async def test_demo_not_yet_for_the_cabinet(client):
-    r = await client.post("/api/v1/demo/create", data={"company_name": "C", "business_type": INSURANCE_BROKER, "country": "CI"},
-                          files={"file": ("a.csv", b"Nom,Prix\nA,1\n", "text/csv")})
-    assert r.status_code == 400 and "bientôt" in r.json()["detail"]
-
-
 # --- Tableau de bord ------------------------------------------------------------------------------------------
 
 def _function(name):
@@ -546,7 +558,8 @@ def test_dashboard_sector_switches():
     assert 'if (currentBusinessType === "INSURANCE_BROKER") {' in create and "delete payload.price;" in create
     save = _function("saveProductEdit")
     assert '...(currentBusinessType === "INSURANCE_BROKER" ? {} : {' in save
-    assert 'class="card no-insurance" id="signals-card"' in HTML and 'class="card no-insurance" id="strategies-card"' in HTML
+    # Lot 54 : le courtier a ses objections, l'analyse et les stratégies lui sont montrées.
+    assert 'class="card" id="signals-card"' in HTML and 'class="card" id="strategies-card"' in HTML
 
 
 def test_quote_page_escapes_everything():

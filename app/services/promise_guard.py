@@ -71,7 +71,23 @@ def _normalize(text: str) -> str:
 CONDITIONAL = re.compile(
     r"\b(?:d[èe]s que|quand|lorsque|une fois que|apr[èe]s que)\s*(?:vous|tu|tu m'|vous m'|j'aurai|j'aurais)\b"
 )
-_SENTENCE = re.compile(r"[^.!?\n]+")
+_SENTENCE = re.compile(r"[^.!?\n]+[.!?]*")
+
+# Lot 54 — une QUESTION au client n'est pas une promesse : « Puis-je transmettre votre demande à votre
+# conseiller ? » (accord demandé avant d'envoyer une demande de cotation, règlement CIMA), « Souhaitez-vous
+# qu'un conseiller vous rappelle ? ». Seule une vraie tournure interrogative compte : « Un conseiller va
+# vous rappeler, d'accord ? » reste une promesse.
+_CONSENT_QUESTION = re.compile(
+    r"^\s*(?:et\s+)?(?:puis-je|pourrais-je|dois-je|est-ce que|souhaite[sz]-(?:vous|tu)|souhaiteriez-vous"
+    r"|voule[sz]-vous|voudriez-vous|veux-tu|accepte[sz]-(?:vous|tu)|[êe]tes-vous d'accord|es-tu d'accord"
+    r"|pr[ée]f[ée]re[sz]-(?:vous|tu)|pr[ée]f[ée]reriez-vous|d[ée]sire[sz]-vous|aimeriez-vous|aimerais-tu"
+    r"|je peux|on peut|d'accord pour que|vous (?:voulez|souhaitez|acceptez|pr[ée]f[ée]rez) que"
+    r"|vous [êe]tes d'accord|tu (?:veux|acceptes|pr[ée]f[èe]res) que|tu es d'accord)\b"
+)
+
+
+def _is_question(sentence: str) -> bool:
+    return sentence.rstrip().endswith("?") and bool(_CONSENT_QUESTION.search(sentence))
 
 
 def contains_human_promise(text: str | None) -> bool:
@@ -79,7 +95,7 @@ def contains_human_promise(text: str | None) -> bool:
         return False
     normalized = _normalize(text)
     return any(p.search(sentence) for sentence in _SENTENCE.findall(normalized)
-               if not CONDITIONAL.search(sentence) for p in _PATTERNS)
+               if not CONDITIONAL.search(sentence) and not _is_question(sentence) for p in _PATTERNS)
 
 
 def remove_human_promises(text: str, tu: bool = False) -> str:

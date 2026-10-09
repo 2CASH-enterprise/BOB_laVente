@@ -246,23 +246,33 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                 "detail": f"Commande de {float(o.total_amount):,.0f} {o.currency}".replace(",", " "),
                 "since": _aware(o.created_at), "action": "Voir la commande",
             })
+    prospects: dict = {}
     if insurance:
         # Lot 53 — demandes de cotation transmises par Bob, pas encore prises en charge.
+        # Lot 54 — avec le score du prospect : les « Chaud » (échéance proche…) passent en premier.
         from app.models.quote_request import QuoteRequest
+        from app.services import insurance_prospect
         from app.services.insurance import STATUS_SUBMITTED, branch_label
 
+        prospects = await insurance_prospect.for_customers(db, tenant, None, now)
         for q in (await db.execute(select(QuoteRequest).where(
             QuoteRequest.tenant_id == tenant_id, QuoteRequest.status == STATUS_SUBMITTED,
         ))).scalars().all():
+            prospect = prospects.get(q.customer_id)
+            hot = prospect is not None and prospect["score"] == "CHAUD"
+            detail = branch_label(q.branch)
+            if hot:
+                detail += " · 🔥 " + ", ".join(prospect["reasons"])
             todo.append({
                 "kind": "QUOTE", "quote_id": str(q.id),
                 "conversation_id": str(q.conversation_id) if q.conversation_id else None,
                 "customer": _name(customers.get(q.customer_id)) if customers.get(q.customer_id) else "Client",
-                "reason": "Demande de cotation", "tone": "info", "detail": branch_label(q.branch),
+                "reason": "Prospect chaud" if hot else "Demande de cotation", "tone": "danger" if hot else "info",
+                "detail": _short(detail), "hot": hot,
                 "since": _aware(q.submitted_at or q.created_at), "action": "Préparer la cotation",
             })
     order_of_kind = {"CONVERSATION": 0, "QUOTE": 1, "APPOINTMENT": 2, "CALLBACK": 3, "OUTCOME": 4, "ORDER": 5}
-    todo.sort(key=lambda t: (order_of_kind[t["kind"]], t["since"]))
+    todo.sort(key=lambda t: (order_of_kind[t["kind"]], not t.get("hot", False), t["since"]))
 
     # --- Entonnoir ---------------------------------------------------------------------------
     funnel = [
@@ -287,6 +297,12 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
         appointment_days = {_aware(created).date() for created in (await db.execute(
             select(_Appointment.created_at).where(_Appointment.tenant_id == tenant_id, _Appointment.created_at >= since)
         )).scalars()}
+        if insurance:  # lot 54 : une cotation transmise compte comme un rendez-vous demandé
+            from app.models.quote_request import QuoteRequest as _Quote
+
+            appointment_days |= {_aware(submitted).date() for submitted in (await db.execute(
+                select(_Quote.submitted_at).where(_Quote.tenant_id == tenant_id, _Quote.submitted_at >= since)
+            )).scalars()}
     for i in range(days):
         day = start_day + timedelta(days=i)
         daily.append({"date": day.isoformat(), "conversations": len(per_day.get(day, ())), "sale": day in paid_days,
@@ -300,6 +316,10 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                                                  insurance=insurance)
         activity = sorted(activity + await _dealership_activity(db, tenant_id, now, customers, insurance=insurance),
                           key=lambda e: e["at"], reverse=True)[:ACTIVITY_LIMIT]
+    extra = {}
+    if insurance:
+        kpis, funnel = await _insurance_figures(db, tenant_id, since, prev_since, now, kpis, funnel)
+        extra = _insurance_prospects(prospects, customers)
 
     return {
         "business_type": normalize(tenant.business_type if tenant else None),
@@ -314,6 +334,7 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
         "funnel": funnel,
         "daily": daily,
         "activity": activity,
+        **extra,
     }
 
 
@@ -437,6 +458,53 @@ async def _dealership_figures(db, tenant_id, since, prev_since, now, current_con
     return dealer_kpis, funnel
 
 
+async def _insurance_figures(db, tenant_id, since, prev_since, now, kpis: dict, funnel: list) -> tuple[dict, list]:
+    """
+    Lot 54 — courtier : la demande de cotation transmise est l'étape clé (le contrat se signe ensuite au
+    cabinet). Parcours : conversations → cotations → rendez-vous et appels → contrats souscrits.
+    """
+    from app.models.quote_request import QuoteRequest
+    from app.services.insurance import STATUS_SUBMITTED
+
+    rows = (await db.execute(select(QuoteRequest.submitted_at, QuoteRequest.status).where(
+        QuoteRequest.tenant_id == tenant_id, QuoteRequest.submitted_at.is_not(None),
+    ))).all()
+    end = now + timedelta(seconds=1)
+    current = sum(1 for submitted_at, _ in rows if since <= _aware(submitted_at) < end)
+    previous = sum(1 for submitted_at, _ in rows if prev_since <= _aware(submitted_at) < since)
+    kpis = {**kpis, "quotes": {"value": current, "delta_pct": _delta_pct(current, previous),
+                               "to_handle": sum(1 for _, status in rows if status == STATUS_SUBMITTED)}}
+    steps = {f["key"]: f for f in funnel}
+    funnel = [
+        steps["conversations"],
+        {"key": "quotes", "label": "Demandes de cotation", "value": current},
+        {**steps["appointments"], "label": "Rendez-vous et appels"},
+        steps["sold"],
+    ]
+    return kpis, funnel
+
+
+EXPIRY_LIST_DAYS = 60  # échéances montrées sur l'accueil : les 60 prochains jours (et celles échues depuis peu)
+EXPIRY_LIST_LIMIT = 8
+
+
+def _insurance_prospects(prospects: dict, customers: dict) -> dict:
+    """Lot 54 — répartition des prospects par score, et échéances de leurs contrats actuels à venir."""
+    counts = {"CHAUD": 0, "TIEDE": 0, "FROID": 0, "VENDU": 0}
+    expiries = []
+    for customer_id, p in prospects.items():
+        counts[p["score"]] += 1
+        if p["expiry"] is not None and p["days_left"] <= EXPIRY_LIST_DAYS and p["outcome"] not in ("SOLD", "NOT_INTERESTED"):
+            expiries.append({
+                "customer": _name(customers.get(customer_id)) if customers.get(customer_id) else "Client",
+                "customer_id": str(customer_id), "branches": p["branches"], "expiry": p["expiry"].isoformat(),
+                "days_left": p["days_left"], "term": p["term"], "hot": p["expiry_soon"],
+                "current_insurer": p["current_insurer"],
+            })
+    expiries.sort(key=lambda e: e["days_left"])
+    return {"prospect_scores": counts, "expiries": expiries[:EXPIRY_LIST_LIMIT], "expiries_total": len(expiries)}
+
+
 async def _dealership_activity(db, tenant_id, now, customers, insurance: bool = False) -> list[dict]:
     from app.models.appointment_request import APPOINTMENT_KINDS, OUTCOME_SOLD, AppointmentRequest
 
@@ -451,4 +519,14 @@ async def _dealership_activity(db, tenant_id, now, customers, insurance: bool = 
         if a.outcome == OUTCOME_SOLD and a.outcome_at and _aware(a.outcome_at) >= since:
             events.append({"kind": "SALE", "title": "Contrat souscrit" if insurance else "Vente conclue",
                            "detail": f"{name} · {a.vehicle_label}" if a.vehicle_label else name, "at": _aware(a.outcome_at)})
+    if insurance:  # lot 54 : chaque demande de cotation transmise au cabinet
+        from app.models.quote_request import QuoteRequest
+        from app.services.insurance import branch_label
+
+        for q in (await db.execute(select(QuoteRequest).where(
+            QuoteRequest.tenant_id == tenant_id, QuoteRequest.submitted_at >= since,
+        ))).scalars():
+            events.append({"kind": "QUOTE", "title": "Demande de cotation transmise",
+                           "detail": f"{_name(customers.get(q.customer_id))} · {branch_label(q.branch)}",
+                           "at": _aware(q.submitted_at)})
     return events

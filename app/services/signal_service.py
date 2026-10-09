@@ -195,8 +195,9 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
     objections.sort(key=lambda item: (-item["opportunities"], -item["messages"], item["label"]))
 
     extra = {}
-    if business_type == "CAR_DEALERSHIP":
-        extra = await _with_appointments(db, tenant_id, objections, objection_first)
+    if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER"):  # lots 46 / 54 : mesure en demandes obtenues
+        extra = await _with_appointments(db, tenant_id, objections, objection_first,
+                                         insurance=business_type == "INSURANCE_BROKER")
 
     return {
         **extra,
@@ -208,13 +209,13 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
     }
 
 
-async def _with_appointments(db: AsyncSession, tenant_id, objections: list[dict], first_seen: dict) -> dict:
-    """
-    Lot 46 — concession : pour chaque frein, conversations où il est apparu et, parmi elles, celles où
-    une demande de rendez-vous a été faite APRÈS sa première apparition. Taux affiché seulement à partir
-    du même seuil que les stratégies (en dessous, un pourcentage serait trompeur).
-    """
-    from app.agents.strategies import MIN_TERMINATED_FOR_RATE
+# Lot 54 — ce qu'on mesure : rendez-vous obtenus (concession) ; demande de cotation transmise OU appel /
+# rendez-vous obtenu (courtier : le contrat se signe ensuite au cabinet, pas sur WhatsApp).
+OUTCOME_LABELS = {False: "Rendez-vous obtenus", True: "Cotations ou rendez-vous obtenus"}
+
+
+async def lead_times(db: AsyncSession, tenant_id, insurance: bool = False) -> dict:
+    """Conversation → moments où le client a demandé un rendez-vous (et, chez le courtier, une cotation)."""
     from app.models.appointment_request import AppointmentRequest
 
     booked: dict = {}
@@ -222,6 +223,28 @@ async def _with_appointments(db: AsyncSession, tenant_id, objections: list[dict]
         select(AppointmentRequest.conversation_id, AppointmentRequest.created_at).where(AppointmentRequest.tenant_id == tenant_id)
     )).all():
         booked.setdefault(conversation_id, []).append(_aware(created_at))
+    if insurance:
+        from app.models.quote_request import QuoteRequest
+
+        for conversation_id, submitted_at in (await db.execute(
+            select(QuoteRequest.conversation_id, QuoteRequest.submitted_at).where(
+                QuoteRequest.tenant_id == tenant_id, QuoteRequest.submitted_at.is_not(None))
+        )).all():
+            booked.setdefault(conversation_id, []).append(_aware(submitted_at))
+    return booked
+
+
+async def _with_appointments(db: AsyncSession, tenant_id, objections: list[dict], first_seen: dict,
+                             insurance: bool = False) -> dict:
+    """
+    Lot 46 — concession : pour chaque frein, conversations où il est apparu et, parmi elles, celles où
+    une demande de rendez-vous a été faite APRÈS sa première apparition. Taux affiché seulement à partir
+    du même seuil que les stratégies (en dessous, un pourcentage serait trompeur).
+    Lot 54 — courtier : une demande de cotation transmise compte aussi.
+    """
+    from app.agents.strategies import MIN_TERMINATED_FOR_RATE
+
+    booked = await lead_times(db, tenant_id, insurance)
     for item in objections:
         conversations = first_seen.get(item["code"], {})
         with_appointment = sum(
@@ -236,4 +259,5 @@ async def _with_appointments(db: AsyncSession, tenant_id, objections: list[dict]
             "appointment_rate_pct": round(with_appointment / len(conversations) * 100, 1) if enough else None,
         })
     objections.sort(key=lambda item: (-item["conversations"], -item["messages"], item["label"]))
-    return {"measure": "APPOINTMENTS", "min_conversations_for_rate": MIN_TERMINATED_FOR_RATE}
+    return {"measure": "APPOINTMENTS", "outcome_label": OUTCOME_LABELS[insurance],
+            "min_conversations_for_rate": MIN_TERMINATED_FOR_RATE}

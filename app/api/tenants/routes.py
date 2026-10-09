@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_online_store
+from app.services.business_type import only_insurance, only_online_store
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.messaging_settings import KillSwitch, OutboundMode, TenantMessagingSettings
@@ -547,6 +547,67 @@ async def update_address_form(
 
 
 # ---------------------------------------------------------------------------
+# Lot 54 — courtier / agent d'assurance : qui parle au client (règlement CIMA 01-24)
+# ---------------------------------------------------------------------------
+
+class InsuranceProfileReq(BaseModel):
+    insurance_structure: Literal["COURTIER", "AGENCE_GENERALE", "AGENT"]
+    insurer_name: str | None = Field(default=None, max_length=150)
+    insurance_license: str | None = Field(default=None, max_length=80)
+    complaints_contact: str | None = Field(default=None, max_length=200)
+
+
+def _insurance_profile_response(tenant: Tenant) -> dict:
+    from app.agents.prompts import insurance_identity
+    from app.services.insurance import STRUCTURES
+
+    return {
+        "insurance_structure": tenant.insurance_structure,
+        "insurer_name": tenant.insurer_name,
+        "insurance_license": tenant.insurance_license,
+        "complaints_contact": tenant.complaints_contact,
+        "options": [{"code": code, "label": label} for code, label in STRUCTURES.items()],
+        # Ce que Bob dira de lui-même, pour que le cabinet le voie avant ses clients.
+        "preview": f"Je suis Bob, l'assistant virtuel de {tenant.name}, {insurance_identity(tenant)}.",
+    }
+
+
+def _clean_text(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return " ".join(value.split()) or None
+
+
+@router.get("/me/insurance-profile", dependencies=[Depends(only_insurance())])
+async def get_insurance_profile(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    return _insurance_profile_response(await db.get(Tenant, current_user.tenant_id))
+
+
+@router.put("/me/insurance-profile", dependencies=[Depends(require_role("ADMIN")), Depends(only_insurance())])
+async def update_insurance_profile(
+    payload: InsuranceProfileReq,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Statut, compagnie mandante, agrément et contact réclamations : Bob les donne au client qui les demande."""
+    from app.services.audit import log_audit_event
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    tenant.insurance_structure = payload.insurance_structure
+    # Un cabinet de courtage travaille avec plusieurs compagnies : pas de « compagnie mandante ».
+    tenant.insurer_name = None if payload.insurance_structure == "COURTIER" else _clean_text(payload.insurer_name)
+    tenant.insurance_license = _clean_text(payload.insurance_license)
+    tenant.complaints_contact = _clean_text(payload.complaints_contact)
+    await log_audit_event(db, actor=str(current_user.user_id), action="INSURANCE_PROFILE_UPDATED", tenant_id=tenant.id,
+                          details={"structure": tenant.insurance_structure})
+    await db.commit()
+    return _insurance_profile_response(tenant)
+
+
+# ---------------------------------------------------------------------------
 # Lot 41 — « Premiers pas » : ce qu'il reste à faire pour que Bob travaille
 # ---------------------------------------------------------------------------
 
@@ -595,6 +656,10 @@ async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
          "hint": "Quelques lignes sur votre activité, vos horaires, la livraison… Bob s'en sert pour répondre.",
          "done": bool((tenant.company_profile or "").strip())},
         fourth,
+        *([{"key": "structure", "label": "Indiquer votre statut et votre agrément", "tab": "bob",
+            "hint": "Cabinet de courtage, agence générale ou agent : Bob se présente correctement et répond à la "
+                    "question « êtes-vous agréés ? ».",
+            "done": bool(tenant.insurance_structure)}] if is_insurance(tenant) else []),
         {"key": "test", "label": "Tester Bob", "tab": "integrations",
          "hint": "Écrivez à votre numéro WhatsApp depuis un autre téléphone, comme un client.", "done": has_conversation},
     ]

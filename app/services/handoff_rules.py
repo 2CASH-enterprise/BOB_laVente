@@ -70,6 +70,9 @@ RULE_LABELS = {
     "DEALER_PRICE": "prix ou remise (concession) : à discuter avec un conseiller",
     "DEALER_FINANCING": "paiement ou financement (concession) : présenté par le conseiller lors de la visite",
     "FINANCE_FIGURES": "chiffre de financement ou de reprise retiré de la réponse de Bob",
+    "INSURANCE_COMPLAINT": "réclamation ou sinistre (courtier) : transmis au cabinet",
+    "INSURANCE_PRICE": "prix ou remise (courtier) : proposition personnalisée du conseiller",
+    "INSURANCE_PAYMENT": "paiement de la prime (courtier) : jamais de crédit, modalités par le conseiller",
 }
 
 # Message fixe au client selon la règle de transfert immédiat (défaut : TRANSFER_MESSAGE).
@@ -114,6 +117,7 @@ def evaluate(
     currency: str = "",
     known_categories: set[str] | None = None,
     dealership: bool = False,
+    insurance: bool = False,
 ) -> TurnDecision:
     """
     `signal` = {"intents": [...], "objections": [...], "offered_amount": float|None}, ou None.
@@ -136,8 +140,14 @@ def evaluate(
     # Lot 16 — question sur les retours / échanges / garantie alors que la boutique n'a rien
     # renseigné : Bob ne peut qu'inventer ou promettre de « vérifier ». Le code transmet
     # réellement la question (le commerçant est prévenu), avec un message fixe.
-    if "CONDITIONS_VENTE" in intents and known_categories is not None and not (known_categories & CONDITIONS_CATEGORIES):
+    if ("CONDITIONS_VENTE" in intents and known_categories is not None and not (known_categories & CONDITIONS_CATEGORIES)
+            and not insurance):  # lot 54 : chez le courtier, une question sur les garanties se qualifie
         return TurnDecision(mode=TRANSFER_NOW, rule="MISSING_CONDITIONS")
+
+    if insurance:
+        decision = _insurance_rule(intents, objections)
+        if decision is not None:
+            return decision
 
     if "RECLAMATION" in intents:
         if settings.complaint_policy == COMPLAINT_TRANSFER:
@@ -225,6 +235,47 @@ def evaluate(
     return TurnDecision()
 
 
+def _insurance_rule(intents: set, objections: set) -> TurnDecision | None:
+    """
+    Lot 54 — courtier / agent d'assurance (règlement CIMA) : une réclamation ou un sinistre part au cabinet
+    avec le contact réclamations ; un prix ne se négocie pas avec Bob ; jamais de crédit pour la prime.
+    """
+    if "RECLAMATION" in intents:
+        return TurnDecision(
+            mode=ALLOW_TRANSFER,
+            rule="INSURANCE_COMPLAINT",
+            instruction=(
+                "Le client exprime une réclamation ou parle d'un sinistre. Ne réponds pas sur le fond et ne promets "
+                "aucune prise en charge. Appelle handoff_to_human (raison : sa réclamation ou son sinistre) et dis-lui "
+                "que tu transmets au cabinet ; si les INFORMATIONS DU CABINET indiquent un contact pour les "
+                "réclamations, donne-le lui."
+            ),
+        )
+    if "DEMANDE_REMISE" in intents:
+        return TurnDecision(
+            mode=ALLOW_TRANSFER,
+            rule="INSURANCE_PRICE",
+            instruction=(
+                "Le client parle de remise ou de prix. Ne donne et ne promets AUCUN montant ni aucune remise : "
+                "explique que le conseiller lui fera la proposition la mieux adaptée à sa situation, sans engagement, "
+                "et propose-lui un appel ou un rendez-vous au cabinet (get_available_slots, puis request_appointment). "
+                "S'il insiste pour avoir une réponse maintenant, utilise handoff_to_human."
+            ),
+        )
+    if "PAIEMENT" in intents and "PAIEMENT" not in objections:
+        return TurnDecision(
+            mode=ALLOW_TRANSFER,
+            rule="INSURANCE_PAYMENT",
+            instruction=(
+                "Le client pose une question sur le paiement de la prime. Ne propose JAMAIS de crédit, de paiement "
+                "différé ni de paiement en plusieurs fois. Cite seulement les moyens de paiement qui figurent dans la "
+                "base de connaissances ; sinon, explique que le conseiller lui présentera les modalités de paiement "
+                "avec sa proposition. Ne demande jamais de paiement sur WhatsApp."
+            ),
+        )
+    return None
+
+
 async def load_handoff_settings(db, tenant_id) -> HandoffSettingsView:
     """Réglages du commerce, ou valeurs par défaut s'il n'a jamais rien enregistré."""
     from sqlalchemy import select
@@ -266,8 +317,11 @@ async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
     from app.services.strategy_service import knowledge_categories
 
     known = await knowledge_categories(db, tenant.id)
+    from app.services.business_type import is_insurance
+
     return evaluate(
         signal, view, negotiation_active, currency=tenant.currency or "", known_categories=known, dealership=dealership,
+        insurance=is_insurance(tenant),
     )
 
 

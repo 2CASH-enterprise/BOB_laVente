@@ -41,6 +41,7 @@ async def create_demo(
     currency: str = Form("XOF"),
     country: str = Form("SN"),
     business_type: str = Form("ONLINE_STORE"),
+    insurance_structure: str | None = Form(None),
     file: UploadFile = None,
     db: AsyncSession = Depends(get_db),
 ) -> DemoCreateResponse:
@@ -57,12 +58,13 @@ async def create_demo(
         raise HTTPException(status_code=400, detail="Le nom de l'entreprise est requis")
     if business_type not in BUSINESS_TYPES:
         raise HTTPException(status_code=400, detail="Secteur d'activité inconnu")
-    if business_type == "INSURANCE_BROKER":  # lot 53 : la démo « courtier » arrive au lot 54
-        raise HTTPException(status_code=400, detail="La démo « Courtier / agent d'assurance » sera bientôt disponible.")
     country = (country or "").strip().upper()
     if len(country) != 2 or not country.isalpha():
         raise HTTPException(status_code=400, detail="Pays invalide")
     dealership = business_type == CAR_DEALERSHIP
+    if business_type == "INSURANCE_BROKER":
+        # Lot 54 — démo courtier : pas de fichier, les produits d'assurance par défaut (sans prix) suffisent.
+        return await _create_insurance_demo(db, company_name, currency, country, insurance_structure)
     if file is None or not file.filename:
         raise HTTPException(status_code=400, detail="Un fichier catalogue (CSV) est requis")
 
@@ -122,6 +124,43 @@ async def create_demo(
         available=import_result.available,
         unavailable=import_result.unavailable,
     )
+
+
+async def _demo_owner(db: AsyncSession, company_name: str, currency: str, country: str, business_type: str,
+                      **tenant_fields) -> tuple[Tenant, User]:
+    from datetime import datetime, timezone
+
+    tenant = Tenant(
+        name=company_name.strip()[:255], country=country, currency=currency.upper()[:3] or "XOF",
+        email=f"demo-{secrets.token_hex(8)}@bob-demo.internal", is_demo=True,
+        business_type=business_type, business_type_chosen_at=datetime.now(timezone.utc), **tenant_fields,
+    )
+    db.add(tenant)
+    await db.flush()
+    owner = User(tenant_id=tenant.id, email=tenant.email, hashed_password=hash_password(secrets.token_urlsafe(24)),
+                 full_name="Compte démo", role=Role.OWNER)
+    db.add(owner)
+    await db.flush()
+    return tenant, owner
+
+
+async def _create_insurance_demo(db: AsyncSession, company_name: str, currency: str, country: str,
+                                 structure: str | None) -> DemoCreateResponse:
+    """Lot 54 — démo courtier / agent : produits d'assurance par défaut, créneaux d'appel et de rendez-vous."""
+    from app.models.appointment_settings import TenantAppointmentSettings
+    from app.services import insurance
+
+    if structure is not None and structure not in insurance.STRUCTURES:
+        raise HTTPException(status_code=400, detail="Statut inconnu : " + ", ".join(insurance.STRUCTURES))
+    tenant, owner = await _demo_owner(db, company_name, currency, country, "INSURANCE_BROKER",
+                                      insurance_structure=structure or "COURTIER")
+    seeded = await insurance.seed_products(db, tenant)
+    db.add(TenantAppointmentSettings(tenant_id=tenant.id, online_booking=True,
+                                     opening_hours=DEMO_OPENING_HOURS, slot_minutes=30, capacity=1))
+    await db.commit()
+    demo_token = create_access_token(user_id=owner.id, tenant_id=tenant.id, role=owner.role.value)
+    return DemoCreateResponse(tenant_id=str(tenant.id), demo_token=demo_token, imported=seeded, updated=0, failed=0,
+                              available=seeded, unavailable=0)
 
 
 @router.post("/chat", response_model=DemoChatResponse)
@@ -251,6 +290,13 @@ async def promote_demo(
             AppointmentRequest.tenant_id == tenant.id, AppointmentRequest.customer_id == demo_customer.id,
         ))).scalars().all():
             appointment_service.cancel(appointment)
+        # Lot 54 : les demandes de cotation du client fictif ne deviennent pas des tâches du vrai compte.
+        from sqlalchemy import delete
+
+        from app.models.quote_request import QuoteRequest
+
+        await db.execute(delete(QuoteRequest).where(
+            QuoteRequest.tenant_id == tenant.id, QuoteRequest.customer_id == demo_customer.id))
 
     tenant.is_demo = False
     tenant.email = owner.email

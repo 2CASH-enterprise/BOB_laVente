@@ -121,8 +121,8 @@ async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=No
 
     now = aware(now or datetime.now(timezone.utc))
     since = now - timedelta(days=days)
-    if business_type == "CAR_DEALERSHIP":
-        return await _dealership_summary(db, tenant_id, days, since)
+    if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER"):  # lots 45 / 54
+        return await _dealership_summary(db, tenant_id, days, since, insurance=business_type == "INSURANCE_BROKER")
     signals = (await db.execute(
         select(MessageSignal).where(
             MessageSignal.tenant_id == tenant_id, MessageSignal.strategy.is_not(None),
@@ -179,17 +179,17 @@ async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=No
     return {"period_days": days, "measure": "PAID", "min_terminated_for_rate": MIN_TERMINATED_FOR_RATE, "strategies": rows}
 
 
-async def _dealership_summary(db: AsyncSession, tenant_id, days: int, since) -> dict:
+async def _dealership_summary(db: AsyncSession, tenant_id, days: int, since, insurance: bool = False) -> dict:
     """
     Lot 45 — en concession, rien ne se paie sur WhatsApp : une stratégie se mesure aux RENDEZ-VOUS
     obtenus. Pour chaque stratégie : conversations où elle a servi, et parmi elles celles où une
     demande de rendez-vous a été faite APRÈS sa première utilisation. Taux affiché seulement à partir
     de MIN_TERMINATED_FOR_RATE conversations.
+    Lot 54 — courtier : une demande de cotation transmise après la stratégie compte aussi.
     """
     from datetime import timezone
 
     from app.agents.taxonomy import objection_label
-    from app.models.appointment_request import AppointmentRequest
     from app.models.message_signal import MessageSignal
 
     def aware(dt):
@@ -201,12 +201,9 @@ async def _dealership_summary(db: AsyncSession, tenant_id, days: int, since) -> 
             MessageSignal.message_created_at >= since,
         )
     )).scalars().all()
-    appointments = (await db.execute(
-        select(AppointmentRequest.conversation_id, AppointmentRequest.created_at).where(AppointmentRequest.tenant_id == tenant_id)
-    )).all()
-    booked: dict = {}
-    for conversation_id, created_at in appointments:
-        booked.setdefault(conversation_id, []).append(aware(created_at))
+    from app.services.signal_service import OUTCOME_LABELS, lead_times
+
+    booked = await lead_times(db, tenant_id, insurance)
 
     stats: dict = {}
     for signal in signals:
@@ -240,4 +237,5 @@ async def _dealership_summary(db: AsyncSession, tenant_id, days: int, since) -> 
             "appointment_rate_pct": round(with_appointment / len(conversations) * 100, 1) if enough else None,
         })
     rows.sort(key=lambda r: (r["objection_label"], -r["uses"], r["label"]))
-    return {"period_days": days, "measure": "APPOINTMENTS", "min_terminated_for_rate": MIN_TERMINATED_FOR_RATE, "strategies": rows}
+    return {"period_days": days, "measure": "APPOINTMENTS", "outcome_label": OUTCOME_LABELS[insurance],
+            "min_terminated_for_rate": MIN_TERMINATED_FOR_RATE, "strategies": rows}

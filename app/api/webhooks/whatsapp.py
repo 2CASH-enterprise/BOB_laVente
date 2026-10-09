@@ -291,8 +291,8 @@ async def receive_webhook(
         return {"status": "received_rate_limited"}
     signal = None
     business_type = getattr(await db.get(Tenant, tenant_id), "business_type", None)
-    # Lot 53 — courtier : pas encore de liste d'objections propre (lot 54) ; aucune analyse d'ici là.
-    if rate == usage_guard.OK and business_type != "INSURANCE_BROKER":
+    # Lot 54 — le courtier a désormais ses propres objections (taxonomie v1.4assu) : ses messages sont analysés.
+    if rate == usage_guard.OK:
         signal = await classify_and_store(db, classifier, incoming_message, business_type=business_type)
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:

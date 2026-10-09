@@ -12,6 +12,7 @@ class QuoteRequest(Base):
     Lot 53 — demande de cotation (courtier / agent d'assurance). Bob la remplit au fil de la conversation
     (brouillon) ; le code la transmet au cabinet dès que le minimum de la branche est réuni. Jamais de prix.
     Statuts : DRAFT → SUBMITTED (à traiter) → HANDLED (prise en charge par le cabinet).
+    Lot 54 : transmise seulement avec l'accord du client (consent_at), jamais avant.
     """
 
     __tablename__ = "quote_requests"
@@ -30,6 +31,8 @@ class QuoteRequest(Base):
     client_type: Mapped[str] = mapped_column(String(16), nullable=False)
     details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="DRAFT", index=True)
+    # Lot 54 (CIMA) : moment où le client a accepté que sa demande soit transmise au cabinet.
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

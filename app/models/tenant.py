@@ -56,6 +56,13 @@ class Tenant(Base):
     business_type_chosen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 38 — « VOUS » ou « TU » envers les clients (boutique en ligne ; concession : toujours VOUS).
     address_form: Mapped[str] = mapped_column(String(8), default="VOUS", server_default="VOUS", nullable=False)
+    # Lot 54 — courtier / agent d'assurance (règlement CIMA 01-24) : qui parle au client. Statut (COURTIER,
+    # AGENCE_GENERALE, AGENT ; vide = pas encore indiqué), compagnie mandante, numéro d'agrément et contact
+    # pour les réclamations. Bob les donne au client quand il les demande ; il n'invente jamais un agrément.
+    insurance_structure: Mapped[str | None] = mapped_column(String(24))
+    insurer_name: Mapped[str | None] = mapped_column(String(150))
+    insurance_license: Mapped[str | None] = mapped_column(String(80))
+    complaints_contact: Mapped[str | None] = mapped_column(String(200))
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

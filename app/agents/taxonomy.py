@@ -89,20 +89,59 @@ DEALERSHIP_OBJECTIONS: dict[str, tuple[str, str]] = {
 }
 
 
+# Lot 54 — courtier / agent d'assurance : ses propres freins. Ni livraison, ni stock : on hésite à
+# s'assurer parce que c'est « cher », qu'on est déjà assuré, qu'on doute que l'assureur paie, qu'on n'en
+# voit pas l'utilité, qu'on veut comparer ou qu'on ne peut pas payer la prime d'un coup.
+INSURANCE_TAXONOMY_VERSION = "v1.4assu"  # 8 caractères au plus (colonne taxonomy_version)
+
+INSURANCE_OBJECTIONS: dict[str, tuple[str, str]] = {
+    "PRIX_TROP_ELEVE": (
+        "Prix trop élevé",
+        "trouve l'assurance trop chère, n'a pas le budget, a trouvé moins cher ailleurs, pense que l'assurance "
+        "coûte trop cher",
+    ),
+    "DEJA_ASSURE": ("Déjà assuré", "a déjà une assurance ou un contrat en cours, est déjà client d'un autre assureur"),
+    "CONFIANCE": (
+        "Confiance",
+        "doute que l'assurance paie en cas de sinistre, se méfie des assureurs, craint une arnaque, doute du "
+        "sérieux du cabinet",
+    ),
+    "PAS_BESOIN": (
+        "Pas besoin",
+        "ne voit pas l'utilité de s'assurer : « je n'en ai pas besoin », « il ne m'arrivera rien », "
+        "« c'est de l'argent perdu »",
+    ),
+    "COMPARAISON": ("Veut comparer", "veut comparer avec d'autres offres ou d'autres assureurs avant de décider"),
+    "PAIEMENT": (
+        "Paiement de la prime",
+        "ne peut pas payer toute la prime en une fois, demande à payer en plusieurs fois, plus tard ou à crédit",
+    ),
+    "HESITATION": OBJECTIONS["HESITATION"],
+}
+
+
 def _is_dealership(business_type: str | None) -> bool:
     return business_type == "CAR_DEALERSHIP"
 
 
+def _is_insurance(business_type: str | None) -> bool:
+    return business_type == "INSURANCE_BROKER"
+
+
 def objections_for(business_type: str | None = None) -> dict[str, tuple[str, str]]:
+    if _is_insurance(business_type):
+        return INSURANCE_OBJECTIONS
     return DEALERSHIP_OBJECTIONS if _is_dealership(business_type) else OBJECTIONS
 
 
 def taxonomy_version(business_type: str | None = None) -> str:
+    if _is_insurance(business_type):
+        return INSURANCE_TAXONOMY_VERSION
     return DEALERSHIP_TAXONOMY_VERSION if _is_dealership(business_type) else TAXONOMY_VERSION
 
 
 def is_known_objection(code: str) -> bool:
-    return code in OBJECTIONS or code in DEALERSHIP_OBJECTIONS
+    return code in OBJECTIONS or code in DEALERSHIP_OBJECTIONS or code in INSURANCE_OBJECTIONS
 
 
 def intent_label(code: str) -> str:
@@ -110,8 +149,8 @@ def intent_label(code: str) -> str:
 
 
 def objection_label(code: str, business_type: str | None = None) -> str:
-    """Libellé dans le vocabulaire de l'activité ; sans activité : boutique, puis concession."""
+    """Libellé dans le vocabulaire de l'activité ; sans activité : boutique, puis concession, puis courtier."""
     own = objections_for(business_type)
     if code in own:
         return own[code][0]
-    return OBJECTIONS.get(code, DEALERSHIP_OBJECTIONS.get(code, (code, "")))[0]
+    return OBJECTIONS.get(code, DEALERSHIP_OBJECTIONS.get(code, INSURANCE_OBJECTIONS.get(code, (code, ""))))[0]

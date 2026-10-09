@@ -341,7 +341,8 @@ TOOL_DEFINITIONS = [
             "Enregistre ce que le client vient de dire sur son besoin d'assurance, pour UNE branche. Appelle-le dès "
             "qu'une information NOUVELLE et concrète apparaît, sans rien deviner ni compléter, et n'envoie que les "
             "champs réellement donnés. Le résultat dit ce qu'il manque encore (pose une ou deux questions à la "
-            "fois) ou que la demande de cotation vient d'être transmise au cabinet."
+            "fois), qu'il faut demander l'accord du client pour transmettre sa demande, ou qu'elle vient d'être "
+            "transmise au cabinet."
         ),
         "input_schema": {
             "type": "object",
@@ -374,7 +375,16 @@ TOOL_DEFINITIONS = [
                 "route": {"type": "string", "description": "Trajet et mode de transport"},
                 "description": {"type": "string", "description": "Besoin décrit par le client (branche AUTRE)"},
                 "current_insurer": {"type": "string", "description": "Assureur actuel, s'il en a un"},
-                "current_expiry": {"type": "string", "description": "Date d'échéance de son contrat actuel, avec ses mots"},
+                "current_expiry": {"type": "string", "description": (
+                    "Date d'échéance de son contrat actuel, au format AAAA-MM-JJ, calculée avec le CALENDRIER si "
+                    "le client dit « fin du mois » ou « dans deux semaines » ; jamais devinée")},
+                "current_term": {"type": "string", "enum": ["MENSUEL", "TRIMESTRIEL", "SEMESTRIEL", "ANNUEL"],
+                                 "description": "Durée de son contrat actuel, s'il la donne"},
+                "budget": {"type": "string", "description": "Budget que le client envisage, avec ses mots (ne le répète jamais)"},
+                "payment_wish": {"type": "string", "description": "Ce que le client souhaite pour le paiement, avec ses mots"},
+                "consent": {"type": "boolean", "description": (
+                    "true SEULEMENT si le client vient d'accepter clairement que sa demande et ses informations "
+                    "soient transmises au conseiller du cabinet")},
             },
             "required": ["branch"],
         },

@@ -164,9 +164,11 @@ INSURANCE_RULES = """RÈGLES
    multirisque pro, marchandises transportées) et s'il s'agit d'un particulier ou d'une entreprise.
 6. Qualifie au fil de la conversation, une ou deux questions à la fois, jamais un interrogatoire. Dès que le
    client donne une information NOUVELLE et concrète, enregistre-la avec update_insurance_request (une
-   branche par appel), sans jamais deviner. Demande aussi, si c'est naturel, son assureur actuel et la date
-   d'échéance de son contrat. Ne redemande jamais une information déjà donnée. L'outil te dit ce qu'il
-   manque, ou que la demande de cotation est transmise au cabinet.
+   branche par appel), sans jamais deviner. Demande aussi, si c'est naturel, son assureur actuel, la date
+   d'échéance de son contrat (au format AAAA-MM-JJ, calculée avec le CALENDRIER) et sa durée (mensuel,
+   trimestriel, semestriel ou annuel). Ne redemande jamais une information déjà donnée. L'outil te dit ce
+   qu'il manque, quand demander au client son accord pour transmettre sa demande au cabinet (ne transmets
+   JAMAIS sans cet accord), ou que la demande de cotation est transmise.
 7. Quand la demande est transmise, demande au client s'il préfère être appelé par un conseiller ou venir au
    cabinet, puis appelle get_available_slots et propose les créneaux renvoyés, avec leurs libellés exacts.
    Quand il en choisit un, appelle request_appointment (kind APPEL ou CABINET) avec ce slot. Sans créneaux,
@@ -190,7 +192,16 @@ INSURANCE_RULES = """RÈGLES
 13. Ne promets JAMAIS qu'un conseiller va contacter le client sans avoir appelé handoff_to_human,
     request_appointment, ou sans que update_insurance_request ait confirmé la transmission de la demande.
 14. Ne demande jamais de document (pièce d'identité, carte grise, permis…) sur WhatsApp : le conseiller
-    s'en chargera."""
+    s'en chargera.
+15. Si le client demande qui vous êtes, si le cabinet est agréé ou pour quelle compagnie il travaille,
+    réponds uniquement avec les INFORMATIONS DU CABINET ci-dessous ; si l'information n'y figure pas, ne
+    l'invente jamais : transmets la question (handoff_to_human).
+16. Réclamation ou mécontentement : donne le contact pour les réclamations indiqué dans les INFORMATIONS
+    DU CABINET s'il existe, et appelle handoff_to_human.
+17. Paiement de la prime : ne propose JAMAIS de crédit, de paiement différé ou « plus tard », ni de paiement
+    en plusieurs fois que le cabinet n'a pas indiqué. Cite seulement les moyens de paiement de la base de
+    connaissances ; le conseiller présente les modalités avec sa proposition. Ne demande jamais de
+    paiement sur WhatsApp."""
 
 
 CATEGORY_LABELS = {
@@ -283,8 +294,8 @@ Pays : {tenant.country}
     if is_insurance(tenant):
         return f"""IDENTITÉ
 
-Tu es Bob, l'assistant virtuel de {tenant.name}, cabinet de courtage / agence d'assurance.
-
+Tu es Bob, l'assistant virtuel de {tenant.name}, {insurance_identity(tenant)}.
+{insurance_wording(tenant)}
 OBJECTIF
 
 Renseigner le client sur les assurances proposées par {tenant.name}, comprendre son besoin, préparer sa
@@ -292,6 +303,9 @@ demande de cotation et lui proposer un appel d'un conseiller ou un rendez-vous a
 conversation WhatsApp, en français. Tu ne donnes jamais de prix : le cabinet fait la proposition.
 
 {INSURANCE_RULES}
+
+INFORMATIONS DU CABINET
+{insurance_office_info(tenant)}
 
 CALENDRIER (heure du cabinet)
 {_calendar(tenant, now)}
@@ -321,6 +335,42 @@ Devise : {tenant.currency}
 Pays : {tenant.country}
 {_format_company_profile(tenant)}{knowledge_section}{_format_missing_conditions(knowledge_entries or [])}{customer_memory}
 """
+
+
+# Lot 54 — qui parle au client : la structure choisie dans les réglages (fini « cabinet de courtage et agence
+# d'assurance » à la fois, test du 09/10). Sans réglage : « intermédiaire en assurance », toujours vrai.
+def insurance_identity(tenant: Tenant) -> str:
+    structure = getattr(tenant, "insurance_structure", None)
+    insurer = (getattr(tenant, "insurer_name", None) or "").strip()
+    if structure == "COURTIER":
+        return "cabinet de courtage en assurance"
+    if structure == "AGENCE_GENERALE":
+        return f"agence générale d'assurance {insurer}".rstrip() if insurer else "agence générale d'assurance"
+    if structure == "AGENT":
+        return f"agent d'assurance mandataire de {insurer}" if insurer else "agent d'assurance"
+    return "intermédiaire en assurance"
+
+
+def insurance_wording(tenant: Tenant) -> str:
+    """Dans les consignes, « le cabinet » désigne l'entreprise ; avec le client, Bob emploie le bon mot."""
+    if getattr(tenant, "insurance_structure", None) in ("AGENCE_GENERALE", "AGENT"):
+        return ("Dans ces consignes, « le cabinet » désigne " + tenant.name + " : avec le client, parle de "
+                "« l'agence » (par exemple « un rendez-vous à l'agence »).\n")
+    return ""
+
+
+def insurance_office_info(tenant: Tenant) -> str:
+    """Lot 54 (règlement CIMA 01-24) : identification du distributeur et voie de réclamation."""
+    from app.services.insurance import STRUCTURES
+
+    rows = [
+        ("Statut", STRUCTURES.get(getattr(tenant, "insurance_structure", None) or "")),
+        ("Compagnie d'assurance mandante", getattr(tenant, "insurer_name", None)),
+        ("Numéro d'agrément", getattr(tenant, "insurance_license", None)),
+        ("Contact pour les réclamations", getattr(tenant, "complaints_contact", None)),
+    ]
+    lines = [f"{label} : {' '.join(str(value).split())}" for label, value in rows if value and str(value).strip()]
+    return "\n".join(lines) if lines else "Aucune information renseignée par le cabinet."
 
 
 def _calendar(tenant: Tenant, now=None) -> str:

@@ -401,7 +401,7 @@
   .section-title { font-size: 13px; font-weight: 800; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin: 32px 0 14px; }
   @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 860px) {
-    .home-row { grid-template-columns: 1fr; }
+    .home-row { grid-template-columns: minmax(0, 1fr); }  /* lot 54 : un long détail ne déborde plus de l'écran */
     .home-row .span-2 { grid-column: auto; }
     .home-hero h1 { font-size: 24px; }
     .kpi-grid { gap: 12px; }
@@ -655,10 +655,10 @@
       <div class="card store-only" id="sales-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement des ventes</p>
       </div>
-      <div class="card no-insurance" id="signals-card" style="margin-top: 20px;">
+      <div class="card" id="signals-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement de l'analyse des messages</p>
       </div>
-      <div class="card no-insurance" id="strategies-card" style="margin-top: 20px;">
+      <div class="card" id="strategies-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement des réponses aux objections</p>
       </div>
     </section>
@@ -935,6 +935,26 @@
       <template class="page-tip-src">La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances. Ce que Bob sait de votre boutique se règle dans la Base de connaissances.</template>
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span></p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="card insurance-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="insurance-profile-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Vous êtes<button class="tip"></button><span class="tip-bubble" hidden>Le règlement CIMA demande que le client sache clairement qui lui parle. Bob se présente avec votre statut, et donne votre numéro d'agrément, votre compagnie et votre contact réclamations quand un client les demande. Il n'invente jamais ce que vous n'avez pas indiqué.</span></div>
+          <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px;" id="insurance-structure-options"></div>
+          <div id="insurer-name-row" style="margin-bottom: 8px;">
+            <label for="insurer-name" style="font-size: 12px; color: var(--muted);">Compagnie d'assurance que vous représentez</label>
+            <input id="insurer-name" class="input" maxlength="150" placeholder="Ex. Sunu Assurances">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="insurance-license" style="font-size: 12px; color: var(--muted);">Numéro d'agrément (facultatif)</label>
+            <input id="insurance-license" class="input" maxlength="80" placeholder="Tel qu'il figure sur votre agrément">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label for="complaints-contact" style="font-size: 12px; color: var(--muted);">Contact pour les réclamations (facultatif)</label>
+            <input id="complaints-contact" class="input" maxlength="200" placeholder="Ex. reclamations@moncabinet.ci ou +225 …">
+          </div>
+          <div id="insurance-profile-preview" style="font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;"></div>
+          <button class="action" onclick="saveInsuranceProfile()">Enregistrer</button>
+          <div id="insurance-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+
         <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Comment Bob s'adresse à vos clients<button class="tip"></button><span class="tip-bubble" hidden>S'applique aux réponses de Bob et à tous ses messages automatiques sur WhatsApp (récapitulatif de commande, transmission à un conseiller…).</span></div>
           <div style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 13px;">
@@ -970,13 +990,14 @@
           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
             <input type="checkbox" id="handoff-refund"> Transférer immédiatement les demandes de remboursement
           </label>
-          <label style="font-size: 12px; color: var(--muted);">Réclamation d'un client</label>
-          <select id="handoff-complaint" class="input" style="margin-bottom: 10px;">
+          <p class="insurance-only" style="font-size: 12px; color: var(--muted); margin: 0 0 10px;">Une réclamation ou un sinistre est toujours transmis au cabinet, avec votre contact réclamations. Bob ne négocie jamais de prix.</p>
+          <label class="no-insurance" style="font-size: 12px; color: var(--muted);">Réclamation d'un client</label>
+          <select id="handoff-complaint" class="input no-insurance" style="margin-bottom: 10px;">
             <option value="TRY_FIRST">Bob essaie d'abord de résoudre, puis transfère s'il n'y arrive pas</option>
             <option value="TRANSFER">Transférer immédiatement</option>
           </select>
-          <label style="font-size: 12px; color: var(--muted);">Demande de remise, quand la négociation est désactivée</label>
-          <select id="handoff-discount" class="input" style="margin-bottom: 10px;">
+          <label class="no-insurance" style="font-size: 12px; color: var(--muted);">Demande de remise, quand la négociation est désactivée</label>
+          <select id="handoff-discount" class="input no-insurance" style="margin-bottom: 10px;">
             <option value="FIXED_PRICES">Bob indique poliment que les prix sont fixes</option>
             <option value="TRANSFER">Transférer à un humain</option>
           </select>
@@ -989,7 +1010,7 @@
           <div id="handoff-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
 
-        <div class="card no-insurance" style="max-width: 480px; flex: 1; min-width: 300px;">
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Réponses aux objections<button class="tip"></button><span class="tip-bubble" hidden>Quand un client exprime un frein (prix, hésitation, confiance…), Bob applique l'une des stratégies activées ci-dessous, choisie au hasard : c'est ce qui permet de mesurer celle qui fonctionne le mieux. Aucune stratégie n'autorise Bob à inventer un prix, une promotion ou une fausse urgence.</span></div>
           <div id="strategy-list"><p class="loading-text">Chargement</p></div>
           <button class="action" onclick="saveStrategySettings()">Enregistrer</button>
@@ -2077,7 +2098,7 @@ function showTab(name) {
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
-  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } loadHandoffSettings(); if (currentBusinessType !== "INSURANCE_BROKER") loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "settings") loadMfaStatus();
 }
@@ -2120,6 +2141,7 @@ const HOME_ICONS = {
   swap: "M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4",
   calendar: "M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 2v4M16 2v4",  // lot 47
   key: "M15 9a3 3 0 1 0 0-.01M13 11l-9 9M7 17l2 2M10 14l2 2",
+  shield: "M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6zM9 12l2 2 4-4",  // lot 54 : cotations
 };
 const ACTIVITY_STYLE = {
   PAYMENT: ["wallet", "tone-success"], CUSTOMER: ["users", "tone-info"], ORDER: ["receipt", "tone-accent"],
@@ -2185,7 +2207,18 @@ function renderHome(h) {
   const dealer = h.business_type === "CAR_DEALERSHIP" || h.business_type === "INSURANCE_BROKER";  // lot 47 / 53 : rendez-vous et ventes, pas de paiement
   const insurer = h.business_type === "INSURANCE_BROKER";
   const conv = k.conversion;
-  const kpis = dealer ? [
+  const kpis = insurer ? [  // lot 54 : la demande de cotation est l'étape clé du courtier
+    kpi("shield", "tone-info", "Demandes de cotation", `${k.quotes.value}`,
+      k.quotes.delta_pct !== null ? deltaNote(k.quotes.delta_pct, "%", "") : `${k.quotes.to_handle} à traiter`),
+    kpi("calendar", "tone-success", "Rendez-vous et appels", `${k.appointments.value}`,
+      k.appointments.delta_pct !== null ? deltaNote(k.appointments.delta_pct, "%", "")
+        : `${k.appointments.to_confirm} à confirmer`),
+    kpi("key", "tone-warning", "Contrats souscrits", `${k.sold.value}`,
+      k.sold.delta_pct !== null ? deltaNote(k.sold.delta_pct, "%", "") : "Selon l'issue indiquée après chaque rendez-vous"),
+    kpi("chat", "tone-accent", "Conversations", `${k.conversations.value}`,
+      k.conversations.delta_pct !== null ? deltaNote(k.conversations.delta_pct, "%", "")
+        : `dont ${k.conversations.bob_only} gérée${k.conversations.bob_only > 1 ? "s" : ""} par Bob seul`),
+  ].join("") : dealer ? [
     kpi("calendar", "tone-success", "Rendez-vous obtenus", `${k.appointments.value}`,
       k.appointments.delta_pct !== null ? deltaNote(k.appointments.delta_pct, "%", "")
         : `${k.appointments.to_confirm} à confirmer`),
@@ -2253,6 +2286,8 @@ function renderHome(h) {
       }).join("")
     : `<p class="empty-state">Aucune activité ces 7 derniers jours.</p>`;
 
+  const insuranceRow = insurer ? insuranceHomeRow(h) : "";  // lot 54
+
   document.getElementById("home-root").innerHTML = `
     <div class="home-hero">
       <div><h1>${hello}</h1><p>Voici ce que Bob a fait pour vous ces ${h.period_days} derniers jours.</p></div>
@@ -2266,15 +2301,16 @@ function renderHome(h) {
         ${todo}
       </div>
       <div class="card">
-        <div class="card-head"><div><h2>${dealer ? "Parcours des prospects" : "Entonnoir de vente"}</h2><p class="card-sub">${dealer ? "De la première question à la vente" : "De la première question au paiement"}</p></div></div>
+        <div class="card-head"><div><h2>${dealer ? "Parcours des prospects" : "Entonnoir de vente"}</h2><p class="card-sub">${insurer ? "De la première question au contrat" : dealer ? "De la première question à la vente" : "De la première question au paiement"}</p></div></div>
         ${funnel}
       </div>
     </div>
+    ${insuranceRow}
     <div class="home-row">
       <div class="card span-2 chart-card">
         <div class="card-head" style="align-items: flex-start;">
-          <div><h2>Conversations par jour</h2><p class="card-sub">${dealer ? "Les jours avec au moins une demande de rendez-vous sont mis en évidence" : "Les jours avec au moins une vente payée sont mis en évidence"}</p></div>
-          <div class="legend"><span><i style="background: var(--bar-soft);"></i>Conversations</span><span><i style="background: var(--accent-fill);"></i>${dealer ? "Jour avec rendez-vous" : "Jour avec vente"}</span></div>
+          <div><h2>Conversations par jour</h2><p class="card-sub">${insurer ? "Les jours avec au moins une cotation transmise ou un rendez-vous demandé sont mis en évidence" : dealer ? "Les jours avec au moins une demande de rendez-vous sont mis en évidence" : "Les jours avec au moins une vente payée sont mis en évidence"}</p></div>
+          <div class="legend"><span><i style="background: var(--bar-soft);"></i>Conversations</span><span><i style="background: var(--accent-fill);"></i>${insurer ? "Jour avec cotation ou rendez-vous" : dealer ? "Jour avec rendez-vous" : "Jour avec vente"}</span></div>
         </div>
         <div class="bars" role="img" aria-label="Conversations par jour sur ${h.period_days} jours">${bars}</div>
         <div class="bars-axis">${axis}</div>
@@ -2285,6 +2321,48 @@ function renderHome(h) {
       </div>
     </div>`;
   loadOnboarding();  // lot 41
+}
+
+// ---- Lot 54 : courtier — échéances des contrats actuels de ses prospects, et scores ----
+const TERM_LABELS = { MENSUEL: "contrat mensuel", TRIMESTRIEL: "contrat trimestriel", SEMESTRIEL: "contrat semestriel", ANNUEL: "contrat annuel" };
+
+function expiryTag(e) {
+  const when = e.days_left < 0 ? `Échu depuis ${-e.days_left} j` : e.days_left === 0 ? "Aujourd'hui" : `Dans ${e.days_left} j`;
+  return `<span class="tag ${e.hot ? "tone-danger" : "tone-info"}">${e.hot ? "🔥 " : ""}${when}</span>`;
+}
+
+function insuranceHomeRow(h) {
+  const list = (h.expiries || []).length
+    ? h.expiries.map((e) => `
+      <div class="todo-item">
+        <div class="avatar" aria-hidden="true">${esc(initials(e.customer))}</div>
+        <div class="todo-main">
+          <div class="todo-top"><span class="todo-name">${esc(e.customer)}</span>${expiryTag(e)}</div>
+          <span class="todo-detail">${esc([e.branches.join(", "), e.current_insurer, TERM_LABELS[e.term]].filter(Boolean).join(" · "))}</span>
+        </div>
+        <span class="todo-since">${new Date(e.expiry + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
+        <button class="action" onclick="showTab('customers'); openCustomer('${esc(e.customer_id)}')">Voir la fiche</button>
+      </div>`).join("")
+      + (h.expiries_total > h.expiries.length ? `<p class="card-sub" style="margin-top: 10px;">Et ${h.expiries_total - h.expiries.length} autre${h.expiries_total - h.expiries.length > 1 ? "s" : ""} dans les 60 jours.</p>` : "")
+    : `<p class="empty-state">Aucune échéance connue dans les 60 prochains jours. Bob demande l'échéance et la durée du contrat actuel quand c'est naturel.</p>`;
+  const sc = h.prospect_scores || { CHAUD: 0, TIEDE: 0, FROID: 0, VENDU: 0 };
+  const total = sc.CHAUD + sc.TIEDE + sc.FROID + sc.VENDU;
+  const rows = [["CHAUD", "Chauds", "tone-danger"], ["TIEDE", "Tièdes", "tone-warning"], ["FROID", "Froids", "tone-info"], ["VENDU", "Souscrits", "tone-success"]]
+    .map(([code, label, tone]) => `<div class="funnel-step">
+      <div class="funnel-top"><span><span class="pill ${tone}" style="font-size: 11px;">${code === "CHAUD" ? "🔥 " : ""}${label}</span></span><span><b>${sc[code]}</b></span></div>
+      <div class="track"><div style="width: ${total ? Math.max(sc[code] / total * 100, sc[code] ? 2 : 0) : 0}%; background: var(--accent-fill);"></div></div>
+    </div>`).join("");
+  return `<div class="home-row">
+      <div class="card span-2" id="home-expiries">
+        <div class="card-head"><div><h2>Échéances de vos prospects <span class="count ${(h.expiries || []).some((e) => e.hot) ? "tone-danger" : "tone-info"}">${h.expiries_total || 0}</span></h2>
+          <p class="card-sub">Leur contrat actuel arrive à échéance : le bon moment pour les rappeler</p></div></div>
+        ${list}
+      </div>
+      <div class="card" id="home-scores">
+        <div class="card-head"><div><h2>Vos prospects</h2><p class="card-sub">Chaud : échéance proche (15 jours pour un contrat mensuel, 45 pour un trimestriel, 60 sinon), ou cotation transmise avec un rendez-vous</p></div></div>
+        ${rows}
+      </div>
+    </div>`;
 }
 
 async function loadHome() {
@@ -2344,6 +2422,10 @@ async function loadOverview() {
   loadStrategies();
 }
 
+function insuranceMeasure(s) {  // lot 54 : chez le courtier, une cotation transmise compte aussi
+  return (s.outcome_label || "").startsWith("Cotations");
+}
+
 async function loadStrategies() {
   const card = document.getElementById("strategies-card");
   if (!card) return;
@@ -2355,8 +2437,9 @@ async function loadStrategies() {
       return;
     }
     if (s.measure === "APPOINTMENTS") {  // lot 45 : en concession, une stratégie se mesure aux rendez-vous obtenus
+      const obtained = s.outcome_label || "Rendez-vous obtenus";  // lot 54 : courtier, cotation ou rendez-vous
       card.innerHTML = `${title}
-      <table style="margin-top: 10px;"><thead><tr><th>Objection</th><th>Stratégie</th><th>Utilisations</th><th>Rendez-vous obtenus</th><th>Taux</th></tr></thead><tbody>
+      <table style="margin-top: 10px;"><thead><tr><th>Objection</th><th>Stratégie</th><th>Utilisations</th><th>${esc(obtained)}</th><th>Taux</th></tr></thead><tbody>
         ${s.strategies.map((r) => `<tr>
           <td data-label="Objection">${esc(r.objection_label)}</td>
           <td data-label="Stratégie">${esc(r.label)}</td>
@@ -2366,7 +2449,7 @@ async function loadStrategies() {
         </tr>`).join("")}
       </tbody></table>
       <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
-        Rendez-vous obtenus : demandes de rendez-vous faites dans la conversation après la stratégie. Le taux n'est
+        ${esc(obtained)} : ${insuranceMeasure(s) ? "demandes de cotation transmises ou demandes de rendez-vous" : "demandes de rendez-vous"} faites dans la conversation après la stratégie. Le taux n'est
         affiché qu'à partir de ${s.min_terminated_for_rate} conversations : en dessous, un pourcentage serait trompeur.
         Bob alterne au hasard entre les stratégies activées (Réglages de Bob → Réponses aux objections), pour pouvoir
         les comparer honnêtement.
@@ -2442,10 +2525,11 @@ async function loadSignals() {
         <span style="text-align: right;">${i.messages}</span>
       </div>`).join("") || "<p style='font-size: 13px; color: var(--muted);'>—</p>";
     const byAppointments = s.measure === "APPOINTMENTS";  // lot 46 : en concession, on mesure les rendez-vous obtenus
+    const obtained = s.outcome_label || "Rendez-vous obtenus";  // lot 54 : courtier, cotation ou rendez-vous
     const objections = !s.objections.length
       ? "<p style='font-size: 13px; color: var(--muted);'>Aucune objection détectée sur la période.</p>"
       : byAppointments
-      ? `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Conversations</th><th>Rendez-vous obtenus</th><th>Taux</th></tr></thead><tbody>
+      ? `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Conversations</th><th>${esc(obtained)}</th><th>Taux</th></tr></thead><tbody>
           ${s.objections.map((o) => `<tr><td data-label="Objection">${esc(o.label)}</td><td data-label="Conversations">${o.conversations}</td>
             <td data-label="Rendez-vous">${o.appointments}</td><td data-label="Taux">${o.enough_data ? o.appointment_rate_pct + " %" : "<span style='color: var(--muted); font-size: 12px;'>Pas encore assez de données</span>"}</td></tr>`).join("")}
          </tbody></table>`
@@ -2457,13 +2541,13 @@ async function loadSignals() {
       <div class="label" style="font-weight: 600;">Ce que demandent vos clients — ${s.period_days} derniers jours</div>
       <p style="font-size: 12px; color: var(--muted); margin: 4px 0 12px;">${s.classified_messages} message${s.classified_messages > 1 ? "s" : ""} analysé${s.classified_messages > 1 ? "s" : ""} sur ${s.customer_messages}.</p>
       ${intents}
-      <div class="label" style="font-weight: 600; margin: 16px 0 0;">Freins à l'achat</div>
+      <div class="label" style="font-weight: 600; margin: 16px 0 0;">${currentBusinessType === "INSURANCE_BROKER" ? "Freins à la souscription" : "Freins à l'achat"}</div>
       ${objections}
       <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
         Étiquettes déduites automatiquement par une IA : ce sont des indications, qui peuvent se tromper.
         Vous pouvez les vérifier sous chaque message client, dans l'onglet Conversations.
         ${byAppointments
-          ? `Rendez-vous obtenus = conversations où une demande de rendez-vous a été faite après l'apparition de ce frein. Le taux n'est affiché qu'à partir de ${s.min_conversations_for_rate} conversations.`
+          ? `${esc(obtained)} = conversations où ${insuranceMeasure(s) ? "une demande de cotation a été transmise ou un rendez-vous demandé" : "une demande de rendez-vous a été faite"} après l'apparition de ce frein. Le taux n'est affiché qu'à partir de ${s.min_conversations_for_rate} conversations.`
           : "Conversion = opportunités payées ÷ opportunités terminées où ce frein est apparu."}
       </p>`;
   } catch (e) {
@@ -3495,10 +3579,12 @@ async function loadQuotes(view) {
   box.innerHTML = rows.length ? rows.map((q) => `
     <div class="card">
       <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline;">
-        <div><strong>${esc(q.customer)}</strong> · ${esc(q.branch_label)} <span class="pill tone-info">${esc(q.client_type === "ENTREPRISE" ? "Entreprise" : "Particulier")}</span></div>
+        <div><strong>${esc(q.customer)}</strong> · ${esc(q.branch_label)} <span class="pill tone-info">${esc(q.client_type === "ENTREPRISE" ? "Entreprise" : "Particulier")}</span>${q.prospect ? " " + scorePill(q.prospect) : ""}</div>
         <span style="font-size: 13px; color: var(--muted);">${esc(q.status_label)} · ${new Date(q.submitted_at || q.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>
       </div>
+      ${q.prospect ? `<p style="font-size: 12px; color: var(--muted); margin: 8px 0 0;">Score : ${esc(q.prospect.reasons.join(", "))}.</p>` : ""}
       <ul style="margin: 10px 0; padding-left: 18px; font-size: 14px;">${q.lines.map((l) => `<li>${esc(l)}</li>`).join("") || "<li>Aucune information pour l'instant</li>"}</ul>
+      ${(q.trace || []).length ? `<p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">${q.trace.map(esc).join(" · ")}</p>` : (q.status === "DRAFT" ? `<p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">Pas encore transmise : Bob attend les informations utiles et l'accord du client.</p>` : "")}
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         ${q.conversation_id ? `<button class="action secondary" onclick="jumpToCustomerConversation('${esc(q.conversation_id)}')">Voir la conversation</button>` : ""}
         ${q.status === "SUBMITTED" ? `<button class="action" onclick="handleQuote('${esc(q.id)}')">Prise en charge</button>` : ""}
@@ -3696,6 +3782,56 @@ async function previewFollowup(stage) {
 }
 
 // ---- Lot 38 : tutoiement / vouvoiement (boutique en ligne) ----
+// ---- Lot 54 : courtier / agent — qui parle au client (règlement CIMA 01-24) ----
+let insuranceProfile = null;
+
+async function loadInsuranceProfile() {
+  const box = document.getElementById("insurance-structure-options");
+  try { insuranceProfile = await api("/api/v1/tenants/me/insurance-profile"); } catch (e) {
+    box.innerHTML = `<span style="color: var(--danger);">${esc(e.message)}</span>`;
+    return;
+  }
+  const p = insuranceProfile;
+  box.innerHTML = p.options.map((o) => `<label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="insurance-structure" value="${esc(o.code)}" ${o.code === p.insurance_structure ? "checked" : ""} onchange="insuranceStructureChanged()"> ${esc(o.label)}</label>`).join("");
+  document.getElementById("insurer-name").value = p.insurer_name || "";
+  document.getElementById("insurance-license").value = p.insurance_license || "";
+  document.getElementById("complaints-contact").value = p.complaints_contact || "";
+  document.getElementById("insurance-profile-msg").textContent = "";
+  insuranceStructureChanged();
+}
+
+function insuranceStructureChanged() {
+  const chosen = (document.querySelector('input[name="insurance-structure"]:checked') || {}).value;
+  // Un cabinet de courtage travaille avec plusieurs compagnies : pas de compagnie mandante.
+  document.getElementById("insurer-name-row").classList.toggle("hidden", chosen === "COURTIER");
+  document.getElementById("insurance-profile-preview").innerHTML = insuranceProfile && insuranceProfile.insurance_structure
+    ? `<div style="font-size: 11px; color: var(--muted); margin-bottom: 4px;">Comment Bob se présente</div>« ${esc(insuranceProfile.preview)} »`
+    : `<span style="color: var(--muted);">Choisissez votre statut : en attendant, Bob se présente comme « intermédiaire en assurance ».</span>`;
+}
+
+async function saveInsuranceProfile() {
+  const msg = document.getElementById("insurance-profile-msg");
+  const chosen = (document.querySelector('input[name="insurance-structure"]:checked') || {}).value;
+  if (!chosen) { msg.style.color = "var(--danger)"; msg.textContent = "Choisissez votre statut."; return; }
+  try {
+    insuranceProfile = await api("/api/v1/tenants/me/insurance-profile", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        insurance_structure: chosen,
+        insurer_name: document.getElementById("insurer-name").value.trim() || null,
+        insurance_license: document.getElementById("insurance-license").value.trim() || null,
+        complaints_contact: document.getElementById("complaints-contact").value.trim() || null,
+      }),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+    insuranceStructureChanged();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
 let addressFormOptions = [];
 
 async function loadAddressForm() {

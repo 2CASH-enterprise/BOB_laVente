@@ -498,6 +498,20 @@ class ToolExecutor:
             financing_interest=financing,
         )
         self.db.add(appointment)
+        from app.services.business_type import INSURANCE_BROKER, normalize
+
+        if normalize(self.business_type) == INSURANCE_BROKER:
+            # Lot 54 (CIMA) : demander un appel ou un rendez-vous, c'est accepter d'être recontacté : les demandes
+            # de cotation complètes de ce client partent au cabinet, avec cet accord horodaté.
+            from app.services import insurance
+
+            for request in await insurance.consent_from_appointment(self.db, self.tenant_id, self.customer_id,
+                                                                    self.conversation.id):
+                self.db.add(Message(
+                    tenant_id=self.tenant_id, conversation_id=self.conversation.id, sender=MessageSender.SYSTEM,
+                    message_type="quote_request",
+                    content="Demande de cotation transmise au cabinet : " + insurance.branch_label(request.branch),
+                ))
 
         if booked is not None:
             start, label, now = booked
@@ -832,6 +846,14 @@ class ToolExecutor:
                 "La demande de cotation vient d'être transmise au cabinet : dis-le au client, sans aucun prix, puis "
                 "demande-lui s'il préfère qu'un conseiller l'appelle ou un rendez-vous au cabinet ; propose alors des "
                 "créneaux (get_available_slots) et enregistre son choix avec request_appointment (APPEL ou CABINET)."))
+        elif result["needs_consent"]:
+            answer.update(status="consent_needed", instruction=(
+                "Les informations utiles sont réunies. Demande maintenant au client, en une phrase, s'il accepte que sa "
+                "demande et ces informations soient transmises au conseiller du cabinet pour qu'il lui prépare une "
+                "proposition personnalisée, sans engagement (par exemple : « Acceptez-vous que je transmette votre demande "
+                "au conseiller du cabinet, pour qu'il vous prépare une proposition sans engagement ? »). S'il accepte "
+                "clairement, rappelle update_insurance_request "
+                "avec la branche et consent=true. Ne dis pas que la demande est transmise avant cela."))
         elif result["request"].status == insurance.STATUS_SUBMITTED:
             answer.update(status="quote_request_updated", instruction=(
                 "Information ajoutée à la demande déjà transmise au cabinet. Si le client n'a pas encore de rendez-vous, "

@@ -6,14 +6,26 @@ Lot 53 — courtier / agent d'assurance.
 - Demande de cotation : Bob range ce que le client dit avec l'outil update_insurance_request ; c'est
   le CODE qui décide quand le minimum est réuni, enregistre la demande, prévient le cabinet (email +
   tâche) et dit à Bob de proposer un appel ou un rendez-vous. Bob ne décide jamais seul.
+- Lot 54 (règlement CIMA 01-24) : la demande ne part qu'avec l'accord du client, horodaté (consent_at),
+  donné à Bob ou en demandant un appel / un rendez-vous ; transmission et prise en charge sont horodatées.
 - Montants : Bob ne donne JAMAIS de prime, de tarif, de franchise ni de montant de garantie. Le code
   relit chaque réponse ; un montant est corrigé une fois, puis remplacé par un message fixe.
 """
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import select
+
+# Lot 54 — qui parle au client (règlement CIMA 01-24 : le distributeur doit être clairement identifié).
+STRUCTURES = {
+    "COURTIER": "Cabinet de courtage",
+    "AGENCE_GENERALE": "Agence générale",
+    "AGENT": "Agent d'assurance",
+}
+
+# Lot 54 — durée du contrat actuel du client : sert au score (fenêtre « Chaud » = min(60 j, durée / 2)).
+TERMS = {"MENSUEL": "Mensuel", "TRIMESTRIEL": "Trimestriel", "SEMESTRIEL": "Semestriel", "ANNUEL": "Annuel"}
 
 PARTICULIER = "PARTICULIER"
 ENTREPRISE = "ENTREPRISE"
@@ -44,7 +56,12 @@ FIELDS = {
     "route": ("Trajet / mode de transport", "text", 150),
     "description": ("Besoin décrit par le client", "text", 300),
     "current_insurer": ("Assureur actuel", "text", 100),
-    "current_expiry": ("Échéance du contrat actuel", "text", 60),
+    # Lot 54 : date réelle (AAAA-MM-JJ) et durée du contrat, pour le score ; « budget » et « paiement » : notés
+    # pour le conseiller, jamais commentés par Bob.
+    "current_expiry": ("Échéance du contrat actuel", "date", None),
+    "current_term": ("Durée du contrat actuel", "choice", TERMS),
+    "budget": ("Budget envisagé par le client", "text", 80),
+    "payment_wish": ("Souhait du client pour le paiement", "text", 150),
 }
 
 # code → (libellé, type de client par défaut, champs indispensables, champs utiles, description du produit)
@@ -91,6 +108,11 @@ def _clean_value(key: str, value):
     label, kind, limit = FIELDS[key]
     if value is None:
         return None
+    if kind == "date":
+        parsed = parse_date(value)
+        return parsed.isoformat() if parsed else None
+    if kind == "choice":
+        return value if isinstance(value, str) and value in limit else None
     if kind == "int":
         try:
             number = int(str(value).strip())
@@ -101,6 +123,34 @@ def _clean_value(key: str, value):
         return None
     cleaned = " ".join(value.split())[:limit]
     return cleaned or None
+
+
+def parse_date(value) -> date | None:
+    """Date AAAA-MM-JJ vraisemblable (2000 à 2100), sinon None : une date n'est jamais devinée."""
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        return None
+    return parsed if 2000 <= parsed.year <= 2100 else None
+
+
+def display_value(key: str, value) -> str:
+    """Valeur lisible pour le cabinet (date en JJ/MM/AAAA, durée en toutes lettres)."""
+    kind = FIELDS[key][1]
+    if kind == "date":
+        parsed = parse_date(value)
+        return parsed.strftime("%d/%m/%Y") if parsed else str(value)  # ancienne valeur libre (lot 53) : telle quelle
+    if kind == "choice":
+        return FIELDS[key][2].get(value, str(value))
+    return str(value)
+
+
+def structure_label(tenant) -> str | None:
+    return STRUCTURES.get(getattr(tenant, "insurance_structure", None) or "")
 
 
 def missing_fields(branch: str, client_type: str | None, details: dict) -> list[str]:
@@ -127,8 +177,10 @@ async def open_request(db, tenant_id, customer_id, branch: str):
 async def update_request(db, tenant_id, customer_id, conversation_id, values: dict, now: datetime | None = None) -> dict:
     """
     Enregistre ce que le client a dit pour UNE branche. Renvoie :
-    {"request": QuoteRequest, "submitted_now": bool, "missing": [libellés], "rejected": [champs], "error"?}.
-    La demande passe à « transmise » une seule fois, dès que le minimum de la branche est réuni.
+    {"request": QuoteRequest, "submitted_now": bool, "needs_consent": bool, "missing": [libellés],
+     "rejected": [champs], "error"?}.
+    La demande passe à « transmise » une seule fois, dès que le minimum de la branche est réuni ET que le
+    client a accepté qu'elle soit transmise au cabinet (lot 54, CIMA : accord horodaté dans consent_at).
     """
     from app.models.quote_request import QuoteRequest
 
@@ -157,14 +209,46 @@ async def update_request(db, tenant_id, customer_id, conversation_id, values: di
             details[key] = cleaned
     request.details = details
     request.conversation_id = conversation_id or request.conversation_id
+    now = now or datetime.now(timezone.utc)
+    if values.get("consent") is True and request.consent_at is None:
+        request.consent_at = now
     missing = missing_fields(branch, request.client_type, details)
-    submitted_now = False
-    if not missing and request.status == STATUS_DRAFT:
-        request.status = STATUS_SUBMITTED
-        request.submitted_at = now or datetime.now(timezone.utc)
-        submitted_now = True
+    submitted_now = _submit_if_ready(request, now)
     await db.flush()
-    return {"request": request, "submitted_now": submitted_now, "missing": missing_labels(missing), "rejected": rejected}
+    return {"request": request, "submitted_now": submitted_now, "missing": missing_labels(missing), "rejected": rejected,
+            "needs_consent": not missing and request.status == STATUS_DRAFT and request.consent_at is None}
+
+
+def _submit_if_ready(request, now: datetime) -> bool:
+    """Brouillon complet ET accord du client : transmis au cabinet (une seule fois)."""
+    if (request.status != STATUS_DRAFT or request.consent_at is None
+            or missing_fields(request.branch, request.client_type, request.details or {})):
+        return False
+    request.status = STATUS_SUBMITTED
+    request.submitted_at = now
+    return True
+
+
+async def consent_from_appointment(db, tenant_id, customer_id, conversation_id, now: datetime | None = None) -> list:
+    """
+    Lot 54 — le client vient de demander à être appelé ou reçu au cabinet : c'est un accord explicite pour être
+    recontacté. Ses brouillons reçoivent l'accord, et ceux qui sont complets partent au cabinet (une seule fois).
+    Renvoie les demandes transmises maintenant.
+    """
+    from app.models.quote_request import QuoteRequest
+
+    now = now or datetime.now(timezone.utc)
+    sent = []
+    for request in (await db.execute(select(QuoteRequest).where(
+        QuoteRequest.tenant_id == tenant_id, QuoteRequest.customer_id == customer_id, QuoteRequest.status == STATUS_DRAFT,
+    ))).scalars().all():
+        if request.consent_at is None:
+            request.consent_at = now
+        request.conversation_id = request.conversation_id or conversation_id
+        if _submit_if_ready(request, now):
+            sent.append(request)
+    await db.flush()
+    return sent
 
 
 def request_lines(request) -> list[str]:
@@ -172,16 +256,36 @@ def request_lines(request) -> list[str]:
     lines = [f"Assurance : {branch_label(request.branch)}", f"Type de client : {CLIENT_TYPES.get(request.client_type, '—')}"]
     for key, (label, _, _) in FIELDS.items():
         if details.get(key) not in (None, ""):
-            lines.append(f"{label} : {details[key]}")
+            lines.append(f"{label} : {display_value(key, details[key])}")
     return lines
 
 
-def quote_email(tenant, customer, request, link: str) -> tuple[str, str]:
+def _when(value) -> str:
+    if value is None:
+        return "—"
+    aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return aware.astimezone(timezone.utc).strftime("%d/%m/%Y à %H:%M (UTC)")
+
+
+def trace_lines(request) -> list[str]:
+    """Lot 54 (CIMA) : étapes horodatées de la demande — accord du client, transmission, prise en charge."""
+    lines = []
+    if request.consent_at:
+        lines.append(f"Accord du client pour la transmission : {_when(request.consent_at)}")
+    if request.submitted_at:
+        lines.append(f"Transmise au cabinet : {_when(request.submitted_at)}")
+    if request.handled_at:
+        lines.append(f"Prise en charge : {_when(request.handled_at)}")
+    return lines
+
+
+def quote_email(tenant, customer, request, link: str, score: str | None = None) -> tuple[str, str]:
     """Email au cabinet : nouvelle demande de cotation (jamais de prix : c'est au cabinet de proposer)."""
     from app.services.handoff_service import customer_display_name
 
     who = customer_display_name(customer)
-    subject = f"Nouvelle demande de cotation — {branch_label(request.branch)} — {who}"
+    hot = score is not None and score.startswith("Chaud")
+    subject = f"{'🔥 ' if hot else ''}Nouvelle demande de cotation — {branch_label(request.branch)} — {who}"
     body = "\n".join([
         "Bonjour,",
         "",
@@ -189,6 +293,8 @@ def quote_email(tenant, customer, request, link: str) -> tuple[str, str]:
         "",
         f"Client : {who}",
         *request_lines(request),
+        *([f"Score commercial : {score}"] if score else []),
+        *trace_lines(request),
         "",
         "Bob a proposé au client un appel ou un rendez-vous au cabinet. Il ne lui a donné aucun prix.",
         "",
@@ -283,6 +389,10 @@ async def quote_alert_emails(db, tenant, customer, conversation, now: datetime |
         if claimed.rowcount != 1:
             continue  # déjà annoncée par un autre traitement
         request.notified_at = now
-        subject, body = quote_email(tenant, customer, request, conversation_link(conversation))
+        from app.services import insurance_prospect
+
+        prospect = (await insurance_prospect.for_customers(db, tenant, [customer.id], now)).get(customer.id)
+        score = f"{prospect['score_label']} ({', '.join(prospect['reasons'])})" if prospect else None
+        subject, body = quote_email(tenant, customer, request, conversation_link(conversation), score)
         emails += alert_emails(tenant.email, await commercial_for_customer(db, customer), subject, body)
     return emails
