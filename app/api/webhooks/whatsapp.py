@@ -475,6 +475,17 @@ async def receive_webhook(
         if not tenant.is_paid:
             reply_text = f"{reply_text}\n\n_Propulsé par Bob 🤖_"
 
+    # Lot 58 (CIMA 01-24, art. 7) — courtier : la première réponse de Bob à un client lui dit, une seule fois,
+    # qui traite ses données, avec le lien vers la politique de confidentialité du cabinet (s'il l'a donné).
+    if not is_opt_out and customer.privacy_notice_at is None:
+        from app.services.business_type import is_insurance
+        from app.services.insurance import privacy_notice
+
+        notice = privacy_notice(tenant) if is_insurance(tenant) else None
+        if notice:
+            reply_text = f"{reply_text}\n\n{notice}"
+            customer.privacy_notice_at = datetime.now(timezone.utc)
+
     # Lot 31 — texte enregistré tel qu'il part sur WhatsApp (gras *…*, puces •), pour que le tableau
     # de bord montre exactement ce que le client a reçu.
     reply_text = to_whatsapp(reply_text)

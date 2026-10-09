@@ -238,6 +238,48 @@ def risk_country_hint(tenant, customer) -> str:
             "(risk_country). Ne refuse jamais sa demande pour cette raison : le cabinet vérifiera.")
 
 
+# --- Lot 58 : liens publics du cabinet, compagnies partenaires, information sur les données (CIMA) ------------
+
+URL_MAX = 300
+PARTNERS_MAX = 20
+_URL = re.compile(r"^https?://[^\s<>\"']+\.[^\s<>\"']+$", re.I)
+
+
+def clean_url(value) -> str | None:
+    """Lien public (http ou https), 300 caractères au plus ; vide → None ; invalide → ValueError."""
+    text = (value or "").strip() if isinstance(value, str) else ""
+    if not text:
+        return None
+    if not text.lower().startswith(("http://", "https://")):
+        text = "https://" + text
+    if len(text) > URL_MAX or not _URL.match(text):
+        raise ValueError("Lien invalide : indiquez une adresse web complète (https://…)")
+    return text
+
+
+def parse_partners(value) -> list[dict]:
+    """Compagnies partenaires d'un courtier : [{name, address}] (raison sociale obligatoire, 20 au plus)."""
+    partners = []
+    for item in value or []:
+        if not isinstance(item, dict):
+            continue
+        name = " ".join(str(item.get("name") or "").split())[:150]
+        address = " ".join(str(item.get("address") or "").split())[:300]
+        if name:
+            partners.append({"name": name, "address": address or None})
+    if len(partners) > PARTNERS_MAX:
+        raise ValueError(f"{PARTNERS_MAX} compagnies partenaires au plus")
+    return partners
+
+
+def privacy_notice(tenant) -> str | None:
+    """Phrase fixe sur les données personnelles (art. 7), seulement si le cabinet a donné son lien."""
+    url = getattr(tenant, "privacy_policy_url", None)
+    if not url:
+        return None
+    return f"Vos informations sont traitées par {tenant.name} pour répondre à votre demande. En savoir plus : {url}"
+
+
 def structure_label(tenant) -> str | None:
     return STRUCTURES.get(getattr(tenant, "insurance_structure", None) or "")
 
@@ -455,8 +497,12 @@ def _normalize(text: str) -> str:
     return text.replace("’", "'").replace(" ", " ").replace("\xa0", " ")
 
 
+_LINK = re.compile(r"https?://\S+", re.I)
+
+
 def contains_amount(text: str) -> bool:
-    normalized = _normalize(text)
+    # Lot 58 : un lien (conditions tarifaires, confidentialité) n'est jamais un montant.
+    normalized = _normalize(_LINK.sub(" ", text or ""))
     return any(pattern.search(normalized) for pattern in _AMOUNT_PATTERNS)
 
 

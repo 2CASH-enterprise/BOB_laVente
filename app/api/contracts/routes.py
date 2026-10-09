@@ -120,6 +120,19 @@ async def list_contracts(
     }
 
 
+@router.get("/export.csv", dependencies=[Depends(require_role("AGENT"))])
+async def export_contracts(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> Response:
+    """Lot 58 (CIMA, art. 4, 14) : le registre complet, tous statuts ; la prime pour un administrateur seulement."""
+    from app.services.insurance_exports import contracts_csv
+
+    tenant = await _tenant(db, current_user)
+    content = await contracts_csv(db, tenant, _is_admin(current_user))
+    await log_audit_event(db, actor=str(current_user.user_id), action="CONTRACTS_EXPORTED", tenant_id=tenant.id, details={})
+    await db.commit()
+    return Response(content, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="registre_contrats.csv"'})
+
+
 @router.get("/template.csv")
 async def csv_template(current_user: CurrentUser = Depends(get_current_user)) -> Response:
     return Response(contracts.CSV_TEMPLATE.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",

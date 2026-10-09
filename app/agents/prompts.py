@@ -152,7 +152,9 @@ INSURANCE_RULES = """RÈGLES
    humain, dis que tu es l'assistant virtuel du cabinet. Vouvoie TOUJOURS le client, même s'il te tutoie.
 2. Ne donne JAMAIS de montant : ni prime, ni tarif, ni « à partir de », ni franchise, ni plafond, ni montant
    de garantie, ni pourcentage, même approximatif, même si le client insiste ou cite un concurrent. Le prix
-   dépend de sa situation : le cabinet lui fera une proposition personnalisée, sans engagement.
+   dépend de sa situation : le cabinet lui fera une proposition personnalisée, sans engagement. Si le client
+   parle de prix ou de tarif et que les INFORMATIONS DU CABINET donnent un lien vers les conditions
+   tarifaires, donne-lui ce lien tel quel, sans en citer aucun chiffre.
 3. Ne promets JAMAIS qu'un client est couvert, qu'un sinistre sera pris en charge ou qu'un contrat est
    accepté : seul l'assureur, par le cabinet, peut le confirmer. Ne compare pas les assureurs entre eux.
 4. Pour décrire un produit, appuie-toi uniquement sur les produits du cabinet (search_products,
@@ -193,7 +195,8 @@ INSURANCE_RULES = """RÈGLES
     request_appointment, ou sans que update_insurance_request ait confirmé la transmission de la demande.
 14. Ne demande jamais de document (pièce d'identité, carte grise, permis…) sur WhatsApp : le conseiller
     s'en chargera.
-15. Si le client demande qui vous êtes, si le cabinet est agréé ou pour quelle compagnie il travaille,
+15. Si le client demande qui vous êtes, si le cabinet est agréé, pour quelle compagnie il travaille (raison
+    sociale, adresse, compagnies partenaires) ou comment ses données sont utilisées,
     réponds uniquement avec les INFORMATIONS DU CABINET ci-dessous ; si l'information n'y figure pas, ne
     l'invente jamais : transmets la question (handoff_to_human).
 16. Réclamation ou mécontentement : donne le contact pour les réclamations indiqué dans les INFORMATIONS
@@ -365,13 +368,24 @@ def insurance_office_info(tenant: Tenant) -> str:
     """Lot 54 (règlement CIMA 01-24) : identification du distributeur et voie de réclamation."""
     from app.services.insurance import STRUCTURES
 
+    courtier = getattr(tenant, "insurance_structure", None) == "COURTIER"
     rows = [
         ("Statut", STRUCTURES.get(getattr(tenant, "insurance_structure", None) or "")),
-        ("Compagnie d'assurance mandante", getattr(tenant, "insurer_name", None)),
+        ("Compagnie d'assurance mandante", None if courtier else getattr(tenant, "insurer_name", None)),
+        # Lot 58 (art. 12) : raison sociale et adresse de la compagnie (agent, agence générale).
+        ("Raison sociale de la compagnie", None if courtier else getattr(tenant, "insurer_legal_name", None)),
+        ("Adresse de la compagnie", None if courtier else getattr(tenant, "insurer_address", None)),
         ("Numéro d'agrément", getattr(tenant, "insurance_license", None)),
         ("Contact pour les réclamations", getattr(tenant, "complaints_contact", None)),
+        # Lot 58 (art. 11 et 7) : liens publics, donnés tels quels.
+        ("Conditions tarifaires (lien)", getattr(tenant, "tariff_url", None)),
+        ("Politique de confidentialité (lien)", getattr(tenant, "privacy_policy_url", None)),
     ]
     lines = [f"{label} : {' '.join(str(value).split())}" for label, value in rows if value and str(value).strip()]
+    partners = (getattr(tenant, "insurance_partners", None) or []) if courtier else []
+    if partners:
+        lines.append("Compagnies partenaires : " + " ; ".join(
+            p["name"] + (f" ({p['address']})" if p.get("address") else "") for p in partners))
     return "\n".join(lines) if lines else "Aucune information renseignée par le cabinet."
 
 

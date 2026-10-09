@@ -64,6 +64,10 @@ class Customer(Base):
     # Toujours une INFÉRENCE de l'IA, jamais un fait vérifié — à afficher comme tel.
     detected_preferences: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
+    # Lot 58 (CIMA 01-24, art. 7) — moment où le client a reçu, une seule fois, l'information sur le traitement de
+    # ses données (avec le lien vers la politique de confidentialité du cabinet).
+    privacy_notice_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

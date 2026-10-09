@@ -555,6 +555,12 @@ class InsuranceProfileReq(BaseModel):
     insurer_name: str | None = Field(default=None, max_length=150)
     insurance_license: str | None = Field(default=None, max_length=80)
     complaints_contact: str | None = Field(default=None, max_length=200)
+    # Lot 58 (CIMA 01-24, art. 7, 11, 12) — absent de la requête : inchangé.
+    insurer_legal_name: str | None = Field(default=None, max_length=150)
+    insurer_address: str | None = Field(default=None, max_length=300)
+    insurance_partners: list[dict] | None = Field(default=None, max_length=50)
+    tariff_url: str | None = Field(default=None, max_length=400)
+    privacy_policy_url: str | None = Field(default=None, max_length=400)
 
 
 def _insurance_profile_response(tenant: Tenant) -> dict:
@@ -566,6 +572,11 @@ def _insurance_profile_response(tenant: Tenant) -> dict:
         "insurer_name": tenant.insurer_name,
         "insurance_license": tenant.insurance_license,
         "complaints_contact": tenant.complaints_contact,
+        "insurer_legal_name": tenant.insurer_legal_name,
+        "insurer_address": tenant.insurer_address,
+        "insurance_partners": tenant.insurance_partners or [],
+        "tariff_url": tenant.tariff_url,
+        "privacy_policy_url": tenant.privacy_policy_url,
         "options": [{"code": code, "label": label} for code, label in STRUCTURES.items()],
         # Ce que Bob dira de lui-même, pour que le cabinet le voie avant ses clients.
         "preview": f"Je suis Bob, l'assistant virtuel de {tenant.name}, {insurance_identity(tenant)}.",
@@ -601,6 +612,29 @@ async def update_insurance_profile(
     tenant.insurer_name = None if payload.insurance_structure == "COURTIER" else _clean_text(payload.insurer_name)
     tenant.insurance_license = _clean_text(payload.insurance_license)
     tenant.complaints_contact = _clean_text(payload.complaints_contact)
+    from app.services import insurance
+
+    sent = payload.model_fields_set
+    courtier = payload.insurance_structure == "COURTIER"
+    try:
+        if "tariff_url" in sent:
+            tenant.tariff_url = insurance.clean_url(payload.tariff_url)
+        if "privacy_policy_url" in sent:
+            tenant.privacy_policy_url = insurance.clean_url(payload.privacy_policy_url)
+        if "insurance_partners" in sent:
+            tenant.insurance_partners = insurance.parse_partners(payload.insurance_partners) or None
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if "insurer_legal_name" in sent:
+        tenant.insurer_legal_name = _clean_text(payload.insurer_legal_name)
+    if "insurer_address" in sent:
+        tenant.insurer_address = _clean_text(payload.insurer_address)
+    if courtier:  # une seule compagnie mandante : agent ou agence générale ; le courtier a ses partenaires
+        tenant.insurer_legal_name = None
+        tenant.insurer_address = None
+    else:
+        tenant.insurance_partners = None
     await log_audit_event(db, actor=str(current_user.user_id), action="INSURANCE_PROFILE_UPDATED", tenant_id=tenant.id,
                           details={"structure": tenant.insurance_structure})
     await db.commit()

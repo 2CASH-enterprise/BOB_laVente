@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from enum import StrEnum
 
-from sqlalchemy import Date, DateTime, Enum, Numeric, String, Text, Uuid, func
+from sqlalchemy import JSON, Date, DateTime, Enum, Numeric, String, Text, Uuid, func
 from sqlalchemy import true as sa_true
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -70,6 +70,14 @@ class Tenant(Base):
     renewal_digest_on: Mapped[date | None] = mapped_column(Date)
     # Lot 57 — délai de réponse aux réclamations annoncé au client, en jours ouvrés (CIMA 01-24, art. 11).
     complaint_delay_days: Mapped[int] = mapped_column(default=10, server_default="10", nullable=False)
+    # Lot 58 (CIMA 01-24) — art. 12 : raison sociale et adresse de la compagnie (agent, agence générale) ou des
+    # compagnies partenaires (courtier : [{"name", "address"}]) ; art. 11 : lien vers les conditions tarifaires
+    # publiques ; art. 7 : lien vers la politique de confidentialité. Bob les donne, ne les invente jamais.
+    insurer_legal_name: Mapped[str | None] = mapped_column(String(150))
+    insurer_address: Mapped[str | None] = mapped_column(String(300))
+    insurance_partners: Mapped[list | None] = mapped_column(JSON)
+    tariff_url: Mapped[str | None] = mapped_column(String(300))
+    privacy_policy_url: Mapped[str | None] = mapped_column(String(300))
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

@@ -830,6 +830,7 @@
         <button type="button" class="pill" data-quote-view="closed" aria-pressed="false" onclick="loadQuotes('closed')">Terminées</button>
         <button type="button" class="pill" data-quote-view="draft" aria-pressed="false" onclick="loadQuotes('draft')">En cours avec Bob</button>
       </div>
+      <button class="action secondary" onclick="downloadExport('/api/v1/quote-requests/export.csv', 'demandes_de_cotation.csv')">Exporter toutes les demandes (CSV)</button>
       <div id="quote-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
     </section>
 
@@ -848,6 +849,7 @@
         <input id="contract-search" class="input" type="search" placeholder="Rechercher : client, assureur, n° de contrat, téléphone" aria-label="Rechercher un contrat" oninput="searchContracts()">
         <select id="contract-branch" class="input" aria-label="Branche" onchange="loadContracts(currentContractView)"><option value="">Toutes les branches</option></select>
         <button class="action" onclick="openContractDialog()">Ajouter un contrat</button>
+        <button class="action secondary" onclick="downloadExport('/api/v1/contracts/export.csv', 'registre_contrats.csv')">Exporter (CSV)</button>
       </div>
       <details class="card" id="contracts-import-card" style="margin-bottom: 16px;">
         <summary style="cursor: pointer; font-weight: 600;">Importer votre registre (CSV)</summary>
@@ -1048,6 +1050,14 @@
           <div id="insurer-name-row" style="margin-bottom: 8px;">
             <label for="insurer-name" style="font-size: 12px; color: var(--muted);">Compagnie d'assurance que vous représentez</label>
             <input id="insurer-name" class="input" maxlength="150" placeholder="Ex. Sunu Assurances">
+            <label for="insurer-legal-name" style="font-size: 12px; color: var(--muted); display: block; margin-top: 8px;">Raison sociale de la compagnie (facultatif)</label>
+            <input id="insurer-legal-name" class="input" maxlength="150" placeholder="Telle qu'elle figure sur ses documents">
+            <label for="insurer-address" style="font-size: 12px; color: var(--muted); display: block; margin-top: 8px;">Adresse de la compagnie (facultatif)</label>
+            <input id="insurer-address" class="input" maxlength="300" placeholder="Ex. Plateau, avenue …, Abidjan">
+          </div>
+          <div id="insurance-partners-row" class="hidden" style="margin-bottom: 8px;">
+            <label for="insurance-partners" style="font-size: 12px; color: var(--muted);">Compagnies partenaires (facultatif) — une par ligne : raison sociale — adresse</label>
+            <textarea id="insurance-partners" class="input" rows="3" style="resize: vertical;" placeholder="Sunu Assurances Vie CI — Plateau, Abidjan&#10;NSIA Assurances — Cocody, Abidjan"></textarea>
           </div>
           <div style="margin-bottom: 8px;">
             <label for="insurance-license" style="font-size: 12px; color: var(--muted);">Numéro d'agrément (facultatif)</label>
@@ -1056,6 +1066,14 @@
           <div style="margin-bottom: 10px;">
             <label for="complaints-contact" style="font-size: 12px; color: var(--muted);">Contact pour les réclamations (facultatif)</label>
             <input id="complaints-contact" class="input" maxlength="200" placeholder="Ex. reclamations@moncabinet.ci ou +225 …">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="tariff-url" style="font-size: 12px; color: var(--muted);">Lien vers vos conditions tarifaires publiques (facultatif)<button class="tip"></button><span class="tip-bubble" hidden>Le règlement CIMA demande que les conditions tarifaires soient accessibles aux clients. Quand un client parle de prix, Bob lui donne ce lien, sans jamais citer de montant : le conseiller fait toujours la proposition personnalisée.</span></label>
+            <input id="tariff-url" class="input" type="url" maxlength="300" placeholder="https://…">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label for="privacy-url" style="font-size: 12px; color: var(--muted);">Lien vers votre politique de confidentialité (facultatif)<button class="tip"></button><span class="tip-bubble" hidden>Avec ce lien, la première réponse de Bob à chaque nouveau client se termine, une seule fois, par : « Vos informations sont traitées par [votre cabinet] pour répondre à votre demande. En savoir plus : [lien] ».</span></label>
+            <input id="privacy-url" class="input" type="url" maxlength="300" placeholder="https://…">
           </div>
           <div id="insurance-profile-preview" style="font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;"></div>
           <button class="action" onclick="saveInsuranceProfile()">Enregistrer</button>
@@ -2930,7 +2948,10 @@ async function openCustomer(id) {
           <div style="font-size: 18px; font-weight: 700;">${esc(c.display_name)}</div>
           <div style="color: var(--muted); font-size: 13px;">${esc(c.whatsapp_number)}${c.city ? " · " + esc(c.city) : ""}${c.email ? " · " + esc(c.email) : ""}</div>
         </div>
-        <span class="badge ${CUSTOMER_STATUS_BADGE[c.commercial_status]}" style="font-size: 13px;">${CUSTOMER_STATUS_LABELS[c.commercial_status]}</span>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <span class="badge ${CUSTOMER_STATUS_BADGE[c.commercial_status]}" style="font-size: 13px;">${CUSTOMER_STATUS_LABELS[c.commercial_status]}</span>
+          ${currentBusinessType === "INSURANCE_BROKER" ? `<button class="action secondary" onclick="openCustomerDossier('${esc(c.id)}')">Dossier du client</button>` : ""}
+        </div>
       </div>
     </div>
 
@@ -4434,6 +4455,13 @@ async function loadInsuranceProfile() {
   document.getElementById("insurer-name").value = p.insurer_name || "";
   document.getElementById("insurance-license").value = p.insurance_license || "";
   document.getElementById("complaints-contact").value = p.complaints_contact || "";
+  // Lot 58 (CIMA 01-24, art. 7, 11, 12)
+  document.getElementById("insurer-legal-name").value = p.insurer_legal_name || "";
+  document.getElementById("insurer-address").value = p.insurer_address || "";
+  document.getElementById("insurance-partners").value = (p.insurance_partners || [])
+    .map((x) => x.name + (x.address ? " — " + x.address : "")).join("\n");
+  document.getElementById("tariff-url").value = p.tariff_url || "";
+  document.getElementById("privacy-url").value = p.privacy_policy_url || "";
   document.getElementById("insurance-profile-msg").textContent = "";
   insuranceStructureChanged();
 }
@@ -4442,6 +4470,7 @@ function insuranceStructureChanged() {
   const chosen = (document.querySelector('input[name="insurance-structure"]:checked') || {}).value;
   // Un cabinet de courtage travaille avec plusieurs compagnies : pas de compagnie mandante.
   document.getElementById("insurer-name-row").classList.toggle("hidden", chosen === "COURTIER");
+  document.getElementById("insurance-partners-row").classList.toggle("hidden", chosen !== "COURTIER");  // lot 58
   document.getElementById("insurance-profile-preview").innerHTML = insuranceProfile && insuranceProfile.insurance_structure
     ? `<div style="font-size: 11px; color: var(--muted); margin-bottom: 4px;">Comment Bob se présente</div>« ${esc(insuranceProfile.preview)} »`
     : `<span style="color: var(--muted);">Choisissez votre statut : en attendant, Bob se présente comme « intermédiaire en assurance ».</span>`;
@@ -4459,6 +4488,11 @@ async function saveInsuranceProfile() {
         insurer_name: document.getElementById("insurer-name").value.trim() || null,
         insurance_license: document.getElementById("insurance-license").value.trim() || null,
         complaints_contact: document.getElementById("complaints-contact").value.trim() || null,
+        insurer_legal_name: document.getElementById("insurer-legal-name").value.trim() || null,
+        insurer_address: document.getElementById("insurer-address").value.trim() || null,
+        insurance_partners: parsePartners(document.getElementById("insurance-partners").value),
+        tariff_url: document.getElementById("tariff-url").value.trim() || null,
+        privacy_policy_url: document.getElementById("privacy-url").value.trim() || null,
       }),
     });
     msg.style.color = "var(--success)";
@@ -4467,6 +4501,45 @@ async function saveInsuranceProfile() {
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
+  }
+}
+
+// Lot 58 — « Raison sociale — adresse », une compagnie par ligne (tiret long, tiret ou point-virgule).
+function parsePartners(text) {
+  return String(text || "").split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+    const cut = line.split(/\s+[—–-]\s+|\s*;\s*/);
+    return { name: cut[0].trim(), address: cut.slice(1).join(", ").trim() || null };
+  }).filter((x) => x.name);
+}
+
+// Lot 58 — téléchargement d'un export (le jeton ne passe jamais dans l'adresse).
+async function downloadExport(path, filename) {
+  try {
+    const r = await fetch(API_BASE + path, { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Export impossible pour le moment.");
+    const url = URL.createObjectURL(await r.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// Lot 58 — « Dossier du client » : page imprimable ouverte dans un nouvel onglet.
+async function openCustomerDossier(id) {
+  const tab = window.open("", "_blank");
+  try {
+    const r = await fetch(API_BASE + `/api/v1/customers/${encodeURIComponent(id)}/dossier`, { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Dossier indisponible pour le moment.");
+    const url = URL.createObjectURL(new Blob([await r.text()], { type: "text/html" }));
+    if (tab) tab.location.href = url; else window.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    if (tab) tab.close();
+    toast(e.message, "error");
   }
 }
 

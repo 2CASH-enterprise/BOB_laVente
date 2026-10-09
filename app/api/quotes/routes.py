@@ -61,6 +61,22 @@ def _out(request: QuoteRequest, customer: Customer | None, prospect: dict | None
     }
 
 
+@router.get("/export.csv", dependencies=[Depends(require_role("AGENT"))])
+async def export_quote_requests(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Lot 58 (CIMA, art. 5) : toutes les demandes et leurs étapes horodatées."""
+    from fastapi.responses import Response
+
+    from app.models.tenant import Tenant
+    from app.services.insurance_exports import quotes_csv
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    content = await quotes_csv(db, tenant)
+    await log_audit_event(db, actor=str(current_user.user_id), action="QUOTE_REQUESTS_EXPORTED", tenant_id=tenant.id, details={})
+    await db.commit()
+    return Response(content, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="demandes_de_cotation.csv"'})
+
+
 @router.get("")
 async def list_quote_requests(
     view: str = Query("todo"),

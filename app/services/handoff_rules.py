@@ -260,6 +260,7 @@ def _insurance_rule(intents: set, objections: set) -> TurnDecision | None:
                 "Le client parle de remise ou de prix. Ne donne et ne promets AUCUN montant ni aucune remise : "
                 "explique que le conseiller lui fera la proposition la mieux adaptée à sa situation, sans engagement, "
                 "et propose-lui un appel ou un rendez-vous au cabinet (get_available_slots, puis request_appointment). "
+                "Si les INFORMATIONS DU CABINET donnent un lien vers les conditions tarifaires, donne-le tel quel. "
                 "S'il insiste pour avoir une réponse maintenant, utilise handoff_to_human."
             ),
         )
