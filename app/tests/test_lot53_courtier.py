@@ -408,7 +408,7 @@ async def test_quote_requests_api(client, db_session):
     todo = (await client.get("/api/v1/quote-requests", headers=headers)).json()
     assert [q["id"] for q in todo] == [str(sent["request"].id)]
     assert todo[0]["branch_label"] == "Assurance scolaire" and todo[0]["lines"] == ["Nombre d'enfants : 2"]
-    assert todo[0]["status_label"] == "Nouvelle" and todo[0]["conversation_id"] == str(conversation.id)
+    assert todo[0]["status_label"] == "Reçue" and todo[0]["conversation_id"] == str(conversation.id)
     drafts = (await client.get("/api/v1/quote-requests?view=draft", headers=headers)).json()
     assert [q["id"] for q in drafts] == [str(draft["request"].id)]
     assert (await client.get("/api/v1/quote-requests?view=x", headers=headers)).status_code == 422
@@ -565,11 +565,11 @@ def test_dashboard_sector_switches():
 def test_quote_page_escapes_everything():
     body = _function("loadQuotes")
     for piece in ("${esc(q.customer)}", "${esc(q.branch_label)}", "${esc(l)}", "${esc(q.status_label)}",
-                  "jumpToCustomerConversation('${esc(q.conversation_id)}')", "handleQuote('${esc(q.id)}')", "${esc(e.message)}"):
+                  "jumpToCustomerConversation('${esc(q.conversation_id)}')", "advanceQuote('${esc(q.id)}', '${esc(s)}')", "${esc(e.message)}"):
         assert piece in body, piece
     assert 'if (item.kind === "QUOTE") return `showTab(\'quotes\')`;' in HTML
     assert 'if (name === "quotes") loadQuotes(currentQuoteView);' in HTML
-    assert '"orders", "appointments", "quotes", "integrations"' in _function("showTab")  # la page s'affiche vraiment
+    assert '"orders", "appointments", "quotes", "contracts", "integrations"' in _function("showTab")  # la page s'affiche vraiment
 
 
 def test_outcome_words_of_the_cabinet():

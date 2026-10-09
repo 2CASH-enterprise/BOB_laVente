@@ -648,7 +648,7 @@ def test_dashboard_home_of_the_cabinet():
     assert '"De la première question au contrat"' in render and '"Jour avec cotation ou rendez-vous"' in render
     row = _function("insuranceHomeRow")
     for piece in ("${esc(initials(e.customer))}", "${esc(e.customer)}", "openCustomer('${esc(e.customer_id)}')",
-                  "Échéances de vos prospects", "15 jours pour un contrat mensuel, 45 pour un trimestriel, 60 sinon"):
+                  "Échéances à venir", "15 jours pour un contrat mensuel, 45 pour un trimestriel, 60 sinon"):
         assert piece in row, piece
     assert 'shield: "M12 3 4 6v6' in HTML
 

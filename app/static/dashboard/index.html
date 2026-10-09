@@ -333,6 +333,27 @@
   button.pill { cursor: pointer; }
   /* Lot 25 — rendez-vous */
   .appt-views { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  /* Lot 55 — page « Contrats » */
+  .contracts-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .contracts-stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); min-width: 0; }
+  .contracts-stat-value { font-size: 22px; font-weight: 800; color: var(--text); }
+  .tone-text-danger { color: var(--danger) !important; }
+  .contracts-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .contracts-toolbar #contract-search { flex: 1 1 260px; min-width: 0; }
+  .contracts-toolbar #contract-branch { flex: 0 1 220px; min-width: 0; }
+  .contracts-setting { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 4px 0 0; }
+  .contracts-setting input { margin-top: 3px; }
+  .contract-card.contract-due { border-left: 4px solid var(--warning); }
+  .contract-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+  .contract-who { min-width: 0; overflow-wrap: anywhere; }
+  .contract-facts { font-size: 13px; color: var(--muted); margin: 8px 0 0; overflow-wrap: anywhere; }
+  .contract-note { font-size: 13px; margin: 8px 0 0; overflow-wrap: anywhere; }
+  .contract-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  @media (max-width: 600px) {
+    .contracts-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .contracts-toolbar > * { flex: 1 1 100%; }
+  }
   .appt-views button { background: var(--panel); border: 1px solid var(--border); color: var(--text); }
   .appt-views button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-light); }
   .appt-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
@@ -468,6 +489,8 @@
   .bob-dialog .bob-dialog-text { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.55; white-space: pre-line; }
   .bob-dialog .bob-field { margin-bottom: 12px; }
   .bob-dialog .bob-field > label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .bob-dialog .bob-field-hint { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+  .bob-dialog select.input { width: 100%; }
   .bob-dialog .bob-check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; margin-bottom: 12px; }
   .bob-dialog .bob-check input { margin-top: 3px; }
   .bob-dialog-error { color: var(--danger); font-size: 13px; margin: -4px 0 10px; }
@@ -628,6 +651,7 @@
       <button data-tab="orders" data-label="Commandes" class="store-only" onclick="showTab('orders')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4"/></svg></span>Commandes</button>
       <button data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden" onclick="showTab('appointments')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3v3H8z"/></svg></span>Rendez-vous</button>
       <button data-tab="quotes" data-label="Demandes de cotation" id="nav-quotes" class="insurance-only" onclick="showTab('quotes')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6zM9 12l2 2 4-4"/></svg></span>Demandes de cotation</button>
+      <button data-tab="contracts" data-label="Contrats" id="nav-contracts" class="insurance-only" onclick="showTab('contracts')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg></span>Contrats</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg></span>Intégrations</button>
       <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8"/></svg></span>Base de connaissances</button>
       <button data-tab="bob" data-label="Réglages de Bob" onclick="showTab('bob')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M5 9h14a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a1 1 0 0 1 1-1zM9 14h.01M15 14h.01M2 13v3M22 13v3"/></svg></span>Réglages de Bob</button>
@@ -777,13 +801,57 @@
     </section>
 
     <section id="tab-quotes" class="hidden">
-      <template class="page-tip-src">Les demandes de cotation préparées par Bob : il a réuni les informations utiles, sans jamais donner de prix, puis proposé au client un appel ou un rendez-vous. Cliquez « Prise en charge » quand vous vous en occupez.</template>
+      <template class="page-tip-src">Les demandes de cotation préparées par Bob : il a réuni les informations utiles, sans jamais donner de prix, puis proposé au client un appel ou un rendez-vous. Suivez chaque demande : prise en charge, proposition envoyée, puis souscrit ou perdu. Une demande souscrite peut être ajoutée au registre des contrats.</template>
       <div class="appt-views" role="group" aria-label="Demandes affichées">
         <button type="button" class="pill" data-quote-view="todo" aria-pressed="true" onclick="loadQuotes('todo')">À traiter</button>
-        <button type="button" class="pill" data-quote-view="handled" aria-pressed="false" onclick="loadQuotes('handled')">Prises en charge</button>
+        <button type="button" class="pill" data-quote-view="handled" aria-pressed="false" onclick="loadQuotes('handled')">En cotation</button>
+        <button type="button" class="pill" data-quote-view="proposal" aria-pressed="false" onclick="loadQuotes('proposal')">Proposition envoyée</button>
+        <button type="button" class="pill" data-quote-view="closed" aria-pressed="false" onclick="loadQuotes('closed')">Terminées</button>
         <button type="button" class="pill" data-quote-view="draft" aria-pressed="false" onclick="loadQuotes('draft')">En cours avec Bob</button>
       </div>
       <div id="quote-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
+    </section>
+
+    <section id="tab-contracts" class="hidden">
+      <template class="page-tip-src">Le registre de vos contrats. 45 jours avant une échéance (15 pour un contrat mensuel), le contrat passe « à traiter » et vous recevez un récapitulatif par email. 30 jours avant (7 pour un mensuel), Bob rappelle le client une seule fois : sur WhatsApp s'il vous a écrit dans les 20 dernières heures, sinon par email, sinon le contrat est noté « à appeler ». Cliquez « Prise en charge » si vous vous en occupez : Bob ne le rappellera pas. Bob ne voit jamais la prime ni le numéro du contrat.</template>
+      <div class="contracts-stats" id="contracts-stats"></div>
+      <div class="appt-views" role="group" aria-label="Contrats affichés">
+        <button type="button" class="pill" data-contract-view="todo" aria-pressed="true" onclick="loadContracts('todo')">À traiter</button>
+        <button type="button" class="pill" data-contract-view="due30" aria-pressed="false" onclick="loadContracts('due30')">Sous 30 jours</button>
+        <button type="button" class="pill" data-contract-view="due60" aria-pressed="false" onclick="loadContracts('due60')">Sous 60 jours</button>
+        <button type="button" class="pill" data-contract-view="due90" aria-pressed="false" onclick="loadContracts('due90')">Sous 90 jours</button>
+        <button type="button" class="pill" data-contract-view="all" aria-pressed="false" onclick="loadContracts('all')">Tous en cours</button>
+        <button type="button" class="pill" data-contract-view="closed" aria-pressed="false" onclick="loadContracts('closed')">Terminés</button>
+      </div>
+      <div class="contracts-toolbar">
+        <input id="contract-search" class="input" type="search" placeholder="Rechercher : client, assureur, n° de contrat, téléphone" aria-label="Rechercher un contrat" oninput="searchContracts()">
+        <select id="contract-branch" class="input" aria-label="Branche" onchange="loadContracts(currentContractView)"><option value="">Toutes les branches</option></select>
+        <button class="action" onclick="openContractDialog()">Ajouter un contrat</button>
+      </div>
+      <details class="card" id="contracts-import-card" style="margin-bottom: 16px;">
+        <summary style="cursor: pointer; font-weight: 600;">Importer votre registre (CSV)</summary>
+        <div style="margin-top: 12px;">
+          <p style="font-size: 13px; color: var(--muted); margin: 0 0 10px;">Une ligne par contrat. Colonnes obligatoires : téléphone, branche, échéance. Facultatives : prénom, nom, email, assureur, numéro, prime, devise, date d'effet, durée. Dates au format JJ/MM/AAAA. Un numéro de contrat déjà présent met la ligne à jour.</p>
+          <label class="file-drop" id="contracts-drop">
+            <span class="file-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
+            <span class="file-text">
+              <span class="file-title" id="contracts-file-name">Choisir un fichier CSV</span>
+              <span class="file-hint" id="contracts-file-hint">ou glissez-le ici · fichier .csv</span>
+            </span>
+            <input type="file" id="contracts-file-input" accept=".csv,text/csv" aria-label="Choisir un fichier CSV de contrats" onchange="showChosenContractsCsv()">
+          </label>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="action" onclick="importContracts()">Importer</button>
+            <button class="action secondary" onclick="downloadContractTemplate()">Télécharger le modèle</button>
+          </div>
+          <div id="contracts-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+      </details>
+      <label class="contracts-setting">
+        <input type="checkbox" id="renewal-reminders" onchange="saveRenewalSetting()">
+        <span>Bob rappelle automatiquement le client avant l'échéance (un seul message, sans aucun montant)</span>
+      </label>
+      <div id="contract-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
     </section>
 
     <section id="tab-appointments" class="hidden">
@@ -1141,8 +1209,15 @@ function bobDialog({ title, message = "", confirmLabel = "Confirmer", cancelLabe
         const label = document.createElement("label");
         label.htmlFor = id;
         label.textContent = f.label;
-        input = document.createElement(f.type === "textarea" ? "textarea" : "input");
-        if (f.type !== "textarea") input.type = f.type || "text";
+        input = document.createElement(f.type === "textarea" ? "textarea" : f.type === "select" ? "select" : "input");
+        if (f.type === "select") {  // lot 55 : liste de choix [{ value, label }]
+          (f.options || []).forEach((o) => {
+            const opt = document.createElement("option");
+            opt.value = o.value;
+            opt.textContent = o.label;
+            input.appendChild(opt);
+          });
+        } else if (f.type !== "textarea") input.type = f.type || "text";
         else input.rows = f.rows || 3;
         input.className = "input";
         input.value = f.value == null ? "" : f.value;
@@ -1150,6 +1225,12 @@ function bobDialog({ title, message = "", confirmLabel = "Confirmer", cancelLabe
         if (f.maxlength) input.maxLength = f.maxlength;
         if (f.readonly) input.readOnly = true;
         wrap.append(label, input);
+        if (f.hint) {  // lot 55 : précision sous le champ
+          const hint = document.createElement("span");
+          hint.className = "bob-field-hint";
+          hint.textContent = f.hint;
+          wrap.appendChild(hint);
+        }
         box.appendChild(wrap);
       }
       input.id = id;
@@ -1199,7 +1280,7 @@ function bobDialog({ title, message = "", confirmLabel = "Confirmer", cancelLabe
         e.preventDefault(); submit(); return;
       }
       if (e.key === "Tab") {  // le focus reste dans la fenêtre
-        const focusable = [...box.querySelectorAll("input, textarea, button")].filter((el) => !el.disabled);
+        const focusable = [...box.querySelectorAll("input, select, textarea, button")].filter((el) => !el.disabled);
         const first = focusable[0], last = focusable[focusable.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -1662,6 +1743,8 @@ async function resendMfa() {
 // Lien direct depuis un email d'alerte : …/dashboard/?conversation=<id>. Conservé jusqu'à la
 // connexion si nécessaire, puis retiré de l'adresse.
 let pendingConversationId = new URLSearchParams(window.location.search).get("conversation");
+// Lot 55 — lien direct vers une rubrique (…/dashboard/?tab=contracts, depuis le récapitulatif des échéances).
+let pendingTab = new URLSearchParams(window.location.search).get("tab");
 
 function enterApp() {
   AUTH_SCREENS.forEach((s) => document.getElementById(s).classList.add("hidden"));
@@ -1681,6 +1764,16 @@ function enterApp() {
       bobAlert("Conversation introuvable", "Cette conversation est introuvable dans ce compte. Vérifiez que vous êtes connecté au bon compte.");
       loadConversations();
     });
+    return;
+  }
+  if (pendingTab && document.getElementById("tab-" + pendingTab)) {
+    const tab = pendingTab;
+    pendingTab = null;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("tab");
+    const qs = params.toString();
+    history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    showTab(tab);
     return;
   }
   loadOverview();
@@ -2034,6 +2127,11 @@ async function setAppointmentOutcome(id, outcome) {
     msg.style.color = "var(--success)";
     msg.textContent = parts.join(" ");
     loadAppointments(currentAppointmentView);
+    // Lot 55 — courtier : le contrat souscrit rejoint le registre (échéance suivie, client rappelé au bon moment).
+    if (outcome === "SOLD" && currentBusinessType === "INSURANCE_BROKER" && r.appointment.customer_id
+        && await bobConfirm("Enregistrer le contrat ?", "Ajoutez-le au registre : vous serez prévenu de son échéance et Bob rappellera le client au bon moment.", { confirmLabel: "Ajouter au registre" })) {
+      openContractDialog(null, { customer_id: r.appointment.customer_id, customer: r.appointment.customer });
+    }
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
@@ -2087,7 +2185,7 @@ function showTab(name) {
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
-  ["overview", "conversations", "customers", "products", "orders", "appointments", "quotes", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
+  ["overview", "conversations", "customers", "products", "orders", "appointments", "quotes", "contracts", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
@@ -2100,6 +2198,7 @@ function showTab(name) {
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
+  if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "settings") loadMfaStatus();
 }
 
@@ -2186,6 +2285,7 @@ function deltaNote(delta, unit, fallback) {
 function todoAction(item) {
   if (item.kind === "ORDER") return `showTab('orders')`;
   if (item.kind === "QUOTE") return `showTab('quotes')`;  // lot 53
+  if (item.kind === "RENEWAL") return `currentContractView = 'todo'; showTab('contracts')`;  // lot 55
   if (item.kind === "APPOINTMENT") return `showTab('appointments')`;
   if (item.kind === "OUTCOME") return `showTab('appointments'); loadAppointments('closed')`;
   return `jumpToCustomerConversation('${esc(item.conversation_id)}')`;
@@ -2251,7 +2351,7 @@ function renderHome(h) {
           <div class="todo-top"><span class="todo-name">${esc(t.customer)}</span><span class="tag tone-${esc(t.tone)}">${esc(t.reason)}</span></div>
           <span class="todo-detail">${esc(t.detail || "")}</span>
         </div>
-        <span class="todo-since">depuis ${elapsed(t.since)}</span>
+        <span class="todo-since">${t.kind === "RENEWAL" ? new Date(t.since).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : "depuis " + elapsed(t.since)}</span>
         <button class="action" onclick="${todoAction(t)}">${esc(t.action)}</button>
       </div>`).join("")
       + (h.todo.length > shown.length ? `<p class="card-sub" style="margin-top: 10px;">Et ${h.todo.length - shown.length} autre${h.todo.length - shown.length > 1 ? "s" : ""} : voir les conversations et ${dealer ? "les rendez-vous" : "les commandes"}.</p>` : "")
@@ -2337,14 +2437,14 @@ function insuranceHomeRow(h) {
       <div class="todo-item">
         <div class="avatar" aria-hidden="true">${esc(initials(e.customer))}</div>
         <div class="todo-main">
-          <div class="todo-top"><span class="todo-name">${esc(e.customer)}</span>${expiryTag(e)}</div>
+          <div class="todo-top"><span class="todo-name">${esc(e.customer)}</span>${expiryTag(e)}${e.renewal ? ' <span class="tag tone-accent">Renouvellement</span>' : ""}</div>
           <span class="todo-detail">${esc([e.branches.join(", "), e.current_insurer, TERM_LABELS[e.term]].filter(Boolean).join(" · "))}</span>
         </div>
         <span class="todo-since">${new Date(e.expiry + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
-        <button class="action" onclick="showTab('customers'); openCustomer('${esc(e.customer_id)}')">Voir la fiche</button>
+        ${e.renewal ? `<button class="action" onclick="currentContractView = 'due60'; showTab('contracts')">Voir le contrat</button>` : `<button class="action" onclick="showTab('customers'); openCustomer('${esc(e.customer_id)}')">Voir la fiche</button>`}
       </div>`).join("")
       + (h.expiries_total > h.expiries.length ? `<p class="card-sub" style="margin-top: 10px;">Et ${h.expiries_total - h.expiries.length} autre${h.expiries_total - h.expiries.length > 1 ? "s" : ""} dans les 60 jours.</p>` : "")
-    : `<p class="empty-state">Aucune échéance connue dans les 60 prochains jours. Bob demande l'échéance et la durée du contrat actuel quand c'est naturel.</p>`;
+    : `<p class="empty-state">Aucune échéance connue dans les 60 prochains jours. Ajoutez vos contrats dans « Contrats » ; Bob demande aussi aux prospects l'échéance de leur contrat actuel.</p>`;
   const sc = h.prospect_scores || { CHAUD: 0, TIEDE: 0, FROID: 0, VENDU: 0 };
   const total = sc.CHAUD + sc.TIEDE + sc.FROID + sc.VENDU;
   const rows = [["CHAUD", "Chauds", "tone-danger"], ["TIEDE", "Tièdes", "tone-warning"], ["FROID", "Froids", "tone-info"], ["VENDU", "Souscrits", "tone-success"]]
@@ -2354,8 +2454,8 @@ function insuranceHomeRow(h) {
     </div>`).join("");
   return `<div class="home-row">
       <div class="card span-2" id="home-expiries">
-        <div class="card-head"><div><h2>Échéances de vos prospects <span class="count ${(h.expiries || []).some((e) => e.hot) ? "tone-danger" : "tone-info"}">${h.expiries_total || 0}</span></h2>
-          <p class="card-sub">Leur contrat actuel arrive à échéance : le bon moment pour les rappeler</p></div></div>
+        <div class="card-head"><div><h2>Échéances à venir <span class="count ${(h.expiries || []).some((e) => e.hot) ? "tone-danger" : "tone-info"}">${h.expiries_total || 0}</span></h2>
+          <p class="card-sub">Vos contrats à renouveler et les contrats actuels de vos prospects : le bon moment pour les rappeler</p></div></div>
         ${list}
       </div>
       <div class="card" id="home-scores">
@@ -3575,7 +3675,10 @@ async function loadQuotes(view) {
     box.innerHTML = `<p class="empty-state">${esc(e.message)}</p>`;
     return;
   }
-  const empty = { todo: "Aucune demande à traiter.", handled: "Aucune demande prise en charge.", draft: "Aucune demande en cours avec Bob." };
+  const empty = { todo: "Aucune demande à traiter.", handled: "Aucune demande en cotation.", proposal: "Aucune proposition en attente de réponse.",
+    closed: "Aucune demande terminée.", draft: "Aucune demande en cours avec Bob." };
+  window.quoteRows = {};
+  rows.forEach((q) => { window.quoteRows[q.id] = q; });
   box.innerHTML = rows.length ? rows.map((q) => `
     <div class="card">
       <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline;">
@@ -3587,7 +3690,7 @@ async function loadQuotes(view) {
       ${(q.trace || []).length ? `<p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">${q.trace.map(esc).join(" · ")}</p>` : (q.status === "DRAFT" ? `<p style="font-size: 11px; color: var(--muted); margin: 0 0 10px;">Pas encore transmise : Bob attend les informations utiles et l'accord du client.</p>` : "")}
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
         ${q.conversation_id ? `<button class="action secondary" onclick="jumpToCustomerConversation('${esc(q.conversation_id)}')">Voir la conversation</button>` : ""}
-        ${q.status === "SUBMITTED" ? `<button class="action" onclick="handleQuote('${esc(q.id)}')">Prise en charge</button>` : ""}
+        ${(q.next_statuses || []).map((s) => `<button class="action${s === "WON" || (s === "HANDLED" && q.status === "SUBMITTED") ? "" : " secondary"}" onclick="advanceQuote('${esc(q.id)}', '${esc(s)}')">${esc(s === "HANDLED" && q.status === "LOST" ? "Rouvrir" : QUOTE_STEP_LABELS[s])}</button>`).join("")}
       </div>
     </div>`).join("") : `<p class="empty-state">${empty[currentQuoteView]}</p>`;
 }
@@ -3601,6 +3704,328 @@ async function handleQuote(id) {
   }
   loadQuotes(currentQuoteView);
   scheduleTaskCounts();
+}
+
+// ---- Lot 55 : registre des contrats et échéances (courtier) ----
+var currentContractView = "todo";
+var contractMeta = { branches: [], terms: [], statuses: [], premium_visible: false, currency: "XOF" };
+var contractRows = {};
+var contractSearchTimer = null;
+
+function searchContracts() {
+  clearTimeout(contractSearchTimer);
+  contractSearchTimer = setTimeout(() => loadContracts(currentContractView), 300);
+}
+
+async function loadContracts(view) {
+  currentContractView = view || currentContractView || "todo";
+  document.querySelectorAll("[data-contract-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.contractView === currentContractView)));
+  initContractsDrop();
+  const box = document.getElementById("contract-list");
+  box.innerHTML = '<p class="loading-text">Chargement des contrats</p>';
+  const params = new URLSearchParams({ view: currentContractView });
+  const branch = document.getElementById("contract-branch").value;
+  const q = document.getElementById("contract-search").value.trim();
+  if (branch) params.set("branch", branch);
+  if (q) params.set("q", q);
+  let data;
+  try { data = await api("/api/v1/contracts?" + params.toString()); } catch (e) {
+    box.innerHTML = `<p class="empty-state">${esc(e.message)}</p>`;
+    return;
+  }
+  contractMeta = data;
+  const select = document.getElementById("contract-branch");
+  if (select.options.length <= 1) {
+    data.branches.forEach((b) => { const o = document.createElement("option"); o.value = b.value; o.textContent = b.label; select.appendChild(o); });
+  }
+  document.getElementById("renewal-reminders").checked = !!data.renewal_reminders_enabled;
+  renderContractStats(data.summary);
+  renderContracts(data);
+}
+
+function renderContractStats(s) {
+  const stat = (label, value, tone) => `<div class="contracts-stat"><span class="contracts-stat-value ${tone}">${value}</span><span>${label}</span></div>`;
+  document.getElementById("contracts-stats").innerHTML =
+    stat("à traiter", s.todo, s.todo ? "tone-text-danger" : "") + stat("échéances sous 30 jours", s.due30, "") +
+    stat("sous 60 jours", s.due60, "") + stat("contrats en cours", s.active, "");
+}
+
+function contractWhenTag(c) {
+  if (c.status !== "ACTIVE") return `<span class="tag tone-info">${esc(c.status_label)}</span>`;
+  const tone = c.days_left < 0 ? "tone-danger" : c.alert ? (c.days_left <= 15 ? "tone-danger" : "tone-warning") : "tone-info";
+  return `<span class="tag ${tone}">${esc(c.when_label.charAt(0).toUpperCase() + c.when_label.slice(1))}</span>`;
+}
+
+function renderContracts(data) {
+  const box = document.getElementById("contract-list");
+  contractRows = {};
+  const empty = {
+    todo: "Aucune échéance à traiter. Les contrats apparaissent ici 45 jours avant leur échéance.",
+    due30: "Aucune échéance dans les 30 prochains jours.", due60: "Aucune échéance dans les 60 prochains jours.",
+    due90: "Aucune échéance dans les 90 prochains jours.",
+    all: "Aucun contrat pour l'instant. Ajoutez-en un, ou importez votre registre en CSV.", closed: "Aucun contrat terminé.",
+  };
+  if (!data.contracts.length) { box.innerHTML = `<p class="empty-state">${empty[currentContractView]}</p>`; return; }
+  box.innerHTML = data.contracts.map((c) => {
+    contractRows[c.id] = c;
+    const money = data.premium_visible && c.premium != null
+      ? `Prime : ${Number(c.premium).toLocaleString("fr-FR")} ${esc(c.currency || "")}` : "";
+    const facts = [c.policy_number ? "N° " + c.policy_number : "", c.term_label ? "Contrat " + c.term_label.toLowerCase() : "",
+      "Échéance le " + new Date(c.expires_on + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })]
+      .filter(Boolean).map(esc).join(" · ") + (money ? " · " + money : "");
+    const active = c.status === "ACTIVE";
+    return `
+    <div class="card contract-card${c.to_handle ? " contract-due" : ""}">
+      <div class="contract-head">
+        <div class="contract-who"><strong>${esc(c.customer)}</strong> · ${esc(c.branch_label)}${c.insurer ? ` <span class="pill tone-info">${esc(c.insurer || "")}</span>` : ""}</div>
+        ${contractWhenTag(c)}
+      </div>
+      <p class="contract-facts">${facts}</p>
+      ${active && c.reminder ? `<p class="contract-note ${c.reminder_channel === "CALL" ? "tone-text-danger" : ""}">${esc(c.reminder)}</p>` : ""}
+      ${active && !c.reminder && c.alert && !c.renewal_handled_at ? `<p class="contract-note">Bob rappellera le client le ${esc(new Date(c.reminder_on + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "long" }))} si vous ne le prenez pas en charge.</p>` : ""}
+      ${active && c.renewal_handled_at ? `<p class="contract-note">Prise en charge le ${new Date(c.renewal_handled_at).toLocaleDateString("fr-FR")} : Bob ne rappellera pas le client.</p>` : ""}
+      ${c.note ? `<p class="contract-note">Note : ${esc(c.note)}</p>` : ""}
+      <div class="contract-actions">
+        ${active && c.to_handle ? `<button class="action" onclick="handleContract('${esc(c.id)}')">Prise en charge</button>` : ""}
+        ${active ? `<button class="action secondary" onclick="renewContract('${esc(c.id)}')">Renouveler</button>` : ""}
+        <button class="action secondary" onclick="openContractDialog('${esc(c.id)}')">Modifier</button>
+        ${active ? `<button class="action secondary" onclick="setContractStatus('${esc(c.id)}')">Changer le statut</button>` : ""}
+        ${c.conversation_id ? `<button class="action secondary" onclick="jumpToCustomerConversation('${esc(c.conversation_id)}')">Voir la conversation</button>` : ""}
+      </div>
+    </div>`;
+  }).join("") + (data.contracts.length >= data.limit ? `<p class="card-sub">Seuls les ${data.limit} premiers contrats sont affichés : affinez la recherche.</p>` : "");
+}
+
+async function ensureContractMeta() {
+  if (contractMeta.branches.length) return;
+  contractMeta = await api("/api/v1/contracts?view=closed");
+}
+
+async function openContractDialog(id, prefill) {
+  try { await ensureContractMeta(); } catch (e) { toast(e.message, "error"); return; }
+  const c = id ? contractRows[id] : null;
+  const p = prefill || {};
+  const fields = [];
+  if (!c && !p.customer_id) {
+    fields.push({ name: "phone", label: "Téléphone WhatsApp du client", type: "tel", placeholder: "+225 07 00 00 00 00", hint: "Le client est retrouvé par son numéro, ou créé." },
+      { name: "first_name", label: "Prénom", maxlength: 255 }, { name: "last_name", label: "Nom", maxlength: 255 },
+      { name: "email", label: "Email (facultatif)", type: "email", maxlength: 255, hint: "Pour le rappel d'échéance si le client ne vous a pas écrit sur WhatsApp." });
+  }
+  fields.push(
+    { name: "branch", label: "Branche", type: "select", options: contractMeta.branches, value: c ? c.branch : (p.branch || "AUTO") },
+    { name: "insurer", label: "Assureur", maxlength: 150, value: c ? c.insurer : "" },
+    { name: "policy_number", label: "Numéro de contrat", maxlength: 64, value: c ? c.policy_number : "" },
+    { name: "effective_on", label: "Date d'effet", type: "date", value: c ? c.effective_on : "" },
+    { name: "expires_on", label: "Échéance", type: "date", value: c ? c.expires_on : "" },
+    { name: "term", label: "Durée", type: "select", options: [{ value: "", label: "Non précisée" }, ...contractMeta.terms], value: c ? (c.term || "") : "ANNUEL" },
+  );
+  if (contractMeta.premium_visible) {
+    fields.push({ name: "premium", label: `Prime (${contractMeta.currency || ""})`, value: c && c.premium != null ? String(c.premium) : "",
+      hint: "Visible des administrateurs seulement. Bob ne la voit jamais." });
+  }
+  fields.push({ name: "note", label: "Note interne (facultatif)", type: "textarea", rows: 2, maxlength: 500, value: c ? c.note : "" });
+  const answer = await bobDialog({
+    title: c ? "Modifier le contrat" : "Ajouter un contrat",
+    message: c ? c.customer : (p.customer ? p.customer : ""),
+    confirmLabel: c ? "Enregistrer" : "Ajouter", fields,
+    validate: (v) => (!c && !p.customer_id && !v.phone.trim()) ? "Indiquez le téléphone du client." : (!v.expires_on ? "Indiquez la date d'échéance." : null),
+  });
+  if (answer === null) return;
+  await saveContract(c ? c.id : null, Object.assign({}, answer, p.customer_id ? { customer_id: p.customer_id } : {},
+    p.quote_request_id ? { quote_request_id: p.quote_request_id } : {}));
+}
+
+async function saveContract(id, values) {
+  const body = {};
+  Object.entries(values).forEach(([k, v]) => { body[k] = typeof v === "string" ? v.trim() : v; });
+  try {
+    await api(id ? `/api/v1/contracts/${id}` : "/api/v1/contracts", {
+      method: id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    toast(id ? "Contrat enregistré." : "Contrat ajouté au registre.");
+  } catch (e) {
+    toast(e.message, "error");
+    return;
+  }
+  if (!document.getElementById("tab-contracts").classList.contains("hidden")) loadContracts(currentContractView);
+}
+
+async function renewContract(id) {
+  const c = contractRows[id];
+  if (!c) return;
+  const fields = [
+    { name: "expires_on", label: "Nouvelle échéance", type: "date", value: "",
+      hint: c.term ? "Laissez vide : elle sera calculée selon la durée du contrat." : "Obligatoire : la durée du contrat n'est pas connue." },
+    { name: "insurer", label: "Assureur", maxlength: 150, value: c.insurer || "" },
+    { name: "policy_number", label: "Numéro de contrat", maxlength: 64, value: c.policy_number || "" },
+  ];
+  if (contractMeta.premium_visible) fields.push({ name: "premium", label: `Nouvelle prime (${contractMeta.currency || ""})`, value: c.premium != null ? String(c.premium) : "" });
+  const answer = await bobDialog({
+    title: "Renouveler ce contrat ?", confirmLabel: "Renouveler", fields,
+    message: `${c.customer} · ${c.branch_label}. Le contrat actuel passe « Renouvelé » et le nouveau prend la suite à son échéance.`,
+    validate: (v) => (!c.term && !v.expires_on) ? "Indiquez la nouvelle échéance." : null,
+  });
+  if (answer === null) return;
+  const body = {};
+  Object.entries(answer).forEach(([k, v]) => { if (k !== "expires_on" || v) body[k] = v.trim(); });
+  try {
+    await api(`/api/v1/contracts/${id}/renew`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast("Contrat renouvelé.");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  loadContracts(currentContractView);
+}
+
+async function handleContract(id) {
+  try {
+    await api(`/api/v1/contracts/${id}/handle`, { method: "POST" });
+    toast("Échéance prise en charge : Bob ne rappellera pas ce client.");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  loadContracts(currentContractView);
+}
+
+async function setContractStatus(id) {
+  const c = contractRows[id];
+  if (!c) return;
+  const answer = await bobDialog({
+    title: "Changer le statut", message: `${c.customer} · ${c.branch_label}. Pour un renouvellement, utilisez « Renouveler ».`,
+    confirmLabel: "Enregistrer", fields: [{ name: "status", label: "Statut", type: "select", options: contractMeta.statuses, value: c.status }],
+  });
+  if (answer === null || answer.status === c.status) return;
+  try {
+    await api(`/api/v1/contracts/${id}/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: answer.status }) });
+    toast("Statut enregistré.");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  loadContracts(currentContractView);
+}
+
+async function saveRenewalSetting() {
+  const box = document.getElementById("renewal-reminders");
+  try {
+    await api("/api/v1/contracts/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ renewal_reminders_enabled: box.checked }) });
+    toast(box.checked ? "Bob rappellera les clients avant l'échéance." : "Bob ne rappellera plus les clients : vous restez prévenu des échéances.");
+  } catch (e) {
+    box.checked = !box.checked;
+    toast(e.message.startsWith("Rôle insuffisant") ? "Seul un administrateur peut changer ce réglage." : e.message, "error");
+  }
+}
+
+function showChosenContractsCsv() {
+  const file = document.getElementById("contracts-file-input").files[0];
+  document.getElementById("contracts-drop").classList.toggle("has-file", !!file);
+  document.getElementById("contracts-file-name").textContent = file ? file.name : "Choisir un fichier CSV";
+  document.getElementById("contracts-file-hint").textContent = file
+    ? `${file.size < 1024 ? file.size + " o" : Math.max(1, Math.round(file.size / 1024)) + " Ko"} · cliquez pour en choisir un autre`
+    : "ou glissez-le ici · fichier .csv";
+  document.getElementById("contracts-import-msg").textContent = "";
+}
+
+function initContractsDrop() {
+  const zone = document.getElementById("contracts-drop");
+  if (!zone || zone.dataset.ready) return;
+  zone.dataset.ready = "1";
+  ["dragenter", "dragover"].forEach((type) => zone.addEventListener(type, (e) => { e.preventDefault(); zone.classList.add("dragging"); }));
+  ["dragleave", "dragend"].forEach((type) => zone.addEventListener(type, () => zone.classList.remove("dragging")));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragging");
+    const file = e.dataTransfer && e.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.csv$/i.test(file.name)) {
+      const msg = document.getElementById("contracts-import-msg");
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Seuls les fichiers .csv peuvent être importés.";
+      return;
+    }
+    const data = new DataTransfer();
+    data.items.add(file);
+    document.getElementById("contracts-file-input").files = data.files;
+    showChosenContractsCsv();
+  });
+}
+
+async function importContracts() {
+  const msg = document.getElementById("contracts-import-msg");
+  const input = document.getElementById("contracts-file-input");
+  msg.textContent = "";
+  if (!input.files.length) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Choisissez un fichier CSV d'abord.";
+    return;
+  }
+  const form = new FormData();
+  form.append("file", input.files[0]);
+  try {
+    const r = await api("/api/v1/contracts/import-csv", { method: "POST", body: form });
+    input.value = "";
+    showChosenContractsCsv();
+    const parts = [`${r.created} contrat${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}`, `${r.updated} mis à jour`];
+    if (r.skipped) parts.push(`${r.skipped} déjà présent${r.skipped > 1 ? "s" : ""}`);
+    if (r.customers_created) parts.push(`${r.customers_created} nouveau${r.customers_created > 1 ? "x" : ""} client${r.customers_created > 1 ? "s" : ""}`);
+    let text = parts.join(", ") + ".";
+    if (r.premium_ignored) text += " Les primes n'ont pas été importées : seul un administrateur peut les saisir.";
+    if (r.ignored_columns.length) text += " Colonnes ignorées : " + r.ignored_columns.join(", ") + ".";
+    msg.style.color = r.errors.length ? "var(--warning)" : "var(--success)";
+    msg.innerHTML = esc(text) + (r.errors.length ? `<ul style="margin: 6px 0 0; padding-left: 18px;">${r.errors.map((e) => `<li>Ligne ${e.line} : ${esc(e.message)}</li>`).join("")}</ul>` : "");
+    loadContracts(currentContractView);
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function downloadContractTemplate() {
+  try {
+    const r = await fetch(API_BASE + "/api/v1/contracts/template.csv", { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error("Téléchargement impossible pour le moment.");
+    const url = URL.createObjectURL(await r.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "modele_contrats.csv";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// Lot 55 — suivi des demandes de cotation : en cotation → proposition envoyée → souscrit / perdu.
+const QUOTE_STEP_LABELS = { HANDLED: "Prise en charge", PROPOSAL_SENT: "Proposition envoyée", WON: "Souscrit", LOST: "Perdu" };
+
+async function advanceQuote(id, status) {
+  const q = (window.quoteRows || {})[id];
+  let body = { status };
+  if (status === "LOST") {
+    const answer = await bobDialog({
+      title: "Demande perdue", confirmLabel: "Enregistrer", danger: true,
+      fields: [{ name: "reason", label: "Pourquoi ? (quelques mots)", maxlength: 150, placeholder: "Trop cher, parti chez un concurrent…" }],
+      validate: (v) => v.reason.trim() ? null : "Indiquez en quelques mots pourquoi.",
+    });
+    if (answer === null) return;
+    body.lost_reason = answer.reason.trim();
+  }
+  if (status === "HANDLED" && q && q.status === "SUBMITTED") {
+    await handleQuote(id);
+    return;
+  }
+  let result;
+  try {
+    result = await api(`/api/v1/quote-requests/${id}/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast(`Demande : ${result.status_label}.`);
+  } catch (e) {
+    toast(e.message, "error");
+    loadQuotes(currentQuoteView);
+    return;
+  }
+  loadQuotes(currentQuoteView);
+  if (status === "WON" && await bobConfirm("Enregistrer le contrat ?", "Ajoutez-le au registre : vous serez prévenu de son échéance et Bob rappellera le client au bon moment.", { confirmLabel: "Ajouter au registre" })) {
+    openContractDialog(null, { customer_id: result.customer_id, quote_request_id: result.id, branch: result.branch, customer: result.customer });
+  }
 }
 
 async function createProduct() {
@@ -4447,6 +4872,7 @@ async function revokeAllSessions() {
 var TASK_NAV = {  // rubrique du menu → types de tâches
   overview: ["callbacks"], conversations: ["conversations"], orders: ["orders"], appointments: ["appointments", "outcomes"],
   quotes: ["quotes"],  // lot 53
+  contracts: ["renewals"],  // lot 55
 };
 // « var » : enterApp() peut s'exécuter au démarrage, avant que ce bloc soit lu.
 var taskTimer = null;

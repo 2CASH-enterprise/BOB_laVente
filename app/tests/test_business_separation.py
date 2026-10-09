@@ -94,18 +94,18 @@ async def test_admin_route_refuses_bad_values_and_tenant_tokens(client, db_sessi
 
 STORE_ONLY = [
     ("GET", "/api/v1/orders", None),
-    ("POST", "/api/v1/orders", {"customer_id": str(uuid.uuid4()), "items": []}),
+    ("POST", "/api/v1/orders", {"customer_id": "00000000-0000-4000-8000-000000000097", "items": []}),
     ("GET", "/api/v1/tenants/me/negotiation-settings", None),
     ("PUT", "/api/v1/tenants/me/negotiation-settings", {"enabled": True}),
     ("GET", "/api/v1/analytics/sales", None),
     ("POST", "/api/v1/analytics/sales/refresh", None),
-    ("GET", f"/api/v1/products/{uuid.uuid4()}/complements", None),
+    ("GET", "/api/v1/products/00000000-0000-4000-8000-000000000102/complements", None),
 ]
 DEALER_ONLY = [
     ("GET", "/api/v1/appointments", None),
     ("GET", "/api/v1/appointments/settings", None),
     ("PUT", "/api/v1/appointments/settings", {"online_booking": False, "opening_hours": {}}),
-    ("POST", f"/api/v1/appointments/{uuid.uuid4()}/cancel", {}),
+    ("POST", "/api/v1/appointments/00000000-0000-4000-8000-000000000108/cancel", {}),
 ]
 
 

@@ -51,6 +51,7 @@ class AppointmentOut(BaseModel):
     scheduled_label: str | None
     created_at: datetime
     customer: str
+    customer_id: UUID | None = None  # lot 55 : pour enregistrer le contrat souscrit
     conversation_id: UUID
     outcome: str | None = None  # lot 36
     outcome_label: str | None = None
@@ -112,6 +113,7 @@ async def _out(db: AsyncSession, appointment: AppointmentRequest, zone, now: dat
         scheduled_label=format_local(appointment.scheduled_at, zone) if appointment.scheduled_at else None,
         created_at=appointment.created_at,
         customer=customer_display_name(customer) if customer else "Client",
+        customer_id=appointment.customer_id,
         conversation_id=appointment.conversation_id,
         referred_by=referred_by,
         confirmed_by_bob=appointment.confirmed_by == "BOB",

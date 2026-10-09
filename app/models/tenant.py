@@ -3,6 +3,7 @@ from datetime import date, datetime
 from enum import StrEnum
 
 from sqlalchemy import Date, DateTime, Enum, Numeric, String, Text, Uuid, func
+from sqlalchemy import true as sa_true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -63,6 +64,10 @@ class Tenant(Base):
     insurer_name: Mapped[str | None] = mapped_column(String(150))
     insurance_license: Mapped[str | None] = mapped_column(String(80))
     complaints_contact: Mapped[str | None] = mapped_column(String(200))
+    # Lot 55 — échéances du registre des contrats : rappel automatique au client (réglable, actif par défaut),
+    # et jour du dernier récapitulatif des échéances envoyé au cabinet (un seul email par jour).
+    renewal_reminders_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
+    renewal_digest_on: Mapped[date | None] = mapped_column(Date)
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

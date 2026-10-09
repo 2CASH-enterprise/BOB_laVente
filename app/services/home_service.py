@@ -271,7 +271,34 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                 "detail": _short(detail), "hot": hot,
                 "since": _aware(q.submitted_at or q.created_at), "action": "Préparer la cotation",
             })
-    order_of_kind = {"CONVERSATION": 0, "QUOTE": 1, "APPOINTMENT": 2, "CALLBACK": 3, "OUTCOME": 4, "ORDER": 5}
+        # Lot 55 — échéances du registre des contrats, pas encore prises en charge par le cabinet.
+        from app.models.insurance_contract import InsuranceContract
+        from app.services import insurance_contracts
+
+        today = insurance_contracts.today_for(tenant, now)
+        for c in (await db.execute(select(InsuranceContract).where(
+            InsuranceContract.tenant_id == tenant_id, InsuranceContract.status == insurance_contracts.ACTIVE,
+            InsuranceContract.renewal_handled_at.is_(None),
+            InsuranceContract.expires_on >= today - timedelta(days=insurance_contracts.EXPIRED_GRACE_DAYS),
+            InsuranceContract.expires_on <= today + timedelta(days=insurance_contracts.ALERT_DAYS),
+        ))).scalars().all():
+            if not insurance_contracts.needs_attention(c, today):
+                continue
+            left = insurance_contracts.days_left(c, today)
+            detail = branch_label(c.branch) + (f" · {c.insurer}" if c.insurer else "")
+            if c.client_reminder_channel == "CALL":
+                detail += " · à appeler (pas de WhatsApp ni d'email)"
+            elif c.client_reminded_at is not None:
+                detail += f" · client rappelé par {insurance_contracts.CHANNEL_LABELS[c.client_reminder_channel]}"
+            todo.append({
+                "kind": "RENEWAL", "contract_id": str(c.id),
+                "customer": _name(customers.get(c.customer_id)) if customers.get(c.customer_id) else "Client",
+                "reason": insurance_contracts._when_label(left).capitalize(), "tone": "danger" if left <= 15 else "warning",
+                "detail": _short(detail), "hot": left <= 15,
+                "since": datetime.combine(c.expires_on, datetime.min.time(), tzinfo=timezone.utc),
+                "action": "Voir le contrat",
+            })
+    order_of_kind = {"CONVERSATION": 0, "QUOTE": 1, "RENEWAL": 2, "APPOINTMENT": 3, "CALLBACK": 4, "OUTCOME": 5, "ORDER": 6}
     todo.sort(key=lambda t: (order_of_kind[t["kind"]], not t.get("hot", False), t["since"]))
 
     # --- Entonnoir ---------------------------------------------------------------------------
@@ -474,7 +501,26 @@ async def _insurance_figures(db, tenant_id, since, prev_since, now, kpis: dict, 
     previous = sum(1 for submitted_at, _ in rows if prev_since <= _aware(submitted_at) < since)
     kpis = {**kpis, "quotes": {"value": current, "delta_pct": _delta_pct(current, previous),
                                "to_handle": sum(1 for _, status in rows if status == STATUS_SUBMITTED)}}
+    # Lot 55 — « Contrats souscrits » : issue du rendez-vous OU demande passée à « Souscrit » (un client compté
+    # une fois par période).
+    from app.models.appointment_request import OUTCOME_SOLD, AppointmentRequest
+    from app.services.insurance import STATUS_WON
+
+    sold_rows = (await db.execute(select(AppointmentRequest.customer_id, AppointmentRequest.outcome_at).where(
+        AppointmentRequest.tenant_id == tenant_id, AppointmentRequest.outcome == OUTCOME_SOLD,
+        AppointmentRequest.outcome_at.is_not(None)))).all()
+    won_rows = (await db.execute(select(QuoteRequest.customer_id, QuoteRequest.closed_at).where(
+        QuoteRequest.tenant_id == tenant_id, QuoteRequest.status == STATUS_WON, QuoteRequest.closed_at.is_not(None)))).all()
+
+    def sold_between(start, stop):
+        return len({customer for customer, at in [*sold_rows, *won_rows] if start <= _aware(at) < stop})
+
+    sold_now, sold_prev = sold_between(since, end), sold_between(prev_since, since)
+    if won_rows:
+        kpis = {**kpis, "sold": {"value": sold_now, "delta_pct": _delta_pct(sold_now, sold_prev)}}
     steps = {f["key"]: f for f in funnel}
+    if won_rows:
+        steps["sold"] = {**steps["sold"], "value": max(steps["sold"]["value"], sold_now)}
     funnel = [
         steps["conversations"],
         {"key": "quotes", "label": "Demandes de cotation", "value": current},
@@ -494,12 +540,17 @@ def _insurance_prospects(prospects: dict, customers: dict) -> dict:
     expiries = []
     for customer_id, p in prospects.items():
         counts[p["score"]] += 1
-        if p["expiry"] is not None and p["days_left"] <= EXPIRY_LIST_DAYS and p["outcome"] not in ("SOLD", "NOT_INTERESTED"):
+        # Lot 55 : une échéance du registre (renouvellement) est toujours montrée, même chez un client souscrit.
+        if p["expiry"] is not None and p["days_left"] <= EXPIRY_LIST_DAYS and (
+                p.get("renewal") or p["outcome"] not in ("SOLD", "NOT_INTERESTED")):
             expiries.append({
                 "customer": _name(customers.get(customer_id)) if customers.get(customer_id) else "Client",
-                "customer_id": str(customer_id), "branches": p["branches"], "expiry": p["expiry"].isoformat(),
+                "customer_id": str(customer_id),
+                "branches": [p["contract_branch"]] if p.get("renewal") else p["branches"],
+                "expiry": p["expiry"].isoformat(),
                 "days_left": p["days_left"], "term": p["term"], "hot": p["expiry_soon"],
-                "current_insurer": p["current_insurer"],
+                "current_insurer": p.get("contract_insurer") if p.get("renewal") else p["current_insurer"],
+                "renewal": bool(p.get("renewal")), "contract_id": p.get("contract_id"),
             })
     expiries.sort(key=lambda e: e["days_left"])
     return {"prospect_scores": counts, "expiries": expiries[:EXPIRY_LIST_LIMIT], "expiries_total": len(expiries)}

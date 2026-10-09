@@ -94,9 +94,24 @@ DEFAULT_PRODUCTS = [code for code in BRANCHES if code != "AUTRE"]  # liste compl
 SKU_PREFIX = "ASSUR-"
 
 STATUS_DRAFT = "DRAFT"           # Bob réunit encore les informations
-STATUS_SUBMITTED = "SUBMITTED"   # transmise au cabinet, à traiter
-STATUS_HANDLED = "HANDLED"       # prise en charge par le cabinet
-STATUS_LABELS = {STATUS_DRAFT: "En cours de qualification", STATUS_SUBMITTED: "Nouvelle", STATUS_HANDLED: "Prise en charge"}
+STATUS_SUBMITTED = "SUBMITTED"   # transmise au cabinet, à traiter (« reçue »)
+STATUS_HANDLED = "HANDLED"       # prise en charge par le cabinet (« en cotation »)
+# Lot 55 — suivi jusqu'au bout : proposition envoyée, puis souscrit ou perdu.
+STATUS_PROPOSAL = "PROPOSAL_SENT"
+STATUS_WON = "WON"
+STATUS_LOST = "LOST"
+STATUS_LABELS = {STATUS_DRAFT: "En cours de qualification", STATUS_SUBMITTED: "Reçue", STATUS_HANDLED: "En cotation",
+                 STATUS_PROPOSAL: "Proposition envoyée", STATUS_WON: "Souscrit", STATUS_LOST: "Perdu"}
+# Demandes transmises au cabinet et encore ouvertes (comptent comme « cotation transmise » dans le score).
+IN_PROGRESS = (STATUS_SUBMITTED, STATUS_HANDLED, STATUS_PROPOSAL)
+# Étapes permises depuis chaque statut (le cabinet avance à son rythme ; un dossier perdu peut être rouvert).
+TRANSITIONS = {
+    STATUS_SUBMITTED: (STATUS_HANDLED, STATUS_PROPOSAL, STATUS_WON, STATUS_LOST),
+    STATUS_HANDLED: (STATUS_PROPOSAL, STATUS_WON, STATUS_LOST),
+    STATUS_PROPOSAL: (STATUS_WON, STATUS_LOST),
+    STATUS_LOST: (STATUS_HANDLED,),
+}
+LOST_REASON_MAX = 150
 
 
 def branch_label(code: str | None) -> str:
@@ -276,7 +291,41 @@ def trace_lines(request) -> list[str]:
         lines.append(f"Transmise au cabinet : {_when(request.submitted_at)}")
     if request.handled_at:
         lines.append(f"Prise en charge : {_when(request.handled_at)}")
+    if getattr(request, "proposal_sent_at", None):
+        lines.append(f"Proposition envoyée : {_when(request.proposal_sent_at)}")
+    if getattr(request, "closed_at", None) and request.status in (STATUS_WON, STATUS_LOST):
+        closed = "Souscrit" if request.status == STATUS_WON else "Perdu"
+        reason = f" — {request.lost_reason}" if request.status == STATUS_LOST and request.lost_reason else ""
+        lines.append(f"{closed} : {_when(request.closed_at)}{reason}")
     return lines
+
+
+class TransitionError(ValueError):
+    """Étape refusée : message montré tel quel au cabinet."""
+
+
+def advance(request, status: str, user_id, now: datetime | None = None, lost_reason: str | None = None) -> None:
+    """
+    Lot 55 — le cabinet fait avancer une demande : en cotation, proposition envoyée, souscrit ou perdu.
+    Chaque étape est horodatée ; une étape sautée reçoit aussi son horodatage (prise en charge implicite).
+    """
+    allowed = TRANSITIONS.get(request.status, ())
+    if status not in allowed:
+        raise TransitionError(f"Impossible de passer de « {STATUS_LABELS.get(request.status, request.status)} » "
+                              f"à « {STATUS_LABELS.get(status, status)} »")
+    now = now or datetime.now(timezone.utc)
+    if request.handled_at is None:
+        request.handled_at = now
+        request.handled_by = str(user_id)
+    if status == STATUS_PROPOSAL:
+        request.proposal_sent_at = now
+    if status in (STATUS_WON, STATUS_LOST):
+        request.closed_at = now
+        request.lost_reason = (" ".join((lost_reason or "").split())[:LOST_REASON_MAX] or None) if status == STATUS_LOST else None
+    if status == STATUS_HANDLED and request.status == STATUS_LOST:  # rouvert
+        request.closed_at = None
+        request.lost_reason = None
+    request.status = status
 
 
 def quote_email(tenant, customer, request, link: str, score: str | None = None) -> tuple[str, str]:

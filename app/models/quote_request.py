@@ -13,6 +13,8 @@ class QuoteRequest(Base):
     (brouillon) ; le code la transmet au cabinet dès que le minimum de la branche est réuni. Jamais de prix.
     Statuts : DRAFT → SUBMITTED (à traiter) → HANDLED (prise en charge par le cabinet).
     Lot 54 : transmise seulement avec l'accord du client (consent_at), jamais avant.
+    Lot 55 : suivi jusqu'au bout — HANDLED (« en cotation ») → PROPOSAL_SENT (proposition envoyée) →
+    WON (souscrit) ou LOST (perdu, avec un motif court). Chaque étape est horodatée.
     """
 
     __tablename__ = "quote_requests"
@@ -37,5 +39,8 @@ class QuoteRequest(Base):
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     handled_by: Mapped[str | None] = mapped_column(String(64))
+    proposal_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lost_reason: Mapped[str | None] = mapped_column(String(150))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

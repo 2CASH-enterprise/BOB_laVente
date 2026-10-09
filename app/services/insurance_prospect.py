@@ -14,8 +14,13 @@ Règles FIXES (jamais un avis de l'IA), expliquées au cabinet en une ligne :
 durée du contrat, avec un maximum de 60 jours — mensuel 15 jours, trimestriel 45 jours, semestriel et
 annuel 60 jours ; durée inconnue : 60 jours. Un contrat échu depuis moins de 30 jours compte aussi
 (le client n'est peut-être plus assuré). Au-delà, l'échéance n'est plus utilisée.
+
+Lot 55 — registre des contrats : un contrat EN COURS du cabinet dont l'échéance est proche (même fenêtre)
+rend le client « Chaud » (renouvellement), même s'il a déjà souscrit ou s'il n'était pas intéressé par
+autre chose, et même sans demande ni rendez-vous. Une demande « Souscrit » vaut un contrat souscrit, une
+demande « Proposition envoyée » compte comme une cotation transmise.
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -62,9 +67,17 @@ def nearest_expiry(requests, today: date) -> tuple[date, str | None, int] | None
     return best
 
 
-def score(submitted: bool, has_appointment: bool, outcome: str | None, expiry: tuple | None) -> tuple[str, list[str]]:
+def score(submitted: bool, has_appointment: bool, outcome: str | None, expiry: tuple | None,
+          renewal: tuple | None = None, won: bool = False) -> tuple[str, list[str]]:
     """(VENDU | CHAUD | TIEDE | FROID, raisons lisibles). Règles fixes, voir l'en-tête du module."""
-    if outcome == "SOLD":
+    if renewal is not None:  # lot 55 : contrat du cabinet à renouveler bientôt
+        reasons = [f"renouvellement : {expiry_reason(renewal[2], renewal[1])}"]
+        if submitted:
+            reasons.append("demande de cotation transmise")
+        if has_appointment:
+            reasons.append("appel ou rendez-vous prévu")
+        return "CHAUD", reasons
+    if outcome == "SOLD" or won:
         return "VENDU", ["contrat souscrit"]
     reasons = []
     if outcome in OUTCOME_REASONS:
@@ -98,11 +111,13 @@ async def for_customers(db, tenant, customer_ids=None, now: datetime | None = No
     """
     from app.models.appointment_request import STATUS_CANCELLED, AppointmentRequest
     from app.models.quote_request import QuoteRequest
+    from app.models.insurance_contract import InsuranceContract
     from app.services.prospect import _has_upcoming
 
     now = now or datetime.now(timezone.utc)
     if customer_ids is not None and not customer_ids:
         return {}
+    today = _today(tenant, now)
     request_query = select(QuoteRequest).where(QuoteRequest.tenant_id == tenant.id)
     appointment_query = select(AppointmentRequest).where(
         AppointmentRequest.tenant_id == tenant.id, AppointmentRequest.status != STATUS_CANCELLED)
@@ -116,16 +131,36 @@ async def for_customers(db, tenant, customer_ids=None, now: datetime | None = No
     for appointment in (await db.execute(appointment_query.order_by(AppointmentRequest.created_at))).scalars().all():
         latest[appointment.customer_id] = appointment  # trié par date : le dernier l'emporte
 
-    today = _today(tenant, now)
+    # Lot 55 — contrats du cabinet à renouveler bientôt (seuls ceux dans la fenêtre « Chaud » comptent).
+    contract_query = select(InsuranceContract).where(
+        InsuranceContract.tenant_id == tenant.id, InsuranceContract.status == "ACTIVE",
+        InsuranceContract.expires_on >= today - timedelta(days=EXPIRED_GRACE_DAYS),
+        InsuranceContract.expires_on <= today + timedelta(days=MAX_WINDOW_DAYS))
+    if customer_ids is not None:
+        contract_query = contract_query.where(InsuranceContract.customer_id.in_(list(customer_ids)))
+    renewals: dict = {}
+    for contract in (await db.execute(contract_query)).scalars().all():
+        term = contract.term if contract.term in insurance.TERMS else None
+        left = (contract.expires_on - today).days
+        if left > hot_window(term):
+            continue
+        best = renewals.get(contract.customer_id)
+        if best is None or left < best[0][2]:
+            renewals[contract.customer_id] = ((contract.expires_on, term, left), contract)
+
     result = {}
-    for customer_id in set(requests) | set(latest):
+    for customer_id in set(requests) | set(latest) | set(renewals):
         own = requests.get(customer_id, [])
         appointment = latest.get(customer_id)
+        renewal, contract = renewals.get(customer_id, (None, None))
         expiry = nearest_expiry(own, today)
+        if renewal is not None and (expiry is None or renewal[2] <= expiry[2]):
+            expiry = renewal
         has_appointment = _has_upcoming(appointment, now)
         outcome = appointment.outcome if appointment is not None else None
-        submitted = any(r.status in (insurance.STATUS_SUBMITTED, insurance.STATUS_HANDLED) for r in own)
-        code, reasons = score(submitted, has_appointment, outcome, expiry)
+        submitted = any(r.status in insurance.IN_PROGRESS for r in own)
+        won = any(r.status == insurance.STATUS_WON for r in own)
+        code, reasons = score(submitted, has_appointment, outcome, expiry, renewal=renewal, won=won)
         result[customer_id] = {
             "score": code, "score_label": SCORES[code], "reasons": reasons,
             "branches": list(dict.fromkeys(insurance.branch_label(r.branch) for r in own)),
@@ -135,6 +170,10 @@ async def for_customers(db, tenant, customer_ids=None, now: datetime | None = No
             "days_left": expiry[2] if expiry else None,
             "expiry_soon": expiry is not None and expiry[2] <= hot_window(expiry[1]),
             "has_appointment": has_appointment, "outcome": outcome,
+            # Lot 55 : l'échéance vient du registre du cabinet (renouvellement), pas d'une déclaration du client.
+            "renewal": renewal is not None, "contract_id": str(contract.id) if contract is not None else None,
+            "contract_insurer": contract.insurer if contract is not None else None,
+            "contract_branch": insurance.branch_label(contract.branch) if contract is not None else None,
         }
     return result
 

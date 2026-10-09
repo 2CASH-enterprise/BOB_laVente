@@ -24,6 +24,7 @@ TASK_MODULES = [
     "app.workers.followups",
     "app.workers.llm_budget",
     "app.workers.billing",
+    "app.workers.renewals",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -63,6 +64,11 @@ celery_app.conf.beat_schedule = {
     "billing-notices": {
         "task": "app.workers.billing.check_billing_task",
         "schedule": crontab(minute=20),
+    },
+    # Lot 55 — échéances des contrats du courtier : récapitulatif au cabinet et rappel unique au client.
+    "contract-renewals": {
+        "task": "app.workers.renewals.check_renewals_task",
+        "schedule": crontab(minute=35),
     },
 }
 celery_app.conf.timezone = "UTC"

@@ -57,6 +57,11 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
 
     contact = contact_lines(await db.get(Customer, customer_id))  # lot 34
     contact_section = ("\n\nCONTACT DU CLIENT\n" + "\n".join(contact)) if contact else ""
+    # Lot 55 — courtier : contrats en cours du client (branche, assureur, échéance ; jamais prime ni numéro).
+    from app.models.tenant import Tenant
+    from app.services.insurance_contracts import memory_for_bob
+
+    contact_section += await memory_for_bob(db, await db.get(Tenant, tenant_id), customer_id)
 
     if not order_lines and not viewed_lines and not preferences_lines:
         return contact_section
