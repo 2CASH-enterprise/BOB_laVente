@@ -29,12 +29,22 @@ class SubscriptionOut(BaseModel):
 
 
 @router.get("/counts")
-async def get_counts(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
-    """Ce qu'il reste à faire. Les compteurs vus ici ne déclenchent plus de notification."""
+async def get_counts(
+    seen: bool = True,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Ce qu'il reste à faire. Les compteurs vus ici ne déclenchent plus de notification.
+    Lot 56 : un onglet en arrière-plan demande seen=false — personne ne les a vus, la notification
+    du téléphone doit encore partir.
+    """
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Boutique introuvable")
     counts = await notifications.task_counts(db, tenant)
+    if not seen:
+        return counts
     await notifications.remember_counts(db, tenant.id, counts)
     try:
         await db.commit()

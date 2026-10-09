@@ -33,8 +33,13 @@ self.addEventListener("push", (event) => {
   const badge = count === null ? Promise.resolve()
     : count > 0 && self.navigator.setAppBadge ? self.navigator.setAppBadge(count).catch(() => {})
     : self.navigator.clearAppBadge ? self.navigator.clearAppBadge().catch(() => {}) : Promise.resolve();
+  // Lot 56 — un onglet Bob déjà ouvert est prévenu tout de suite : son et fenêtre sans attendre.
+  const tellOpenTabs = self.clients.matchAll({ type: "window", includeUncontrolled: true })
+    .then((windows) => windows.forEach((w) => w.postMessage({ type: "bob-refresh-counts" })))
+    .catch(() => {});
   event.waitUntil(Promise.all([
     badge,
+    tellOpenTabs,
     self.registration.showNotification(title, {
       body, tag: "bob-tasks", renotify: true, icon: "icon-192.png", badge: "icon-192.png", data: { url: "./" },
     }),

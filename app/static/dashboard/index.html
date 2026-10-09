@@ -498,6 +498,23 @@
   .bob-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
   button.action.danger { background: var(--danger); color: #fff; }
   button.action.danger:hover { background: var(--danger); filter: brightness(0.92); }
+  /* Lot 56 — fenêtre des nouvelles tâches */
+  .task-alert { position: fixed; z-index: 135; right: 20px; bottom: calc(20px + var(--safe-bottom)); width: min(360px, calc(100vw - 32px));
+    background: var(--panel); color: var(--text); border: 1px solid var(--border-strong); border-left: 4px solid var(--accent);
+    border-radius: var(--radius); padding: 14px 16px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22); animation: bob-rise 0.2s ease; }
+  .task-alert-head { display: flex; align-items: flex-start; gap: 10px; }
+  .task-alert-icon { flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); }
+  .task-alert-title { flex: 1; font-size: 15px; line-height: 1.4; padding-top: 5px; overflow-wrap: anywhere; }
+  .task-alert-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1; padding: 4px 6px; }
+  .task-alert-list { margin: 8px 0 0 42px; padding-left: 16px; font-size: 13px; color: var(--muted); }
+  .task-alert-hint { margin: 8px 0 0 42px; font-size: 12px; color: var(--warning); }
+  .task-alert-actions { display: flex; gap: 8px; margin: 12px 0 0 42px; flex-wrap: wrap; }
+  @media (max-width: 600px) {
+    .task-alert { right: 16px; left: 16px; width: auto; top: calc(64px + env(safe-area-inset-top, 0px)); bottom: auto; }
+    .task-alert-list, .task-alert-hint, .task-alert-actions { margin-left: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .task-alert { animation: none; } }
   .bob-toasts { position: fixed; z-index: 140; left: 50%; transform: translateX(-50%); bottom: calc(16px + var(--safe-bottom));
     display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 32px)); pointer-events: none; }
   .bob-toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; background: var(--panel); color: var(--text);
@@ -1149,6 +1166,14 @@
           <button class="action hidden" id="push-on-btn" onclick="enablePush()">Activer les notifications sur cet appareil</button>
           <button class="action secondary hidden" id="push-off-btn" onclick="disablePush()">Désactiver sur cet appareil</button>
           <p id="push-status" style="font-size: 13px; margin: 8px 0 0;"></p>
+        </div>
+        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;" id="sound-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Son et fenêtre des nouvelles tâches<button class="tip"></button><span class="tip-bubble" hidden>Quand une nouvelle tâche arrive pendant que Bob est ouvert (client qui attend, rendez-vous, commande, cotation…), une fenêtre s'affiche en bas de l'écran et un son discret retentit. Le titre de l'onglet clignote si vous êtes ailleurs. Réglage propre à cet appareil.</span></div>
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+            <input type="checkbox" id="sound-toggle" onchange="setSoundEnabled(this.checked)"> Jouer un son à chaque nouvelle tâche
+          </label>
+          <button class="action secondary" style="margin-top: 10px;" onclick="testTaskSound()">Tester le son</button>
+          <p id="sound-status" style="font-size: 13px; margin: 8px 0 0;"></p>
         </div>
       </div>
     </section>
@@ -4908,7 +4933,16 @@ function showTaskCounts(c) {
 
 async function refreshTaskCounts() {
   if (!token) return;
-  try { showTaskCounts(await api("/api/v1/notifications/counts")); } catch (e) { /* hors ligne : on réessaiera */ }
+  // Lot 56 : un onglet en arrière-plan n'a rien « vu » : la notification du téléphone doit encore partir.
+  const seen = document.visibilityState === "visible";
+  lastCountsAt = Date.now();
+  let counts;
+  try { counts = await api("/api/v1/notifications/counts" + (seen ? "" : "?seen=false")); } catch (e) { return; /* hors ligne : on réessaiera */ }
+  showTaskCounts(counts);
+  if (titleFlashTimer) {  // showTaskCounts vient de réécrire le titre : on garde le clignotement
+    startTitleFlash(counts.total);
+  }
+  noticeNewTasks(counts);
 }
 
 function scheduleTaskCounts() {
@@ -4916,18 +4950,210 @@ function scheduleTaskCounts() {
   taskDebounce = setTimeout(refreshTaskCounts, 800);
 }
 
+// Lot 56 — toutes les 20 secondes quand Bob est affiché, toutes les 60 secondes en arrière-plan.
+var lastCountsAt = 0;
+var COUNTS_VISIBLE_MS = 20000;  // « var » : enterApp() peut démarrer avant la lecture de ce bloc
+var COUNTS_HIDDEN_MS = 60000;
+
 function startTaskCounts() {
+  lastTaskCounts = null;  // nouvelle session : le premier relevé sert de référence, sans alerte
+  pendingAlert = {};
   refreshTaskCounts();
   clearInterval(taskTimer);
-  taskTimer = setInterval(() => { if (document.visibilityState === "visible") refreshTaskCounts(); }, 60000);
+  taskTimer = setInterval(() => {
+    const gap = document.visibilityState === "visible" ? COUNTS_VISIBLE_MS : COUNTS_HIDDEN_MS;
+    if (Date.now() - lastCountsAt >= gap - 1000) refreshTaskCounts();
+  }, COUNTS_VISIBLE_MS);
   setTimeout(refreshPushCard, 0);
+  setTimeout(refreshSoundCard, 0);
 }
 
 function stopTaskCounts() {
   clearInterval(taskTimer);
   clearTimeout(taskDebounce);
+  closeTaskAlert();  // lot 56 : rien ne reste affiché après la déconnexion
+  lastTaskCounts = null;
   document.title = "Bob";
   if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {});
+}
+
+// ---- Lot 56 : nouvelles tâches plus visibles — son, fenêtre, titre qui clignote ----
+// Mêmes règles que la pastille (lot 37b) : seule une NOUVELLE tâche (un compteur qui augmente) prévient,
+// jamais les tâches déjà là à l'ouverture. Texte général : jamais le nom ni le message d'un client.
+var TASK_ALERT_LABELS = {  // [une, plusieurs] — même ordre de priorité que les notifications du téléphone
+  conversations: ["Un client attend votre réponse", (n) => `${n} clients attendent votre réponse`],
+  appointments: ["Nouveau rendez-vous à confirmer", (n) => `${n} nouveaux rendez-vous à confirmer`],
+  orders: ["Nouvelle commande", (n) => `${n} nouvelles commandes`],
+  callbacks: ["Client à rappeler", (n) => `${n} clients à rappeler`],
+  outcomes: ["Rendez-vous passé : issue à indiquer", (n) => `${n} rendez-vous passés : issue à indiquer`],
+  quotes: ["Nouvelle demande de cotation", (n) => `${n} nouvelles demandes de cotation`],
+  renewals: ["Échéance de contrat à préparer", (n) => `${n} échéances de contrat à préparer`],
+};
+var TASK_ALERT_TAB = { conversations: "conversations", appointments: "appointments", outcomes: "appointments",
+  orders: "orders", callbacks: "overview", quotes: "quotes", renewals: "contracts" };
+var SOUND_GAP_MS = 10000;  // au plus un son toutes les 10 secondes, tous onglets confondus
+var lastTaskCounts = null;   // null = premier relevé depuis l'ouverture : il sert de référence, sans alerte
+var pendingAlert = {};       // nouvelles tâches pas encore vues dans la fenêtre ouverte
+var bobAudio = null;
+var titleFlashTimer = null;
+
+function taskAlertLabel(kind, n) {
+  const [one, many] = TASK_ALERT_LABELS[kind];
+  return n > 1 ? many(n) : one;
+}
+
+function newTaskKinds(previous, counts) {
+  return Object.keys(TASK_ALERT_LABELS)
+    .filter((k) => (Number(counts[k]) || 0) > (Number(previous[k]) || 0))
+    .map((k) => [k, (Number(counts[k]) || 0) - (Number(previous[k]) || 0)]);
+}
+
+function noticeNewTasks(counts) {
+  const previous = lastTaskCounts;
+  lastTaskCounts = Object.assign({}, counts);
+  if (previous === null) return;
+  const fresh = newTaskKinds(previous, counts);
+  if (!fresh.length) return;
+  fresh.forEach(([k, n]) => { pendingAlert[k] = (pendingAlert[k] || 0) + n; });
+  showTaskAlert();
+  playTaskSound();
+  if (document.visibilityState !== "visible") startTitleFlash(counts.total);
+}
+
+// -- Son (réglage par appareil, activé par défaut) --
+function soundEnabled() {
+  try { return localStorage.getItem("bob_task_sound") !== "off"; } catch (e) { return true; }
+}
+
+function setSoundEnabled(on) {
+  try { localStorage.setItem("bob_task_sound", on ? "on" : "off"); } catch (e) { /* navigateur privé */ }
+  refreshSoundCard();
+  const btn = document.getElementById("task-alert-sound");
+  if (btn) btn.textContent = on ? "Couper le son" : "Activer le son";
+}
+
+function unlockAudio() {
+  // Les navigateurs n'autorisent le son qu'après un geste de l'utilisateur dans la page.
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!bobAudio) { try { bobAudio = new Ctx(); } catch (e) { return null; } }
+  if (bobAudio.state === "suspended") bobAudio.resume().catch(() => {});
+  return bobAudio;
+}
+["pointerdown", "keydown", "touchstart"].forEach((type) => document.addEventListener(type, unlockAudio, { capture: true, passive: true }));
+
+function soundBlocked() {
+  return soundEnabled() && (!bobAudio || bobAudio.state !== "running");
+}
+
+function playTaskSound(force = false) {
+  if (!force && !soundEnabled()) return false;
+  if (!force) {
+    let last = 0;
+    try { last = Number(localStorage.getItem("bob_task_sound_at")) || 0; } catch (e) { /* rien */ }
+    if (Date.now() - last < SOUND_GAP_MS) return false;  // un autre onglet vient de sonner
+    try { localStorage.setItem("bob_task_sound_at", String(Date.now())); } catch (e) { /* rien */ }
+  }
+  const ctx = force ? unlockAudio() : bobAudio;
+  if (!ctx || ctx.state !== "running") return false;
+  // Deux notes douces (mi puis la), un peu moins d'une demi-seconde : discret, reconnaissable.
+  const start = ctx.currentTime + 0.02;
+  [[659.25, 0], [880, 0.16]].forEach(([freq, delay]) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, start + delay);
+    gain.gain.exponentialRampToValueAtTime(0.18, start + delay + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + delay + 0.28);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start + delay);
+    osc.stop(start + delay + 0.3);
+  });
+  return true;
+}
+
+// -- Fenêtre (reste ouverte jusqu'à ce qu'on la ferme ou qu'on clique) --
+function showTaskAlert() {
+  const kinds = Object.keys(TASK_ALERT_LABELS).filter((k) => pendingAlert[k]);
+  if (!kinds.length) return;
+  let box = document.getElementById("task-alert");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "task-alert";
+    box.className = "task-alert";
+    box.setAttribute("role", "status");
+    box.setAttribute("aria-live", "assertive");
+    document.body.appendChild(box);
+  }
+  const total = kinds.reduce((sum, k) => sum + pendingAlert[k], 0);
+  const title = kinds.length === 1 ? taskAlertLabel(kinds[0], pendingAlert[kinds[0]])
+    : `${total} nouvelles tâches à traiter`;
+  const lines = kinds.length > 1
+    ? `<ul class="task-alert-list">${kinds.map((k) => `<li>${esc(taskAlertLabel(k, pendingAlert[k]))}</li>`).join("")}</ul>` : "";
+  const first = kinds[0];
+  box.innerHTML = `
+    <div class="task-alert-head">
+      <span class="task-alert-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+      <strong class="task-alert-title">${esc(title)}</strong>
+      <button type="button" class="task-alert-close" aria-label="Fermer" onclick="closeTaskAlert()">×</button>
+    </div>
+    ${lines}
+    ${soundBlocked() ? `<p class="task-alert-hint">Son bloqué par le navigateur : cliquez n'importe où dans Bob pour l'autoriser.</p>` : ""}
+    <div class="task-alert-actions">
+      <button type="button" class="action" onclick="openTaskAlert('${esc(first)}')">Voir</button>
+      <button type="button" class="action secondary" id="task-alert-sound" onclick="setSoundEnabled(!soundEnabled())">${soundEnabled() ? "Couper le son" : "Activer le son"}</button>
+    </div>`;
+  box.classList.remove("hidden");
+}
+
+function closeTaskAlert() {
+  pendingAlert = {};
+  const box = document.getElementById("task-alert");
+  if (box) box.remove();
+  stopTitleFlash();
+}
+
+function openTaskAlert(kind) {
+  const tab = TASK_ALERT_TAB[kind] || "overview";
+  closeTaskAlert();
+  if (tab === "contracts") currentContractView = "todo";
+  if (tab === "quotes") currentQuoteView = "todo";
+  showTab(tab);
+}
+
+// -- Titre de l'onglet qui clignote tant que Bob est en arrière-plan --
+function startTitleFlash(total) {
+  stopTitleFlash();
+  let on = false;
+  const normal = total ? `(${total > 99 ? "99+" : total}) Bob` : "Bob";
+  titleFlashTimer = setInterval(() => {
+    on = !on;
+    document.title = on ? "🔔 Nouvelle tâche" : normal;
+  }, 1500);
+}
+
+function stopTitleFlash() {
+  if (!titleFlashTimer) return;
+  clearInterval(titleFlashTimer);
+  titleFlashTimer = null;
+  const total = lastTaskCounts ? Number(lastTaskCounts.total) || 0 : 0;
+  document.title = total ? `(${total > 99 ? "99+" : total}) Bob` : "Bob";
+}
+
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") stopTitleFlash(); });
+window.addEventListener("focus", stopTitleFlash);
+
+// -- Réglage dans Paramètres --
+function refreshSoundCard() {
+  const box = document.getElementById("sound-toggle");
+  if (box) box.checked = soundEnabled();
+}
+
+function testTaskSound() {
+  const msg = document.getElementById("sound-status");
+  const played = playTaskSound(true);
+  if (msg) msg.textContent = played ? "" : "Le navigateur bloque le son : cliquez de nouveau sur « Tester le son ».";
 }
 
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshTaskCounts(); });
