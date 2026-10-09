@@ -120,6 +120,12 @@ class ToolExecutor:
         self.looked_up_products = True
         if has_photo:
             self.products_with_photo[str(product.id)] = product.name
+        from app.services.business_type import INSURANCE_BROKER, normalize
+
+        if normalize(self.business_type) == INSURANCE_BROKER:
+            # Lot 53 — un cabinet d'assurance ne donne jamais de prix : Bob ne le voit même pas.
+            return {"product_id": str(product.id), "name": product.name, "description": description or None,
+                    "active": product.active}
         return {
             "product_id": str(product.id),
             "name": product.name,
@@ -406,10 +412,13 @@ class ToolExecutor:
         """
         from app.models.appointment_request import APPOINTMENT_KINDS, STATUS_CONFIRMED, AppointmentRequest
 
+        from app.services.business_type import appointment_kinds
+
         kind = tool_input.get("kind")
         availability = (tool_input.get("availability") or "").strip()
-        if kind not in APPOINTMENT_KINDS:
-            return {"error": "Type de rendez-vous invalide : ESSAI, VISITE ou ESTIMATION_REPRISE"}
+        allowed_kinds = appointment_kinds(self.business_type)  # lot 53 : selon le secteur
+        if kind not in APPOINTMENT_KINDS or kind not in allowed_kinds:
+            return {"error": "Type de rendez-vous invalide : " + ", ".join(allowed_kinds)}
         booked = None
         if tool_input.get("slot"):
             booked, error = await self._book_slot(tool_input, kind)
@@ -802,6 +811,36 @@ class ToolExecutor:
             return {"status": "partially_saved", "rejected": rejected,
                     "instruction": "Ces valeurs n'ont pas été comprises : n'insiste pas, continue la conversation."}
         return {"status": "saved", "instruction": "Continue naturellement ; ne récite pas la fiche au client."}
+
+    async def _tool_update_insurance_request(self, tool_input: dict) -> dict:
+        """Lot 53 (courtier) : demande de cotation ; c'est le code qui décide quand elle part au cabinet."""
+        from app.services import insurance
+
+        result = await insurance.update_request(self.db, self.tenant_id, self.customer_id, self.conversation.id, tool_input)
+        if "error" in result:
+            return {"error": result["error"]}
+        answer = {"status": "saved"}
+        if result["rejected"]:
+            answer["not_understood"] = result["rejected"]
+        if result["submitted_now"]:
+            self.db.add(Message(
+                tenant_id=self.tenant_id, conversation_id=self.conversation.id, sender=MessageSender.SYSTEM,
+                message_type="quote_request",
+                content="Demande de cotation transmise au cabinet : " + insurance.branch_label(result["request"].branch),
+            ))
+            answer.update(status="quote_request_sent", instruction=(
+                "La demande de cotation vient d'être transmise au cabinet : dis-le au client, sans aucun prix, puis "
+                "demande-lui s'il préfère qu'un conseiller l'appelle ou un rendez-vous au cabinet ; propose alors des "
+                "créneaux (get_available_slots) et enregistre son choix avec request_appointment (APPEL ou CABINET)."))
+        elif result["request"].status == insurance.STATUS_SUBMITTED:
+            answer.update(status="quote_request_updated", instruction=(
+                "Information ajoutée à la demande déjà transmise au cabinet. Si le client n'a pas encore de rendez-vous, "
+                "propose-lui un appel ou un rendez-vous au cabinet."))
+        else:
+            answer.update(missing=result["missing"], instruction=(
+                "Pour transmettre la demande au cabinet, il manque : " + ", ".join(result["missing"]) + ". Pose une ou "
+                "deux questions à la fois, naturellement, sans jamais donner de prix."))
+        return answer
 
     async def _tool_update_customer_profile(self, tool_input: dict) -> dict:
         from app.models.customer import Customer

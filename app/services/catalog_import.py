@@ -27,7 +27,7 @@ def _parse_active(raw: str | None) -> bool:
 
 async def import_catalog_csv(
     db: AsyncSession, tenant_id, csv_content: str, max_new_products: int | None = None,
-    with_vehicles: bool = True,
+    with_vehicles: bool = True, without_prices: bool = False,
 ) -> CsvImportResponse:
     """
     max_new_products : plafond freemium (section produits) — n'empêche jamais la mise à
@@ -35,8 +35,10 @@ async def import_catalog_csv(
     """
     reader = csv.DictReader(io.StringIO(csv_content))
 
-    if reader.fieldnames is None or not REQUIRED_COLUMNS.issubset(set(reader.fieldnames)):
-        missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
+    # Lot 53 — courtier : ni prix ni devise dans le fichier (jamais de prix chez un cabinet d'assurance).
+    required = {"SKU", "NAME"} if without_prices else REQUIRED_COLUMNS
+    if reader.fieldnames is None or not required.issubset(set(reader.fieldnames)):
+        missing = required - set(reader.fieldnames or [])
         return CsvImportResponse(
             total_rows=0,
             imported=0,
@@ -64,8 +66,8 @@ async def import_catalog_csv(
             continue
 
         try:
-            price = Decimal(str(row.get("PRICE", "")).strip())
-            if price <= 0:
+            price = Decimal(0) if without_prices else Decimal(str(row.get("PRICE", "")).strip())
+            if price <= 0 and not without_prices:
                 raise InvalidOperation
         except (InvalidOperation, ValueError):
             failed += 1
@@ -73,13 +75,13 @@ async def import_catalog_csv(
             continue
 
         try:
-            stock = int(str(row.get("STOCK", "0")).strip() or 0)
+            stock = 0 if without_prices else int(str(row.get("STOCK", "0")).strip() or 0)
         except ValueError:
             failed += 1
             errors.append(f"Ligne {row_number} ({sku}) : stock invalide")
             continue
 
-        currency = (row.get("CURRENCY") or "").strip().upper()
+        currency = (row.get("CURRENCY") or "").strip().upper() or ("XOF" if without_prices else "")
         if len(currency) != 3:
             failed += 1
             errors.append(f"Ligne {row_number} ({sku}) : devise invalide (attendu code ISO 3 lettres)")

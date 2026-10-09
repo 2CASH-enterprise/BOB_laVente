@@ -9,7 +9,7 @@ Lot 38 — tutoiement ou vouvoiement des clients (boutique en ligne).
   de commande, transfert, panne, demande d'email…) : chacun existe dans les deux versions.
 - Les emails suivront ce réglage au lot 40 (emails redessinés).
 """
-from app.services.business_type import CAR_DEALERSHIP
+from app.services.business_type import is_online_store
 
 VOUS = "VOUS"
 TU = "TU"
@@ -17,7 +17,7 @@ ADDRESS_FORMS = {VOUS: "Vouvoiement", TU: "Tutoiement"}
 
 
 def uses_tu(tenant) -> bool:
-    return tenant is not None and tenant.business_type != CAR_DEALERSHIP and getattr(tenant, "address_form", VOUS) == TU
+    return tenant is not None and is_online_store(tenant) and getattr(tenant, "address_form", VOUS) == TU
 
 
 def ai_rule(tenant) -> str:

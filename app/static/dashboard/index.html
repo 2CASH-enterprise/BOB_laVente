@@ -345,8 +345,12 @@
   .appt-actions label { font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
   .tone-accent { background: var(--accent-soft); color: var(--accent); }
   /* Lot 32 : chaque activité ne voit que ses fonctions (le serveur refuse aussi les autres). */
-  body.dealership .store-only { display: none !important; }
-  body:not(.dealership) .dealer-only { display: none !important; }
+  /* Lot 53 : « dealer-only » = secteurs à rendez-vous (concession et courtier) */
+  body.rdv-sector .store-only { display: none !important; }
+  body:not(.rdv-sector) .dealer-only { display: none !important; }
+  body:not(.insurance) .insurance-only { display: none !important; }
+  body.insurance .no-insurance { display: none !important; }
+  .option-hint { font-weight: 400; color: var(--muted); font-size: 0.9em; }
   .tone-success { background: var(--success-soft); color: var(--success); }
   .tone-warning { background: var(--warning-soft); color: var(--warning); }
   .tone-danger { background: var(--danger-soft); color: var(--danger); }
@@ -620,9 +624,10 @@
       <button class="active" data-tab="overview" data-label="Accueil" onclick="showTab('overview')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>Accueil</button>
       <button data-tab="conversations" data-label="Conversations" onclick="showTab('conversations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>Conversations</button>
       <button data-tab="customers" data-label="Clients" onclick="showTab('customers')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7"/></svg></span>Clients</button>
-      <button data-tab="products" data-label="Produits" onclick="showTab('products')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg></span>Produits</button>
+      <button data-tab="products" data-label="Produits" id="nav-products" onclick="showTab('products')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg></span>Produits</button>
       <button data-tab="orders" data-label="Commandes" class="store-only" onclick="showTab('orders')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4"/></svg></span>Commandes</button>
       <button data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden" onclick="showTab('appointments')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3v3H8z"/></svg></span>Rendez-vous</button>
+      <button data-tab="quotes" data-label="Demandes de cotation" id="nav-quotes" class="insurance-only" onclick="showTab('quotes')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6zM9 12l2 2 4-4"/></svg></span>Demandes de cotation</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg></span>Intégrations</button>
       <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8"/></svg></span>Base de connaissances</button>
       <button data-tab="bob" data-label="Réglages de Bob" onclick="showTab('bob')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M5 9h14a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a1 1 0 0 1 1-1zM9 14h.01M15 14h.01M2 13v3M22 13v3"/></svg></span>Réglages de Bob</button>
@@ -650,10 +655,10 @@
       <div class="card store-only" id="sales-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement des ventes</p>
       </div>
-      <div class="card" id="signals-card" style="margin-top: 20px;">
+      <div class="card no-insurance" id="signals-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement de l'analyse des messages</p>
       </div>
-      <div class="card" id="strategies-card" style="margin-top: 20px;">
+      <div class="card no-insurance" id="strategies-card" style="margin-top: 20px;">
         <p class="loading-text">Chargement des réponses aux objections</p>
       </div>
     </section>
@@ -730,9 +735,11 @@
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
             <input id="new-product-sku" placeholder="Référence (ex. REF-001)" class="input">
             <input id="new-product-name" placeholder="Nom" class="input">
-            <input id="new-product-price" placeholder="Prix" type="number" class="input">
-            <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input" maxlength="3">
-            <input id="new-product-stock" placeholder="Stock" type="number" class="input" style="grid-column: span 2;">
+            <input id="new-product-price" placeholder="Prix" type="number" class="input no-insurance">
+            <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input no-insurance" maxlength="3">
+            <input id="new-product-stock" placeholder="Stock" type="number" class="input no-insurance" style="grid-column: span 2;">
+            <textarea id="new-product-description" class="input insurance-only" rows="3" style="grid-column: span 2; resize: vertical;"
+              placeholder="Garanties et conditions, comme vous les présentez à vos clients (jamais de prix : Bob n'en donne pas)"></textarea>
           </div>
           <div id="new-vehicle-fields" class="hidden" style="margin-top: 8px;"></div>
           <button class="action" style="margin-top: 10px;" onclick="createProduct()">Ajouter</button>
@@ -754,7 +761,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Nom</th><th>Référence</th><th>Prix</th><th>Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
+        <thead><tr><th>Nom</th><th>Référence</th><th class="no-insurance">Prix</th><th class="no-insurance">Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
 
@@ -767,6 +774,16 @@
         <div id="qr-codes-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="qr-codes-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px;"></div>
       </div>
+    </section>
+
+    <section id="tab-quotes" class="hidden">
+      <template class="page-tip-src">Les demandes de cotation préparées par Bob : il a réuni les informations utiles, sans jamais donner de prix, puis proposé au client un appel ou un rendez-vous. Cliquez « Prise en charge » quand vous vous en occupez.</template>
+      <div class="appt-views" role="group" aria-label="Demandes affichées">
+        <button type="button" class="pill" data-quote-view="todo" aria-pressed="true" onclick="loadQuotes('todo')">À traiter</button>
+        <button type="button" class="pill" data-quote-view="handled" aria-pressed="false" onclick="loadQuotes('handled')">Prises en charge</button>
+        <button type="button" class="pill" data-quote-view="draft" aria-pressed="false" onclick="loadQuotes('draft')">En cours avec Bob</button>
+      </div>
+      <div id="quote-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
     </section>
 
     <section id="tab-appointments" class="hidden">
@@ -972,7 +989,7 @@
           <div id="handoff-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
 
-        <div class="card" style="max-width: 480px; flex: 1; min-width: 300px;">
+        <div class="card no-insurance" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Réponses aux objections<button class="tip"></button><span class="tip-bubble" hidden>Quand un client exprime un frein (prix, hésitation, confiance…), Bob applique l'une des stratégies activées ci-dessous, choisie au hasard : c'est ce qui permet de mesurer celle qui fonctionne le mieux. Aucune stratégie n'autorise Bob à inventer un prix, une promotion ou une fausse urgence.</span></div>
           <div id="strategy-list"><p class="loading-text">Chargement</p></div>
           <button class="action" onclick="saveStrategySettings()">Enregistrer</button>
@@ -1454,7 +1471,7 @@ async function loadSignupOptions() {
   const o = await fetch(API_BASE + "/api/v1/auth/signup-options").then((r) => r.json());
   signupState.options = o;
   document.getElementById("signup-activity").innerHTML = o.business_types
-    .map((b) => `<button type="button" class="segment-option" onclick="chooseSignupActivity('${esc(b.code)}')"><strong>${esc(b.label)}</strong><span>${esc(b.description)}</span></button>`)
+    .map((b) => `<button type="button" class="segment-option" onclick="chooseSignupActivity('${esc(b.code)}')"><strong>${sectorTitle(b)}</strong><span>${esc(b.description)}</span></button>`)
     .join("");
   document.getElementById("signup-country").innerHTML = o.countries
     .map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("");
@@ -1489,7 +1506,8 @@ function signupGo(step) {
 
 function chooseSignupActivity(code) {
   signupState.businessType = code;
-  document.getElementById("signup-company").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar" : "Ex. Boutique Awa";
+  document.getElementById("signup-company").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar"
+    : code === "INSURANCE_BROKER" ? "Ex. Cabinet Kouassi Assurances" : "Ex. Boutique Awa";
   signupGo(2);
 }
 
@@ -1651,14 +1669,36 @@ function enterApp() {
 
 let currentBusinessType = "ONLINE_STORE";
 
+// Lot 53 — nom du secteur, et sa précision en gris (« Commerce (en ligne et physique) »).
+function sectorTitle(option) {
+  return esc(option.label) + (option.hint ? ` <span class="option-hint">(${esc(option.hint)})</span>` : "");
+}
+
+function isRdvSector() {
+  return currentBusinessType === "CAR_DEALERSHIP" || currentBusinessType === "INSURANCE_BROKER";
+}
+
+// Lot 53 — issues d'un rendez-vous, dans les mots du secteur.
+function outcomeLabels() {
+  return currentBusinessType === "INSURANCE_BROKER"
+    ? { SOLD: "Contrat souscrit", FOLLOW_UP: "À relancer", NOT_INTERESTED: "Pas intéressé", NO_SHOW: "Absent / injoignable" }
+    : APPT_OUTCOME_LABELS;
+}
+
 function applyBusinessType(code, label) {
   currentBusinessType = code;
   const dealership = code === "CAR_DEALERSHIP";
+  const insurance = code === "INSURANCE_BROKER";
   document.body.classList.toggle("dealership", dealership);
+  document.body.classList.toggle("insurance", insurance);
+  document.body.classList.toggle("rdv-sector", dealership || insurance);
   const labelEl = document.getElementById("business-type-label");
   if (labelEl && label) labelEl.textContent = label;
-  // Lot 25 : la page Rendez-vous n'existe que pour les concessions.
-  document.getElementById("nav-appointments").classList.toggle("hidden", !dealership);
+  // Lot 25 / 53 : la page Rendez-vous existe pour la concession et le courtier.
+  document.getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance));
+  const productsNav = document.getElementById("nav-products");
+  productsNav.dataset.label = insurance ? "Produits d'assurance" : "Produits";
+  productsNav.lastChild.textContent = insurance ? "Produits d'assurance" : "Produits";
   // Lot 26 : fiche véhicule dans l'ajout de produit et aide de l'import CSV.
   const fields = document.getElementById("new-vehicle-fields");
   fields.classList.toggle("hidden", !dealership);
@@ -1714,7 +1754,7 @@ async function checkBusinessTypeChosen() {
   applyBusinessType(bt.business_type, current ? current.label : "");
   if (bt.chosen) return;
   document.getElementById("segment-options").innerHTML = bt.options
-    .map((o) => `<button type="button" class="segment-option" onclick="chooseBusinessType('${esc(o.code)}')"><strong>${esc(o.label)}</strong><span>${esc(o.description)}</span></button>`)
+    .map((o) => `<button type="button" class="segment-option" onclick="chooseBusinessType('${esc(o.code)}')"><strong>${sectorTitle(o)}</strong><span>${esc(o.description)}</span></button>`)
     .join("");
   document.getElementById("segment-screen").classList.remove("hidden");
 }
@@ -1772,13 +1812,13 @@ function appointmentCard(a, view) {
   const change = a.customer_change ? ` <span class="pill tone-warning">${esc(a.customer_change)}</span>` : "";
   const waReminder = a.whatsapp_reminder_sent_at ? ` <span class="pill tone-info">Rappel WhatsApp envoyé</span>` : "";
   // Lot 36 : issue du rendez-vous et relance.
-  const outcomePill = a.outcome_label ? ` <span class="pill ${a.outcome === "SOLD" ? "tone-success" : a.outcome === "NO_SHOW" ? "tone-danger" : "tone-info"}">${esc(a.outcome_label)}</span>` : "";
+  const outcomePill = a.outcome_label ? ` <span class="pill ${a.outcome === "SOLD" ? "tone-success" : a.outcome === "NO_SHOW" ? "tone-danger" : "tone-info"}">${esc(outcomeLabels()[a.outcome] || a.outcome_label)}</span>` : "";
   const followup = a.followup_channel
     ? `<p class="appt-meta">${esc(FOLLOWUP_LABELS[a.followup_channel] || "")} ${a.followup_sent_at ? "· " + new Date(a.followup_sent_at).toLocaleDateString("fr-FR") : ""}</p>` : "";
   const outcomeButtons = a.can_set_outcome && view === "closed" ? `
       <div class="appt-actions" role="group" aria-label="Issue du rendez-vous">
         <span style="font-size: 13px; color: var(--muted);">${a.outcome ? "Modifier l'issue :" : "Issue du rendez-vous :"}</span>
-        ${Object.entries(APPT_OUTCOME_LABELS).map(([code, label]) =>
+        ${Object.entries(outcomeLabels()).map(([code, label]) =>
           `<button class="action ${a.outcome === code ? "" : "secondary"}" onclick="setAppointmentOutcome('${esc(a.id)}', '${code}')">${esc(label)}</button>`).join("")}
       </div>` : "";
   // Lot 49 : WhatsApp dans les 20 h qui suivent le dernier message du client, sinon email, sinon téléphone.
@@ -1966,7 +2006,7 @@ async function setAppointmentOutcome(id, outcome) {
     const r = await api(`/api/v1/appointments/${id}/outcome`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outcome }),
     });
-    const parts = [`Issue enregistrée : ${APPT_OUTCOME_LABELS[outcome]}.`];
+    const parts = [`Issue enregistrée : ${outcomeLabels()[outcome]}.`];
     if (r.vehicle_unavailable) parts.push("Le véhicule est passé en indisponible (remettez-le en stock dans Produits si besoin).");
     if (r.followup_channel) parts.push(FOLLOWUP_LABELS[r.followup_channel] + ".");
     if (outcome === "FOLLOW_UP" && !r.appointment.followup_sent_at) parts.push("Bob relancera le client dans 2 jours.");
@@ -2026,7 +2066,7 @@ function showTab(name) {
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
-  ["overview", "conversations", "customers", "products", "orders", "appointments", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
+  ["overview", "conversations", "customers", "products", "orders", "appointments", "quotes", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
@@ -2037,7 +2077,8 @@ function showTab(name) {
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
-  if (name === "bob") { if (currentBusinessType !== "CAR_DEALERSHIP") { loadNegotiationSettings(); loadAddressForm(); } loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } loadHandoffSettings(); if (currentBusinessType !== "INSURANCE_BROKER") loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "settings") loadMfaStatus();
 }
 
@@ -2084,6 +2125,7 @@ const ACTIVITY_STYLE = {
   PAYMENT: ["wallet", "tone-success"], CUSTOMER: ["users", "tone-info"], ORDER: ["receipt", "tone-accent"],
   TRANSFER: ["swap", "tone-danger"], OBJECTION: ["flag", "tone-warning"],
   APPOINTMENT: ["calendar", "tone-info"], SALE: ["key", "tone-success"],  // lot 47 : concession
+  QUOTE: ["receipt", "tone-info"],  // lot 53 : demande de cotation
 };
 
 function homeIcon(name, size = 18) {
@@ -2121,6 +2163,7 @@ function deltaNote(delta, unit, fallback) {
 
 function todoAction(item) {
   if (item.kind === "ORDER") return `showTab('orders')`;
+  if (item.kind === "QUOTE") return `showTab('quotes')`;  // lot 53
   if (item.kind === "APPOINTMENT") return `showTab('appointments')`;
   if (item.kind === "OUTCOME") return `showTab('appointments'); loadAppointments('closed')`;
   return `jumpToCustomerConversation('${esc(item.conversation_id)}')`;
@@ -2139,13 +2182,14 @@ function renderHome(h) {
       <div class="kpi-value">${value}</div>
       <div class="kpi-note">${note}</div>
     </div>`;
-  const dealer = h.business_type === "CAR_DEALERSHIP";  // lot 47 : rendez-vous et ventes, pas de paiement
+  const dealer = h.business_type === "CAR_DEALERSHIP" || h.business_type === "INSURANCE_BROKER";  // lot 47 / 53 : rendez-vous et ventes, pas de paiement
+  const insurer = h.business_type === "INSURANCE_BROKER";
   const conv = k.conversion;
   const kpis = dealer ? [
     kpi("calendar", "tone-success", "Rendez-vous obtenus", `${k.appointments.value}`,
       k.appointments.delta_pct !== null ? deltaNote(k.appointments.delta_pct, "%", "")
         : `${k.appointments.to_confirm} à confirmer`),
-    kpi("key", "tone-warning", "Véhicules vendus", `${k.sold.value}`,
+    kpi("key", "tone-warning", insurer ? "Contrats souscrits" : "Véhicules vendus", `${k.sold.value}`,
       k.sold.delta_pct !== null ? deltaNote(k.sold.delta_pct, "%", "") : "Selon l'issue indiquée après chaque rendez-vous"),
     kpi("target", "tone-info", "Taux de rendez-vous", k.appointment_rate.value === null ? "—" : `${frNumber(k.appointment_rate.value)} <small>%</small>`,
       k.appointment_rate.delta_points !== null ? deltaNote(k.appointment_rate.delta_points, "pts", "")
@@ -2432,7 +2476,7 @@ function money(value, currency) {
 }
 
 async function loadSales(forceRefresh = false) {
-  if (currentBusinessType === "CAR_DEALERSHIP") return;  // lot 32 : réservé à la boutique en ligne
+  if (isRdvSector()) return;  // lot 32 / 53 : réservé au commerce
   const card = document.getElementById("sales-card");
   try {
     let s = forceRefresh
@@ -2561,14 +2605,14 @@ async function loadSources(period) {
   document.querySelectorAll(".sources-periods .pill").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.period === period)));
   const box = document.getElementById("sources-content");
   box.innerHTML = "<p class='loading-text'>Chargement</p>";
-  if (currentBusinessType === "CAR_DEALERSHIP") loadCommercials(period);  // lot 36
+  if (isRdvSector()) loadCommercials(period);  // lot 36 / 53
   try {
     const data = await api(`/api/v1/analytics/sources?period=${encodeURIComponent(period)}`);
     if (!data.total_customers) {
       box.innerHTML = "<p style='font-size: 13px; color: var(--muted);'>Aucun nouveau client sur la période.</p>";
       return;
     }
-    const dealership = currentBusinessType === "CAR_DEALERSHIP";
+    const dealership = isRdvSector();
     const head = dealership
       ? `<tr><th>Source</th><th>Clients</th><th>Rendez-vous</th><th>Venus</th><th>Vendus</th></tr>`
       : `<tr><th>Source</th><th>Clients</th><th>Ventes payées</th></tr>`;
@@ -2828,8 +2872,8 @@ async function loadProducts() {
     .map(
       (p) => `<tr>
         <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}</td>
-        <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
-        <td data-label="Stock">${p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
+        <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix" class="no-insurance">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
+        <td data-label="Stock" class="no-insurance">${p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
         <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel('${esc(p.id)}')">Gérer</button></td>
         <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel('${esc(p.id)}')">Modifier</button></td>
       </tr>
@@ -2856,8 +2900,8 @@ function renderEditPanel(productId) {
   panel.innerHTML = `
     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 620px; margin-bottom: 10px;">
       <input id="edit-name-${p.id}" class="input" placeholder="Nom" value="${esc(p.name)}">
-      <input id="edit-price-${p.id}" class="input" type="number" placeholder="Prix" value="${esc(p.price)}">
-      <input id="edit-stock-${p.id}" class="input" type="number" placeholder="Stock" value="${esc(p.stock_quantity)}">
+      <input id="edit-price-${p.id}" class="input no-insurance" type="number" placeholder="Prix" value="${esc(p.price)}">
+      <input id="edit-stock-${p.id}" class="input no-insurance" type="number" placeholder="Stock" value="${esc(p.stock_quantity)}">
     </div>
     <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${esc(p.description || "")}</textarea>
     ${currentBusinessType === "CAR_DEALERSHIP" || p.vehicle ? `<div style="max-width: 620px; margin-bottom: 10px;">${vehicleFields(`edit-${p.id}`, p.vehicle)}</div>` : ""}
@@ -2886,8 +2930,10 @@ async function saveProductEdit(productId) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: document.getElementById(`edit-name-${productId}`).value,
-        price: document.getElementById(`edit-price-${productId}`).value,
-        stock_quantity: parseInt(document.getElementById(`edit-stock-${productId}`).value, 10),
+        ...(currentBusinessType === "INSURANCE_BROKER" ? {} : {  // lot 53 : jamais de prix chez un courtier
+          price: document.getElementById(`edit-price-${productId}`).value,
+          stock_quantity: parseInt(document.getElementById(`edit-stock-${productId}`).value, 10),
+        }),
         description: document.getElementById(`edit-description-${productId}`).value || null,
         active: document.getElementById(`edit-active-${productId}`).checked,
         ...(document.getElementById(`edit-${productId}-vehicle-year`) ? { vehicle: readVehicle(`edit-${productId}`) } : {}),
@@ -3432,6 +3478,45 @@ async function removeComplement(linkId, productId) {
   renderUpsellPanel(productId);
 }
 
+// ---- Lot 53 : demandes de cotation (courtier / agent d'assurance) ----
+var currentQuoteView = "todo";
+
+async function loadQuotes(view) {
+  currentQuoteView = view || "todo";
+  document.querySelectorAll("[data-quote-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.quoteView === currentQuoteView)));
+  const box = document.getElementById("quote-list");
+  box.innerHTML = '<p class="loading-text">Chargement des demandes</p>';
+  let rows;
+  try { rows = await api("/api/v1/quote-requests?view=" + encodeURIComponent(currentQuoteView)); } catch (e) {
+    box.innerHTML = `<p class="empty-state">${esc(e.message)}</p>`;
+    return;
+  }
+  const empty = { todo: "Aucune demande à traiter.", handled: "Aucune demande prise en charge.", draft: "Aucune demande en cours avec Bob." };
+  box.innerHTML = rows.length ? rows.map((q) => `
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline;">
+        <div><strong>${esc(q.customer)}</strong> · ${esc(q.branch_label)} <span class="pill tone-info">${esc(q.client_type === "ENTREPRISE" ? "Entreprise" : "Particulier")}</span></div>
+        <span style="font-size: 13px; color: var(--muted);">${esc(q.status_label)} · ${new Date(q.submitted_at || q.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>
+      </div>
+      <ul style="margin: 10px 0; padding-left: 18px; font-size: 14px;">${q.lines.map((l) => `<li>${esc(l)}</li>`).join("") || "<li>Aucune information pour l'instant</li>"}</ul>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        ${q.conversation_id ? `<button class="action secondary" onclick="jumpToCustomerConversation('${esc(q.conversation_id)}')">Voir la conversation</button>` : ""}
+        ${q.status === "SUBMITTED" ? `<button class="action" onclick="handleQuote('${esc(q.id)}')">Prise en charge</button>` : ""}
+      </div>
+    </div>`).join("") : `<p class="empty-state">${empty[currentQuoteView]}</p>`;
+}
+
+async function handleQuote(id) {
+  try {
+    await api(`/api/v1/quote-requests/${id}/handle`, { method: "POST" });
+    toast("Demande prise en charge.");
+  } catch (e) {
+    toast(e.message, "error");
+  }
+  loadQuotes(currentQuoteView);
+  scheduleTaskCounts();
+}
+
 async function createProduct() {
   const msg = document.getElementById("new-product-msg");
   msg.textContent = "";
@@ -3443,7 +3528,18 @@ async function createProduct() {
     stock_quantity: parseInt(document.getElementById("new-product-stock").value || "0", 10),
   };
   if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");
-  if (!payload.sku || !payload.name || !payload.price || !payload.currency) {
+  if (currentBusinessType === "INSURANCE_BROKER") {
+    // Lot 53 — un produit d'assurance n'a ni prix ni stock : seulement ses garanties.
+    delete payload.price;
+    payload.stock_quantity = 0;
+    payload.currency = payload.currency || "XOF";
+    payload.description = document.getElementById("new-product-description").value.trim() || null;
+    if (!payload.sku || !payload.name) {
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Référence et nom sont obligatoires.";
+      return;
+    }
+  } else if (!payload.sku || !payload.name || !payload.price || !payload.currency) {
     msg.style.color = "var(--danger)";
     msg.textContent = "Référence, nom, prix et devise sont obligatoires.";
     return;
@@ -3452,7 +3548,7 @@ async function createProduct() {
     await api("/api/v1/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     msg.style.color = "var(--success)";
     msg.textContent = "Produit ajouté.";
-    ["sku", "name", "price", "currency", "stock"].forEach((f) => (document.getElementById("new-product-" + f).value = ""));
+    ["sku", "name", "price", "currency", "stock", "description"].forEach((f) => (document.getElementById("new-product-" + f).value = ""));
     if (currentBusinessType === "CAR_DEALERSHIP") document.getElementById("new-vehicle-fields").innerHTML = vehicleFields("new", null);
     loadProducts();
   } catch (e) {
@@ -4214,6 +4310,7 @@ async function revokeAllSessions() {
 // Nombre = ce qu'il reste à faire ; il baisse quand la tâche est faite, pas quand elle est vue.
 var TASK_NAV = {  // rubrique du menu → types de tâches
   overview: ["callbacks"], conversations: ["conversations"], orders: ["orders"], appointments: ["appointments", "outcomes"],
+  quotes: ["quotes"],  // lot 53
 };
 // « var » : enterApp() peut s'exécuter au démarrage, avant que ce bloc soit lu.
 var taskTimer = null;

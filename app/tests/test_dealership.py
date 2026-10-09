@@ -50,13 +50,13 @@ TOOL_NAMES = {t["name"] for t in TOOL_DEFINITIONS}
 
 def test_online_store_keeps_every_sales_tool_and_never_sees_appointments():
     names = {t["name"] for t in tools_for(ONLINE_STORE, TOOL_DEFINITIONS)}
-    assert names == TOOL_NAMES - DEALERSHIP_TOOLS
+    assert names == TOOL_NAMES - DEALERSHIP_TOOLS - {"update_insurance_request"}  # lot 53 : outil du courtier
     assert {t["name"] for t in tools_for(None, TOOL_DEFINITIONS)} == names  # défaut = boutique en ligne
 
 
 def test_dealership_loses_every_sales_tool_and_gets_appointments():
     names = {t["name"] for t in tools_for(CAR_DEALERSHIP, TOOL_DEFINITIONS)}
-    assert names == TOOL_NAMES - SALES_TOOLS
+    assert names == TOOL_NAMES - SALES_TOOLS - {"update_insurance_request"}  # lot 53 : outil du courtier
     assert "request_appointment" in names and not names & SALES_TOOLS
 
 
@@ -353,7 +353,7 @@ async def test_new_shop_is_asked_its_business_type_then_it_is_saved(client, db_s
 
     before = (await client.get("/api/v1/tenants/me/business-type", headers=headers)).json()
     assert before["business_type"] == ONLINE_STORE and before["chosen"] is False
-    assert [o["code"] for o in before["options"]] == [ONLINE_STORE, CAR_DEALERSHIP]
+    assert [o["code"] for o in before["options"]] == [ONLINE_STORE, CAR_DEALERSHIP, "INSURANCE_BROKER"]  # lot 53
 
     after = await client.put("/api/v1/tenants/me/business-type", json={"business_type": CAR_DEALERSHIP}, headers=headers)
 

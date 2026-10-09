@@ -225,11 +225,13 @@ async def generate_ai_reply_detailed(
     photo_retry_done = False
     lookup_retry_done = False
     # Lot 44 — concession : dates cohérentes et rendez-vous annoncé seulement s'il existe.
-    from app.services.business_type import is_dealership
+    from app.services.business_type import is_appointment_sector, is_insurance
 
-    dealership = is_dealership(tenant)
+    dealership = is_appointment_sector(tenant)  # lot 53 : concession et courtier
+    insurance = is_insurance(tenant)
     date_retry_done = False
     claim_retry_done = False
+    amount_retry_done = False
     try:
         for _ in range(settings.max_tool_iterations):
             response = await _create_with_retries(llm_client, **call_kwargs(system_prompt))
@@ -265,6 +267,19 @@ async def generate_ai_reply_detailed(
                     )
                     logger.warning("Bob a nié une photo existante (conversation %s) : nouvel essai", conversation.id)
                     continue
+                if text and insurance:
+                    # Lot 53 — courtier : jamais de montant. Une correction, puis un message fixe.
+                    from app.services import insurance as insurance_service
+
+                    if insurance_service.contains_amount(text):
+                        if amount_retry_done:
+                            logger.warning("Réponse de Bob remplacée (AMOUNT, conversation %s)", conversation.id)
+                            text = insurance_service.AMOUNT_FALLBACK
+                        else:
+                            amount_retry_done = True
+                            system_prompt += insurance_service.amount_correction()
+                            logger.warning("Réponse de Bob à corriger (AMOUNT, conversation %s) : nouvel essai", conversation.id)
+                            continue
                 if text and dealership:
                     correction, fixed = _appointment_check(text, tenant, executor, date_retry_done, claim_retry_done)
                     if correction == "DATE":

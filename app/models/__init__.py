@@ -62,3 +62,4 @@ __all__ = [
     "ProductQrCode",
     "EmailCampaign",
 ]
+from app.models.quote_request import QuoteRequest  # noqa: F401 — lot 53

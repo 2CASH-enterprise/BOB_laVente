@@ -44,7 +44,24 @@ def _vehicle(appointment) -> str:
     return appointment.vehicle_label or "le véhicule"
 
 
+INSURANCE_KINDS = ("CABINET", "APPEL")  # lot 53 : courtier / agent d'assurance
+
+
+def _insurance_texts(appointment, shop_name: str) -> tuple[str, str]:
+    """(relance après absence, relance « à relancer ») pour un rendez-vous de cabinet ou un appel."""
+    about = appointment.vehicle_label or "votre demande d'assurance"
+    if appointment.outcome == OUTCOME_NO_SHOW:
+        missed = ("nous n'avons pas réussi à vous joindre" if appointment.kind == "APPEL"
+                  else "nous ne vous avons pas vu à votre rendez-vous")
+        return (f"Bonjour, {missed} ({shop_name}). Souhaitez-vous choisir un autre moment ? "
+                "Répondez simplement à ce message."), "Votre rendez-vous"
+    return (f"Bonjour, merci encore pour notre échange, {shop_name} ! Avez-vous des questions sur {about} ? "
+            "Nous restons à votre disposition pour toute information."), "Merci pour notre échange"
+
+
 def whatsapp_text(appointment, shop_name: str) -> str:
+    if appointment.kind in INSURANCE_KINDS:
+        return _insurance_texts(appointment, shop_name)[0]
     if appointment.outcome == OUTCOME_NO_SHOW:
         return (f"Bonjour, nous ne vous avons pas vu pour votre {subject_phrase(appointment)} chez {shop_name}. "
                 "Souhaitez-vous choisir un autre créneau ? Répondez simplement à ce message.")
@@ -56,6 +73,11 @@ def email_text(appointment, shop_name: str, powered_by: bool = False) -> tuple[s
     from app.services.email_layout import customer_footer
 
     footer = customer_footer(shop_name, powered_by)
+    if appointment.kind in INSURANCE_KINDS:
+        text, title = _insurance_texts(appointment, shop_name)
+        reply = "Répondez simplement à cet email ou écrivez-nous sur WhatsApp."
+        body = text.replace("Répondez simplement à ce message.", reply) if "Répondez simplement" in text else f"{text} {reply}"
+        return f"{title} — {shop_name}", f"{body}\n\nÀ bientôt,\n{shop_name}" + footer
     if appointment.outcome == OUTCOME_NO_SHOW:
         return (f"Votre rendez-vous chez {shop_name}",
                 f"Bonjour,\n\nNous ne vous avons pas vu pour votre {subject_phrase(appointment)}. Souhaitez-vous "
@@ -128,7 +150,8 @@ async def record_outcome(db, tenant, appointment, outcome: str, user_id: str, no
         raise OutcomeError("Ce rendez-vous n'a pas encore eu lieu.")
     appointment.outcome, appointment.outcome_at, appointment.outcome_by = outcome, now, user_id
     result = {"vehicle_unavailable": False, "followup_channel": None}
-    if outcome == OUTCOME_SOLD and appointment.product_id is not None:
+    if outcome == OUTCOME_SOLD and appointment.product_id is not None and appointment.kind not in INSURANCE_KINDS:
+        # Lot 53 : un contrat souscrit ne rend jamais un produit d'assurance indisponible.
         product = await db.get(Product, appointment.product_id)
         if product is not None and product.tenant_id == appointment.tenant_id:
             product.stock_quantity = 0

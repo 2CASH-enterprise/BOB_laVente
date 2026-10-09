@@ -198,7 +198,8 @@ def test_segment_screen_after_signup_escapes_options_and_can_be_left_by_logout()
     assert 'id="segment-screen" class="hidden" role="dialog"' in HTML
     check = re.search(r"async function checkBusinessTypeChosen\(\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert "if (bt.chosen) return;" in check
-    assert "chooseBusinessType('${esc(o.code)}')" in check and "${esc(o.label)}" in check and "${esc(o.description)}" in check
+    assert "chooseBusinessType('${esc(o.code)}')" in check and "${sectorTitle(o)}" in check and "${esc(o.description)}" in check
+    assert "return esc(option.label) + (option.hint ? ` <span class=\"option-hint\">(${esc(option.hint)})</span>` : \"\");" in HTML  # lot 53
     enter = re.search(r"function enterApp\(\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert "checkBusinessTypeChosen();" in enter
     logout = re.search(r"function logout\(\) \{(.*?)\n\}", HTML, re.S).group(1)
@@ -215,7 +216,7 @@ def test_business_type_is_no_longer_changeable_from_bob_settings():
 
 
 def test_store_only_features_are_hidden_for_dealerships():
-    assert "body.dealership .store-only { display: none !important; }" in HTML
+    assert "body.rdv-sector .store-only { display: none !important; }" in HTML  # lot 53 : concession et courtier
     nav = re.search(r"<nav>(.*?)</nav>", HTML, re.S).group(1)
     assert 'data-tab="orders" data-label="Commandes" class="store-only"' in nav
     assert 'class="card store-only" id="sales-card"' in HTML
@@ -232,7 +233,8 @@ def test_appointments_page_only_for_dealerships_and_loaded_with_its_tab():
     nav = re.search(r"<nav>(.*?)</nav>", HTML, re.S).group(1)
     assert 'data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden"' in nav
     apply = re.search(r"function applyBusinessType\(code, label\) \{(.*?)\n\}", HTML, re.S).group(1)
-    assert 'const dealership = code === "CAR_DEALERSHIP";' in apply and 'getElementById("nav-appointments").classList.toggle("hidden", !dealership)' in apply
+    assert 'const dealership = code === "CAR_DEALERSHIP";' in apply
+    assert 'getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance))' in apply  # lot 53
     assert HTML.count("applyBusinessType(") >= 2  # définition + chargement
     assert "loadAppointments(currentAppointmentView)" in _show_tab_line("appointments")
     assert "if (item.kind === \"APPOINTMENT\") return `showTab('appointments')`" in HTML

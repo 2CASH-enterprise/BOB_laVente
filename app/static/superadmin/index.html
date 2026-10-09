@@ -206,7 +206,7 @@ async function loadAiCosts() {
 }
 const PLANS = ["FREE", "INDEPENDANT", "STARTER", "PRO", "ENTERPRISE"];
 // Lot 32 : le type d'activité ne se change plus que d'ici, à la demande du client.
-const BUSINESS_TYPES = { ONLINE_STORE: "Boutique en ligne", CAR_DEALERSHIP: "Concession auto" };
+const BUSINESS_TYPES = { ONLINE_STORE: "Commerce (en ligne et physique)", CAR_DEALERSHIP: "Concession auto", INSURANCE_BROKER: "Courtier / agent d'assurance" };
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));

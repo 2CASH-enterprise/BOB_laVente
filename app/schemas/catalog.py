@@ -21,7 +21,8 @@ class ProductCreate(BaseModel):
     sku: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
-    price: Decimal = Field(gt=0)
+    # Lot 53 : obligatoire partout SAUF chez un courtier (jamais de prix) — vérifié par la route.
+    price: Decimal | None = Field(default=None, gt=0)
     cost_price: Decimal | None = Field(default=None, gt=0)
     currency: str = Field(min_length=3, max_length=3)
     stock_quantity: int = Field(ge=0, default=0)

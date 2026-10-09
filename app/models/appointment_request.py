@@ -14,6 +14,8 @@ APPOINTMENT_KINDS = {
     "ESSAI": "Essai",
     "VISITE": "Visite",
     "ESTIMATION_REPRISE": "Estimation de reprise",
+    "CABINET": "Rendez-vous au cabinet",  # lot 53 : courtier / agent d'assurance
+    "APPEL": "Appel d'un conseiller",
 }
 STATUS_REQUESTED = "REQUESTED"
 STATUS_CONFIRMED = "CONFIRMED"

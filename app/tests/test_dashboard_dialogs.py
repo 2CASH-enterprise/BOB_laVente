@@ -86,7 +86,7 @@ def test_warnings_stay_visible():
 
 def test_page_explanations_open_from_the_page_title():
     templates = re.findall(r'<section id="tab-(\w+)" class="hidden">\s*<template class="page-tip-src">', HTML)
-    assert set(templates) == {"appointments", "bob"}
+    assert set(templates) == {"appointments", "bob", "quotes"}  # lot 53 : demandes de cotation
     assert 'id="appt-timezone"' in HTML  # le fuseau horaire reste affiché
     assert '<strong id="business-type-label"></strong>' in HTML  # l'activité reste affichée
     body = _function("showTab")

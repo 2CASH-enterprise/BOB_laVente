@@ -262,6 +262,10 @@ async def update_tenant_business_type(
         db, actor=f"superadmin:{current.superadmin_user_id}", action="BUSINESS_TYPE_CHANGED_BY_ADMIN", tenant_id=tenant.id,
         details={"from": previous, "to": payload.business_type},
     )
+    if payload.business_type == "INSURANCE_BROKER":
+        from app.services.insurance import seed_products
+
+        await seed_products(db, tenant)  # lot 53 : seulement si la boutique n'a encore aucun produit
     await db.commit()
     return await _build_summary(db, tenant)
 

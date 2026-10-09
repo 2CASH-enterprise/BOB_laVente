@@ -259,7 +259,10 @@ async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
 
     dealership = is_dealership(tenant)
     # Lot 24 : jamais de négociation par Bob en concession, quel que soit le réglage enregistré.
-    negotiation_active = negotiation is not None and negotiation.enabled and tenant.is_paid and not dealership
+    from app.services.business_type import is_online_store
+
+    # Lot 53 : la négociation n'existe qu'en commerce (ni concession, ni courtier).
+    negotiation_active = negotiation is not None and negotiation.enabled and tenant.is_paid and is_online_store(tenant)
     from app.services.strategy_service import knowledge_categories
 
     known = await knowledge_categories(db, tenant.id)

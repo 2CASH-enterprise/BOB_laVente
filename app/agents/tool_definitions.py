@@ -335,6 +335,51 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        # Lot 53 — courtier / agent d'assurance : demande de cotation remplie au fil de la conversation.
+        "name": "update_insurance_request",
+        "description": (
+            "Enregistre ce que le client vient de dire sur son besoin d'assurance, pour UNE branche. Appelle-le dès "
+            "qu'une information NOUVELLE et concrète apparaît, sans rien deviner ni compléter, et n'envoie que les "
+            "champs réellement donnés. Le résultat dit ce qu'il manque encore (pose une ou deux questions à la "
+            "fois) ou que la demande de cotation vient d'être transmise au cabinet."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "branch": {"type": "string", "enum": ["AUTO", "MOTO", "SANTE", "HABITATION", "VOYAGE", "VIE_PREVOYANCE",
+                                                      "SCOLAIRE", "RC_PRO", "FLOTTE", "MULTIRISQUE_PRO", "MARCHANDISES", "AUTRE"],
+                           "description": "Branche d'assurance concernée"},
+                "client_type": {"type": "string", "enum": ["PARTICULIER", "ENTREPRISE"],
+                                "description": "Particulier ou entreprise, si c'est clair"},
+                "company_name": {"type": "string", "description": "Nom de l'entreprise"},
+                "vehicle": {"type": "string", "description": "Marque et modèle du véhicule"},
+                "vehicle_year": {"type": "integer", "description": "Année du véhicule"},
+                "vehicle_value": {"type": "string", "description": "Valeur du véhicule, avec les mots du client"},
+                "vehicles_count": {"type": "integer", "description": "Nombre de véhicules (flotte)"},
+                "usage": {"type": "string", "description": "Usage : privé, professionnel, taxi, transport…"},
+                "coverage": {"type": "string", "description": "Couverture souhaitée, avec les mots du client (tiers, tous risques…)"},
+                "persons_count": {"type": "integer", "description": "Nombre de personnes à assurer"},
+                "ages": {"type": "string", "description": "Âges des personnes à assurer"},
+                "occupancy": {"type": "string", "description": "Propriétaire ou locataire"},
+                "housing_type": {"type": "string", "description": "Type de logement : appartement, maison, villa…"},
+                "destination": {"type": "string", "description": "Pays de destination du voyage"},
+                "travel_dates": {"type": "string", "description": "Dates ou durée du voyage"},
+                "objective": {"type": "string", "description": "Objectif : épargne, retraite, études, obsèques, protection des proches"},
+                "age": {"type": "integer", "description": "Âge du client"},
+                "children_count": {"type": "integer", "description": "Nombre d'enfants à assurer"},
+                "activity": {"type": "string", "description": "Activité de l'entreprise"},
+                "employees": {"type": "integer", "description": "Nombre de salariés"},
+                "premises": {"type": "string", "description": "Locaux à assurer : type et ville"},
+                "goods": {"type": "string", "description": "Marchandises transportées"},
+                "route": {"type": "string", "description": "Trajet et mode de transport"},
+                "description": {"type": "string", "description": "Besoin décrit par le client (branche AUTRE)"},
+                "current_insurer": {"type": "string", "description": "Assureur actuel, s'il en a un"},
+                "current_expiry": {"type": "string", "description": "Date d'échéance de son contrat actuel, avec ses mots"},
+            },
+            "required": ["branch"],
+        },
+    },
+    {
         # Lot 26c — envoyer la vraie photo d'un produit (boutique en ligne et concession).
         "name": "send_product_images",
         "description": (

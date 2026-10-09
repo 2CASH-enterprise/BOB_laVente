@@ -26,13 +26,14 @@ from app.core.config import get_settings
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
 from app.models.order import Order, OrderStatus
 from app.models.push_subscription import NotificationState, PushSubscription
-from app.services.business_type import CAR_DEALERSHIP
+from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER
 
 logger = logging.getLogger(__name__)
 
-KINDS = ("conversations", "appointments", "outcomes", "orders", "callbacks")
-DEALERSHIP_ONLY = frozenset({"appointments", "outcomes"})
+KINDS = ("conversations", "appointments", "outcomes", "orders", "callbacks", "quotes")
+DEALERSHIP_ONLY = frozenset({"appointments", "outcomes"})  # secteurs à rendez-vous (concession, courtier)
 STORE_ONLY = frozenset({"orders"})
+INSURANCE_ONLY = frozenset({"quotes"})  # lot 53 : demandes de cotation à traiter
 
 # Titre de la notification selon le type de la nouvelle tâche (ordre = priorité).
 TITLES = {
@@ -41,6 +42,7 @@ TITLES = {
     "orders": "Nouvelle commande",
     "callbacks": "Client à rappeler",
     "outcomes": "Rendez-vous passé : issue à indiquer",
+    "quotes": "Nouvelle demande de cotation",
 }
 
 # Services de notification des navigateurs : jamais d'envoi vers une autre adresse.
@@ -74,7 +76,7 @@ async def task_counts(db, tenant, now: datetime | None = None) -> dict:
 
     now = _aware(now or datetime.now(timezone.utc))
     tenant_id = tenant.id
-    dealership = tenant.business_type == CAR_DEALERSHIP
+    dealership = tenant.business_type in (CAR_DEALERSHIP, INSURANCE_BROKER)  # lot 53 : secteurs à rendez-vous
     counts = dict.fromkeys(KINDS, 0)
 
     waiting = set((await db.execute(select(Conversation.id).where(
@@ -110,6 +112,12 @@ async def task_counts(db, tenant, now: datetime | None = None) -> dict:
         ))).scalars().all()
         counts["outcomes"] = sum(1 for a in past if a.outcome is None)
         counts["callbacks"] += len(open_tasks(past, now))
+        if tenant.business_type == INSURANCE_BROKER:
+            from app.models.quote_request import QuoteRequest
+
+            counts["quotes"] = (await db.execute(select(func.count(QuoteRequest.id)).where(
+                QuoteRequest.tenant_id == tenant_id, QuoteRequest.status == "SUBMITTED",
+            ))).scalar_one()
     else:
         counts["orders"] = (await db.execute(select(func.count(Order.id)).where(
             Order.tenant_id == tenant_id, Order.status == OrderStatus.PENDING,

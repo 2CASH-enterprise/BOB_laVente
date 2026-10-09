@@ -83,6 +83,7 @@ async def update_tenant_profile(
 class BusinessTypeOption(BaseModel):
     code: str
     label: str
+    hint: str | None = None  # lot 53 : précision en gris (« En ligne et physique »)
     description: str
 
 
@@ -144,6 +145,10 @@ async def update_business_type(
     previous = tenant.business_type
     tenant.business_type = payload.business_type
     tenant.business_type_chosen_at = datetime.now(timezone.utc)
+    if payload.business_type == "INSURANCE_BROKER":
+        from app.services.insurance import seed_products
+
+        await seed_products(db, tenant)  # lot 53 : produits d'assurance par défaut, sans prix
     await log_audit_event(
         db, actor=str(current_user.user_id), action="BUSINESS_TYPE_CHANGED", tenant_id=tenant.id,
         details={"from": previous, "to": payload.business_type},
@@ -557,9 +562,9 @@ async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
     from app.models.customer import Customer
     from app.models.product import Product
     from app.models.whatsapp_account import WhatsAppAccount
-    from app.services.business_type import is_dealership
+    from app.services.business_type import is_appointment_sector, is_dealership, is_insurance
 
-    dealership = is_dealership(tenant)
+    dealership = is_appointment_sector(tenant)  # lot 53 : concession et courtier
     has_whatsapp = (await db.execute(select(func.count(WhatsAppAccount.id)).where(
         WhatsAppAccount.tenant_id == tenant.id))).scalar_one() > 0
     has_products = (await db.execute(select(func.count(Product.id)).where(
@@ -581,7 +586,9 @@ async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
     steps = [
         {"key": "whatsapp", "label": "Connecter votre WhatsApp", "tab": "integrations",
          "hint": "Bob répond aux messages reçus sur votre numéro WhatsApp Business.", "done": has_whatsapp},
-        {"key": "products", "label": "Ajouter vos véhicules" if dealership else "Ajouter vos produits", "tab": "products",
+        {"key": "products", "label": ("Ajouter vos véhicules" if is_dealership(tenant) else
+                                      "Vérifier vos produits d'assurance" if is_insurance(tenant) else "Ajouter vos produits"),
+         "tab": "products",
          "hint": "Import d'un fichier, catalogue Facebook ou ajout un par un : Bob ne propose que ce qui existe.",
          "done": has_products},
         {"key": "profile", "label": "Présenter votre entreprise", "tab": "knowledge",

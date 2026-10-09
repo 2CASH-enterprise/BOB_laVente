@@ -57,6 +57,8 @@ async def create_demo(
         raise HTTPException(status_code=400, detail="Le nom de l'entreprise est requis")
     if business_type not in BUSINESS_TYPES:
         raise HTTPException(status_code=400, detail="Secteur d'activité inconnu")
+    if business_type == "INSURANCE_BROKER":  # lot 53 : la démo « courtier » arrive au lot 54
+        raise HTTPException(status_code=400, detail="La démo « Courtier / agent d'assurance » sera bientôt disponible.")
     country = (country or "").strip().upper()
     if len(country) != 2 or not country.isalpha():
         raise HTTPException(status_code=400, detail="Pays invalide")

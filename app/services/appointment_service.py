@@ -38,6 +38,11 @@ def confirmation_message(appointment: AppointmentRequest, shop_name: str, zone) 
         what = f"Votre essai{f' ({appointment.vehicle_label})' if appointment.vehicle_label else ''} est confirmé"
     elif appointment.kind == "VISITE":
         what = f"Votre visite{f' ({appointment.vehicle_label})' if appointment.vehicle_label else ''} est confirmée"
+    elif appointment.kind == "CABINET":  # lot 53 : courtier / agent d'assurance
+        what = f"Votre rendez-vous au cabinet{f' ({appointment.vehicle_label})' if appointment.vehicle_label else ''} est confirmé"
+    elif appointment.kind == "APPEL":
+        return (f"Bonjour ! C'est noté : un conseiller de {shop_name} vous appelle le {when}"
+                f"{f' au sujet de votre {appointment.vehicle_label[:1].lower()}{appointment.vehicle_label[1:]}' if appointment.vehicle_label else ''}. À bientôt !")
     else:
         what = "Votre rendez-vous d'estimation de reprise est confirmé"
     return f"Bonjour ! {what} le {when}. À bientôt chez {shop_name} !"

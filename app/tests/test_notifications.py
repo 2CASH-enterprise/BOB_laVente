@@ -112,7 +112,7 @@ async def test_store_counts_waiting_conversations_and_pending_orders(db_session)
 
     c = await shop.counts()
 
-    assert c == {"conversations": 2, "appointments": 0, "outcomes": 0, "orders": 1, "callbacks": 0, "total": 3}
+    assert c == {"conversations": 2, "appointments": 0, "outcomes": 0, "orders": 1, "callbacks": 0, "quotes": 0, "total": 3}
 
 
 @pytest.mark.asyncio

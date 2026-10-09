@@ -51,6 +51,13 @@ async def create_product(
 
     data = payload.model_dump()
     data["vehicle"] = _checked_vehicle(data.get("vehicle"), tenant)
+    from app.services.business_type import is_insurance
+
+    if is_insurance(tenant):
+        # Lot 53 — un produit d'assurance n'a ni prix ni stock : le cabinet fait une proposition personnalisée.
+        data.update(price=0, cost_price=None, stock_quantity=0)
+    elif data.get("price") is None:
+        raise HTTPException(status_code=422, detail="Le prix est obligatoire")
     product = Product(tenant_id=current_user.tenant_id, **data)
     await repo.add(product)
     await db.commit()
@@ -142,10 +149,15 @@ async def update_product(
         raise HTTPException(status_code=404, detail="Produit introuvable")
 
     changes = payload.model_dump(exclude_unset=True)
-    if "vehicle" in changes:
-        from app.models.tenant import Tenant
+    from app.models.tenant import Tenant
+    from app.services.business_type import is_insurance
 
-        changes["vehicle"] = _checked_vehicle(changes["vehicle"], await db.get(Tenant, current_user.tenant_id))
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if "vehicle" in changes:
+        changes["vehicle"] = _checked_vehicle(changes["vehicle"], tenant)
+    if is_insurance(tenant):
+        for key in ("price", "cost_price", "stock_quantity"):  # lot 53 : jamais de prix chez un courtier
+            changes.pop(key, None)
     for field, value in changes.items():
         setattr(product, field, value)
 

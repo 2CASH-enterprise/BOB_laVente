@@ -132,6 +132,10 @@ async def register_tenant(
         tenant.business_type_chosen_at = datetime.now(timezone.utc)
     db.add(tenant)
     await db.flush()  # obtient tenant.id sans committer
+    if tenant.business_type == "INSURANCE_BROKER":
+        from app.services.insurance import seed_products
+
+        await seed_products(db, tenant)  # lot 53 : produits d'assurance par défaut, sans prix
 
     owner = User(
         tenant_id=tenant.id,

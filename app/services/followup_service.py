@@ -163,7 +163,9 @@ async def build_followup_email(db: AsyncSession, tenant, customer, settings: Ten
     lines = [f"Bonjour {first}," if first else "Bonjour,", ""]
     lines.append((settings.first_message if stage == 0 else settings.second_message).strip())
     if viewed:
-        what = "le véhicule" if is_dealership(tenant) else "l'article"
+        from app.services.business_type import is_insurance
+
+        what = "le véhicule" if is_dealership(tenant) else ("l'assurance" if is_insurance(tenant) else "l'article")
         lines += ["", f"{'Tu regardais' if tu else 'Vous regardiez'} {what} « {viewed} ». "
                       f"{'Il t' + chr(39) + 'intéresse' if tu else 'Il vous intéresse'} toujours ?"]
     if offer:

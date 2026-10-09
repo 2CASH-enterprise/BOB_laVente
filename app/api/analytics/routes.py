@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_dealership, only_online_store
+from app.services.business_type import only_appointment_sectors, only_online_store
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user
 from app.models.conversation import Conversation, Message
@@ -138,7 +138,7 @@ async def get_sources_summary(
     return {"period": period, "currency": tenant.currency if tenant else None, **summary}
 
 
-@router.get("/commercials", dependencies=[Depends(only_dealership())])
+@router.get("/commercials", dependencies=[Depends(only_appointment_sectors())])
 async def get_commercials_summary(
     period: str = Query(default="30", pattern="^(30|90|all)$"),
     current_user: CurrentUser = Depends(get_current_user),

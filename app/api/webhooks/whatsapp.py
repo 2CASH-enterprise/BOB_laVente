@@ -290,9 +290,10 @@ async def receive_webhook(
         await db.commit()
         return {"status": "received_rate_limited"}
     signal = None
-    if rate == usage_guard.OK:
-        signal = await classify_and_store(db, classifier, incoming_message,
-                                          business_type=getattr(await db.get(Tenant, tenant_id), "business_type", None))
+    business_type = getattr(await db.get(Tenant, tenant_id), "business_type", None)
+    # Lot 53 — courtier : pas encore de liste d'objections propre (lot 54) ; aucune analyse d'ici là.
+    if rate == usage_guard.OK and business_type != "INSURANCE_BROKER":
+        signal = await classify_and_store(db, classifier, incoming_message, business_type=business_type)
 
     if llm_client is None or conversation.status != ConversationStatus.ACTIVE:
         # Pas de LLM configuré, ou conversation déjà passée en attente d'un humain (section 19/28) :
@@ -521,6 +522,10 @@ async def receive_webhook(
     recap_emails = [r for r in [await recap_to_send(db, tenant, customer)] if r is not None]
     # Lot 43 — concession : prospect devenu chaud sans rendez-vous → fiche au commercial (une fois).
     recap_emails += await hot_alert_emails(db, tenant, customer, conversation)
+    # Lot 53 — courtier : demande de cotation transmise pendant cette réponse → email au cabinet (une fois).
+    from app.services.insurance import quote_alert_emails
+
+    recap_emails += await quote_alert_emails(db, tenant, customer, conversation)
     await db.commit()
     for email in handoff_emails + outage_emails + booking_emails + recap_emails:
         background_tasks.add_task(send_email, **email)

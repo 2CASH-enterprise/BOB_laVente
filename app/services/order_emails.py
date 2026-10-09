@@ -18,7 +18,7 @@ from sqlalchemy import select, update
 
 from app.models.order import Order, OrderStatus
 from app.services.address_form import uses_tu
-from app.services.business_type import CAR_DEALERSHIP
+from app.services.business_type import is_online_store
 from app.services.email_layout import customer_footer
 from app.services.receipt_service import get_order_item_lines
 
@@ -98,7 +98,7 @@ def _envelope(tenant, customer, subject: str, body: str) -> dict:
 
 async def recap_to_send(db, tenant, customer, now: datetime | None = None) -> dict | None:
     """Email prêt à partir (et marqué envoyé), ou None : boutique, email connu, commande récente pas encore récapitulée."""
-    if tenant is None or customer is None or not customer.email or tenant.business_type == CAR_DEALERSHIP:
+    if tenant is None or customer is None or not customer.email or not is_online_store(tenant):
         return None
     now = _aware(now or datetime.now(timezone.utc))
     order = (await db.execute(

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_dealership
+from app.services.business_type import only_appointment_sectors
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.appointment_request import (
@@ -32,7 +32,7 @@ from app.services.handoff_service import customer_display_name
 from app.services.human_reply import reply_window_closes_at
 from app.services.local_time import as_utc, format_local, local_to_utc, tenant_zone
 
-router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"], dependencies=[Depends(only_dealership())])  # lot 32
+router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"], dependencies=[Depends(only_appointment_sectors())])  # lot 32 / 53 : concession et courtier
 
 
 class AppointmentOut(BaseModel):

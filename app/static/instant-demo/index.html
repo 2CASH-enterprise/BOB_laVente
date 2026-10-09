@@ -96,7 +96,7 @@
       <div class="field"><label>Votre secteur d'activité</label></div>
       <div class="sector-options">
         <button type="button" class="sector-option" onclick="chooseSector('ONLINE_STORE')">
-          <span class="t">🛍️ Boutique en ligne</span>
+          <span class="t">🛍️ Commerce <span style="font-weight: 400; color: #8a8f98; font-size: 0.9em;">(en ligne et physique)</span></span>
           <span class="d">Bob répond, conseille et prend les commandes sur WhatsApp.</span>
         </button>
         <button type="button" class="sector-option" onclick="chooseSector('CAR_DEALERSHIP')">
@@ -209,7 +209,7 @@ const CURRENCIES = { XOF: "FCFA (XOF)", XAF: "FCFA (XAF)", EUR: "Euro (EUR)", US
 
 const SECTORS = {
   ONLINE_STORE: {
-    label: "Boutique en ligne", status: "● Vendeur IA en ligne", company: "Boutique Exemple", items: "PRODUITS IMPORTÉS",
+    label: "Commerce", status: "● Vendeur IA en ligne", company: "Boutique Exemple", items: "PRODUITS IMPORTÉS",
     sample: `Nom,Prix,Description,Stock
 iPhone 15,450000,128 Go neuf sous blister,5
 Samsung A56,280000,256 Go double SIM,12

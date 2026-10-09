@@ -258,8 +258,8 @@ async def test_commercial_stats_are_for_dealerships_only(client, db_session, uni
 
 def test_dashboard_outcome_ui_is_escaped():
     html = open("app/static/dashboard/index.html", encoding="utf-8").read()
-    assert "${esc(a.outcome_label)}" in html and "setAppointmentOutcome(" in html and "${esc(r.name)}" in html
-    assert "body:not(.dealership) .dealer-only { display: none !important; }" in html
+    assert "${esc(outcomeLabels()[a.outcome] || a.outcome_label)}" in html and "setAppointmentOutcome(" in html and "${esc(r.name)}" in html
+    assert "body:not(.rdv-sector) .dealer-only { display: none !important; }" in html
     assert 'class="card dealer-only"' in html and "if (item.kind === \"OUTCOME\")" in html
 
 

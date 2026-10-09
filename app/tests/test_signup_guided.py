@@ -156,7 +156,7 @@ async def test_unknown_country_currency_or_activity_is_refused(client, email_cod
 async def test_signup_options(client):
     o = (await client.get("/api/v1/auth/signup-options")).json()
     assert {c["code"] for c in o["countries"]} == {c for c, _, _ in COUNTRIES}
-    assert {"ONLINE_STORE", "CAR_DEALERSHIP"} == {b["code"] for b in o["business_types"]}
+    assert {"ONLINE_STORE", "CAR_DEALERSHIP", "INSURANCE_BROKER"} == {b["code"] for b in o["business_types"]}  # lot 53
     assert next(c for c in o["countries"] if c["code"] == "CM")["currency"] == "XAF"
 
 
