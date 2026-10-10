@@ -42,6 +42,46 @@
   .badge.demo { background: #FBEFDB; color: var(--warning); }
   button.small { font-size: 11px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; }
   .hidden { display: none !important; }
+  /* Lot 61 — Prospection */
+  .tabs { display: flex; gap: 6px; }
+  .tabs button { background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .tabs button[aria-pressed="true"] { background: white; color: var(--accent); font-weight: 700; }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--text); }
+  .pill[aria-pressed="true"] { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 8px 13px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text); }
+  .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.danger { color: var(--danger); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin: 18px 0 10px; }
+  .funnel-row { display: grid; grid-template-columns: 130px 1fr 110px; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 7px; }
+  .funnel-track { background: #E6EEE9; border-radius: 6px; height: 14px; overflow: hidden; }
+  .funnel-bar { height: 100%; background: var(--accent-light); border-radius: 6px; }
+  .stage { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .stage.s0, .stage.s1 { background: #EEF1EF; color: var(--muted); }
+  .stage.s5, .stage.s6 { background: var(--accent); color: white; }
+  .stage.lost { background: #FBE4E2; color: var(--danger); }
+  tr.clickable { cursor: pointer; } tr.clickable:hover td { background: #F7FBF8; }
+  .modal-back { position: fixed; inset: 0; background: rgba(20,38,28,0.45); display: flex; align-items: flex-start; justify-content: center; padding: 30px 12px; overflow-y: auto; z-index: 50; }
+  .modal { background: var(--panel); border-radius: 16px; width: 100%; max-width: 720px; padding: 22px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+  .modal h3 { margin: 0 0 4px; font-size: 18px; }
+  .modal label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 3px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .steps { display: flex; gap: 4px; margin: 12px 0; }
+  .steps span { flex: 1; text-align: center; font-size: 10.5px; padding: 6px 2px; border-radius: 6px; background: #EEF1EF; color: var(--muted); }
+  .steps span.on { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
+  .box h4 { margin: 0 0 8px; font-size: 13.5px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row .input { margin: 0; flex: 1; min-width: 140px; }
+  .timeline { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .timeline li { padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .timeline li:last-child { border-bottom: none; }
+  .muted { color: var(--muted); font-size: 12px; }
+  textarea.input { font-family: inherit; resize: vertical; line-height: 1.45; }
+  .import-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin-top: 10px; }
+  .import-wrap table { border: none; border-radius: 0; }
+  .import-wrap td, .import-wrap th { white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; padding: 6px 8px; font-size: 12px; }
+  @media (max-width: 640px) { main { padding: 14px; } header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; } .form-grid { grid-template-columns: 1fr; } .funnel-row { grid-template-columns: 96px 1fr 84px; } }
 </style>
 </head>
 <body>
@@ -58,9 +98,14 @@
 <div id="app" class="hidden">
   <header>
     <h1>🛡️ Bob — Super Admin</h1>
+    <nav class="tabs">
+      <button type="button" data-section="shops" aria-pressed="true" onclick="showSection('shops')">Boutiques</button>
+      <button type="button" data-section="prospects" aria-pressed="false" onclick="showSection('prospects')">Prospection</button>
+    </nav>
     <button onclick="logout()">Déconnexion</button>
   </header>
   <main>
+   <div id="shops-section">
     <div class="grid" id="stats-grid"></div>
     <section id="ai-costs" style="margin-bottom: 28px;">
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px;">
@@ -78,7 +123,48 @@
       <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Activité</th><th>Statut de Bob</th><th>Payé jusqu'au</th><th>Produits</th><th>Conversations (mois)</th><th>Commission</th><th>Créé le</th></tr></thead>
       <tbody id="tenant-rows"></tbody>
     </table>
+   </div>
+
+   <!-- Lot 61 — Prospection : du premier contact au compte payant -->
+   <div id="prospects-section" class="hidden">
+    <div class="card" id="funnel-card">
+      <div class="toolbar" style="margin-top: 0;">
+        <h2 style="font-size: 16px; margin: 0;">Parcours des prospects</h2>
+        <div class="pills" id="funnel-periods">
+          <button class="pill" data-period="30" aria-pressed="false" onclick="loadFunnel('30')">30 jours</button>
+          <button class="pill" data-period="90" aria-pressed="false" onclick="loadFunnel('90')">90 jours</button>
+          <button class="pill" data-period="all" aria-pressed="true" onclick="loadFunnel('all')">Depuis le début</button>
+        </div>
+      </div>
+      <p class="muted" style="margin: 0 0 12px;">Prospects ajoutés sur la période, et l'étape la plus avancée qu'ils ont atteinte. « A cliqué » : leur lien personnel, ouvert par une personne (les aperçus de lien ne comptent pas).</p>
+      <div id="funnel-bars"></div>
+      <div class="toolbar">
+        <strong style="font-size: 14px;">Par</strong>
+        <div class="pills" id="funnel-groups">
+          <button class="pill" data-group="by_source" aria-pressed="true" onclick="showFunnelGroup('by_source')">Source</button>
+          <button class="pill" data-group="by_sector" aria-pressed="false" onclick="showFunnelGroup('by_sector')">Secteur</button>
+          <button class="pill" data-group="by_owner" aria-pressed="false" onclick="showFunnelGroup('by_owner')">Suivi par</button>
+        </div>
+      </div>
+      <div style="overflow-x: auto;" id="funnel-groups-table"></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="pills" id="prospect-views"></div>
+      <div class="row" style="flex: 0 1 auto;">
+        <input id="prospect-search" class="input" placeholder="Rechercher (entreprise, contact, ville, source…)" oninput="searchProspects()" style="min-width: 220px;">
+        <button class="btn primary" onclick="openProspectForm()">Ajouter</button>
+        <button class="btn" onclick="openProspectImport()">Importer (Excel)</button>
+        <button class="btn" onclick="exportProspects()">Exporter (Excel)</button>
+      </div>
+    </div>
+    <div style="overflow-x: auto;"><table>
+      <thead><tr><th>Entreprise</th><th>Contact</th><th>Secteur</th><th>Source</th><th>Étape</th><th>Dernier contact</th><th>Suivi par</th></tr></thead>
+      <tbody id="prospect-rows"></tbody>
+    </table></div>
+   </div>
   </main>
+  <div id="prospect-modal" class="modal-back hidden" onclick="if (event.target === this) closeProspectModal()"><div class="modal" id="prospect-modal-body"></div></div>
 </div>
 
 <script>
@@ -327,6 +413,280 @@ async function changeCommission(tenantId, value) {
   } catch (e) {
     alert(e.message);
     loadTenants();
+  }
+}
+
+// ==== Lot 61 — Prospection ====
+var prospectView = "all";
+var prospectData = null;
+var funnelData = null;
+var funnelGroup = "by_source";
+var searchTimer = null;
+var currentProspect = null;
+var prospectImport = null;
+var STAGE_KEYS = ["ADDED", "CONTACTED", "CLICKED", "DEMO", "SIGNED_UP", "ACTIVATED", "PAID"];
+var STAGE_LABELS = ["Ajouté", "Contacté", "A cliqué", "Démo", "Compte créé", "Activé", "Payant"];
+
+function showSection(name) {
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.section === name)));
+  document.getElementById("shops-section").classList.toggle("hidden", name !== "shops");
+  document.getElementById("prospects-section").classList.toggle("hidden", name !== "prospects");
+  if (name === "prospects") { loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); }
+}
+
+async function loadFunnel(period) {
+  document.querySelectorAll("#funnel-periods .pill").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.period === period)));
+  const box = document.getElementById("funnel-bars");
+  try { funnelData = await api(`/api/v1/superadmin/prospects/funnel?period=${encodeURIComponent(period)}`); } catch (e) {
+    box.innerHTML = `<p style="color: var(--danger);">${esc(e.message)}</p>`; return;
+  }
+  const top = Math.max(funnelData.funnel[0].count, 1);
+  box.innerHTML = funnelData.funnel.map((st) => `<div class="funnel-row"><span>${esc(st.label)}</span>
+    <div class="funnel-track"><div class="funnel-bar" style="width: ${Math.round(st.count / top * 100)}%;"></div></div>
+    <span><strong>${st.count}</strong>${st.rate_pct === null ? "" : ` <span class="muted">(${st.rate_pct} %)</span>`}</span></div>`).join("");
+  showFunnelGroup(funnelGroup);
+}
+
+function showFunnelGroup(group) {
+  funnelGroup = group;
+  document.querySelectorAll("#funnel-groups .pill").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.group === group)));
+  const rows = (funnelData && funnelData[group]) || [];
+  document.getElementById("funnel-groups-table").innerHTML = rows.length ? `<table><thead><tr><th></th><th>Prospects</th><th>Contactés</th><th>Ont cliqué</th><th>Démos</th><th>Comptes</th><th>Activés</th><th>Payants</th><th>Taux d'inscription</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td><strong>${esc(r.name)}</strong></td><td>${r.total}</td><td>${r.contacted}</td><td>${r.clicked}</td><td>${r.demo}</td><td>${r.signed_up}</td><td>${r.activated}</td><td>${r.paid}</td><td>${r.signup_rate_pct === null ? "—" : r.signup_rate_pct + " %"}</td></tr>`).join("")}
+    </tbody></table>` : `<p class="muted">Aucun prospect sur la période.</p>`;
+}
+
+function searchProspects() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadProspects, 250);
+}
+
+async function loadProspects(view) {
+  if (view) prospectView = view;
+  const rows = document.getElementById("prospect-rows");
+  const q = document.getElementById("prospect-search").value.trim();
+  try { prospectData = await api(`/api/v1/superadmin/prospects?view=${prospectView}${q ? "&q=" + encodeURIComponent(q) : ""}`); } catch (e) {
+    rows.innerHTML = `<tr><td colspan="7" style="color: var(--danger);">${esc(e.message)}</td></tr>`; return;
+  }
+  const c = prospectData.counts;
+  const views = [["all", "Tous", c.all], ["todo", "À relancer", c.todo], ["clicked", "Ont cliqué", c.clicked], ["signed_up", "Comptes créés", c.signed_up], ["lost", "Perdus", c.lost]];
+  document.getElementById("prospect-views").innerHTML = views.map(([key, label, n]) =>
+    `<button class="pill" aria-pressed="${key === prospectView}" onclick="loadProspects('${key}')">${label} (${n})</button>`).join("");
+  rows.innerHTML = prospectData.prospects.map((p) => `<tr class="clickable" onclick="openProspect('${esc(p.id)}')">
+      <td><strong>${esc(p.company)}</strong>${p.city ? `<div class="muted">${esc(p.city)}</div>` : ""}</td>
+      <td>${esc(p.contact_name || "—")}<div class="muted">${esc(p.phone || p.email || "")}</div></td>
+      <td>${esc(p.sector_label)}</td><td>${esc(p.source || "—")}</td>
+      <td>${stageBadge(p)}${p.follow_up ? ' <span class="badge demo">à relancer</span>' : ""}</td>
+      <td>${p.last_contact_at ? new Date(p.last_contact_at).toLocaleDateString("fr-FR") : "—"}</td>
+      <td>${esc(p.owner || "—")}</td></tr>`).join("") ||
+    `<tr><td colspan="7" class="muted">${prospectView === "all" && !q ? "Aucun prospect : ajoutez-en un, ou importez votre fichier Excel." : "Aucun prospect dans cette vue."}</td></tr>`;
+}
+
+function stageBadge(p) {
+  if (p.status !== "ACTIVE") return `<span class="stage lost">${esc(p.status_label)}</span>`;
+  return `<span class="stage s${Number(p.stage_index)}">${esc(p.stage_label)}</span>`;
+}
+
+function openModal(html) {
+  document.getElementById("prospect-modal-body").innerHTML = html;
+  document.getElementById("prospect-modal").classList.remove("hidden");
+}
+
+function closeProspectModal() {
+  document.getElementById("prospect-modal").classList.add("hidden");
+  currentProspect = null;
+}
+
+function options(list, current) {
+  return list.map((o) => `<option value="${esc(o.value)}" ${o.value === current ? "selected" : ""}>${esc(o.label)}</option>`).join("");
+}
+
+function openProspectForm(p) {
+  const d = prospectData || { sectors: [], owners: [] };
+  p = p || {};
+  openModal(`<h3>${p.id ? "Modifier le prospect" : "Ajouter un prospect"}</h3>
+    <div class="form-grid">
+      <div><label for="pf-company">Entreprise *</label><input id="pf-company" class="input" maxlength="200" value="${esc(p.company || "")}"></div>
+      <div><label for="pf-contact">Contact</label><input id="pf-contact" class="input" maxlength="200" value="${esc(p.contact_name || "")}"></div>
+      <div><label for="pf-phone">Téléphone (WhatsApp)</label><input id="pf-phone" class="input" value="${esc(p.phone || "")}" placeholder="07 07 00 00 00"></div>
+      <div><label for="pf-email">Email</label><input id="pf-email" class="input" value="${esc(p.email || "")}"></div>
+      <div><label for="pf-city">Ville</label><input id="pf-city" class="input" maxlength="120" value="${esc(p.city || "")}"></div>
+      <div><label for="pf-country">Pays (code)</label><input id="pf-country" class="input" maxlength="2" value="${esc(p.country || "CI")}"></div>
+      <div><label for="pf-sector">Secteur</label><select id="pf-sector" class="input">${options(d.sectors, p.sector || "ONLINE_STORE")}</select></div>
+      <div><label for="pf-source">Source</label><input id="pf-source" class="input" maxlength="120" value="${esc(p.source || "")}" placeholder="Salon, réseau, annuaire…"></div>
+      ${p.id ? `<div><label for="pf-owner">Suivi par</label><select id="pf-owner" class="input"><option value="">—</option>${options(d.owners.map((o) => ({ value: o.id, label: o.name })), p.owner_id)}</select></div>` : ""}
+    </div>
+    <label for="pf-notes">Note</label><textarea id="pf-notes" class="input" rows="3" maxlength="2000">${esc(p.notes || "")}</textarea>
+    <p id="pf-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 4px 0;"></p>
+    <div class="row" style="justify-content: flex-end;"><button class="btn" onclick="${p.id ? `openProspect('${esc(p.id)}')` : "closeProspectModal()"}">Annuler</button>
+      <button class="btn primary" onclick="saveProspect(${p.id ? `'${esc(p.id)}'` : "null"})">Enregistrer</button></div>`);
+  document.getElementById("pf-company").focus();
+}
+
+async function saveProspect(id) {
+  const value = (key) => document.getElementById(key).value;
+  const body = { company: value("pf-company"), contact_name: value("pf-contact"), phone: value("pf-phone"), email: value("pf-email"),
+    city: value("pf-city"), country: value("pf-country").toUpperCase(), sector: value("pf-sector"), source: value("pf-source"), notes: value("pf-notes") };
+  if (id && document.getElementById("pf-owner")) body.owner_id = value("pf-owner");
+  try {
+    const p = await api(`/api/v1/superadmin/prospects${id ? "/" + id : ""}`, { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    renderProspect(p);
+    loadProspects(); loadFunnel(funnelData ? funnelData.period : "all");
+  } catch (e) {
+    document.getElementById("pf-error").textContent = e.message;
+  }
+}
+
+async function openProspect(id) {
+  try { renderProspect(await api(`/api/v1/superadmin/prospects/${id}`)); } catch (e) { openModal(`<p style="color: var(--danger);">${esc(e.message)}</p>`); }
+}
+
+function renderProspect(p) {
+  currentProspect = p;
+  const d = prospectData || { channels: [], statuses: [] };
+  const steps = STAGE_LABELS.map((label, i) => `<span class="${i <= p.stage_index ? "on" : ""}">${label}</span>`).join("");
+  const contactable = p.status === "ACTIVE";
+  openModal(`<div class="row" style="justify-content: space-between; align-items: flex-start;">
+      <div><h3>${esc(p.company)}</h3><div class="muted">${esc([p.contact_name, p.phone, p.email, p.city, p.country].filter(Boolean).join(" · "))}</div>
+        <div class="muted">${esc(p.sector_label)}${p.source ? " · " + esc(p.source) : ""}${p.owner ? " · suivi par " + esc(p.owner) : ""}</div></div>
+      <div>${stageBadge(p)}</div></div>
+    <div class="steps">${steps}</div>
+    <div class="box"><h4>Son lien personnel</h4>
+      <div class="row"><input id="pd-link" class="input" readonly value="${esc(p.link)}"><button class="btn" onclick="copyField('pd-link')">Copier</button></div>
+      <p class="muted" style="margin: 6px 0 0;">${p.click_count ? `Ouvert ${Number(p.click_count)} fois.` : "Pas encore ouvert."} Il mène à la présentation de Bob ; la démo et l'inscription faites ensuite lui sont rattachées.</p></div>
+    ${contactable ? `<div class="box"><h4>Message à envoyer vous-même</h4>
+      <textarea id="pd-message" class="input" rows="4" readonly>${esc(p.message)}</textarea>
+      <div class="row"><button class="btn" onclick="copyField('pd-message')">Copier</button>
+        ${p.whatsapp_url ? `<button class="btn primary" onclick="openWhatsApp()">Ouvrir WhatsApp</button>` : `<span class="muted">Ajoutez son téléphone pour l'ouvrir dans WhatsApp.</span>`}</div>
+      <p class="muted" style="margin: 6px 0 0;">Envoyé depuis votre propre WhatsApp (jamais par Bob). « Ouvrir WhatsApp » note le contact.</p></div>
+    <div class="box"><h4>Noter un contact</h4>
+      <div class="row"><select id="pd-channel" class="input" style="flex: 0 1 160px;">${options(d.channels, "PHONE")}</select>
+        <input id="pd-note" class="input" maxlength="500" placeholder="Ce qui s'est dit (facultatif)"></div>
+      <div class="row" style="margin-top: 8px;"><label for="pd-next" style="margin: 0;">Relancer le</label><input id="pd-next" type="date" class="input" style="flex: 0 1 170px;" value="${esc(p.next_action_on || "")}">
+        <button class="btn primary" onclick="logContact()">Noter</button></div></div>` : ""}
+    <div class="box"><h4>Statut</h4>
+      <div class="row"><select id="pd-status" class="input" style="flex: 0 1 200px;">${options(d.statuses, p.status)}</select>
+        <input id="pd-reason" class="input" maxlength="200" placeholder="Raison (facultatif)" value="${esc(p.status_reason || "")}">
+        <button class="btn" onclick="saveStatus()">Enregistrer</button></div></div>
+    <div class="box"><h4>Historique</h4>
+      <div class="row" style="margin-bottom: 8px;"><input id="pd-memo" class="input" maxlength="500" placeholder="Ajouter une note"><button class="btn" onclick="addMemo()">Ajouter</button></div>
+      <ul class="timeline">${p.events.map((ev) => `<li><strong>${esc(ev.label)}</strong>${ev.channel ? " · " + esc(ev.channel) : ""}${ev.detail ? " — " + esc(ev.detail) : ""}
+        <div class="muted">${ev.at ? new Date(ev.at).toLocaleString("fr-FR") : ""}${ev.actor ? " · " + esc(ev.actor) : ""}</div></li>`).join("")}</ul></div>
+    ${p.notes ? `<div class="box"><h4>Note</h4><div style="white-space: pre-wrap; font-size: 13px;">${esc(p.notes)}</div></div>` : ""}
+    <p id="pd-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 8px 0 0;"></p>
+    <div class="row" style="justify-content: space-between; margin-top: 8px;">
+      <button class="btn danger" onclick="deleteProspect()">Effacer ce prospect</button>
+      <div class="row"><button class="btn" onclick="openProspectForm(currentProspect)">Modifier</button><button class="btn primary" onclick="closeProspectModal()">Fermer</button></div></div>`);
+}
+
+async function copyField(id) {
+  const el = document.getElementById(id);
+  try { await navigator.clipboard.writeText(el.value); } catch (e) { el.select(); document.execCommand("copy"); }
+}
+
+async function prospectAction(path, body) {
+  try {
+    renderProspect(await api(`/api/v1/superadmin/prospects/${currentProspect.id}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    loadProspects(); loadFunnel(funnelData ? funnelData.period : "all");
+  } catch (e) {
+    const err = document.getElementById("pd-error");
+    if (err) err.textContent = e.message;
+  }
+}
+
+function openWhatsApp() {
+  window.open(currentProspect.whatsapp_url, "_blank", "noopener");
+  prospectAction("contact", { channel: "WHATSAPP", note: "Message envoyé depuis WhatsApp", next_action_on: document.getElementById("pd-next").value || null });
+}
+
+function logContact() {
+  prospectAction("contact", { channel: document.getElementById("pd-channel").value, note: document.getElementById("pd-note").value,
+    next_action_on: document.getElementById("pd-next").value || null });
+}
+
+function saveStatus() {
+  prospectAction("status", { status: document.getElementById("pd-status").value, reason: document.getElementById("pd-reason").value });
+}
+
+function addMemo() {
+  const note = document.getElementById("pd-memo").value.trim();
+  if (note) prospectAction("note", { note });
+}
+
+async function deleteProspect() {
+  if (!confirm(`Effacer « ${currentProspect.company} » et tout son historique ?\n\nÀ faire si la personne le demande. C'est définitif.`)) return;
+  const r = await fetch(API_BASE + `/api/v1/superadmin/prospects/${currentProspect.id}`, { method: "DELETE", headers: { Authorization: "Bearer " + token } });
+  if (!r.ok) { document.getElementById("pd-error").textContent = "Effacement impossible pour le moment."; return; }
+  closeProspectModal();
+  loadProspects(); loadFunnel(funnelData ? funnelData.period : "all");
+}
+
+async function exportProspects() {
+  const r = await fetch(API_BASE + "/api/v1/superadmin/prospects/export.xlsx", { headers: { Authorization: "Bearer " + token } });
+  if (!r.ok) return;
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = "prospects.xlsx"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function openProspectImport() {
+  const d = prospectData || { sectors: [] };
+  openModal(`<h3>Importer des prospects</h3>
+    <p class="muted">Un fichier Excel (.xlsx) ou CSV, une ligne par entreprise. Bob reconnaît les colonnes (Entreprise, Contact, Téléphone, Email, Ville, Secteur…) ; vous vérifiez avant d'importer. Un prospect déjà connu (même email ou téléphone) n'est pas ajouté deux fois.</p>
+    <div class="form-grid">
+      <div><label for="pi-source">Source de cette liste</label><input id="pi-source" class="input" maxlength="120" placeholder="Salon de l'auto 2026"></div>
+      <div><label for="pi-sector">Secteur (si la colonne manque)</label><select id="pi-sector" class="input">${options(d.sectors, "ONLINE_STORE")}</select></div>
+      <div><label for="pi-country">Pays (si la colonne manque)</label><input id="pi-country" class="input" maxlength="2" value="CI"></div>
+      <div><label for="pi-file">Fichier</label><input id="pi-file" type="file" class="input" accept=".xlsx,.csv" onchange="previewProspectImport()"></div>
+    </div>
+    <div id="pi-preview"></div>
+    <p id="pi-msg" style="font-size: 13px; min-height: 16px; margin: 8px 0;"></p>
+    <div class="row" style="justify-content: flex-end;"><button class="btn" onclick="closeProspectModal()">Fermer</button></div>`);
+}
+
+async function previewProspectImport(sheet) {
+  const file = document.getElementById("pi-file").files[0];
+  const msg = document.getElementById("pi-msg");
+  msg.textContent = ""; msg.style.color = "var(--danger)";
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  if (sheet) form.append("sheet", sheet);
+  let p;
+  try { p = await api("/api/v1/superadmin/prospects/import/preview", { method: "POST", body: form }); } catch (e) { msg.textContent = e.message; return; }
+  prospectImport = Object.assign({ file }, p);
+  const opts = (current) => `<option value="">Ignorer</option>` + p.fields.map((f) => `<option value="${esc(f.value)}" ${f.value === current ? "selected" : ""}>${esc(f.label)}</option>`).join("");
+  document.getElementById("pi-preview").innerHTML = `
+    ${p.sheets.length > 1 ? `<label>Feuille <select class="input" style="width: auto;" onchange="previewProspectImport(this.value)">${p.sheets.map((s) => `<option ${s === p.sheet ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label>` : ""}
+    <p style="font-size: 13px; margin: 10px 0 0;">${p.total} ligne${p.total > 1 ? "s" : ""}. À quoi correspond chaque colonne ?</p>
+    <div class="import-wrap"><table><thead><tr>${p.header.map((h, i) => `<th>${esc(h || "(sans titre)")}<br><select class="input" style="margin: 4px 0 0; padding: 4px;" onchange="prospectImport.mapping[${i}] = this.value || null">${opts(p.mapping[i])}</select></th>`).join("")}</tr></thead>
+    <tbody>${p.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <div class="row" style="justify-content: flex-end; margin-top: 10px;"><button class="btn primary" id="pi-run" onclick="runProspectImport()">Importer ${p.total} ligne${p.total > 1 ? "s" : ""}</button></div>`;
+}
+
+async function runProspectImport() {
+  const p = prospectImport;
+  const msg = document.getElementById("pi-msg");
+  const form = new FormData();
+  form.append("file", p.file);
+  form.append("mapping", JSON.stringify(p.mapping));
+  if (p.sheet) form.append("sheet", p.sheet);
+  form.append("country", document.getElementById("pi-country").value.toUpperCase() || "CI");
+  form.append("sector", document.getElementById("pi-sector").value);
+  form.append("source", document.getElementById("pi-source").value);
+  document.getElementById("pi-run").disabled = true;
+  try {
+    const r = await api("/api/v1/superadmin/prospects/import", { method: "POST", body: form });
+    msg.style.color = r.errors.length ? "var(--warning)" : "var(--success)";
+    msg.innerHTML = esc(`${r.created} prospect${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}, ${r.duplicates} déjà connu${r.duplicates > 1 ? "s" : ""}.`)
+      + (r.errors.length ? `<ul style="margin: 6px 0 0; padding-left: 18px;">${r.errors.map((e) => `<li>${esc("Ligne " + e.line + " : " + e.message)}</li>`).join("")}</ul>` : "");
+    document.getElementById("pi-preview").innerHTML = "";
+    loadProspects(); loadFunnel(funnelData ? funnelData.period : "all");
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+    document.getElementById("pi-run").disabled = false;
   }
 }
 </script>

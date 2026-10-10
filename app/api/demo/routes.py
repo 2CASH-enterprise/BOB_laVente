@@ -6,7 +6,9 @@ que n'importe quel tenant réel (mêmes outils, mêmes garde-fous, section 33/50
 """
 import secrets
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +39,7 @@ DEMO_OPENING_HOURS = {str(day): [["09:00", "12:00"], ["14:00", "18:00"]] for day
 
 @router.post("/create", response_model=DemoCreateResponse)
 async def create_demo(
+    request: Request,
     company_name: str = Form(...),
     currency: str = Form("XOF"),
     country: str = Form("SN"),
@@ -64,7 +67,11 @@ async def create_demo(
     dealership = business_type == CAR_DEALERSHIP
     if business_type == "INSURANCE_BROKER":
         # Lot 54 — démo courtier : pas de fichier, les produits d'assurance par défaut (sans prix) suffisent.
-        return await _create_insurance_demo(db, company_name, currency, country, insurance_structure)
+        created = await _create_insurance_demo(db, company_name, currency, country, insurance_structure)
+        from app.services import prospection  # lot 61 : démo rattachée au prospect venu par son lien
+
+        await prospection.attach(db, request, UUID(created.tenant_id), "DEMO")
+        return created
     if file is None or not file.filename:
         raise HTTPException(status_code=400, detail="Un fichier catalogue (CSV) est requis")
 
@@ -114,6 +121,9 @@ async def create_demo(
         await db.commit()
 
     demo_token = create_access_token(user_id=owner.id, tenant_id=tenant.id, role=owner.role.value)
+    from app.services import prospection  # lot 61 : démo rattachée au prospect venu par son lien
+
+    await prospection.attach(db, request, tenant.id, "DEMO")
 
     return DemoCreateResponse(
         tenant_id=str(tenant.id),
@@ -242,6 +252,7 @@ async def demo_chat(
 @router.post("/promote", response_model=DemoPromoteResponse)
 async def promote_demo(
     payload: DemoPromoteRequest,
+    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DemoPromoteResponse:
@@ -307,4 +318,7 @@ async def promote_demo(
     await db.commit()
 
     new_token = create_access_token(user_id=owner.id, tenant_id=tenant.id, role=owner.role.value)
+    from app.services import prospection  # lot 61 : compte créé depuis la démo du prospect
+
+    await prospection.attach(db, request, tenant.id, "SIGNUP", email=owner.email)
     return DemoPromoteResponse(access_token=new_token)

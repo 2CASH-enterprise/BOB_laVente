@@ -158,6 +158,9 @@ async def register_tenant(
     )
 
     await db.commit()
+    from app.services import prospection  # lot 61 : inscription rattachée au prospect (lien, ou même email)
+
+    await prospection.attach(db, request, tenant.id, "SIGNUP", email=payload.owner_email)
 
     return TenantCreatedResponse(tenant_id=tenant.id, owner_user_id=owner.id)
 

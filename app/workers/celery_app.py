@@ -25,6 +25,8 @@ TASK_MODULES = [
     "app.workers.llm_budget",
     "app.workers.billing",
     "app.workers.renewals",
+    "app.workers.reports",
+    "app.workers.prospects",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -69,6 +71,16 @@ celery_app.conf.beat_schedule = {
     "contract-renewals": {
         "task": "app.workers.renewals.check_renewals_task",
         "schedule": crontab(minute=35),
+    },
+    # Lot 60 — rapport mensuel de début de mois (le rapport de renouvellement part avec billing-notices).
+    "monthly-reports": {
+        "task": "app.workers.reports.check_monthly_reports_task",
+        "schedule": crontab(minute=50),
+    },
+    # Lot 61 — prospects restés sans réaction depuis un an : effacés (données personnelles).
+    "purge-prospects": {
+        "task": "app.workers.prospects.purge_prospects_task",
+        "schedule": crontab(hour=3, minute=40),
     },
 }
 celery_app.conf.timezone = "UTC"
