@@ -170,31 +170,39 @@ async def _data(db, tenant):
     return customer
 
 
+def _sheet(content: bytes) -> list[list]:
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    return [list(r) for r in load_workbook(BytesIO(content)).active.iter_rows(values_only=True)]
+
+
 @pytest.mark.asyncio
 async def test_contract_and_quote_exports(client, db_session):
     tenant = await _cabinet(db_session)
     await _data(db_session, tenant)
     owner = await _headers(client, tenant)
     agent = await _login(client, await _user(db_session, tenant, Role.AGENT))
-    full = (await client.get("/api/v1/contracts/export.csv", headers=owner))
-    assert full.status_code == 200 and "registre_contrats.csv" in full.headers["content-disposition"]
-    lines = full.content.decode("utf-8-sig").splitlines()
-    assert lines[0].split(";")[7:9] == ["Prime", "Devise"] and "185000,00;XOF" in lines[1] and "POL-9" in lines[1]
-    hidden = (await client.get("/api/v1/contracts/export.csv", headers=agent)).content.decode("utf-8-sig").splitlines()
-    assert "Prime" not in hidden[0] and "185000" not in hidden[1]
-    quotes = (await client.get("/api/v1/quote-requests/export.csv", headers=agent)).content.decode("utf-8-sig").splitlines()
-    assert quotes[0].startswith("Client;Téléphone;Branche") and len(quotes) == 2
-    row = quotes[1]
+    full = (await client.get("/api/v1/contracts/export.xlsx", headers=owner))  # lot 59 : Excel
+    assert full.status_code == 200 and "registre_contrats.xlsx" in full.headers["content-disposition"]
+    lines = _sheet(full.content)
+    assert lines[0][7:9] == ["Prime", "Devise"] and lines[1][7:9] == [185000, "XOF"] and "POL-9" in lines[1]
+    hidden = _sheet((await client.get("/api/v1/contracts/export.xlsx", headers=agent)).content)
+    assert "Prime" not in hidden[0] and 185000 not in hidden[1]
+    quotes = _sheet((await client.get("/api/v1/quote-requests/export.xlsx", headers=agent)).content)
+    assert quotes[0][:3] == ["Client", "Téléphone", "Branche"] and len(quotes) == 2
+    row = " | ".join(str(v) for v in quotes[1] if v is not None)
     assert "Assurance santé" in row and "Perdu" in row and "Trop cher" in row and "Sénégal" in row
     assert "Nombre de personnes : 3" in row and "Risque situé hors de Côte d'Ivoire" in row
     assert "02/10/2026 09:00" in row and "02/10/2026 09:01" in row  # heure d'Abidjan
     tenant.country = "FR"  # heure de Paris en octobre : UTC+2 — les heures suivent le pays du cabinet
     await db_session.commit()
-    paris = (await client.get("/api/v1/quote-requests/export.csv", headers=agent)).content.decode("utf-8-sig").splitlines()[1]
+    paris = " | ".join(str(v) for v in _sheet((await client.get("/api/v1/quote-requests/export.xlsx", headers=agent)).content)[1] if v)
     assert "02/10/2026 11:00" in paris and "02/10/2026 11:01" in paris
     viewer = await _login(client, await _user(db_session, tenant, Role.VIEWER))
-    assert (await client.get("/api/v1/contracts/export.csv", headers=viewer)).status_code == 403
-    assert (await client.get("/api/v1/quote-requests/export.csv", headers=viewer)).status_code == 403
+    assert (await client.get("/api/v1/contracts/export.xlsx", headers=viewer)).status_code == 403
+    assert (await client.get("/api/v1/quote-requests/export.xlsx", headers=viewer)).status_code == 403
     actions = set((await db_session.execute(select(AuditLog.action))).scalars().all())
     assert {"CONTRACTS_EXPORTED", "QUOTE_REQUESTS_EXPORTED"} <= actions
 
@@ -240,7 +248,7 @@ def test_dashboard():
     for key in ("insurer_legal_name", "insurer_address", "insurance_partners: parsePartners(", "tariff_url", "privacy_policy_url"):
         assert key in save, key
     assert 'classList.toggle("hidden", chosen !== "COURTIER")' in _function("insuranceStructureChanged")
-    assert "downloadExport('/api/v1/contracts/export.csv'" in HTML and "downloadExport('/api/v1/quote-requests/export.csv'" in HTML
+    assert "downloadExport('/api/v1/contracts/export.xlsx'" in HTML and "downloadExport('/api/v1/quote-requests/export.xlsx'" in HTML
     assert "openCustomerDossier('${esc(c.id)}')" in HTML and 'currentBusinessType === "INSURANCE_BROKER"' in HTML
     dossier = _function("openCustomerDossier")
     assert "Authorization" in dossier and "token" not in dossier.split("fetch(")[1].split(",")[0]  # jamais dans l'adresse

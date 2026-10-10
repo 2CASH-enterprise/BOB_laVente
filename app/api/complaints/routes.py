@@ -80,14 +80,16 @@ async def list_complaints(
     }
 
 
-@router.get("/export.csv")
-async def export_csv(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> Response:
+@router.get("/export.xlsx")
+async def export_registry(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> Response:
     tenant = await db.get(Tenant, current_user.tenant_id)
-    content = await complaints.export_csv(db, tenant)
+    content = await complaints.export_xlsx(db, tenant)
     await log_audit_event(db, actor=str(current_user.user_id), action="COMPLAINTS_EXPORTED", tenant_id=tenant.id, details={})
     await db.commit()
-    return Response(content.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": 'attachment; filename="registre_reclamations.csv"'})
+    from app.services.spreadsheet import XLSX_MEDIA
+
+    return Response(content, media_type=XLSX_MEDIA,
+                    headers={"Content-Disposition": 'attachment; filename="registre_reclamations.xlsx"'})
 
 
 @router.put("/settings", dependencies=[Depends(require_role("ADMIN"))])

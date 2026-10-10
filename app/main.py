@@ -29,6 +29,8 @@ from app.api.quotes.routes import router as quotes_router  # lot 53
 from app.api.contracts.routes import router as contracts_router  # lot 55
 from app.api.complaints.routes import router as complaints_router  # lot 57
 from app.api.dossier.routes import router as dossier_router  # lot 58
+from app.api.customer_import.routes import router as customer_import_router  # lot 59
+from app.api.kit.routes import router as kit_router  # lot 59
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from app.api.whatsapp.routes import router as whatsapp_router
 from app.core.config import get_settings
@@ -55,6 +57,7 @@ app.include_router(complements_router)
 app.include_router(catalog_import_router)
 app.include_router(orders_router)
 app.include_router(conversations_router)
+app.include_router(customer_import_router)  # lot 59 : avant les clients (« /export.xlsx » n'est pas un identifiant)
 app.include_router(customers_router)
 app.include_router(analytics_router)
 app.include_router(notifications_router)
@@ -72,6 +75,7 @@ app.include_router(quotes_router)
 app.include_router(contracts_router)
 app.include_router(complaints_router)
 app.include_router(dossier_router)
+app.include_router(kit_router)
 
 _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():

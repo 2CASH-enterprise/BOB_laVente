@@ -2,7 +2,7 @@
 Lot 58 — exports du courtier (règlement CIMA 01-24, art. 4, 5, 14 et 15 : le cabinet garde l'accès à ses données,
 piste d'audit de l'origine au dénouement, communication aux autorités et contrôles sur place).
 
-- Registre des contrats et demandes de cotation en CSV (« ; », UTF-8 avec BOM pour Excel), heures du pays.
+- Registre des contrats et demandes de cotation en Excel (.xlsx, lot 59), heures du pays.
 - « Dossier du client » : une page autonome, imprimable (Enregistrer en PDF), qui rassemble tout ce que Bob et le
   cabinet savent d'un client : identité, accords donnés, conversations complètes horodatées, demandes de cotation
   et leurs étapes, rendez-vous, contrats, réclamations. Tout le texte est échappé : un message de client ne peut
@@ -10,8 +10,6 @@ piste d'audit de l'origine au dénouement, communication aux autorités et contr
 
 La prime n'apparaît que pour un administrateur du cabinet (choix du lot 55).
 """
-import csv
-import io
 from datetime import datetime, timezone
 from html import escape
 
@@ -37,15 +35,15 @@ def _day(value) -> str:
     return value.strftime("%d/%m/%Y") if value else ""
 
 
-def _csv(rows: list[list]) -> bytes:
-    out = io.StringIO()
-    csv.writer(out, delimiter=";").writerows(rows)
-    return out.getvalue().encode("utf-8-sig")
+def _xlsx(title: str, rows: list[list]) -> bytes:
+    from app.services.spreadsheet import to_xlsx
+
+    return to_xlsx(title, rows[0], rows[1:])
 
 
 # --- Registre des contrats ------------------------------------------------------------------------
 
-async def contracts_csv(db, tenant, can_see_premium: bool) -> bytes:
+async def contracts_xlsx(db, tenant, can_see_premium: bool) -> bytes:
     from app.models.customer import Customer
     from app.models.insurance_contract import InsuranceContract
     from app.services import insurance_contracts as ic
@@ -68,14 +66,14 @@ async def contracts_csv(db, tenant, can_see_premium: bool) -> bytes:
                 ic.CHANNEL_LABELS.get(c.client_reminder_channel or "", ""), _when(tenant, c.renewal_handled_at),
                 "oui" if c.renewed_from_id else "", c.note or "", _when(tenant, c.created_at)]
         if can_see_premium:
-            line[7:7] = [f"{c.premium:.2f}".replace(".", ",") if c.premium is not None else "", c.currency or ""]
+            line[7:7] = [float(c.premium) if c.premium is not None else "", c.currency or ""]
         lines.append(line)
-    return _csv(lines)
+    return _xlsx("Contrats", lines)
 
 
 # --- Demandes de cotation -------------------------------------------------------------------------
 
-async def quotes_csv(db, tenant) -> bytes:
+async def quotes_xlsx(db, tenant) -> bytes:
     from app.models.customer import Customer
     from app.models.quote_request import QuoteRequest
     from app.services.handoff_service import customer_display_name
@@ -95,7 +93,7 @@ async def quotes_csv(db, tenant) -> bytes:
                       insurance.domiciliation_warning(tenant, r) or "", _when(tenant, r.created_at),
                       _when(tenant, r.consent_at), _when(tenant, r.submitted_at), _when(tenant, r.handled_at),
                       _when(tenant, r.proposal_sent_at), _when(tenant, r.closed_at), r.lost_reason or ""])
-    return _csv(lines)
+    return _xlsx("Demandes de cotation", lines)
 
 
 # --- Dossier du client ----------------------------------------------------------------------------

@@ -53,6 +53,9 @@ DIAL_CODES = {
 # Pays où le 0 initial d'un numéro national disparaît après l'indicatif (06… → 336…). En Côte d'Ivoire
 # et au Bénin, le 0 fait partie du numéro (07… → 22507…).
 TRUNK_ZERO = frozenset({"FR", "BE", "CH", "MA", "DZ", "TN", "GH", "NG", "CM", "GA", "CG", "CD", "GN", "GW", "GQ"})
+# Lot 59 — pays où le numéro national a 10 chiffres et commence par 0 (Côte d'Ivoire, Bénin) : saisi comme nombre
+# dans Excel, il perd son 0 (07 00 00 00 01 → 700000001) ; on le remet.
+NATIONAL_ZERO = frozenset({"CI", "BJ"})
 
 
 # --- Délais ---------------------------------------------------------------------------------------
@@ -131,6 +134,8 @@ def normalize_phone(raw, country: str | None) -> str | None:
     if not digits:
         return None
     if not international:
+        if (country or "").upper() in NATIONAL_ZERO and len(digits) == 9 and not digits.startswith("0"):
+            digits = "0" + digits
         code = DIAL_CODES.get((country or "").upper())
         if code and not (digits.startswith(code) and len(digits) >= len(code) + 8):
             if country in TRUNK_ZERO and digits.startswith("0"):

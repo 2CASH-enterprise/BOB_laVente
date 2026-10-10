@@ -10,8 +10,6 @@ Lot 57 — registre des réclamations et des sinistres du courtier (règlement C
   réclamation non traitée après sa date limite est « en retard ». Rien n'est jamais supprimé.
 - Le type (réclamation ou sinistre) est deviné par mots-clés, jamais par l'IA, et le cabinet peut le corriger.
 """
-import csv
-import io
 import re
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
@@ -344,7 +342,7 @@ def _csv_when(tenant, moment) -> str:
     return local_now(tenant, moment).strftime("%Y-%m-%d %H:%M") if moment else ""
 
 
-async def export_csv(db, tenant) -> str:
+async def export_xlsx(db, tenant) -> bytes:
     """Registre complet (pour un contrôle) : une ligne par réclamation, toutes les étapes horodatées."""
     from app.models.customer import Customer
     from app.models.insurance_complaint import InsuranceComplaint
@@ -354,17 +352,18 @@ async def export_csv(db, tenant) -> str:
                              .where(InsuranceComplaint.tenant_id == tenant.id, Customer.tenant_id == tenant.id)
                              .order_by(InsuranceComplaint.received_at))).all()
     today = local_now(tenant).date()
-    out = io.StringIO()
-    writer = csv.writer(out, delimiter=";")
-    writer.writerow(["Référence", "Type", "Canal", "Client", "Téléphone", "Reçue le", "Accusé de réception",
+    header = (["Référence", "Type", "Canal", "Client", "Téléphone", "Reçue le", "Accusé de réception",
                      "Date limite", "Statut", "En retard", "Prise en charge le", "Traitée le", "Réponse apportée",
                      "Message du client", "Messages suivants"])
+    lines = []
     for c, customer in rows:
-        writer.writerow([
+        lines.append([
             c.reference, KINDS.get(c.kind, c.kind), CHANNELS.get(c.channel, c.channel), customer_display_name(customer),
             f"+{customer.whatsapp_number}" if customer.whatsapp_number else "", _csv_when(tenant, c.received_at),
             _csv_when(tenant, c.acknowledged_at), c.due_on.isoformat() if c.due_on else "", STATUSES.get(c.status, c.status),
             "oui" if is_overdue(c, today) else "non", _csv_when(tenant, c.started_at), _csv_when(tenant, c.resolved_at),
             c.resolution or "", c.subject, c.follow_ups,
         ])
-    return out.getvalue()
+    from app.services.spreadsheet import to_xlsx
+
+    return to_xlsx("Réclamations", header, lines)

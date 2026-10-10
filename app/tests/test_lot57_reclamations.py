@@ -280,12 +280,16 @@ async def test_late_view_counts_and_export(client, db_session):
 
     assert (await task_counts(db_session, tenant))["complaints"] == 2  # à traiter + en cours mais en retard
     assert list(TITLES)[1] == "complaints"
-    export = await client.get("/api/v1/complaints/export.csv", headers=headers)
-    assert export.status_code == 200 and "registre_reclamations.csv" in export.headers["content-disposition"]
-    lines = export.content.decode("utf-8-sig").splitlines()
-    assert lines[0].startswith("Référence;Type;Canal;Client") and len(lines) == 3
-    assert lines[1].startswith("R-2026-0001;Réclamation;WhatsApp;") and ";oui;" in lines[1]
-    assert '"Ancienne; plainte ""guillemets"""' in lines[1]
+    export = await client.get("/api/v1/complaints/export.xlsx", headers=headers)  # lot 59 : Excel
+    assert export.status_code == 200 and "registre_reclamations.xlsx" in export.headers["content-disposition"]
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    lines = [list(r) for r in load_workbook(BytesIO(export.content)).active.iter_rows(values_only=True)]
+    assert lines[0][:4] == ["Référence", "Type", "Canal", "Client"] and len(lines) == 3
+    assert lines[1][:3] == ["R-2026-0001", "Réclamation", "WhatsApp"] and "oui" in lines[1]
+    assert 'Ancienne; plainte "guillemets"' in lines[1]
 
 
 @pytest.mark.asyncio

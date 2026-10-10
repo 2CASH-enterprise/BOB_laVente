@@ -97,5 +97,5 @@ def test_page_explanations_open_from_the_page_title():
 def test_every_infobulle_button_has_its_bubble():
     markup = HTML[:HTML.index("<script>", HTML.index("<body"))]
     assert len(re.findall(r'<button class="tip(?: hidden page-tip-btn)?"></button><span class="tip-bubble', markup)) \
-        == len(re.findall(r'<button class="tip', markup)) == 20  # lot 54 : « Vous êtes » (courtier) ; lot 56 : son des nouvelles tâches ; lot 58 : liens tarifs et confidentialité
+        == len(re.findall(r'<button class="tip', markup)) == 22  # lot 59 : kit de lancement et import Excel ; lot 54 : « Vous êtes » (courtier) ; lot 56 : son des nouvelles tâches ; lot 58 : liens tarifs et confidentialité
     assert "initTips();" in SCRIPT

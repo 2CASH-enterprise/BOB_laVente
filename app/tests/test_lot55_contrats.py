@@ -383,7 +383,7 @@ async def test_csv_import_guards(client, db_session):
         "file": ("c.csv", b"nom;branche\nAwa;Auto\n", "text/csv")})
     assert missing.status_code == 422 and "téléphone, branche et échéance" in missing.json()["detail"]
     assert (await client.post("/api/v1/contracts/import-csv", headers=manager,
-                              files={"file": ("c.xlsx", b"x", "text/csv")})).status_code == 400
+                              files={"file": ("c.pdf", b"x", "text/csv")})).status_code == 400  # lot 59 : .xlsx accepté
     latin = "telephone;branche;echeance;note\n0700000002;Santé;2027-01-01;déjà client\n".encode("cp1252")
     report = (await client.post("/api/v1/contracts/import-csv", headers=manager,
                                 files={"file": ("c.csv", latin, "text/csv")})).json()

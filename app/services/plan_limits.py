@@ -83,10 +83,14 @@ def max_contact_points(tenant) -> int | None:
     return DEALERSHIP_MAX_CONTACT_POINTS if is_appointment_sector(tenant) else PAID_MAX_CONTACT_POINTS
 
 
+KIT_CODE_PREFIX = "KIT_"
+
+
 async def count_contact_points(db: AsyncSession, tenant_id) -> int:
     """Les points de contact archivés ne comptent plus dans la limite."""
     stmt = select(func.count(ContactPoint.id)).where(
-        ContactPoint.tenant_id == tenant_id, ContactPoint.archived_at.is_(None)
+        ContactPoint.tenant_id == tenant_id, ContactPoint.archived_at.is_(None),
+        ~ContactPoint.code.startswith(KIT_CODE_PREFIX),  # lot 59 : le lien du kit de lancement ne compte pas
     )
     return (await db.execute(stmt)).scalar_one()
 

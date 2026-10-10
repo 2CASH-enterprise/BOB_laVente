@@ -120,17 +120,19 @@ async def list_contracts(
     }
 
 
-@router.get("/export.csv", dependencies=[Depends(require_role("AGENT"))])
+@router.get("/export.xlsx", dependencies=[Depends(require_role("AGENT"))])
 async def export_contracts(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> Response:
-    """Lot 58 (CIMA, art. 4, 14) : le registre complet, tous statuts ; la prime pour un administrateur seulement."""
-    from app.services.insurance_exports import contracts_csv
+    """Lot 58 (CIMA, art. 4, 14) : le registre complet, tous statuts ; la prime pour un administrateur seulement.
+    Lot 59 : en Excel."""
+    from app.services.insurance_exports import contracts_xlsx
+    from app.services.spreadsheet import XLSX_MEDIA
 
     tenant = await _tenant(db, current_user)
-    content = await contracts_csv(db, tenant, _is_admin(current_user))
+    content = await contracts_xlsx(db, tenant, _is_admin(current_user))
     await log_audit_event(db, actor=str(current_user.user_id), action="CONTRACTS_EXPORTED", tenant_id=tenant.id, details={})
     await db.commit()
-    return Response(content, media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": 'attachment; filename="registre_contrats.csv"'})
+    return Response(content, media_type=XLSX_MEDIA,
+                    headers={"Content-Disposition": 'attachment; filename="registre_contrats.xlsx"'})
 
 
 @router.get("/template.csv")
@@ -257,15 +259,25 @@ async def import_csv(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Seul le format CSV est accepté (Excel : Enregistrer sous → CSV)")
+    name = (file.filename or "").lower()
+    if not name.endswith((".csv", ".xlsx")):
+        raise HTTPException(status_code=400, detail="Format accepté : Excel (.xlsx) ou CSV")
     raw = await file.read()
     if len(raw) > MAX_CSV_SIZE_BYTES:
         raise HTTPException(status_code=413, detail="Fichier trop volumineux (2 Mo au plus)")
-    try:
-        content = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        content = raw.decode("cp1252", errors="replace")  # Excel français enregistre souvent en Windows-1252
+    if name.endswith(".xlsx"):  # lot 59 : le fichier Excel tel quel (première feuille)
+        from app.services.spreadsheet import SpreadsheetError, read_table, to_csv_text
+
+        try:
+            table = read_table(raw, name)
+        except SpreadsheetError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        content = to_csv_text(table["header"], table["rows"])
+    else:
+        try:
+            content = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            content = raw.decode("cp1252", errors="replace")  # Excel français enregistre souvent en Windows-1252
     tenant = await _tenant(db, current_user)
     try:
         report = await contracts.import_csv(db, tenant, content, _is_admin(current_user))

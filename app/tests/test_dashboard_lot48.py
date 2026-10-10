@@ -21,7 +21,7 @@ def test_no_tutoiement_left_in_the_dashboard():
 
 def test_every_file_field_has_the_bob_design():
     inputs = re.findall(r'<input type="file"[^>]*>', HTML)
-    assert len(inputs) == 3  # lot 55 : import du registre des contrats
+    assert len(inputs) == 4  # lot 55 : import du registre des contrats ; lot 59 : import des clients
     for match in re.finditer(r'<input type="file"', HTML):
         before = HTML[max(0, match.start() - 1500):match.start()]
         assert before.rfind('class="file-drop"') > before.rfind("</label>") or before.rfind('class="file-pick"') > before.rfind("</label>")

@@ -346,6 +346,27 @@
   .contracts-setting input { margin-top: 3px; }
   .contract-card.contract-due { border-left: 4px solid var(--warning); }
   .contract-card.complaint-late { border-left: 4px solid var(--danger); }
+  /* Lot 59 — kit de lancement et import Excel */
+  .kit-grid { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; margin-top: 10px; }
+  .kit-qr { width: 168px; flex-shrink: 0; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px; }
+  .kit-qr svg { width: 100%; height: auto; display: block; }
+  .kit-main { flex: 1 1 300px; min-width: 0; }
+  .kit-row { display: flex; gap: 8px; align-items: center; }
+  .kit-row .input { flex: 1; min-width: 0; }
+  .kit-texts { display: grid; gap: 10px; margin-top: 10px; }
+  .kit-text { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .kit-text p { font-size: 13px; margin: 4px 0 8px; overflow-wrap: anywhere; }
+  .import-table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .import-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+  .import-table th, .import-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .import-table th { vertical-align: top; background: var(--bg); }
+  .import-table select.input { font-size: 12px; padding: 4px 6px; min-width: 120px; margin-top: 4px; }
+  .import-col { font-weight: 700; }
+  /* L'aperçu reste un vrai tableau sur téléphone (les autres tableaux y deviennent des cartes) : on le fait défiler */
+  .import-table { display: table; } .import-table thead { display: table-header-group; } .import-table tbody { display: table-row-group; }
+  .import-table tr { display: table-row; background: none; border: 0; border-radius: 0; padding: 0; margin: 0; box-shadow: none; }
+  .import-table th, .import-table td { display: table-cell; font-size: 12px; }
+  @media (max-width: 600px) { .kit-qr { width: 140px; margin: 0 auto; } .kit-row { flex-wrap: wrap; } }
   .complaint-subject { white-space: pre-line; }
   .quote-warning { font-size: 13px; color: var(--warning); margin: 8px 0 0; overflow-wrap: anywhere; }
   .contract-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
@@ -734,6 +755,27 @@
     </section>
 
     <section id="tab-customers" class="hidden">
+      <!-- Lot 59 : faire écrire les clients sur WhatsApp, et la liste de clients depuis / vers Excel -->
+      <div class="card" style="margin-bottom: 20px;" id="kit-card">
+        <div class="label" style="font-weight: 600; margin-bottom: 4px;">Faites écrire vos clients sur WhatsApp<button class="tip"></button><span class="tip-bubble" hidden>Sur WhatsApp, c'est toujours le client qui écrit en premier. Affichez ce lien et ce QR code partout où vos clients passent : dès qu'ils écrivent, Bob répond. Les clients venus par ce kit sont comptés dans « D'où viennent vos clients » (Affiche, flyer, salon).</span></div>
+        <div id="kit-content"><p class="loading-text">Chargement du kit</p></div>
+      </div>
+      <div class="card" style="margin-bottom: 20px;" id="customers-import-card">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+          <div class="label" style="font-weight: 600;">Vos clients dans Excel<button class="tip"></button><span class="tip-bubble" hidden>Importez la liste que vous tenez déjà (fichier Excel .xlsx ou CSV) : Bob reconnaîtra ces clients dès qu'ils vous écriront. Un client déjà connu n'est jamais créé deux fois, et ce que Bob sait déjà n'est jamais remplacé. Importer n'envoie aucun message, et l'accord pour les offres se recueille toujours auprès du client.</span></div>
+          <button class="action secondary" onclick="downloadExport('/api/v1/customers/export.xlsx', 'clients.xlsx')">Exporter mes clients (Excel)</button>
+        </div>
+        <label class="file-drop" id="customers-drop" style="margin-top: 12px;">
+          <span class="file-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
+          <span class="file-text">
+            <span class="file-title" id="customers-file-name">Choisir votre fichier Excel</span>
+            <span class="file-hint" id="customers-file-hint">ou glissez-le ici · .xlsx ou .csv</span>
+          </span>
+          <input type="file" id="customers-file-input" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" aria-label="Choisir un fichier Excel de clients" onchange="previewCustomerImport()">
+        </label>
+        <div id="customers-import-preview"></div>
+        <div id="customers-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
+      </div>
       <div class="card" style="margin-bottom: 20px;" id="sources-card">
         <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
           <div class="label" style="font-weight: 600;">D'où viennent vos clients<button class="tip"></button><span class="tip-bubble" hidden>Les pubs Facebook et Instagram « clic vers WhatsApp » sont reconnues automatiquement. Pour Google, YouTube, TikTok, un site ou une affiche, utilisez un lien Bob (Intégrations) et choisissez son canal. Un client qui tape lui-même votre numéro reste « Direct ».</span></div>
@@ -830,7 +872,7 @@
         <button type="button" class="pill" data-quote-view="closed" aria-pressed="false" onclick="loadQuotes('closed')">Terminées</button>
         <button type="button" class="pill" data-quote-view="draft" aria-pressed="false" onclick="loadQuotes('draft')">En cours avec Bob</button>
       </div>
-      <button class="action secondary" onclick="downloadExport('/api/v1/quote-requests/export.csv', 'demandes_de_cotation.csv')">Exporter toutes les demandes (CSV)</button>
+      <button class="action secondary" onclick="downloadExport('/api/v1/quote-requests/export.xlsx', 'demandes_de_cotation.xlsx')">Exporter toutes les demandes (Excel)</button>
       <div id="quote-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
     </section>
 
@@ -849,19 +891,19 @@
         <input id="contract-search" class="input" type="search" placeholder="Rechercher : client, assureur, n° de contrat, téléphone" aria-label="Rechercher un contrat" oninput="searchContracts()">
         <select id="contract-branch" class="input" aria-label="Branche" onchange="loadContracts(currentContractView)"><option value="">Toutes les branches</option></select>
         <button class="action" onclick="openContractDialog()">Ajouter un contrat</button>
-        <button class="action secondary" onclick="downloadExport('/api/v1/contracts/export.csv', 'registre_contrats.csv')">Exporter (CSV)</button>
+        <button class="action secondary" onclick="downloadExport('/api/v1/contracts/export.xlsx', 'registre_contrats.xlsx')">Exporter (Excel)</button>
       </div>
       <details class="card" id="contracts-import-card" style="margin-bottom: 16px;">
-        <summary style="cursor: pointer; font-weight: 600;">Importer votre registre (CSV)</summary>
+        <summary style="cursor: pointer; font-weight: 600;">Importer votre registre (Excel ou CSV)</summary>
         <div style="margin-top: 12px;">
           <p style="font-size: 13px; color: var(--muted); margin: 0 0 10px;">Une ligne par contrat. Colonnes obligatoires : téléphone, branche, échéance. Facultatives : prénom, nom, email, assureur, numéro, prime, devise, date d'effet, durée. Dates au format JJ/MM/AAAA. Un numéro de contrat déjà présent met la ligne à jour.</p>
           <label class="file-drop" id="contracts-drop">
             <span class="file-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
             <span class="file-text">
-              <span class="file-title" id="contracts-file-name">Choisir un fichier CSV</span>
-              <span class="file-hint" id="contracts-file-hint">ou glissez-le ici · fichier .csv</span>
+              <span class="file-title" id="contracts-file-name">Choisir un fichier Excel ou CSV</span>
+              <span class="file-hint" id="contracts-file-hint">ou glissez-le ici · .xlsx ou .csv</span>
             </span>
-            <input type="file" id="contracts-file-input" accept=".csv,text/csv" aria-label="Choisir un fichier CSV de contrats" onchange="showChosenContractsCsv()">
+            <input type="file" id="contracts-file-input" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" aria-label="Choisir un fichier Excel ou CSV de contrats" onchange="showChosenContractsCsv()">
           </label>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button class="action" onclick="importContracts()">Importer</button>
@@ -889,7 +931,7 @@
       </div>
       <div class="contracts-toolbar">
         <button class="action" onclick="openComplaintDialog()">Ajouter une réclamation</button>
-        <button class="action secondary" onclick="exportComplaints()">Exporter le registre (CSV)</button>
+        <button class="action secondary" onclick="exportComplaints()">Exporter le registre (Excel)</button>
         <button class="action secondary" onclick="editComplaintDelay()">Délai de réponse : <span id="complaint-delay">10</span> jours ouvrés</button>
       </div>
       <div id="complaint-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
@@ -2255,7 +2297,7 @@ function showTab(name) {
   );
   if (name === "overview") loadOverview();
   if (name === "conversations") loadConversations();
-  if (name === "customers") { loadCustomers(); loadCampaignEligibleCount(); loadSources(currentSourcesPeriod); }
+  if (name === "customers") { loadCustomers(); loadCampaignEligibleCount(); loadSources(currentSourcesPeriod); loadKit(); initCustomersDrop(); }  // lot 59 : kit et import Excel
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
@@ -3989,10 +4031,10 @@ async function saveRenewalSetting() {
 function showChosenContractsCsv() {
   const file = document.getElementById("contracts-file-input").files[0];
   document.getElementById("contracts-drop").classList.toggle("has-file", !!file);
-  document.getElementById("contracts-file-name").textContent = file ? file.name : "Choisir un fichier CSV";
+  document.getElementById("contracts-file-name").textContent = file ? file.name : "Choisir un fichier Excel ou CSV";
   document.getElementById("contracts-file-hint").textContent = file
     ? `${file.size < 1024 ? file.size + " o" : Math.max(1, Math.round(file.size / 1024)) + " Ko"} · cliquez pour en choisir un autre`
-    : "ou glissez-le ici · fichier .csv";
+    : "ou glissez-le ici · .xlsx ou .csv";
   document.getElementById("contracts-import-msg").textContent = "";
 }
 
@@ -4007,10 +4049,10 @@ function initContractsDrop() {
     zone.classList.remove("dragging");
     const file = e.dataTransfer && e.dataTransfer.files[0];
     if (!file) return;
-    if (!/\.csv$/i.test(file.name)) {
+    if (!/\.(xlsx|csv)$/i.test(file.name)) {
       const msg = document.getElementById("contracts-import-msg");
       msg.style.color = "var(--danger)";
-      msg.textContent = "Seuls les fichiers .csv peuvent être importés.";
+      msg.textContent = "Seuls les fichiers Excel (.xlsx) ou CSV peuvent être importés.";
       return;
     }
     const data = new DataTransfer();
@@ -4026,7 +4068,7 @@ async function importContracts() {
   msg.textContent = "";
   if (!input.files.length) {
     msg.style.color = "var(--danger)";
-    msg.textContent = "Choisissez un fichier CSV d'abord.";
+    msg.textContent = "Choisissez un fichier Excel ou CSV d'abord.";
     return;
   }
   const form = new FormData();
@@ -4214,18 +4256,7 @@ async function editComplaintDelay() {
 }
 
 async function exportComplaints() {
-  try {
-    const r = await fetch(API_BASE + "/api/v1/complaints/export.csv", { headers: { Authorization: "Bearer " + token } });
-    if (!r.ok) throw new Error("Export impossible pour le moment.");
-    const url = URL.createObjectURL(await r.blob());
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "registre_reclamations.csv";
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (e) {
-    toast(e.message, "error");
-  }
+  downloadExport("/api/v1/complaints/export.xlsx", "registre_reclamations.xlsx");  // lot 59 : en Excel
 }
 
 // Lot 55 — suivi des demandes de cotation : en cotation → proposition envoyée → souscrit / perdu.
@@ -4499,6 +4530,209 @@ async function saveInsuranceProfile() {
     msg.textContent = "Enregistré.";
     insuranceStructureChanged();
   } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+// ---- Lot 59 : kit de lancement (faire écrire les clients) et liste de clients depuis / vers Excel ----
+var kitData = null;
+var customerImport = null;  // dernier aperçu : { file, sheet, header, mapping, fields, total }
+
+async function loadKit() {
+  const box = document.getElementById("kit-content");
+  try { kitData = await api("/api/v1/kit"); } catch (e) {
+    box.innerHTML = `<p class="empty-state">${esc(e.message)}</p>`;
+    return;
+  }
+  if (!kitData.connected) {
+    box.innerHTML = `<p style="font-size: 13px; color: var(--muted); margin: 6px 0 0;">Connectez d'abord votre numéro WhatsApp (page Intégrations) : votre lien, votre QR code et votre affiche apparaîtront ici.</p>`;
+    return;
+  }
+  const k = kitData;
+  box.innerHTML = `
+    <div class="kit-grid">
+      <div class="kit-qr">${k.qr_svg}</div>
+      <div class="kit-main">
+        <label for="kit-link" style="font-size: 12px; color: var(--muted);">Votre lien WhatsApp</label>
+        <div class="kit-row"><input id="kit-link" class="input" readonly value="${esc(k.link)}"><button class="action secondary" onclick="copyText(document.getElementById('kit-link').value, 'Lien copié.')">Copier</button></div>
+        <label for="kit-greeting" style="font-size: 12px; color: var(--muted); display: block; margin-top: 10px;">Message pré-rempli quand le client ouvre le lien</label>
+        <div class="kit-row"><input id="kit-greeting" class="input" maxlength="300" value="${esc(k.greeting)}"><button class="action secondary" onclick="saveKitGreeting()">Enregistrer</button></div>
+        <div class="kit-row" style="margin-top: 12px; flex-wrap: wrap;">
+          <button class="action" onclick="openKitPoster()">Affiche à imprimer</button>
+          <button class="action secondary" onclick="downloadKitQr()">Télécharger le QR code</button>
+        </div>
+        <p style="font-size: 12px; color: var(--muted); margin: 10px 0 0;">${Number(k.clicks)} ouverture${k.clicks > 1 ? "s" : ""} du lien · ${Number(k.customers)} client${k.customers > 1 ? "s" : ""} venu${k.customers > 1 ? "s" : ""} par le kit · numéro ${esc(k.phone)}</p>
+      </div>
+    </div>
+    <details style="margin-top: 14px;">
+      <summary style="cursor: pointer; font-weight: 600; font-size: 14px;">Textes prêts à copier (${k.texts.length})</summary>
+      <div class="kit-texts">${k.texts.map((t, i) => `
+        <div class="kit-text">
+          <div style="font-size: 12px; font-weight: 600; color: var(--muted);">${esc(t.title)}</div>
+          <p id="kit-text-${i}">${esc(t.text)}</p>
+          <button class="action secondary" onclick="copyText(document.getElementById('kit-text-${i}').textContent, 'Texte copié.')">Copier</button>
+        </div>`).join("")}</div>
+    </details>`;
+}
+
+async function copyText(text, done) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {  // navigateur ancien ou page non sécurisée : copie à l'ancienne
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand("copy"); } catch (err) { /* rien */ }
+    area.remove();
+  }
+  toast(done || "Copié.");
+}
+
+async function saveKitGreeting() {
+  const greeting = document.getElementById("kit-greeting").value.trim();
+  try {
+    kitData = await api("/api/v1/kit", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ greeting }) });
+    toast("Message enregistré.");
+  } catch (e) {
+    toast(e.message.startsWith("Rôle insuffisant") ? "Seul un manager ou un administrateur peut changer ce message." : e.message, "error");
+  }
+}
+
+async function openKitPoster() {
+  const tab = window.open("", "_blank");
+  try {
+    const r = await fetch(API_BASE + "/api/v1/kit/poster", { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Affiche indisponible pour le moment.");
+    const url = URL.createObjectURL(new Blob([await r.text()], { type: "text/html" }));
+    if (tab) tab.location.href = url; else window.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    if (tab) tab.close();
+    toast(e.message, "error");
+  }
+}
+
+function downloadKitQr() {
+  if (!kitData || !kitData.qr_svg) return;
+  const url = URL.createObjectURL(new Blob([kitData.qr_svg], { type: "image/svg+xml" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "qr-code-whatsapp.svg";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function initCustomersDrop() {
+  const zone = document.getElementById("customers-drop");
+  if (!zone || zone.dataset.ready) return;
+  zone.dataset.ready = "1";
+  ["dragenter", "dragover"].forEach((type) => zone.addEventListener(type, (e) => { e.preventDefault(); zone.classList.add("dragging"); }));
+  ["dragleave", "dragend"].forEach((type) => zone.addEventListener(type, () => zone.classList.remove("dragging")));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragging");
+    const file = e.dataTransfer && e.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.(xlsx|csv)$/i.test(file.name)) {
+      const msg = document.getElementById("customers-import-msg");
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Seuls les fichiers Excel (.xlsx) ou CSV peuvent être importés.";
+      return;
+    }
+    const data = new DataTransfer();
+    data.items.add(file);
+    document.getElementById("customers-file-input").files = data.files;
+    previewCustomerImport();
+  });
+}
+
+async function previewCustomerImport(sheet) {
+  const input = document.getElementById("customers-file-input");
+  const file = input.files[0];
+  const msg = document.getElementById("customers-import-msg");
+  const box = document.getElementById("customers-import-preview");
+  msg.textContent = "";
+  box.innerHTML = "";
+  document.getElementById("customers-drop").classList.toggle("has-file", !!file);
+  document.getElementById("customers-file-name").textContent = file ? file.name : "Choisir votre fichier Excel";
+  document.getElementById("customers-file-hint").textContent = file
+    ? `${file.size < 1024 ? file.size + " o" : Math.max(1, Math.round(file.size / 1024)) + " Ko"} · cliquez pour en choisir un autre`
+    : "ou glissez-le ici · .xlsx ou .csv";
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  if (sheet) form.append("sheet", sheet);
+  box.innerHTML = '<p class="loading-text">Lecture du fichier</p>';
+  let p;
+  try { p = await api("/api/v1/customers/import/preview", { method: "POST", body: form }); } catch (e) {
+    box.innerHTML = "";
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+    return;
+  }
+  customerImport = Object.assign({ file }, p);
+  renderImportPreview();
+}
+
+function renderImportPreview() {
+  const p = customerImport;
+  const options = (current) => [`<option value="">Ignorer</option>`].concat(p.fields.map((f) =>
+    `<option value="${esc(f.value)}" ${f.value === current ? "selected" : ""}>${esc(f.label)}</option>`)).join("");
+  document.getElementById("customers-import-preview").innerHTML = `
+    ${p.sheets.length > 1 ? `<label style="font-size: 12px; color: var(--muted);">Feuille <select class="input" style="width: auto; display: inline-block; margin-left: 6px;" onchange="previewCustomerImport(this.value)">${p.sheets.map((s) => `<option ${s === p.sheet ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label>` : ""}
+    <p style="font-size: 13px; margin: 10px 0 6px;">${p.total} ligne${p.total > 1 ? "s" : ""} trouvée${p.total > 1 ? "s" : ""}. Vérifiez à quoi correspond chaque colonne :</p>
+    <div class="import-table-wrap"><table class="import-table">
+      <thead><tr>${p.header.map((h, i) => `<th><div class="import-col">${esc(h || "(sans titre)")}</div>
+        <select class="input" aria-label="Colonne ${esc(h)}" onchange="customerImport.mapping[${i}] = this.value || null; checkImportMapping()">${options(p.mapping[i])}</select></th>`).join("")}</tr></thead>
+      <tbody>${p.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table></div>
+    <p id="customers-import-check" style="font-size: 13px; margin: 8px 0;"></p>
+    <button class="action" id="customers-import-btn" onclick="runCustomerImport()">Importer ${p.total} ligne${p.total > 1 ? "s" : ""}</button>`;
+  checkImportMapping();
+}
+
+function checkImportMapping() {
+  const chosen = customerImport.mapping.filter(Boolean);
+  const phones = chosen.filter((m) => m === "phone").length;
+  const twice = chosen.filter((m, i) => chosen.indexOf(m) !== i);
+  const check = document.getElementById("customers-import-check");
+  let problem = "";
+  if (phones !== 1) problem = "Choisissez une colonne « Téléphone » (une seule) : c'est elle qui identifie vos clients.";
+  else if (twice.length) problem = "Une même information est choisie pour deux colonnes : gardez-en une seule.";
+  check.style.color = problem ? "var(--danger)" : "var(--muted)";
+  check.textContent = problem || "Les numéros sans indicatif reçoivent celui de votre pays.";
+  document.getElementById("customers-import-btn").disabled = !!problem;
+}
+
+async function runCustomerImport() {
+  const p = customerImport;
+  const msg = document.getElementById("customers-import-msg");
+  const btn = document.getElementById("customers-import-btn");
+  btn.disabled = true;
+  const form = new FormData();
+  form.append("file", p.file);
+  form.append("mapping", JSON.stringify(p.mapping));
+  if (p.sheet) form.append("sheet", p.sheet);
+  try {
+    const r = await api("/api/v1/customers/import", { method: "POST", body: form });
+    const parts = [`${r.created} client${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}`,
+      `${r.completed} complété${r.completed > 1 ? "s" : ""}`, `${r.unchanged} déjà à jour`];
+    const lines = [...r.errors.map((e) => `Ligne ${e.line} : ${e.message}`), ...r.warnings.map((w) => `Ligne ${w.line} : ${w.message}`)];
+    msg.style.color = r.errors.length ? "var(--warning)" : "var(--success)";
+    msg.innerHTML = esc(parts.join(", ") + ".") + (r.ignored_columns.length ? " " + esc("Colonnes ignorées : " + r.ignored_columns.join(", ") + ".") : "")
+      + (lines.length ? `<ul style="margin: 6px 0 0; padding-left: 18px;">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "")
+      + `<p style="margin: 8px 0 0; color: var(--muted);">Pour qu'ils vous écrivent, utilisez le kit ci-dessus : lien, QR code et affiche.</p>`;
+    document.getElementById("customers-import-preview").innerHTML = "";
+    document.getElementById("customers-file-input").value = "";
+    document.getElementById("customers-drop").classList.remove("has-file");
+    document.getElementById("customers-file-name").textContent = "Choisir votre fichier Excel";
+    document.getElementById("customers-file-hint").textContent = "ou glissez-le ici · .xlsx ou .csv";
+    customerImport = null;
+    loadCustomers();
+  } catch (e) {
+    btn.disabled = false;
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
   }
