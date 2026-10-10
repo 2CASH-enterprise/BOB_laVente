@@ -362,6 +362,11 @@
   .import-table th { vertical-align: top; background: var(--bg); }
   .import-table select.input { font-size: 12px; padding: 4px 6px; min-width: 120px; margin-top: 4px; }
   .import-col { font-weight: 700; }
+  /* Lot 60 : aperçu du rapport mensuel (l'email tel qu'il part) */
+  .report-periods .pill, .sources-periods .pill { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .report-periods .pill[aria-pressed="true"], .sources-periods .pill[aria-pressed="true"] { background: var(--accent-fill); color: var(--on-accent); border-color: transparent; }
+  .report-loading { opacity: .45; pointer-events: none; transition: opacity .15s; }
+  .report-frame { width: 100%; height: 1800px; border: 0; border-radius: var(--radius-sm); background: #F4FAF6; display: block; }
   /* L'aperçu reste un vrai tableau sur téléphone (les autres tableaux y deviennent des cartes) : on le fait défiler */
   .import-table { display: table; } .import-table thead { display: table-header-group; } .import-table tbody { display: table-row-group; }
   .import-table tr { display: table-row; background: none; border: 0; border-radius: 0; padding: 0; margin: 0; box-shadow: none; }
@@ -694,6 +699,7 @@
       <button data-tab="quotes" data-label="Demandes de cotation" id="nav-quotes" class="insurance-only" onclick="showTab('quotes')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6zM9 12l2 2 4-4"/></svg></span>Demandes de cotation</button>
       <button data-tab="contracts" data-label="Contrats" id="nav-contracts" class="insurance-only" onclick="showTab('contracts')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg></span>Contrats</button>
       <button data-tab="complaints" data-label="Réclamations" id="nav-complaints" class="insurance-only" onclick="showTab('complaints')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12zM12 8v4M12 16h.01"/></svg></span>Réclamations</button>
+      <button data-tab="reports" data-label="Rapports" onclick="showTab('reports')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Rapports</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg></span>Intégrations</button>
       <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8"/></svg></span>Base de connaissances</button>
       <button data-tab="bob" data-label="Réglages de Bob" onclick="showTab('bob')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M5 9h14a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a1 1 0 0 1 1-1zM9 14h.01M15 14h.01M2 13v3M22 13v3"/></svg></span>Réglages de Bob</button>
@@ -716,17 +722,6 @@
     <div class="page-head hidden"><h1 style="display: flex; align-items: center;"><span id="page-title">Accueil</span><button class="tip hidden page-tip-btn"></button><span class="tip-bubble page-tip-bubble" hidden></span></h1></div>
     <section id="tab-overview">
       <div id="home-root"><p class="loading-text">Chargement de l'accueil</p></div>
-      <h2 class="section-title">Détails</h2>
-      <div class="grid" id="analytics-grid"></div>
-      <div class="card store-only" id="sales-card" style="margin-top: 20px;">
-        <p class="loading-text">Chargement des ventes</p>
-      </div>
-      <div class="card" id="signals-card" style="margin-top: 20px;">
-        <p class="loading-text">Chargement de l'analyse des messages</p>
-      </div>
-      <div class="card" id="strategies-card" style="margin-top: 20px;">
-        <p class="loading-text">Chargement des réponses aux objections</p>
-      </div>
     </section>
 
     <section id="tab-conversations" class="hidden">
@@ -757,7 +752,7 @@
     <section id="tab-customers" class="hidden">
       <!-- Lot 59 : faire écrire les clients sur WhatsApp, et la liste de clients depuis / vers Excel -->
       <div class="card" style="margin-bottom: 20px;" id="kit-card">
-        <div class="label" style="font-weight: 600; margin-bottom: 4px;">Faites écrire vos clients sur WhatsApp<button class="tip"></button><span class="tip-bubble" hidden>Sur WhatsApp, c'est toujours le client qui écrit en premier. Affichez ce lien et ce QR code partout où vos clients passent : dès qu'ils écrivent, Bob répond. Les clients venus par ce kit sont comptés dans « D'où viennent vos clients » (Affiche, flyer, salon).</span></div>
+        <div class="label" style="font-weight: 600; margin-bottom: 4px;">Faites écrire vos clients sur WhatsApp<button class="tip"></button><span class="tip-bubble" hidden>Sur WhatsApp, c'est toujours le client qui écrit en premier. Affichez ce lien et ce QR code partout où vos clients passent : dès qu'ils écrivent, Bob répond. Les clients venus par ce kit sont comptés dans « D'où viennent vos clients » (page Rapports, canal Affiche, flyer, salon).</span></div>
         <div id="kit-content"><p class="loading-text">Chargement du kit</p></div>
       </div>
       <div class="card" style="margin-bottom: 20px;" id="customers-import-card">
@@ -775,21 +770,6 @@
         </label>
         <div id="customers-import-preview"></div>
         <div id="customers-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
-      </div>
-      <div class="card" style="margin-bottom: 20px;" id="sources-card">
-        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
-          <div class="label" style="font-weight: 600;">D'où viennent vos clients<button class="tip"></button><span class="tip-bubble" hidden>Les pubs Facebook et Instagram « clic vers WhatsApp » sont reconnues automatiquement. Pour Google, YouTube, TikTok, un site ou une affiche, utilisez un lien Bob (Intégrations) et choisissez son canal. Un client qui tape lui-même votre numéro reste « Direct ».</span></div>
-          <div class="sources-periods" style="display: flex; gap: 6px;">
-            <button type="button" class="pill" data-period="30" aria-pressed="true" onclick="loadSources('30')">30 jours</button>
-            <button type="button" class="pill" data-period="90" aria-pressed="false" onclick="loadSources('90')">90 jours</button>
-            <button type="button" class="pill" data-period="all" aria-pressed="false" onclick="loadSources('all')">Depuis le début</button>
-          </div>
-        </div>
-        <div id="sources-content"></div>
-      </div>
-      <div class="card dealer-only" style="margin-bottom: 20px;" id="commercials-card">
-        <div class="label" style="font-weight: 600; margin-bottom: 8px;">Résultats par commercial <span style="font-weight: 400; color: var(--muted); font-size: 12px;">(même période)</span></div>
-        <div id="commercials-content"></div>
       </div>
       <div class="card" style="margin-bottom: 20px;">
         <div class="label" style="margin-bottom: 4px; font-weight: 600;">Campagne email</div>
@@ -977,6 +957,49 @@
         <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Paiement</th><th>Livraison</th></tr></thead>
         <tbody id="order-rows"></tbody>
       </table>
+    </section>
+
+    <section id="tab-reports" class="hidden">
+      <template class="page-tip-src">Votre rapport mensuel : ce que Bob a fait pour vous, en chiffres et en graphiques. Il part chaque mois par email au propriétaire et aux administrateurs : 7 jours avant le renouvellement de votre abonnement, ou en début de mois. Ce que Bob mesure seul (conversations, réponses, heures) est séparé de ce que vous déclarez (paiements reçus, ventes, rendez-vous honorés) : pensez à les valider pour des chiffres justes.</template>
+      <div class="card" id="report-card">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+          <div class="label" style="font-weight: 600;">Votre rapport mensuel</div>
+          <div class="report-periods" style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <button type="button" class="pill" data-period="since_last" aria-pressed="false" onclick="loadReportPreview('since_last')">Depuis le dernier rapport</button>
+            <button type="button" class="pill" data-period="30" aria-pressed="true" onclick="loadReportPreview('30')">30 jours</button>
+            <button type="button" class="pill" data-period="90" aria-pressed="false" onclick="loadReportPreview('90')">90 jours</button>
+          </div>
+        </div>
+        <p id="report-info" style="font-size: 13px; color: var(--muted); margin: 8px 0 12px;"></p>
+        <div id="report-actions" class="hidden" style="margin: 0 0 12px;"><button class="action secondary" id="report-send-btn" onclick="sendTestReport()">Recevoir le rapport maintenant</button></div>
+        <div id="report-preview"><p class="loading-text">Préparation du rapport</p></div>
+      </div>
+      <h2 class="section-title" id="reports-details">Analyses détaillées</h2>
+      <div class="grid" id="analytics-grid"></div>
+      <div class="card store-only" id="sales-card" style="margin-top: 20px;">
+        <p class="loading-text">Chargement des ventes</p>
+      </div>
+      <div class="card" id="signals-card" style="margin-top: 20px;">
+        <p class="loading-text">Chargement de l'analyse des messages</p>
+      </div>
+      <div class="card" id="strategies-card" style="margin-top: 20px;">
+        <p class="loading-text">Chargement des réponses aux objections</p>
+      </div>
+      <div class="card" style="margin-top: 20px;" id="sources-card">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+          <div class="label" style="font-weight: 600;">D'où viennent vos clients<button class="tip"></button><span class="tip-bubble" hidden>Les pubs Facebook et Instagram « clic vers WhatsApp » sont reconnues automatiquement. Pour Google, YouTube, TikTok, un site ou une affiche, utilisez un lien Bob (Intégrations) et choisissez son canal. Un client qui tape lui-même votre numéro reste « Direct ».</span></div>
+          <div class="sources-periods" style="display: flex; gap: 6px;">
+            <button type="button" class="pill" data-period="30" aria-pressed="true" onclick="loadSources('30')">30 jours</button>
+            <button type="button" class="pill" data-period="90" aria-pressed="false" onclick="loadSources('90')">90 jours</button>
+            <button type="button" class="pill" data-period="all" aria-pressed="false" onclick="loadSources('all')">Depuis le début</button>
+          </div>
+        </div>
+        <div id="sources-content"></div>
+      </div>
+      <div class="card dealer-only" style="margin-top: 20px;" id="commercials-card">
+        <div class="label" style="font-weight: 600; margin-bottom: 8px;">Résultats par commercial <span style="font-weight: 400; color: var(--muted); font-size: 12px;">(même période)</span></div>
+        <div id="commercials-content"></div>
+      </div>
     </section>
 
     <section id="tab-integrations" class="hidden">
@@ -2292,12 +2315,13 @@ function showTab(name) {
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
-  ["overview", "conversations", "customers", "complaints", "products", "orders", "appointments", "quotes", "contracts", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
+  ["overview", "conversations", "customers", "complaints", "products", "orders", "appointments", "quotes", "contracts", "reports", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
   if (name === "conversations") loadConversations();
-  if (name === "customers") { loadCustomers(); loadCampaignEligibleCount(); loadSources(currentSourcesPeriod); loadKit(); initCustomersDrop(); }  // lot 59 : kit et import Excel
+  if (name === "customers") { loadCustomers(); loadCampaignEligibleCount(); loadKit(); initCustomersDrop(); }  // lot 59 : kit et import Excel
+  if (name === "reports") loadReports();  // lot 60
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
@@ -2617,6 +2641,20 @@ async function hideOnboarding() {
 
 async function loadOverview() {
   loadHome();
+}
+
+// Lot 60 — page Rapports : le rapport mensuel (aperçu), puis les analyses détaillées venues de l'accueil et de Clients.
+async function loadReports() {
+  loadReportInfo();
+  loadReportPreview(currentReportPeriod);
+  loadAnalyticsGrid();
+  loadSales();
+  loadSignals();
+  loadStrategies();
+  loadSources(currentSourcesPeriod);
+}
+
+async function loadAnalyticsGrid() {
   const a = await api("/api/v1/analytics");
   const grid = document.getElementById("analytics-grid");
   // Commandes, chiffre d'affaires et conversion sont désormais dans la carte « Ventes » :
@@ -2626,9 +2664,92 @@ async function loadOverview() {
     <div class="card"><div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7"/></svg></div><div class="value">${a.qualified_prospects}</div><div class="label">Prospects qualifiés</div></div>
     <div class="card"><div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg></div><div class="value">${a.human_handoffs}</div><div class="label">Transferts (depuis le début)</div></div>
   `;
-  loadSales();
-  loadSignals();
-  loadStrategies();
+}
+
+var currentReportPeriod = "30";
+var reportInfo = null;
+
+async function loadReportInfo() {
+  const box = document.getElementById("report-info");
+  try { reportInfo = await api("/api/v1/reports/info"); } catch (e) { box.textContent = e.message; return; }
+  const when = reportInfo.next_send_on
+    ? `Prochain envoi : ${new Date(reportInfo.next_send_on + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`
+    : (reportInfo.demo ? "Pas d'envoi pour un compte de démonstration" : "Pas d'envoi prévu");
+  const last = reportInfo.last_sent_at ? ` · dernier envoi le ${new Date(reportInfo.last_sent_at).toLocaleDateString("fr-FR")}` : "";
+  const who = reportInfo.recipients.length ? ` · à ${reportInfo.recipients.map(esc).join(", ")}` : "";
+  box.innerHTML = `${esc(when)}${esc(last)}${who}. Envoyé chaque mois au propriétaire et aux administrateurs : 7 jours avant le renouvellement de l'abonnement, ou en début de mois.`;
+  document.getElementById("report-actions").classList.toggle("hidden", !reportInfo.can_view);
+  if (!reportInfo.can_view) {
+    document.getElementById("report-preview").innerHTML = `<p style="font-size: 13px; color: var(--muted); margin: 0;">Le rapport mensuel est réservé au propriétaire et aux administrateurs. Les analyses détaillées sont ci-dessous.</p>`;
+  }
+}
+
+async function loadReportPreview(period) {
+  currentReportPeriod = period;
+  document.querySelectorAll(".report-periods .pill").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.period === period)));
+  const box = document.getElementById("report-preview");
+  if (reportInfo && !reportInfo.can_view) return;
+  let frame = document.getElementById("report-frame");
+  // Changer de période garde l'aperçu en place (grisé) jusqu'au nouveau : la page ne saute pas.
+  if (frame) box.classList.add("report-loading");
+  else box.innerHTML = '<p class="loading-text">Préparation du rapport</p>';
+  try {
+    const r = await fetch(API_BASE + "/api/v1/reports/preview?period=" + encodeURIComponent(period), { headers: { Authorization: "Bearer " + token } });
+    if (r.status === 403) {
+      box.innerHTML = `<p style="font-size: 13px; color: var(--muted); margin: 0;">Le rapport mensuel est réservé au propriétaire et aux administrateurs. Les analyses détaillées sont ci-dessous.</p>`;
+      return;
+    }
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Rapport indisponible pour le moment.");
+    const html = (await r.text()).replace("<head>", '<head><base target="_blank">');
+    if (period !== currentReportPeriod) return;  // un autre choix entre-temps : on garde le dernier
+    if (!frame) {
+      // Aucun script n'est autorisé dans l'aperçu ; même origine seulement pour sa hauteur et ses liens.
+      box.innerHTML = '<iframe id="report-frame" class="report-frame" title="Aperçu du rapport mensuel" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>';
+      frame = document.getElementById("report-frame");
+      frame.addEventListener("load", () => {
+        fitReportFrame(frame);
+        box.classList.remove("report-loading");
+        frame.contentDocument.addEventListener("click", reportLinkClicked);
+      });
+    }
+    frame.srcdoc = html;
+  } catch (e) {
+    box.classList.remove("report-loading");
+    toast(e.message, "error");
+    if (!frame) box.innerHTML = `<p style="color: var(--danger); font-size: 13px; margin: 0;">${esc(e.message)}</p>`;
+  }
+}
+
+function fitReportFrame(frame) {
+  try { frame.style.height = (frame.contentDocument.body.scrollHeight + 4) + "px"; } catch (e) { frame.style.height = "1800px"; }
+}
+
+// Les boutons du rapport (« Voir le détail », « Valider maintenant ») restent dans le tableau de bord.
+function reportLinkClicked(event) {
+  const link = event.target.closest && event.target.closest("a[href]");
+  if (!link) return;
+  const match = /\/dashboard\/\?tab=([a-z]+)/.exec(link.getAttribute("href") || "");
+  if (!match) return;  // lien externe : nouvel onglet
+  event.preventDefault();
+  if (match[1] === "reports") {
+    document.getElementById("reports-details").scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (document.getElementById("tab-" + match[1])) {
+    showTab(match[1]);
+    window.scrollTo(0, 0);
+  }
+}
+
+async function sendTestReport() {
+  const btn = document.getElementById("report-send-btn");
+  btn.disabled = true;
+  try {
+    const r = await api("/api/v1/reports/send-test", { method: "POST" });
+    toast(`Rapport envoyé à ${r.sent_to}.`);
+  } catch (e) {
+    toast(e.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function insuranceMeasure(s) {  // lot 54 : chez le courtier, une cotation transmise compte aussi
@@ -2891,7 +3012,7 @@ async function sendCampaign() {
 }
 
 // ---- Lot 28 : sources des clients ----
-let currentSourcesPeriod = "30";
+var currentSourcesPeriod = "30";
 
 async function loadSources(period) {
   currentSourcesPeriod = period;

@@ -463,11 +463,13 @@ async def test_each_billing_email_goes_once(db_session):
     assert await check_billing(db_session, _at(end + timedelta(days=9)), mailbox) == []
 
     subjects = [m["subject"] for m in mailbox.sent]
-    assert subjects == ["Votre abonnement Bob se termine le 15 octobre 2026",
+    # Lot 60 : 7 jours avant, c'est le rapport mensuel qui part, avec le rappel d'échéance.
+    assert subjects == ["Votre mois avec Bob",
                         "Dernier rappel : Bob se met en pause demain",
                         "Bob est en pause : abonnement à renouveler"]
     assert all(m["to"] == shop.email and m["reply_to"] == "admin@bob.internal" and m["from_name"] == "Bob" for m in mailbox.sent)
-    assert "Sans renouvellement, Bob se mettra en pause le 17 octobre 2026" in mailbox.sent[0]["body"]
+    assert "sans renouvellement, Bob se mettra en pause le 17 octobre 2026" in mailbox.sent[0]["body"]
+    assert "Votre abonnement se termine le 15 octobre 2026" in mailbox.sent[0]["html"]
     assert "Bob répond encore à vos clients aujourd'hui" in mailbox.sent[1]["body"]
     assert "Dès le renouvellement, Bob reprend automatiquement" in mailbox.sent[2]["body"]
 

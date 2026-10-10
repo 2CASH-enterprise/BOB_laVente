@@ -58,6 +58,7 @@ def build_message(
     from_name: str | None = None,
     reply_to: str | None = None,
     extra_headers: dict[str, str] | None = None,
+    html: str | None = None,
 ) -> MIMEMultipart:
     """
     Lot 40 — deux versions dans le même email : le texte (lu par les messageries simples, et
@@ -72,7 +73,9 @@ def build_message(
     msg = MIMEMultipart("alternative")
     msg.attach(MIMEText(body, "plain", _charset="utf-8"))
     for_customer = from_name is not None
-    msg.attach(MIMEText(render_html(subject, body, display_name or "Bob", for_customer), "html", _charset="utf-8"))
+    # Lot 60 : un email peut fournir sa propre version HTML (rapport mensuel, avec graphiques).
+    msg.attach(MIMEText(html if html is not None else render_html(subject, body, display_name or "Bob", for_customer),
+                        "html", _charset="utf-8"))
     msg["Subject"] = subject
     msg["From"] = formataddr((display_name, settings.smtp_from_email), charset="utf-8") if display_name else settings.smtp_from_email
     msg["To"] = to
@@ -98,6 +101,7 @@ def send_email(
     from_name: str | None = None,
     reply_to: str | None = None,
     extra_headers: dict[str, str] | None = None,
+    html: str | None = None,
 ) -> bool:
     settings = get_settings()
 
@@ -107,7 +111,7 @@ def send_email(
         )
         return False
 
-    msg = build_message(to, subject, body, from_name=from_name, reply_to=reply_to, extra_headers=extra_headers)
+    msg = build_message(to, subject, body, from_name=from_name, reply_to=reply_to, extra_headers=extra_headers, html=html)
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:

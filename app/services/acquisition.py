@@ -138,8 +138,8 @@ def ad_context_for_ai(ref: dict | None) -> str | None:
     )
 
 
-async def sources_summary(db, tenant_id, since: datetime | None) -> dict:
-    """Clients, rendez-vous et ventes payées par canal, puis par lien ou publicité."""
+async def sources_summary(db, tenant_id, since: datetime | None, until: datetime | None = None) -> dict:
+    """Clients, rendez-vous et ventes payées par canal, puis par lien ou publicité (until : lot 60, rapport mensuel)."""
     from sqlalchemy import func, select
 
     from app.models.appointment_request import AppointmentRequest
@@ -150,6 +150,8 @@ async def sources_summary(db, tenant_id, since: datetime | None) -> dict:
     stmt = select(Customer).where(Customer.tenant_id == tenant_id)
     if since is not None:
         stmt = stmt.where(Customer.created_at >= since)
+    if until is not None:
+        stmt = stmt.where(Customer.created_at < until)
     customers = (await db.execute(stmt)).scalars().all()
     links = {cp.id: cp for cp in (await db.execute(
         select(ContactPoint).where(ContactPoint.tenant_id == tenant_id)
@@ -210,7 +212,7 @@ async def sources_summary(db, tenant_id, since: datetime | None) -> dict:
     }
 
 
-async def commercials_summary(db, tenant_id, since: datetime | None) -> list[dict]:
+async def commercials_summary(db, tenant_id, since: datetime | None, until: datetime | None = None) -> list[dict]:
     """
     Lot 36 — par commercial (lien avec un email) : prospects rattachés, rendez-vous, venus, vendus.
     Prospects : clients rattachés à son lien (créés sur la période) ; rendez-vous : pris sur la période
@@ -231,13 +233,16 @@ async def commercials_summary(db, tenant_id, since: datetime | None) -> list[dic
             Customer.tenant_id == tenant_id, Customer.referred_contact_point_id == link.id,
         ))).scalars().all()
         ids = [c.id for c in customers]
-        prospects = sum(1 for c in customers if since is None or (c.created_at and _aware(c.created_at) >= since))
+        prospects = sum(1 for c in customers if (since is None or (c.created_at and _aware(c.created_at) >= since))
+                        and (until is None or (c.created_at and _aware(c.created_at) < until)))
         appointments = []
         if ids:
             stmt = select(AppointmentRequest).where(AppointmentRequest.tenant_id == tenant_id,
                                                     AppointmentRequest.customer_id.in_(ids))
             if since is not None:
                 stmt = stmt.where(AppointmentRequest.created_at >= since)
+            if until is not None:
+                stmt = stmt.where(AppointmentRequest.created_at < until)
             appointments = (await db.execute(stmt)).scalars().all()
         visits = sum(1 for a in appointments if a.outcome in VISITED_OUTCOMES)
         sold = sum(1 for a in appointments if a.outcome == OUTCOME_SOLD)

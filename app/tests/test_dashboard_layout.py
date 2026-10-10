@@ -138,9 +138,12 @@ def test_status_badges_show_french_labels():
 # --- Lot 19 : accueil -------------------------------------------------------------------
 
 def test_home_is_first_and_existing_cards_stay_below():
+    # Lot 60 : l'accueil ne garde que l'action du jour ; les analyses sont dans la page Rapports, sous le rapport.
     overview = _section("overview")
-    order = [overview.index(x) for x in ('id="home-root"', "Détails", 'id="analytics-grid"', 'id="sales-card"',
-                                         'id="signals-card"', 'id="strategies-card"')]
+    assert 'id="home-root"' in overview and "Détails" not in overview and 'id="signals-card"' not in overview
+    reports = _section("reports")
+    order = [reports.index(x) for x in ('id="report-card"', "Analyses détaillées", 'id="analytics-grid"', 'id="sales-card"',
+                                        'id="signals-card"', 'id="strategies-card"', 'id="sources-card"', 'id="commercials-card"')]
     assert order == sorted(order)
     assert "loadHome();" in re.search(r"async function loadOverview\(\) \{(.*?)\n\}", HTML, re.S).group(1)
 

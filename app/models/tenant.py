@@ -50,6 +50,10 @@ class Tenant(Base):
     paid_until: Mapped[date | None] = mapped_column(Date)
     billing_notice_stage: Mapped[str | None] = mapped_column(String(16))
     billing_notice_for: Mapped[date | None] = mapped_column(Date)
+    # Lot 60 — rapport mensuel aux administrateurs (7 jours avant le renouvellement, ou début de mois) :
+    # quand le dernier est parti et jusqu'où il comptait (le suivant reprend à cette date).
+    report_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    report_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Lot 24 — type d'activité (app/services/business_type.py). chosen_at vide = le commerçant
     # n'a pas encore choisi (l'écran « Votre secteur » s'affiche après l'inscription).

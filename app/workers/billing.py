@@ -2,6 +2,10 @@
 Lot 51 — échéance de l'abonnement : toutes les heures, chaque boutique qui a une date « payé jusqu'au »
 reçoit au plus un email par étape (7 jours avant, jour de grâce, pause). La pause elle-même n'a pas
 besoin de tâche : elle est calculée à chaque message (app/services/bob_pause.py).
+
+Lot 60 — 7 jours avant (WARNING), c'est le RAPPORT MENSUEL qui part, avec le rappel d'échéance à la fin
+(aux administrateurs et à l'adresse de la boutique). Si le rapport ne peut pas être préparé, l'email
+d'échéance simple part à sa place : le rappel n'est jamais perdu.
 """
 import asyncio
 import logging
@@ -30,12 +34,22 @@ async def check_billing(db, now: datetime | None = None, send=None) -> list[tupl
         stage = bob_pause.notice_due(tenant, now)
         if stage is None:
             continue
-        subject, body = bob_pause.billing_email(tenant, stage)
-        try:
-            ok = send(to=tenant.email, subject=subject, body=body, from_name="Bob", reply_to=reply_to)
-        except Exception:  # noqa: BLE001 — une boutique en échec ne bloque jamais les autres
-            logger.warning("Email d'échéance impossible (boutique %s)", tenant.id)
-            ok = False
+        ok = False
+        if stage == bob_pause.WARNING:
+            from app.services import monthly_report
+
+            try:
+                ok = await monthly_report.send_report(db, tenant, now, send=send, renewal=True, reply_to=reply_to) > 0
+            except Exception:  # noqa: BLE001 — rapport impossible : l'email d'échéance simple part quand même
+                logger.exception("Rapport mensuel impossible (boutique %s) : email d'échéance simple", tenant.id)
+                ok = None
+        if ok is None or stage != bob_pause.WARNING:
+            subject, body = bob_pause.billing_email(tenant, stage)
+            try:
+                ok = send(to=tenant.email, subject=subject, body=body, from_name="Bob", reply_to=reply_to)
+            except Exception:  # noqa: BLE001 — une boutique en échec ne bloque jamais les autres
+                logger.warning("Email d'échéance impossible (boutique %s)", tenant.id)
+                ok = False
         if not ok:
             continue
         tenant.billing_notice_stage, tenant.billing_notice_for = stage, tenant.paid_until
