@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     smtp_from_email: str = "no-reply@agenc-ai.com"
     smtp_from_name: str = "Bob AI"  # nom affiché pour les emails transactionnels (2FA, mot de passe)
     smtp_use_tls: bool = True
+    # Lot 62 — emails de PROSPECTION : un compte d'envoi séparé (Gmail + mot de passe d'application), pour
+    # que les réactions des prospects ne touchent jamais les emails de Bob aux boutiques. Vide = pas d'envoi.
+    prospect_smtp_host: str = "smtp.gmail.com"
+    prospect_smtp_port: int = 587
+    prospect_smtp_username: str = ""   # l'adresse Gmail de prospection
+    prospect_smtp_password: str = ""   # mot de passe d'application (jamais le vrai mot de passe)
+    prospect_imap_host: str = "imap.gmail.com"
+    prospect_from_name: str = "Bob de AgenC'AI"
+    prospect_copy_to: str = ""         # copie des réponses des prospects (adresse habituelle)
     debug: bool = False
 
     # Database

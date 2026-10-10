@@ -27,6 +27,7 @@ TASK_MODULES = [
     "app.workers.renewals",
     "app.workers.reports",
     "app.workers.prospects",
+    "app.workers.prospect_emails",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -81,6 +82,16 @@ celery_app.conf.beat_schedule = {
     "purge-prospects": {
         "task": "app.workers.prospects.purge_prospects_task",
         "schedule": crontab(hour=3, minute=40),
+    },
+    # Lot 62 — emails de prospection : un email toutes les 3 minutes au plus (plafond et heures d'envoi vérifiés).
+    "prospect-emails": {
+        "task": "app.workers.prospect_emails.send_prospect_email_task",
+        "schedule": crontab(minute="*/3"),
+    },
+    # Lot 62 — boîte de prospection lue toutes les 15 minutes (réponses, adresses inexistantes).
+    "prospect-inbox": {
+        "task": "app.workers.prospect_emails.read_prospect_inbox_task",
+        "schedule": crontab(minute="*/15"),
     },
 }
 celery_app.conf.timezone = "UTC"

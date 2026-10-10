@@ -81,6 +81,11 @@
   .import-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin-top: 10px; }
   .import-wrap table { border: none; border-radius: 0; }
   .import-wrap td, .import-wrap th { white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; padding: 6px 8px; font-size: 12px; }
+  .warn { background: #FBEFDB; border: 1px solid #F2D9AE; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5; }
+  .err { background: #FBE4E2; border: 1px solid #F3C3BE; border-radius: 12px; padding: 10px 14px; font-size: 13px; color: var(--danger); }
+  .stat { display: inline-block; margin-right: 10px; font-size: 12.5px; white-space: nowrap; }
+  .stat b { font-size: 14px; }
+  .preview-frame { width: 100%; height: 420px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
   @media (max-width: 640px) { main { padding: 14px; } header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; } .form-grid { grid-template-columns: 1fr; } .funnel-row { grid-template-columns: 96px 1fr 84px; } }
 </style>
 </head>
@@ -148,6 +153,9 @@
       </div>
       <div style="overflow-x: auto;" id="funnel-groups-table"></div>
     </div>
+
+    <!-- Lot 62 — emails de prospection -->
+    <div class="card" id="email-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></div>
 
     <div class="toolbar">
       <div class="pills" id="prospect-views"></div>
@@ -431,7 +439,7 @@ function showSection(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.section === name)));
   document.getElementById("shops-section").classList.toggle("hidden", name !== "shops");
   document.getElementById("prospects-section").classList.toggle("hidden", name !== "prospects");
-  if (name === "prospects") { loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); }
+  if (name === "prospects") { loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); }
 }
 
 async function loadFunnel(period) {
@@ -469,14 +477,14 @@ async function loadProspects(view) {
     rows.innerHTML = `<tr><td colspan="7" style="color: var(--danger);">${esc(e.message)}</td></tr>`; return;
   }
   const c = prospectData.counts;
-  const views = [["all", "Tous", c.all], ["todo", "À relancer", c.todo], ["clicked", "Ont cliqué", c.clicked], ["signed_up", "Comptes créés", c.signed_up], ["lost", "Perdus", c.lost]];
+  const views = [["all", "Tous", c.all], ["todo", "À relancer", c.todo], ["replied", "Ont répondu", c.replied], ["clicked", "Ont cliqué", c.clicked], ["signed_up", "Comptes créés", c.signed_up], ["lost", "Perdus", c.lost]];
   document.getElementById("prospect-views").innerHTML = views.map(([key, label, n]) =>
-    `<button class="pill" aria-pressed="${key === prospectView}" onclick="loadProspects('${key}')">${label} (${n})</button>`).join("");
+    `<button class="pill" aria-pressed="${key === prospectView}" onclick="loadProspects('${key}')">${label} (${n ?? 0})</button>`).join("");
   rows.innerHTML = prospectData.prospects.map((p) => `<tr class="clickable" onclick="openProspect('${esc(p.id)}')">
       <td><strong>${esc(p.company)}</strong>${p.city ? `<div class="muted">${esc(p.city)}</div>` : ""}</td>
       <td>${esc(p.contact_name || "—")}<div class="muted">${esc(p.phone || p.email || "")}</div></td>
       <td>${esc(p.sector_label)}</td><td>${esc(p.source || "—")}</td>
-      <td>${stageBadge(p)}${p.follow_up ? ' <span class="badge demo">à relancer</span>' : ""}</td>
+      <td>${stageBadge(p)}${p.replied ? ' <span class="badge active">a répondu</span>' : ""}${p.follow_up ? ' <span class="badge demo">à relancer</span>' : ""}${p.email_step ? ` <span class="muted">email ${Number(p.email_step)}/3</span>` : ""}</td>
       <td>${p.last_contact_at ? new Date(p.last_contact_at).toLocaleDateString("fr-FR") : "—"}</td>
       <td>${esc(p.owner || "—")}</td></tr>`).join("") ||
     `<tr><td colspan="7" class="muted">${prospectView === "all" && !q ? "Aucun prospect : ajoutez-en un, ou importez votre fichier Excel." : "Aucun prospect dans cette vue."}</td></tr>`;
@@ -688,6 +696,134 @@ async function runProspectImport() {
     msg.textContent = e.message;
     document.getElementById("pi-run").disabled = false;
   }
+}
+// ==== Lot 62 — emails de prospection ====
+var emailData = null;
+var campaignStatusLabels = { DRAFT: "Brouillon", RUNNING: "En cours", PAUSED: "En pause" };
+
+async function loadEmails() {
+  const card = document.getElementById("email-card");
+  try { emailData = await api("/api/v1/superadmin/prospection/email"); } catch (e) {
+    card.innerHTML = `<p style="color: var(--danger);">${esc(e.message)}</p>`; return;
+  }
+  const d = emailData;
+  const setup = d.configured ? "" : `<div class="warn" style="margin-bottom: 12px;"><strong>Le compte Gmail de prospection n'est pas encore réglé.</strong>
+    Ajoutez dans le fichier .env du serveur PROSPECT_SMTP_USERNAME (l'adresse Gmail), PROSPECT_SMTP_PASSWORD (le mot de passe d'application) et PROSPECT_COPY_TO (votre adresse habituelle), puis redémarrez Bob. Vous pouvez déjà préparer vos campagnes.</div>`;
+  const error = d.last_error ? `<div class="err" style="margin-bottom: 12px;">${esc(d.last_error)}${d.last_error_at ? ` <span class="muted">(${new Date(d.last_error_at).toLocaleString("fr-FR")})</span>` : ""}</div>` : "";
+  const rows = d.campaigns.map((c) => {
+    const st = c.stats;
+    const target = [c.sector_label, c.source, c.country].filter(Boolean).map(esc).join(" · ");
+    const actions = [`<button class="small" onclick="previewCampaign('${esc(c.id)}')">Aperçu</button>`,
+      d.configured ? `<button class="small" onclick="testCampaign('${esc(c.id)}')">Essai</button>` : "",
+      c.status === "RUNNING" ? `<button class="small" onclick="campaignAction('${esc(c.id)}', 'pause')">Pause</button>`
+        : `<button class="small" onclick="campaignAction('${esc(c.id)}', 'start')">${c.status === "PAUSED" ? "Reprendre" : "Démarrer"}</button>`,
+      c.status !== "RUNNING" ? `<button class="small" onclick="openCampaignForm('${esc(c.id)}')">Modifier</button>` : "",
+      c.status === "DRAFT" ? `<button class="small" onclick="deleteCampaign('${esc(c.id)}')">Effacer</button>` : ""].join(" ");
+    return `<tr><td><strong>${esc(c.name)}</strong><div class="muted">${target} · ${c.steps} email${c.steps > 1 ? "s" : ""}</div></td>
+      <td><span class="badge ${c.status === "RUNNING" ? "active" : c.status === "PAUSED" ? "demo" : ""}">${esc(st.finished ? "Terminée" : campaignStatusLabels[c.status] || c.status)}</span>
+        ${c.status !== "RUNNING" && c.eligible ? `<div class="muted">${c.eligible} prospect${c.eligible > 1 ? "s" : ""} à ajouter</div>` : ""}</td>
+      <td><span class="stat"><b>${st.reached}</b>/${st.targeted} contactés</span><span class="stat"><b>${st.opened}</b> ouverts*</span><span class="stat"><b>${st.clicked}</b> cliqués</span>
+        <span class="stat"><b>${st.replied}</b> réponses</span><span class="stat"><b>${st.signed_up}</b> comptes</span><span class="stat"><b>${st.unsubscribed}</b> désinscrits</span><span class="stat"><b>${st.bounced}</b> invalides</span></td>
+      <td style="white-space: nowrap;">${actions}</td></tr>`;
+  }).join("");
+  card.innerHTML = `<div class="toolbar" style="margin-top: 0;"><h2 style="font-size: 16px; margin: 0;">Emails de prospection</h2>
+      <button class="btn primary" onclick="openCampaignForm()">Nouvelle campagne</button></div>
+    ${setup}${error}
+    <div class="row" style="margin-bottom: 8px;">
+      <span style="font-size: 13px;">${d.from ? `Expéditeur : <strong>${esc(d.from)}</strong> · ` : ""}${d.sent_24h} / ${d.daily_limit} emails sur 24 h</span>
+      <label for="email-limit" style="margin: 0; font-size: 13px;">Plafond par jour</label>
+      <select id="email-limit" class="input" style="flex: 0 0 auto; width: auto; min-width: 0;" onchange="saveEmailSettings({ daily_limit: Number(this.value) })">${d.limits.map((n) => `<option ${n === d.daily_limit ? "selected" : ""}>${n}</option>`).join("")}</select>
+      <button class="btn" onclick="saveEmailSettings({ sending_enabled: ${!d.sending_enabled} })">${d.sending_enabled ? "Suspendre tous les envois" : "Reprendre les envois"}</button>
+    </div>
+    <p class="muted" style="margin: 0 0 12px;">${esc(d.recommendation)} Envoi en semaine de 9 h à 17 h (heure du prospect), un email toutes les 3 minutes au plus ; 3 emails au plus par prospect (1er, 5e et 11e jour), arrêtés dès qu'il clique, crée son compte, répond ou se désinscrit.${d.copy_to ? " Les réponses vous sont copiées." : ""}</p>
+    ${d.campaigns.length ? `<div style="overflow-x: auto;"><table><thead><tr><th>Campagne</th><th>État</th><th>Résultats</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="muted" style="margin: 6px 0 0;">* Ouvertures indicatives : certaines messageries ouvrent les emails d'elles-mêmes, d'autres bloquent les images.</p>`
+      : `<p class="muted">Aucune campagne : créez-en une pour écrire aux prospects qui ont un email et n'ont jamais été contactés.</p>`}`;
+}
+
+async function saveEmailSettings(body) {
+  try {
+    await api("/api/v1/superadmin/prospection/email/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { alert(e.message); }
+  loadEmails();
+}
+
+function openCampaignForm(id) {
+  const c = id ? emailData.campaigns.find((x) => x.id === id) : null;
+  const sectors = [{ value: "", label: "Tous les secteurs" }].concat((prospectData && prospectData.sectors) || []);
+  const step = (i, title) => `<div class="box"><h4>${title}</h4>
+      <label for="cf-subject-${i}">Objet</label><input id="cf-subject-${i}" class="input" maxlength="200" value="${esc(c ? c["subject_" + i] || "" : "")}">
+      <label for="cf-body-${i}">Texte</label><textarea id="cf-body-${i}" class="input" rows="8" maxlength="5000">${esc(c ? c["body_" + i] || "" : "")}</textarea></div>`;
+  openModal(`<h3>${c ? "Modifier la campagne" : "Nouvelle campagne"}</h3>
+    <p class="muted">Elle écrit aux prospects qui ont un email et n'ont jamais été contactés, selon vos filtres. Champs remplis pour chaque prospect : {bonjour} (« Bonjour Awa »), {prenom}, {entreprise}, {ville}, {lien} (son lien personnel, obligatoire dans le premier email). La signature, la désinscription et les mentions légales sont ajoutées automatiquement.</p>
+    <div class="form-grid">
+      <div><label for="cf-name">Nom de la campagne</label><input id="cf-name" class="input" maxlength="120" value="${esc(c ? c.name : "")}" placeholder="Concessions Abidjan — octobre"></div>
+      <div><label for="cf-sector">Secteur</label><select id="cf-sector" class="input" onchange="fillCampaignDefaults(false)">${options(sectors, c ? c.sector || "" : "")}</select></div>
+      <div><label for="cf-source">Source (facultatif)</label><input id="cf-source" class="input" maxlength="120" value="${esc(c ? c.source || "" : "")}" placeholder="Salon auto 2026"></div>
+      <div><label for="cf-country">Pays (code, facultatif)</label><input id="cf-country" class="input" maxlength="2" value="${esc(c ? c.country || "" : "")}" placeholder="CI"></div>
+    </div>
+    ${step(1, "Email 1 — le jour du lancement")}${step(2, "Relance — 4 jours après (laisser vide : pas de relance)")}${step(3, "Dernier email — 10 jours après (facultatif)")}
+    <p id="cf-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 8px 0;"></p>
+    <div class="row" style="justify-content: space-between;"><button class="btn" onclick="fillCampaignDefaults(true)">Remettre les textes proposés</button>
+      <div class="row"><button class="btn" onclick="closeProspectModal()">Annuler</button><button class="btn primary" onclick="saveCampaign(${c ? `'${esc(c.id)}'` : "null"})">Enregistrer</button></div></div>`);
+  if (!c) fillCampaignDefaults(true);
+}
+
+async function fillCampaignDefaults(force) {
+  const sector = document.getElementById("cf-sector").value || "ONLINE_STORE";
+  if (!force && [1, 2, 3].some((i) => document.getElementById("cf-body-" + i).dataset.edited)) return;
+  try {
+    const t = await api(`/api/v1/superadmin/prospection/defaults?sector=${encodeURIComponent(sector)}`);
+    [1, 2, 3].forEach((i) => {
+      document.getElementById("cf-subject-" + i).value = t["subject_" + i] || "";
+      const body = document.getElementById("cf-body-" + i);
+      body.value = t["body_" + i] || "";
+      body.oninput = () => { body.dataset.edited = "1"; };
+    });
+  } catch (e) { document.getElementById("cf-error").textContent = e.message; }
+}
+
+async function saveCampaign(id) {
+  const v = (key) => document.getElementById(key).value;
+  const body = { name: v("cf-name"), sector: v("cf-sector") || null, source: v("cf-source") || null, country: v("cf-country") || null };
+  [1, 2, 3].forEach((i) => { body["subject_" + i] = v("cf-subject-" + i); body["body_" + i] = v("cf-body-" + i); });
+  try {
+    await api(`/api/v1/superadmin/prospection/campaigns${id ? "/" + id : ""}`, { method: id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    closeProspectModal();
+    loadEmails();
+  } catch (e) { document.getElementById("cf-error").textContent = e.message; }
+}
+
+async function previewCampaign(id) {
+  let p;
+  try { p = await api(`/api/v1/superadmin/prospection/campaigns/${id}/preview`, { method: "POST" }); } catch (e) { alert(e.message); return; }
+  openModal(`<h3>Aperçu</h3><p class="muted">Pour ${esc(p.sample)}. Les liens de l'aperçu ne comptent pas.</p>
+    ${p.steps.map((st, i) => `<div class="box"><h4>Jour ${st.day} — ${esc(st.subject)}</h4><iframe class="preview-frame" sandbox="" title="Aperçu de l'email ${i + 1}" id="pv-${i}"></iframe></div>`).join("")}
+    <div class="row" style="justify-content: flex-end; margin-top: 10px;"><button class="btn primary" onclick="closeProspectModal()">Fermer</button></div>`);
+  p.steps.forEach((st, i) => { document.getElementById("pv-" + i).srcdoc = st.html; });
+}
+
+async function testCampaign(id) {
+  try {
+    const r = await api(`/api/v1/superadmin/prospection/campaigns/${id}/test`, { method: "POST" });
+    alert(`${r.emails} email${r.emails > 1 ? "s" : ""} d'essai envoyé${r.emails > 1 ? "s" : ""} à ${r.sent_to}.`);
+  } catch (e) { alert(e.message); }
+}
+
+async function campaignAction(id, action) {
+  if (action === "start" && !confirm("Lancer cette campagne ?\n\nBob écrira aux prospects visés, un email à la fois, sous votre plafond par jour, en semaine de 9 h à 17 h.")) return;
+  try {
+    const r = await api(`/api/v1/superadmin/prospection/campaigns/${id}/${action}`, { method: "POST" });
+    if (action === "start" && r.added) alert(`${r.added} prospect${r.added > 1 ? "s" : ""} ajouté${r.added > 1 ? "s" : ""} à la campagne.`);
+  } catch (e) { alert(e.message); }
+  loadEmails();
+}
+
+async function deleteCampaign(id) {
+  if (!confirm("Effacer ce brouillon de campagne ?")) return;
+  const r = await fetch(API_BASE + `/api/v1/superadmin/prospection/campaigns/${id}`, { method: "DELETE", headers: { Authorization: "Bearer " + token } });
+  if (!r.ok) alert("Effacement impossible.");
+  loadEmails();
 }
 </script>
 </body>

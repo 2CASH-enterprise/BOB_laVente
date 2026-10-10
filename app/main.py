@@ -33,6 +33,7 @@ from app.api.customer_import.routes import router as customer_import_router  # l
 from app.api.kit.routes import router as kit_router  # lot 59
 from app.api.reports.routes import router as reports_router  # lot 60
 from app.api.prospects.routes import public_router as prospect_link_router, router as prospects_router  # lot 61
+from app.api.prospects.campaigns import router as prospect_campaigns_router  # lot 62
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from app.api.whatsapp.routes import router as whatsapp_router
 from app.core.config import get_settings
@@ -80,6 +81,7 @@ app.include_router(dossier_router)
 app.include_router(kit_router)
 app.include_router(reports_router)
 app.include_router(prospects_router)
+app.include_router(prospect_campaigns_router)
 app.include_router(prospect_link_router)
 
 _static_dir = Path(__file__).parent / "static" / "dashboard"

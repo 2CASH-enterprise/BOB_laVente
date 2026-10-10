@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,12 +28,68 @@ router = APIRouter(prefix="/api/v1/superadmin/prospects", tags=["prospection"])
 async def prospect_link(code: str, request: Request, db: AsyncSession = Depends(get_db)) -> RedirectResponse:
     """Lien personnel d'un prospect : clic noté, code gardé 30 jours dans le navigateur, puis la présentation de Bob."""
     prospect = await pros.record_click(db, code, request.headers.get("user-agent"))
-    response = RedirectResponse("/", status_code=302)
+    # Lot 62 : la page de présentation sous l'adresse publique de Bob (…/bob/), pas la racine du domaine.
+    response = RedirectResponse(get_settings().public_base_url.rstrip("/") + "/", status_code=302)
     if prospect is not None:
         response.set_cookie(pros.COOKIE, prospect.code, max_age=pros.COOKIE_DAYS * 86400, httponly=True, samesite="lax",
                             secure=get_settings().public_base_url.startswith("https"), path="/")
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+# Lot 62 — ouverture d'un email (image de 1 pixel) et désinscription en un clic.
+_PIXEL = bytes.fromhex("47494638396101000100800000ffffff00000021f90401000000002c00000000010001000002024401003b")
+
+
+@public_router.get("/p/{code}/o/{email_id}.gif", include_in_schema=False)
+async def prospect_open(code: str, email_id: str, db: AsyncSession = Depends(get_db)) -> Response:
+    prospect = await _by_code(db, code)
+    if prospect is not None:
+        from app.services import prospect_mailer
+
+        await prospect_mailer.record_open(db, prospect, email_id)
+    return Response(_PIXEL, media_type="image/gif", headers={"Cache-Control": "no-store, max-age=0"})
+
+
+async def _by_code(db, code: str):
+    code = (code or "").strip().lower()[:16]
+    return (await db.execute(select(Prospect).where(Prospect.code == code))).scalar_one_or_none()
+
+
+def _page(title: str, text: str, form: bool = False) -> HTMLResponse:
+    from html import escape
+
+    button = ('<form method="post" action="" style="margin-top:18px;">'
+              '<button style="background:#1B4332;color:#fff;border:0;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;">'
+              'Confirmer : ne plus recevoir ces emails</button></form>') if form else ""
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{escape(title)}</title></head><body style="margin:0;background:#F4FAF6;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#13241A;">
+<div style="max-width:460px;margin:60px auto;background:#fff;border:1px solid #E3EBE6;border-radius:16px;padding:28px;">
+<h1 style="font-size:20px;margin:0 0 10px;">{escape(title)}</h1><p style="margin:0;line-height:1.55;">{escape(text)}</p>{button}</div></body></html>""",
+                        headers={"Cache-Control": "no-store"})
+
+
+@public_router.get("/p/{code}/stop", include_in_schema=False)
+async def prospect_stop_page(code: str, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Une page avec un bouton (les antivirus qui ouvrent les liens ne désinscrivent personne par erreur)."""
+    prospect = await _by_code(db, code)
+    if prospect is None:
+        return _page("Lien inconnu", "Ce lien n'est pas valide.")
+    if prospect.status == "UNSUBSCRIBED":
+        return _page("C'est fait", "Vous ne recevrez plus nos emails.")
+    return _page("Ne plus recevoir nos emails", f"Pour {prospect.company} : confirmez et nous ne vous écrirons plus.", form=True)
+
+
+@public_router.post("/p/{code}/stop", include_in_schema=False)
+async def prospect_stop(code: str, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Désinscription (bouton de la page, ou « Se désabonner » de Gmail / Outlook : List-Unsubscribe-Post)."""
+    from app.services import prospect_mailer
+
+    prospect = await _by_code(db, code)
+    if prospect is None:
+        return _page("Lien inconnu", "Ce lien n'est pas valide.")
+    await prospect_mailer.unsubscribe(db, prospect, "lien de désinscription")
+    return _page("C'est fait", "Vous ne recevrez plus nos emails. Merci de nous avoir lus.")
 
 
 # --- Super Admin ---------------------------------------------------------------------------------------------
@@ -101,6 +157,7 @@ def _view(p: Prospect, stage: str, owners: dict, today: date) -> dict:
         "next_action_on": p.next_action_on.isoformat() if p.next_action_on else None,
         "last_contact_at": p.last_contact_at.isoformat() if p.last_contact_at else None,
         "click_count": p.click_count or 0, "notes": p.notes, "link": pros.link(p.code),
+        "email_step": p.email_step or 0, "opened": p.first_opened_at is not None, "replied": p.replied_at is not None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "tenant_id": str(p.tenant_id) if p.tenant_id else None,
     }
@@ -113,7 +170,7 @@ async def _stages(db, prospects: list) -> dict:
 
 @router.get("")
 async def list_prospects(
-    view: str = Query(default="all", pattern="^(all|todo|clicked|signed_up|lost)$"),
+    view: str = Query(default="all", pattern="^(all|todo|replied|clicked|signed_up|lost)$"),
     q: str | None = Query(default=None, max_length=100),
     sector: str | None = None,
     owner: str | None = None,
@@ -141,12 +198,14 @@ async def list_prospects(
     owners = await _owners(db)
     today = datetime.now(timezone.utc).date()
     rows = [_view(p, stages[p.id], owners, today) for p in prospects]
-    counts = {"all": len(rows), "todo": sum(1 for r in rows if r["follow_up"]),
+    counts = {"all": len(rows), "todo": sum(1 for r in rows if r["follow_up"]), "replied": sum(1 for r in rows if r["replied"]),
               "clicked": sum(1 for r in rows if r["stage_index"] >= pros.STAGE_INDEX["CLICKED"] and r["status"] == "ACTIVE"),
               "signed_up": sum(1 for r in rows if r["stage_index"] >= pros.STAGE_INDEX["SIGNED_UP"]),
               "lost": sum(1 for r in rows if r["status"] != "ACTIVE")}
     if view == "todo":
         rows = [r for r in rows if r["follow_up"]]
+    elif view == "replied":
+        rows = [r for r in rows if r["replied"]]
     elif view == "clicked":
         rows = [r for r in rows if r["stage_index"] >= pros.STAGE_INDEX["CLICKED"] and r["status"] == "ACTIVE"]
     elif view == "signed_up":

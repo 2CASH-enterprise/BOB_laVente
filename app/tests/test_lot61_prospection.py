@@ -125,7 +125,10 @@ async def test_personal_link_counts_people_not_previews(client, db_session):
     p = await _prospect(client, headers)
     assert re.fullmatch(r"[a-z2-9]{6}", p["code"]) and p["link"].endswith(f"/p/{p['code']}")
     preview = await client.get(f"/p/{p['code']}", headers={"User-Agent": "WhatsApp/2.24"}, follow_redirects=False)
-    assert preview.status_code == 302 and preview.headers["location"] == "/"
+    from app.core.config import get_settings
+
+    home = get_settings().public_base_url.rstrip("/") + "/"  # lot 62 : la présentation sous l'adresse publique de Bob
+    assert preview.status_code == 302 and preview.headers["location"] == home
     stored = (await db_session.execute(select(Prospect).where(Prospect.code == p["code"]))).scalar_one()
     await db_session.refresh(stored)
     assert stored.click_count == 0 and stored.first_click_at is None  # l'aperçu de WhatsApp n'est pas un clic
@@ -293,7 +296,7 @@ async def test_views_search_and_funnel(client, db_session):
     await client.post(f"{API}/{c['id']}/status", headers=headers, json={"status": "NOT_INTERESTED"})
     await client.get(f"/p/{b['code']}", headers={"User-Agent": BROWSER}, follow_redirects=False)
     data = (await client.get(API, headers=headers)).json()
-    assert data["counts"] == {"all": 3, "todo": 1, "clicked": 1, "signed_up": 0, "lost": 1}
+    assert data["counts"] == {"all": 3, "todo": 1, "replied": 0, "clicked": 1, "signed_up": 0, "lost": 1}
     assert [p["company"] for p in (await client.get(f"{API}?view=todo", headers=headers)).json()["prospects"]] == ["Auto Prestige"]
     assert [p["company"] for p in (await client.get(f"{API}?view=clicked", headers=headers)).json()["prospects"]] == ["Boutique Fatou"]
     assert [p["company"] for p in (await client.get(f"{API}?view=lost", headers=headers)).json()["prospects"]] == ["Cabinet Kouassi"]

@@ -41,7 +41,8 @@ STATUSES = {"ACTIVE": "En cours", "NOT_INTERESTED": "Pas intéressé", "UNSUBSCR
 SECTORS = {"ONLINE_STORE": "Commerce", "CAR_DEALERSHIP": "Concession automobile",
            "INSURANCE_BROKER": "Courtier / agent d'assurance"}
 EVENT_LABELS = {"ADDED": "Ajouté", "CONTACT": "Contacté", "CLICK": "A cliqué sur son lien", "DEMO": "A essayé la démo",
-                "SIGNUP": "A créé son compte", "STATUS": "Statut", "NOTE": "Note"}
+                "SIGNUP": "A créé son compte", "STATUS": "Statut", "NOTE": "Note",
+                "OPEN": "A ouvert un email (indicatif)", "REPLY": "A répondu"}
 # Robots qui ouvrent les liens pour en faire un aperçu : un aperçu n'est pas un clic du prospect.
 BOT_AGENTS = re.compile(r"bot|crawl|spider|preview|facebookexternalhit|whatsapp|telegram|slack|discord|skype|"
                         r"embedly|vkshare|curl|wget|python-|go-http|okhttp|headless|lighthouse", re.I)
@@ -200,6 +201,9 @@ def to_follow_up(prospect, stage: str, today: date, now: datetime | None = None)
     """À relancer : date prévue arrivée, ou contacté sans clic depuis 4 jours (jamais un perdu ni un inscrit)."""
     if prospect.status != "ACTIVE" or STAGE_INDEX[stage] >= STAGE_INDEX["SIGNED_UP"]:
         return False
+    replied = aware(getattr(prospect, "replied_at", None))
+    if replied is not None and (aware(prospect.last_contact_at) is None or aware(prospect.last_contact_at) <= replied):
+        return True  # lot 62 : il a répondu à un email, personne ne lui a encore répondu
     if prospect.next_action_on is not None:
         return prospect.next_action_on <= today
     last = aware(prospect.last_contact_at)
