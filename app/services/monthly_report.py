@@ -545,7 +545,7 @@ async def send_report(db, tenant, now: datetime | None = None, send=None, renewa
 
 def monthly_due(tenant, now: datetime) -> bool:
     """Rapport de début de mois : du 1er au 3, après 8 h (heure du pays), sans échéance proche, 20 jours d'écart."""
-    if tenant is None or not tenant.active or tenant.is_demo:
+    if tenant is None or not tenant.active or tenant.is_demo or tenant.prereg_at and not tenant.access_opened_at:
         return False
     local = as_utc(now).astimezone(tenant_zone(tenant))
     if local.day > 3 or local.hour < OFFICE_START:
@@ -559,7 +559,7 @@ def monthly_due(tenant, now: datetime) -> bool:
 
 def next_send_on(tenant, now: datetime) -> date | None:
     """Date du prochain rapport automatique (affichée dans la page Rapports)."""
-    if not tenant.active or tenant.is_demo:
+    if not tenant.active or tenant.is_demo or tenant.prereg_at and not tenant.access_opened_at:
         return None
     from app.services.bob_pause import WARNING_DAYS
 

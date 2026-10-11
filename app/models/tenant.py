@@ -86,6 +86,16 @@ class Tenant(Base):
     privacy_policy_url: Mapped[str | None] = mapped_column(String(300))
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lot 65 — pré-inscription (avant le lancement) : compte créé pendant le « mode pré-inscription ». Tant que
+    # l'accès n'est pas ouvert (access_opened_at), seul l'accueil d'exemple est visible et rien ne fonctionne.
+    # Offre de lancement figée à l'inscription ; informations préparées par le client pour l'installation.
+    prereg_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    access_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    launch_offer: Mapped[str | None] = mapped_column(String(32))
+    prep_whatsapp: Mapped[str | None] = mapped_column(String(40))
+    prep_catalog_size: Mapped[str | None] = mapped_column(String(16))
+    prep_note: Mapped[str | None] = mapped_column(String(500))
+    prep_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

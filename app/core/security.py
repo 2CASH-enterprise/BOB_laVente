@@ -8,13 +8,14 @@ plutôt que de faire confiance à un tenant_id fourni dans l'URL ou le corps de 
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
+from app.core.database import get_db
 
 settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -92,9 +93,28 @@ class CurrentUser(BaseModel):
     role: str
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> CurrentUser:
+async def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db=Depends(get_db)) -> CurrentUser:
     payload = decode_access_token(token)
-    return CurrentUser(user_id=UUID(payload.sub), tenant_id=UUID(payload.tenant_id), role=payload.role)
+    user = CurrentUser(user_id=UUID(payload.sub), tenant_id=UUID(payload.tenant_id), role=payload.role)
+    await _check_preregistration(request, db, user)
+    return user
+
+
+async def _check_preregistration(request: Request, db, user: CurrentUser) -> None:
+    """
+    Lot 65 — un compte pré-inscrit (accès pas encore ouvert) ne peut appeler que l'accueil d'exemple, sa
+    pré-inscription et la connexion : tout le reste répond 403, quel que soit le chemin pris par la page.
+    """
+    from sqlalchemy import select
+
+    from app.models.tenant import Tenant
+    from app.services import preregistration
+
+    row = (await db.execute(select(Tenant.prereg_at, Tenant.access_opened_at).where(Tenant.id == user.tenant_id))).first()
+    if row is None or row.prereg_at is None or row.access_opened_at is not None:
+        return
+    if not preregistration.allowed(request.method, request.url.path):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=preregistration.LOCKED_MESSAGE)
 
 
 def get_current_tenant_id(current_user: CurrentUser = Depends(get_current_user)) -> UUID:

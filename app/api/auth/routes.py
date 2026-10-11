@@ -156,11 +156,16 @@ async def register_tenant(
                  "business_type": payload.business_type, "email_verified": True},
         ip_address=request.client.host if request.client else None,
     )
+    from app.services import preregistration  # lot 65 : pendant le mode pré-inscription, compte pré-inscrit
+
+    prereg = await preregistration.on_signup(db, tenant)
 
     await db.commit()
     from app.services import prospection  # lot 61 : inscription rattachée au prospect (lien, ou même email)
 
     await prospection.attach(db, request, tenant.id, "SIGNUP", email=payload.owner_email)
+    if prereg:
+        await preregistration.send_signup_emails(db, tenant, owner)
 
     return TenantCreatedResponse(tenant_id=tenant.id, owner_user_id=owner.id)
 

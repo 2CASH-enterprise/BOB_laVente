@@ -311,6 +311,9 @@ async def promote_demo(
 
     tenant.is_demo = False
     tenant.email = owner.email
+    from app.services import preregistration  # lot 65 : pendant le mode pré-inscription, compte pré-inscrit
+
+    prereg = await preregistration.on_signup(db, tenant)
 
     await log_audit_event(
         db, actor=str(owner.id), action="DEMO_PROMOTED_TO_ACCOUNT", tenant_id=tenant.id, details={"email": owner.email}
@@ -321,4 +324,6 @@ async def promote_demo(
     from app.services import prospection  # lot 61 : compte créé depuis la démo du prospect
 
     await prospection.attach(db, request, tenant.id, "SIGNUP", email=owner.email)
+    if prereg:
+        await preregistration.send_signup_emails(db, tenant, owner)
     return DemoPromoteResponse(access_token=new_token)

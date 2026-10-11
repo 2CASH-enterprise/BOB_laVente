@@ -176,7 +176,7 @@
     <div class="chat-messages" id="chat-messages"></div>
     <div class="scenarios" id="scenarios"></div>
     <div class="whatsapp-cta" id="whatsapp-cta">
-      <p>Convaincu ? Crée ton compte gratuit — ton catalogue et tes réglages restent exactement tels quels.</p>
+      <p id="promote-intro">Convaincu ? Crée ton compte gratuit — ton catalogue et tes réglages restent exactement tels quels.</p>
       <div id="promote-form">
         <input id="promote-name" class="input" placeholder="Ton nom complet" maxlength="255" autocomplete="name" style="margin-bottom: 8px;">
         <input id="promote-email" class="input" type="email" placeholder="Ton email" autocomplete="email" style="margin-bottom: 8px;">
@@ -185,7 +185,7 @@
         <div id="promote-code-step" class="hidden">
           <p style="font-size: 12px; margin: 10px 0 6px;">Code à 6 chiffres envoyé à <strong id="promote-email-shown"></strong> (valable 10 min) :</p>
           <input id="promote-code" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Code à 6 chiffres" style="margin-bottom: 8px; text-align: center; letter-spacing: 4px;">
-          <button class="cta" onclick="promoteAccount()" style="margin-top: 0;">Créer mon compte gratuit</button>
+          <button class="cta" id="promote-create-btn" onclick="promoteAccount()" style="margin-top: 0;">Créer mon compte gratuit</button>
           <p style="font-size: 12px; margin: 6px 0 0; text-align: center;"><a href="#" onclick="sendPromoteCode(); return false;">Renvoyer le code</a></p>
         </div>
         <div id="promote-error" style="color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 14px;"></div>
@@ -314,6 +314,13 @@ function changeSector() {
 }
 
 fillCountries();
+
+// Lot 65 — pré-inscriptions ouvertes : le compte gardé depuis la démo est une pré-inscription, avec l'offre.
+fetch(API_BASE + "/api/v1/preregistration/public").then((r) => r.ok ? r.json() : null).then((p) => {
+  if (!p || !p.mode) return;
+  document.getElementById("promote-intro").textContent = "Convaincu ? Pré-inscris ton entreprise : installation offerte, et tes 3 premiers mois d'abonnement à moitié prix (−50 %). Ton catalogue et tes réglages restent tels quels.";
+  document.getElementById("promote-create-btn").textContent = "Me pré-inscrire";
+}).catch(() => {});
 
 // Lot 63 — lien personnel d'un prospect (…/demo/?secteur=concession&p=CODE) : la démo s'ouvre sur son secteur.
 (function presetSector() {

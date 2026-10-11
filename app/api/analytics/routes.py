@@ -111,8 +111,16 @@ async def get_home_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """Accueil (lot 19) : indicateurs sur 30 jours avec évolution, à traiter, entonnoir, activité. Lecture seule."""
+    from app.services import preregistration
     from app.services.home_service import home_summary
 
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if preregistration.is_locked(tenant):  # lot 65 : compte pré-inscrit → l'accueil d'exemple de son secteur
+        from app.models.user import User
+
+        user = await db.get(User, current_user.user_id)
+        first = (user.full_name or "").split()[0] if user and (user.full_name or "").strip() else None
+        return preregistration.example_home(tenant.business_type, first, tenant.currency)
     return await home_summary(db, current_user.tenant_id, user_id=current_user.user_id)
 
 

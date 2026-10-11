@@ -19,6 +19,7 @@ from app.services.local_time import _MONTHS, as_utc, tenant_zone
 
 SUSPENDED = "SUSPENDED"
 UNPAID = "UNPAID"
+PREREG = "PREREG"  # lot 65 : compte pré-inscrit, accès pas encore ouvert — Bob ne travaille pas encore
 
 GRACE_DAYS = 1    # jours où Bob répond encore après le dernier jour payé
 WARNING_DAYS = 7  # premier rappel, 7 jours avant la fin de l'abonnement
@@ -57,6 +58,8 @@ def pause_reason(tenant, now: datetime | None = None) -> str | None:
         return None
     if not tenant.active:
         return SUSPENDED
+    if getattr(tenant, "prereg_at", None) is not None and getattr(tenant, "access_opened_at", None) is None:
+        return PREREG
     if billing_stage(tenant, now) == PAUSED:
         return UNPAID
     return None
@@ -74,6 +77,7 @@ def french_date(value: date) -> str:
 PAUSED_ACTION_MESSAGE = {
     SUSPENDED: "Bob est en pause : votre compte est suspendu. Contactez-nous pour le réactiver.",
     UNPAID: "Bob est en pause : votre abonnement est à renouveler. Tout reprendra dès le renouvellement.",
+    PREREG: "Votre compte est pré-inscrit : Bob démarrera à l'ouverture de votre accès.",
 }
 
 
@@ -108,6 +112,8 @@ def status(tenant, now: datetime | None = None) -> BobStatus:
         message = (f"Bob est en pause depuis le {french_date(pause_on)} : votre abonnement est à renouveler. "
                    "Les messages de vos clients arrivent toujours dans Conversations et vous pouvez leur répondre "
                    "vous-même. Bob reprendra automatiquement dès le renouvellement.")
+    elif reason == PREREG:
+        message = "Votre compte est pré-inscrit : Bob démarrera à l'ouverture de votre accès, au lancement."
     elif stage == GRACE:
         message = (f"Votre abonnement est arrivé à échéance le {french_date(paid_until)}. Bob répond encore "
                    f"aujourd'hui, mais il se mettra en pause le {french_date(pause_on)} si le paiement n'est pas reçu.")

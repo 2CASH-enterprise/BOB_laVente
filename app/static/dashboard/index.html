@@ -448,6 +448,48 @@
   .activity-title { font-size: 13px; font-weight: 800; }
   .activity-detail { font-size: 12px; color: var(--muted); }
   .activity-when { font-size: 11px; color: var(--muted); }
+  /* Lot 65 — pré-inscription : accueil d'exemple figé, fenêtre de présentation par-dessus */
+  body.prereg-locked .sidebar nav button:not([data-tab="overview"]) { display: none; }
+  body.prereg-locked #home-root { pointer-events: none; user-select: none; }
+  body.prereg-locked #home-root .example-ribbon { pointer-events: auto; }
+  .example-ribbon { display: flex; align-items: center; gap: 10px; background: var(--info-soft); color: var(--info); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+  .prereg-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+  .prereg-overlay { position: fixed; inset: 0; z-index: 125; background: rgba(10, 20, 15, 0.55); overflow-y: auto; padding: 32px 16px; animation: bob-fade 0.2s ease; }
+  .prereg-panel { position: relative; max-width: 680px; margin: 0 auto; background: var(--panel); color: var(--text); border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); overflow: hidden; animation: bob-rise 0.22s ease; }
+  .prereg-hero { background: linear-gradient(135deg, #1B4332 0%, #2D6A4F 60%, #40916C 100%); color: #fff; padding: 30px 30px 26px; }
+  .prereg-hero h2 { margin: 10px 0 8px; font-size: 24px; line-height: 1.25; }
+  .prereg-hero p { margin: 0; font-size: 15px; line-height: 1.55; opacity: 0.92; }
+  .prereg-badge { display: inline-block; background: rgba(255, 255, 255, 0.18); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.02em; }
+  .prereg-close { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.18); color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
+  .prereg-close:hover { background: rgba(255, 255, 255, 0.3); }
+  .prereg-body { padding: 8px 30px 28px; }
+  .prereg-body h3 { font-size: 15px; margin: 22px 0 10px; }
+  .prereg-body h3 span { font-weight: 500; color: var(--muted); font-size: 13px; }
+  .prereg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .prereg-list li { position: relative; padding-left: 28px; font-size: 14.5px; line-height: 1.5; }
+  .prereg-list li::before { content: "✓"; position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .prereg-list.gains li::before { content: "★"; background: var(--warning-soft); color: var(--warning); }
+  .prereg-steps { margin: 0; padding-left: 0; list-style: none; counter-reset: step; display: grid; gap: 8px; }
+  .prereg-steps li { counter-increment: step; position: relative; padding-left: 32px; font-size: 14.5px; line-height: 1.5; }
+  .prereg-steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-fill); color: var(--on-accent); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .prereg-offer { margin: 22px 0 4px; border: 2px dashed var(--accent-light); background: var(--accent-soft); border-radius: 14px; padding: 16px 18px; }
+  .prereg-offer-title { font-weight: 800; font-size: 15px; margin-bottom: 4px; color: var(--accent); }
+  .prereg-offer p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+  .prereg-note { font-size: 13.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.5; }
+  .prereg-form { margin-top: 22px; border-top: 1px solid var(--border); }
+  .prereg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .prereg-grid label, .prereg-file > label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .prereg-file { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 10px; }
+  .prereg-file > div { min-width: 0; }
+  .prereg-file-name { font-size: 13.5px; overflow-wrap: anywhere; }
+  .prereg-sign { margin: 26px 0 18px; font-size: 15px; line-height: 1.5; }
+  @media (max-width: 600px) {
+    .prereg-overlay { padding: 12px 8px; }
+    .prereg-hero { padding: 24px 18px 20px; }
+    .prereg-hero h2 { font-size: 20px; padding-right: 30px; }
+    .prereg-body { padding: 4px 18px 22px; }
+    .prereg-grid { grid-template-columns: 1fr; }
+  }
   /* Lot 64 — fiche client du courtier */
   .customer-section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 28px 0 12px; }
   .customer-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
@@ -602,8 +644,12 @@
     <a onclick="showForgot()" style="color: var(--accent); cursor: pointer;">Mot de passe oublié ?</a>
   </p>
   <p style="text-align: center; font-size: 13px; color: var(--muted); margin-top: 16px;">
-    Pas encore de compte ? <a onclick="showSignup()" style="color: var(--accent); cursor: pointer;">Créer un compte</a>
+    Pas encore de compte ? <a onclick="showSignup()" id="login-signup-link" style="color: var(--accent); cursor: pointer;">Créer un compte</a>
   </p>
+</div>
+
+<div id="prereg-overlay" class="prereg-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="prereg-title" onclick="if (event.target === this) closePrereg()">
+  <div class="prereg-panel" id="prereg-panel"></div>
 </div>
 
 <div id="segment-screen" class="hidden" role="dialog" aria-modal="true" aria-labelledby="segment-title">
@@ -617,7 +663,8 @@
 </div>
 <div id="signup-screen" class="hidden">
   <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
-  <h2>Créer votre compte Bob</h2>
+  <h2 id="signup-title">Créer votre compte Bob</h2>
+  <div id="signup-offer" class="prereg-offer hidden" style="margin: 0 0 14px; padding: 12px 14px;"><div class="prereg-offer-title">🎁 Pré-inscriptions ouvertes</div><p id="signup-offer-text" style="font-size: 13.5px;"></p></div>
   <div class="signup-progress" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
   <p class="signup-step-label" id="signup-step-label" aria-live="polite"></p>
   <div class="signup-step" data-step="1">
@@ -740,6 +787,7 @@
     </div>
   </aside>
   <main>
+    <div id="prereg-banner" class="prereg-banner hidden" role="status"><span>Pré-inscrit · votre accès complet ouvrira au lancement.</span><button class="action secondary" onclick="openPrereg()">Revoir ma pré-inscription</button></div>
     <div id="bob-status-banner" class="bob-status-banner hidden" role="status"></div>
     <div class="page-head hidden"><h1 style="display: flex; align-items: center;"><span id="page-title">Accueil</span><button class="tip hidden page-tip-btn"></button><span class="tip-bubble page-tip-bubble" hidden></span></h1></div>
     <section id="tab-overview">
@@ -1903,12 +1951,20 @@ let pendingConversationId = new URLSearchParams(window.location.search).get("con
 // Lot 55 — lien direct vers une rubrique (…/dashboard/?tab=contracts, depuis le récapitulatif des échéances).
 let pendingTab = new URLSearchParams(window.location.search).get("tab");
 
-function enterApp() {
+async function enterApp() {
   AUTH_SCREENS.forEach((s) => document.getElementById(s).classList.add("hidden"));
   document.getElementById("app").classList.remove("hidden");
   loadTenant();
   checkBusinessTypeChosen();
   startTaskCounts();
+  // Lot 65 — compte pré-inscrit : seulement l'accueil d'exemple, sous la fenêtre de pré-inscription.
+  const pre = await loadPreregistration();
+  if (pre && pre.locked) {
+    pendingConversationId = null;
+    pendingTab = null;
+    enterPreregMode();
+    return;
+  }
   if (pendingConversationId) {
     const id = pendingConversationId;
     pendingConversationId = null;
@@ -1934,6 +1990,138 @@ function enterApp() {
     return;
   }
   loadOverview();
+}
+
+// ---- Lot 65 : pré-inscription (accueil d'exemple figé + fenêtre de présentation) ----
+var preregState = null;
+
+async function loadPreregistration() {
+  try { preregState = await api("/api/v1/preregistration/me"); } catch (e) { preregState = null; }
+  return preregState;
+}
+
+function enterPreregMode() {
+  document.body.classList.add("prereg-locked");
+  document.getElementById("prereg-banner").classList.remove("hidden");
+  showTab("overview");
+  renderPrereg();
+  openPrereg();
+}
+
+function openPrereg() {
+  document.getElementById("prereg-overlay").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  const panel = document.querySelector("#prereg-overlay .prereg-close");
+  if (panel) panel.focus();
+}
+
+function closePrereg() {
+  document.getElementById("prereg-overlay").classList.add("hidden");
+  document.body.style.overflow = "";
+}
+
+function preregSize(bytes) {
+  return bytes >= 1048576 ? (bytes / 1048576).toLocaleString("fr-FR", { maximumFractionDigits: 1 }) + " Mo" : Math.max(1, Math.round(bytes / 1024)) + " Ko";
+}
+
+function renderPrereg() {
+  const p = preregState;
+  if (!p) return;
+  const c = p.content;
+  const prep = p.prep || { files: [] };
+  const fileRow = (kind, label) => {
+    const f = prep.files.find((x) => x.kind === kind);
+    return `<div class="prereg-file">
+      <div><label>${esc(label)}</label>
+        <div class="prereg-file-name">${f ? `✓ ${esc(f.filename)} <span style="color: var(--muted);">· ${preregSize(f.size)}</span>` : '<span style="color: var(--muted);">Aucun fichier pour l\'instant</span>'}</div></div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <label class="file-pick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <span>${f ? "Remplacer" : "Déposer le fichier"}</span>
+          <input type="file" accept=".xlsx,.xls,.csv" aria-label="${esc(label)} : choisir un fichier" onchange="uploadPreregFile('${kind}', this)"></label>
+        ${f ? `<button class="action secondary" onclick="deletePreregFile('${esc(f.id)}')">Retirer</button>` : ""}
+      </div></div>`;
+  };
+  document.getElementById("prereg-panel").innerHTML = `
+    <button class="prereg-close" onclick="closePrereg()" aria-label="Fermer et voir l'aperçu">×</button>
+    <div class="prereg-hero">
+      <span class="prereg-badge">Pré-inscription confirmée</span>
+      <h2 id="prereg-title">${p.first_name ? `Bienvenue ${esc(p.first_name)} ! ` : "Bienvenue ! "}${esc(p.company)} est sur la liste.</h2>
+      <p>Bob arrive bientôt. Voici ce qu'il fera pour vous, ce que vous y gagnez, et comment préparer son arrivée.</p>
+    </div>
+    <div class="prereg-body">
+      <h3>Ce que fera Bob, votre vendeur sur WhatsApp</h3>
+      <ul class="prereg-list">${c.does.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <h3>Ce que votre entreprise y gagne</h3>
+      <ul class="prereg-list gains">${c.gains.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <div class="prereg-offer">
+        <div class="prereg-offer-title">🎁 Votre avantage de pré-inscrit</div>
+        <p>${esc(c.offer)}</p>
+      </div>
+      <h3>À préparer avant le lancement</h3>
+      <ol class="prereg-steps">${c.prepare.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>
+      <p class="prereg-note">${esc(c.support)}</p>
+      <div class="prereg-form">
+        <h3>Gagnez du temps : préparez dès maintenant <span>(facultatif)</span></h3>
+        <div class="prereg-grid">
+          <div><label for="prereg-whatsapp">Numéro WhatsApp de l'entreprise</label>
+            <input id="prereg-whatsapp" class="input" type="tel" maxlength="40" placeholder="+225 07 00 00 00 00" value="${esc(prep.whatsapp || "")}"></div>
+          <div><label for="prereg-size">${esc(c.size_label)}</label>
+            <select id="prereg-size" class="input"><option value="">Choisir</option>${p.sizes.map((s) => `<option value="${esc(s)}" ${s === prep.catalog_size ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></div>
+        </div>
+        <label for="prereg-note" style="display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 12px 0 4px;">Une précision pour l'installation</label>
+        <textarea id="prereg-note" class="input" rows="2" maxlength="500" placeholder="Ex. nous avons deux boutiques, nos prix changent chaque semaine…" style="resize: vertical;">${esc(prep.note || "")}</textarea>
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+          <button class="action" onclick="savePreregPrep()">Enregistrer</button>
+          <span id="prereg-msg" style="font-size: 13px;"></span>
+        </div>
+        ${fileRow("PRODUCTS", c.products_label)}
+        ${fileRow("CUSTOMERS", "Fichier de vos clients")}
+        <p class="prereg-note">Excel ou CSV, 5 Mo au plus. Vos fichiers restent privés : seule l'équipe de Bob les voit, pour préparer votre installation.</p>
+      </div>
+      <p class="prereg-sign">À très vite,<br><strong>${esc(c.signature)}</strong></p>
+      <button class="action" style="width: 100%;" onclick="closePrereg()">Voir l'aperçu de mon tableau de bord</button>
+    </div>`;
+}
+
+async function savePreregPrep() {
+  const msg = document.getElementById("prereg-msg");
+  try {
+    preregState = await api("/api/v1/preregistration/me/prep", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      whatsapp: document.getElementById("prereg-whatsapp").value.trim() || null,
+      catalog_size: document.getElementById("prereg-size").value || null,
+      note: document.getElementById("prereg-note").value.trim() || null,
+    }) });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré, merci !";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function uploadPreregFile(kind, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("kind", kind);
+  form.append("file", file);
+  try {
+    const r = await fetch(API_BASE + "/api/v1/preregistration/me/files", { method: "POST", headers: { Authorization: "Bearer " + token }, body: form });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Envoi impossible.");
+    preregState = await r.json();
+    renderPrereg();
+    toast("Fichier reçu, merci : il nous servira à préparer votre installation.");
+  } catch (e) {
+    toast(e.message, "error");
+    input.value = "";
+  }
+}
+
+async function deletePreregFile(id) {
+  try {
+    preregState = await api(`/api/v1/preregistration/me/files/${encodeURIComponent(id)}`, { method: "DELETE" });
+    renderPrereg();
+  } catch (e) { toast(e.message, "error"); }
 }
 
 // ---- Lot 24 : type d'activité (boutique en ligne / concession automobile) ----
@@ -2040,6 +2228,7 @@ async function chooseBusinessType(code) {
     });
     checkBusinessTypeChosen();
     document.getElementById("segment-screen").classList.add("hidden");
+    if (preregState && preregState.locked) { await loadPreregistration(); renderPrereg(); loadOverview(); }  // lot 65
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
@@ -2331,6 +2520,7 @@ function closeSidebar() {
 }
 
 function showTab(name) {
+  if (preregState && preregState.locked && name !== "overview") return;  // lot 65 : rien d'autre avant l'ouverture
   const activeBtn = [...document.querySelectorAll("nav button")].find((b) => b.dataset.tab === name);
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.getElementById("topbar-title").textContent = activeBtn ? activeBtn.dataset.label : "Bob";
@@ -2374,7 +2564,7 @@ async function loadTenant() {
 // Lot 51 — bandeau : Bob en pause (boutique suspendue, abonnement non renouvelé) ou échéance proche.
 function renderBobStatus(st) {
   const banner = document.getElementById("bob-status-banner");
-  if (!st || !st.message) {
+  if (!st || !st.message || st.reason === "PREREG") {  // lot 65 : le bandeau de pré-inscription suffit
     banner.classList.add("hidden");
     return;
   }
@@ -2549,7 +2739,7 @@ function renderHome(h) {
 
   const insuranceRow = insurer ? insuranceHomeRow(h) : "";  // lot 54
 
-  document.getElementById("home-root").innerHTML = `
+  document.getElementById("home-root").innerHTML = (h.example ? `<div class="example-ribbon"><span aria-hidden="true">👁</span><span>Exemple : voici à quoi ressemblera votre accueil quand Bob travaillera pour vous. Chiffres et clients fictifs.</span></div>` : "") + `
     <div class="home-hero">
       <div><h1>${hello}</h1><p>Voici ce que Bob a fait pour vous ces ${h.period_days} derniers jours.</p></div>
       <div class="pills"><span class="pill tone-accent">${h.ai_messages} message${h.ai_messages > 1 ? "s" : ""} traité${h.ai_messages > 1 ? "s" : ""} par Bob</span>${waiting}</div>
@@ -5633,9 +5823,22 @@ async function saveDelivery(orderId) {
   history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
 })();
 
+// Lot 65 — mode pré-inscription : « Je me pré-inscris » à la place de « Créer un compte », avec l'offre.
+var wantsPrereg = new URLSearchParams(window.location.search).get("preinscription") === "1";
+fetch(API_BASE + "/api/v1/preregistration/public").then((r) => r.ok ? r.json() : null).then((p) => {
+  if (!p || !p.mode) return;
+  document.getElementById("login-signup-link").textContent = "Je me pré-inscris";
+  document.getElementById("signup-title").textContent = "Pré-inscrire votre entreprise";
+  document.getElementById("signup-create-btn").textContent = "Me pré-inscrire";
+  document.getElementById("signup-offer-text").textContent = p.offer;
+  document.getElementById("signup-offer").classList.remove("hidden");
+}).catch(() => {});
+
 if (pendingResetToken) {
   document.getElementById("app").classList.add("hidden");
   showAuthScreen("reset-screen");
+} else if (!token && wantsPrereg) {
+  showSignup();  // lien « Je me pré-inscris » de la présentation ou de la démo
 } else if (token) {
   enterApp();
 } else {

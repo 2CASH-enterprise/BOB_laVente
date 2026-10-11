@@ -78,6 +78,10 @@
   .timeline li { padding: 7px 0; border-bottom: 1px solid var(--border); }
   .timeline li:last-child { border-bottom: none; }
   .muted { color: var(--muted); font-size: 12px; }
+  .prereg-row { border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .prereg-row-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+  .prereg-prep { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 13px; }
+  .small-btn { padding: 5px 10px; font-size: 12px; }
   textarea.input { font-family: inherit; resize: vertical; line-height: 1.45; }
   .import-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin-top: 10px; }
   .import-wrap table { border: none; border-radius: 0; }
@@ -107,6 +111,7 @@
     <nav class="tabs">
       <button type="button" data-section="shops" aria-pressed="true" onclick="showSection('shops')">Boutiques</button>
       <button type="button" data-section="prospects" aria-pressed="false" onclick="showSection('prospects')">Prospection</button>
+      <button type="button" data-section="prereg" aria-pressed="false" onclick="showSection('prereg')">Pré-inscriptions</button>
     </nav>
     <button onclick="logout()">Déconnexion</button>
   </header>
@@ -129,6 +134,18 @@
       <thead><tr><th>Entreprise</th><th>Email</th><th>Plan</th><th>Activité</th><th>Statut de Bob</th><th>Payé jusqu'au</th><th>Produits</th><th>Conversations (mois)</th><th>Commission</th><th>Créé le</th></tr></thead>
       <tbody id="tenant-rows"></tbody>
     </table>
+   </div>
+
+   <!-- Lot 65 — Pré-inscriptions : interrupteur, pré-inscrits, ouverture de l'accès -->
+   <div id="prereg-section" class="hidden">
+    <div class="card" id="prereg-mode-card"><p class="muted">Chargement…</p></div>
+    <div class="card" style="margin-top: 16px;">
+      <div class="toolbar" style="margin-top: 0;">
+        <h2 style="font-size: 16px; margin: 0;">Pré-inscrits <span class="muted" id="prereg-counts"></span></h2>
+        <button class="btn primary" id="prereg-open-all" onclick="openAllPrereg()">Ouvrir l'accès à tous les pré-inscrits</button>
+      </div>
+      <div id="prereg-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
+    </div>
    </div>
 
    <!-- Lot 61 — Prospection : du premier contact au compte payant -->
@@ -364,6 +381,7 @@ function bobStatusBadge(t) {
   const st = t.bob_status || {};
   if (st.reason === "SUSPENDED") return '<span class="badge inactive">Suspendu</span>';
   if (st.reason === "UNPAID") return '<span class="badge inactive" title="Abonnement non renouvelé">En pause (impayé)</span>';
+  if (st.reason === "PREREG") return '<span class="badge demo" title="Accès complet à ouvrir dans l\'onglet Pré-inscriptions">Pré-inscrit</span>';
   if (st.stage === "GRACE") return '<span class="badge demo" title="Bob se met en pause demain">Jour de grâce</span>';
   if (st.stage === "WARNING") return '<span class="badge demo">Échéance proche</span>';
   return '<span class="badge active">Actif</span>';
@@ -441,6 +459,89 @@ function showSection(name) {
   document.getElementById("shops-section").classList.toggle("hidden", name !== "shops");
   document.getElementById("prospects-section").classList.toggle("hidden", name !== "prospects");
   if (name === "prospects") { loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); }
+  document.getElementById("prereg-section").classList.toggle("hidden", name !== "prereg");
+  if (name === "prereg") loadPrereg();
+}
+
+// ---- Lot 65 : pré-inscriptions ----
+var preregData = null;
+
+async function loadPrereg() {
+  try { preregData = await api("/api/v1/superadmin/preregistration"); } catch (e) {
+    document.getElementById("prereg-list").innerHTML = `<p style="color: var(--danger);">${esc(e.message)}</p>`; return;
+  }
+  renderPreregAdmin();
+}
+
+function renderPreregAdmin() {
+  const d = preregData;
+  const since = d.changed_at ? ` · depuis le ${new Date(d.changed_at).toLocaleDateString("fr-FR")}${d.changed_by ? " (" + esc(d.changed_by) + ")" : ""}` : "";
+  document.getElementById("prereg-mode-card").innerHTML = `
+    <div class="toolbar" style="margin-top: 0;">
+      <h2 style="font-size: 16px; margin: 0;">Mode pré-inscription ${d.mode ? '<span class="badge active">Allumé</span>' : '<span class="badge inactive">Éteint</span>'}<span class="muted">${since}</span></h2>
+      <button class="btn ${d.mode ? "" : "primary"}" onclick="setPreregMode(${d.mode ? "false" : "true"})">${d.mode ? "Éteindre (lancement)" : "Allumer les pré-inscriptions"}</button>
+    </div>
+    <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 8px 0 0;">Allumé : toute nouvelle inscription (inscription guidée, ou démo gardée) crée un compte <strong>pré-inscrit</strong>. Il voit seulement un accueil d'exemple de son secteur et sa fenêtre de pré-inscription ; rien d'autre ne fonctionne et Bob ne travaille pas pour lui. Les boutons publics deviennent « Je me pré-inscris ». Les comptes existants ne changent pas.<br>Offre enregistrée sur chaque pré-inscrit : ${esc(d.offer)}</p>`;
+  document.getElementById("prereg-counts").textContent = `— ${d.counts.locked} en attente · ${d.counts.opened} avec l'accès ouvert`;
+  document.getElementById("prereg-open-all").disabled = !d.counts.locked;
+  const size = (b) => b >= 1048576 ? (b / 1048576).toFixed(1).replace(".", ",") + " Mo" : Math.max(1, Math.round(b / 1024)) + " Ko";
+  document.getElementById("prereg-list").innerHTML = d.tenants.length ? d.tenants.map((t) => `
+    <div class="prereg-row">
+      <div class="prereg-row-head">
+        <div><strong>${esc(t.name)}</strong> · ${esc(t.sector_label)} · ${esc(t.country)}
+          <div class="muted">${esc([t.owner, t.email, t.phone].filter(Boolean).join(" · "))}</div></div>
+        ${t.locked ? '<span class="badge demo">Pré-inscrit</span>' : `<span class="badge active">Accès ouvert le ${new Date(t.access_opened_at).toLocaleDateString("fr-FR")}</span>`}
+      </div>
+      <div class="muted" style="margin-top: 6px;">Pré-inscrit le ${new Date(t.prereg_at).toLocaleDateString("fr-FR")}${t.offer ? " · offre de lancement" : ""}</div>
+      <div class="prereg-prep">
+        <span>WhatsApp : <strong>${esc(t.prep.whatsapp || "—")}</strong></span>
+        <span>Taille : <strong>${esc(t.prep.catalog_size || "—")}</strong></span>
+        ${t.prep.files.map((f) => `<button class="btn small-btn" onclick="downloadPreregFile('${esc(f.id)}', '${esc(f.filename)}')">⬇ ${esc(f.kind === "CUSTOMERS" ? "Clients" : "Produits / liste")} · ${esc(f.filename)} (${size(f.size)})</button>`).join("")}
+      </div>
+      ${t.prep.note ? `<p class="muted" style="margin: 6px 0 0; font-size: 13px;">Note : ${esc(t.prep.note)}</p>` : ""}
+      <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+        ${t.locked ? `<button class="btn primary" onclick="openPreregTenant('${esc(t.id)}', '${esc(t.name)}')">Ouvrir l'accès complet (bêta)</button>`
+          : `<button class="btn" onclick="relockPreregTenant('${esc(t.id)}', '${esc(t.name)}')">Remettre en pré-inscription</button>`}
+      </div>
+    </div>`).join("") : '<p class="muted">Aucun pré-inscrit pour l\'instant.</p>';
+}
+
+async function setPreregMode(mode) {
+  const question = mode
+    ? "Allumer les pré-inscriptions ?\n\nToute nouvelle inscription créera un compte pré-inscrit (accueil d'exemple seulement)."
+    : "Éteindre les pré-inscriptions ?\n\nLes nouvelles inscriptions auront de nouveau l'accès complet. Les pré-inscrits restent en attente : ouvrez-leur l'accès avec le bouton prévu.";
+  if (!confirm(question)) return;
+  try { preregData = await api("/api/v1/superadmin/preregistration/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) }); renderPreregAdmin(); }
+  catch (e) { alert(e.message); }
+}
+
+async function openPreregTenant(id, name) {
+  if (!confirm(`Ouvrir l'accès complet à « ${name} » ?\n\nLe compte pourra tout utiliser (bêta-testeur). Un email le prévient.`)) return;
+  try { preregData = await api(`/api/v1/superadmin/preregistration/tenants/${id}/open`, { method: "POST" }); renderPreregAdmin(); loadTenants(); }
+  catch (e) { alert(e.message); }
+}
+
+async function relockPreregTenant(id, name) {
+  if (!confirm(`Remettre « ${name} » en pré-inscription ?\n\nIl ne verra plus que l'accueil d'exemple.`)) return;
+  try { preregData = await api(`/api/v1/superadmin/preregistration/tenants/${id}/relock`, { method: "POST" }); renderPreregAdmin(); loadTenants(); }
+  catch (e) { alert(e.message); }
+}
+
+async function openAllPrereg() {
+  if (!confirm(`Ouvrir l'accès à tous les pré-inscrits (${preregData.counts.locked}) ?\n\nJour du lancement : chacun reçoit un email et peut installer Bob.`)) return;
+  try { const r = await api("/api/v1/superadmin/preregistration/open-all", { method: "POST" }); preregData = r; renderPreregAdmin(); loadTenants(); alert(`${r.opened} accès ouvert${r.opened > 1 ? "s" : ""}.`); }
+  catch (e) { alert(e.message); }
+}
+
+async function downloadPreregFile(id, name) {
+  try {
+    const r = await fetch(API_BASE + `/api/v1/superadmin/preregistration/files/${encodeURIComponent(id)}`, { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error("Téléchargement impossible.");
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) { alert(e.message); }
 }
 
 async function loadFunnel(period) {

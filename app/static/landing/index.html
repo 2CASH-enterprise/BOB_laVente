@@ -145,7 +145,7 @@
     </nav>
     <div class="header-actions">
       <a class="btn btn-outline" href="dashboard/">Se connecter</a>
-      <a class="btn btn-gold" href="demo/">Essai gratuit — Sans engagement</a>
+      <a class="btn btn-gold" href="demo/" id="header-cta">Essai gratuit — Sans engagement</a>
     </div>
   </div>
 </header>
@@ -161,12 +161,13 @@
         <div class="gift-box">
           <div class="emoji">🎁</div>
           <div>
-            <div class="title">Essai gratuit — teste avec TON catalogue</div>
-            <div class="sub">Importe ton catalogue et discute avec ton agent en 30 secondes. Sans carte bancaire, sans compte à créer.</div>
+            <div class="title" id="gift-title">Essai gratuit — teste avec TON catalogue</div>
+            <div class="sub" id="gift-sub">Importe ton catalogue et discute avec ton agent en 30 secondes. Sans carte bancaire, sans compte à créer.</div>
           </div>
         </div>
 
         <div class="hero-buttons">
+          <a class="btn btn-gold prereg-cta" href="dashboard/?preinscription=1" style="display: none;">✍️ Je me pré-inscris</a>
           <a class="btn btn-green" href="demo/">💬 Tester avec mon catalogue</a>
           <a class="btn btn-outline" href="#comment-ca-marche">Voir comment ça marche</a>
         </div>
@@ -353,5 +354,17 @@
   <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.36 5.07L2 22l5.07-1.32A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18a7.9 7.9 0 0 1-4.24-1.22l-.3-.18-3.1.8.83-3.02-.2-.31A7.93 7.93 0 0 1 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/></svg>
 </a>
 
+<script>
+// Lot 65 — pré-inscriptions ouvertes : bouton « Je me pré-inscris » et l'offre de lancement.
+fetch("api/v1/preregistration/public").then((r) => r.ok ? r.json() : null).then((p) => {
+  if (!p || !p.mode) return;
+  document.getElementById("gift-title").textContent = "Pré-inscriptions ouvertes — offre de lancement";
+  document.getElementById("gift-sub").textContent = "Pré-inscris ton entreprise : installation offerte, et tes 3 premiers mois d'abonnement à moitié prix (−50 %) à partir de l'ouverture de ton accès.";
+  document.querySelectorAll(".prereg-cta").forEach((a) => { a.style.display = ""; });
+  const header = document.getElementById("header-cta");
+  header.textContent = "Je me pré-inscris";
+  header.href = "dashboard/?preinscription=1";
+}).catch(() => {});
+</script>
 </body>
 </html>
