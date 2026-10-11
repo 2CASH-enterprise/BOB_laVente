@@ -382,6 +382,8 @@
           <select id="shop-sector" class="input" style="width: auto; margin: 0;" onchange="renderShops()"><option value="">Tous les secteurs</option></select>
         </div>
         <div class="shop-grid" id="shop-grid"><p class="muted">Chargement…</p></div>
+        <!-- Lot 68 — interrupteur des modèles WhatsApp pour toute la plateforme -->
+        <section class="card wa-switch" id="wa-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
       </div>
       <div id="shop-detail" class="hidden"></div>
      </div>
@@ -743,6 +745,7 @@ function frDate(iso) { return iso ? new Date(iso + (iso.length === 10 ? "T12:00:
 function initials(name) { return (name || "?").split(/\s+/).filter((w) => /^[\p{L}\d]/u.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?"; }
 
 async function loadTenants() {
+  loadWaSwitch();
   try {
     const [tenants, costs] = await Promise.all([api("/api/v1/superadmin/tenants"), api("/api/v1/superadmin/ai-costs").catch(() => ({ rows: [] }))]);
     shopsData = tenants;
@@ -835,7 +838,9 @@ async function openShop(id) {
         <h2 style="margin-bottom: 12px;">Historique</h2>
         <div class="history">${history.items.length ? history.items.map((h) => `<div><b>${esc(h.what)}</b><div class="muted">${esc(new Date(h.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }))}${h.by ? " · par " + esc(h.by) : ""}</div></div>`).join("") : '<p class="muted">Aucun changement enregistré pour l\'instant.</p>'}</div>
       </section>
-    </div>`;
+    </div>
+    <section class="card" id="shop-wa" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>`;
+  loadShopTemplates(t.id);
 }
 
 async function putShop(path, body) {
@@ -1408,6 +1413,79 @@ async function deleteCampaign(id) {
   const r = await fetch(API_BASE + `/api/v1/superadmin/prospection/campaigns/${id}`, { method: "DELETE", headers: { Authorization: "Bearer " + token } });
   if (!r.ok) toast("Effacement impossible.", "error"); else toast("Brouillon effacé.");
   loadEmails();
+}
+
+// ---- Lot 68 : modèles WhatsApp ----
+const WA_TONES = { APPROVED: "is-ok", PENDING: "is-warn", IN_APPEAL: "is-warn", NOT_CREATED: "is-idle" };
+
+async function loadWaSwitch() {
+  const box = document.getElementById("wa-switch-card");
+  let d;
+  try { d = await api("/api/v1/superadmin/wa-templates/settings"); } catch (e) { box.innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return; }
+  box.innerHTML = `<div class="row" style="justify-content: space-between; align-items: flex-start;">
+    <div style="flex: 1 1 320px; min-width: 0;">
+      <div class="row"><h2>Modèles WhatsApp</h2><span class="badge ${d.enabled ? "active" : "muted"}">${d.enabled ? "Allumés" : "Éteints"}</span></div>
+      <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 6px 0 0;">${d.enabled
+        ? `Bob crée les modèles à la connexion d'un numéro et les envoie hors de la fenêtre de 20 h. ${d.shops} boutique${d.shops > 1 ? "s" : ""} · ${d.approved} approuvé${d.approved > 1 ? "s" : ""} · ${d.pending} en attente · ${d.rejected} refusé${d.rejected > 1 ? "s" : ""} ou en erreur.`
+        : "Rien n'est créé ni envoyé chez Meta. Laissez éteint pendant l'examen de Meta ; hors fenêtre de 20 h, Bob passe par l'email."}</p>
+    </div>
+    <button class="btn ${d.enabled ? "danger" : "primary"}" onclick="toggleWaTemplates(${d.enabled ? "false" : "true"})">${d.enabled ? "Éteindre…" : "Allumer…"}</button>
+  </div>`;
+}
+
+async function toggleWaTemplates(on) {
+  const ok = await saConfirm(on ? "Allumer les modèles WhatsApp ?" : "Éteindre les modèles WhatsApp ?",
+    on ? "Bob pourra créer les modèles chez Meta (connexion d'un numéro, ou bouton de la fiche boutique) et les envoyer hors de la fenêtre de 20 h.\nPensez à désactiver les modèles sur la boutique du compte d'examen Meta."
+       : "Bob n'enverra plus aucun modèle : hors fenêtre de 20 h, il repasse par l'email. Les modèles déjà créés restent chez Meta.",
+    { confirmLabel: on ? "Allumer" : "Éteindre", danger: !on });
+  if (!ok) return;
+  try {
+    await api("/api/v1/superadmin/wa-templates/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: on }) });
+    toast(on ? "Modèles WhatsApp allumés." : "Modèles WhatsApp éteints.");
+    loadWaSwitch();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+function renderShopTemplates(d) {
+  const box = document.getElementById("shop-wa");
+  if (!box) return;
+  const blocked = !d.platform_enabled ? "Les modèles sont éteints pour toute la plateforme (page Boutiques)."
+    : !d.allowed ? "Désactivés pour cette boutique : aucun modèle n'est créé ni envoyé."
+    : !d.connected ? "Aucun numéro WhatsApp connecté : les modèles seront créés à la connexion." : "";
+  box.innerHTML = `<div class="row" style="justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+      <div style="flex: 1 1 300px; min-width: 0;"><h2>Modèles WhatsApp</h2>
+        <p class="muted" style="font-size: 13px; margin: 4px 0 0;">${blocked ? esc(blocked) : `${d.approved} sur ${d.items.filter((i) => i.used).length} approuvés (forme « ${d.form === "TU" ? "tu" : "vous"} » de la boutique).`}</p></div>
+      <div class="row">
+        <button class="btn" onclick="setShopTemplatesAllowed(${d.allowed ? "false" : "true"})">${d.allowed ? "Désactiver pour cette boutique" : "Autoriser pour cette boutique"}</button>
+        <button class="btn primary" ${blocked ? "disabled" : ""} onclick="syncShopTemplates(this)">Créer / vérifier les modèles</button>
+      </div>
+    </div>
+    ${d.items.length ? `<div class="table-wrap"><table><thead><tr><th>Modèle</th><th>Statut chez Meta</th></tr></thead><tbody>${d.items.map((i) => `
+      <tr><td><b>${esc(i.label)}</b> <span class="muted">· ${i.form === "TU" ? "tu" : "vous"}${i.used ? "" : " (pas utilisée)"}</span><div class="muted mon-where" style="white-space: normal; overflow-wrap: anywhere;">${esc(i.name)}</div></td>
+        <td><span class="light ${WA_TONES[i.status] || "is-ko"}" style="display: inline-block; margin-right: 8px;"></span>${esc(i.status_label)}${i.category && i.category !== "UTILITY" ? ` <span class="badge inactive">${esc(i.category)}</span>` : ""}${i.reason ? `<div class="muted">${esc(i.reason)}</div>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="muted">Aucun modèle prévu pour ce secteur.</p>'}`;
+}
+
+async function loadShopTemplates(id) {
+  try { renderShopTemplates(await api(`/api/v1/superadmin/tenants/${id}/wa-templates`)); } catch (e) {
+    const box = document.getElementById("shop-wa"); if (box) box.innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`;
+  }
+}
+
+async function syncShopTemplates(button) {
+  button.disabled = true;
+  try {
+    const d = await api(`/api/v1/superadmin/tenants/${currentShop.id}/wa-templates/sync`, { method: "POST" });
+    renderShopTemplates(d);
+    const r = d.report;
+    if (r.error) toast(r.error, "error");
+    else toast(`${r.created} modèle${r.created > 1 ? "s" : ""} envoyé${r.created > 1 ? "s" : ""} à Meta, ${r.updated} vérifié${r.updated > 1 ? "s" : ""}${r.errors ? `, ${r.errors} en erreur` : ""}.`, r.errors ? "error" : "success");
+  } catch (e) { toast(e.message, "error"); button.disabled = false; }
+}
+
+async function setShopTemplatesAllowed(allowed) {
+  try { renderShopTemplates(await putShop("wa-templates/allowed", { allowed })); toast(allowed ? "Modèles autorisés pour cette boutique." : "Modèles désactivés pour cette boutique."); }
+  catch (e) { toast(e.message, "error"); }
 }
 
 // ---- Lot 67 : monitoring technique ----

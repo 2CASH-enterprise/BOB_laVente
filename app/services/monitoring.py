@@ -65,6 +65,7 @@ TASK_LABELS = {
     "app.workers.order_reminders.check_order_reminders_task": "Relances de commandes",
     "app.workers.monitoring.drain_task": "Monitoring : collecte des erreurs",
     "app.workers.monitoring.purge_task": "Monitoring : effacement après 30 jours",
+    "app.workers.wa_templates.refresh_templates_task": "Modèles WhatsApp : statut chez Meta",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).

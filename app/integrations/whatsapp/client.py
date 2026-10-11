@@ -53,6 +53,30 @@ class MetaOAuthClient:
             _raise_for_meta(response)
 
 
+class MetaTemplatesClient:
+    """
+    Lot 68 — modèles de message du compte WhatsApp Business (WABA) d'une boutique : liste et création.
+    Le jeton reste dans l'en-tête, jamais dans l'adresse ; une erreur est relancée sans l'adresse.
+    """
+
+    def __init__(self, waba_id: str, token: str, api_version: str | None = None):
+        self.token = token
+        self.url = f"{GRAPH_BASE_URL}/{api_version or settings.whatsapp_graph_api_version}/{waba_id}/message_templates"
+
+    async def list_templates(self) -> list[dict]:
+        params = {"fields": "id,name,language,status,category,rejected_reason", "limit": 200}
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(self.url, params=params, headers={"Authorization": f"Bearer {self.token}"})
+            _raise_for_meta(response)
+            return (response.json() or {}).get("data") or []
+
+    async def create_template(self, payload: dict) -> dict:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(self.url, json=payload, headers={"Authorization": f"Bearer {self.token}"})
+            _raise_for_meta(response)
+            return response.json() or {}
+
+
 class MetaGraphError(Exception):
     """Refus de Meta, décrit SANS l'adresse de la requête (qui peut contenir un secret)."""
 
@@ -128,13 +152,12 @@ class WhatsAppClient:
         payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": image}
         return await self._post("/messages", payload)
 
-    async def send_template_message(self, to: str, template_name: str, language: str = "fr") -> dict:
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": to,
-            "type": "template",
-            "template": {"name": template_name, "language": {"code": language}},
-        }
+    async def send_template_message(self, to: str, template_name: str, language: str = "fr",
+                                    components: list | None = None) -> dict:
+        template = {"name": template_name, "language": {"code": language}}
+        if components:
+            template["components"] = components  # lot 68 : valeurs du texte et du bouton
+        payload = {"messaging_product": "whatsapp", "to": to, "type": "template", "template": template}
         return await self._post("/messages", payload)
 
     async def _post(self, path: str, payload: dict) -> dict:

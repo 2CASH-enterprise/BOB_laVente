@@ -30,6 +30,7 @@ TASK_MODULES = [
     "app.workers.prospect_emails",
     "app.workers.order_reminders",
     "app.workers.monitoring",
+    "app.workers.wa_templates",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -104,6 +105,11 @@ celery_app.conf.beat_schedule = {
     "monitoring-drain": {
         "task": "app.workers.monitoring.drain_task",
         "schedule": crontab(minute="*"),
+    },
+    # Lot 68 — statut chez Meta des modèles WhatsApp encore en attente (rien si l'interrupteur est éteint).
+    "wa-templates-refresh": {
+        "task": "app.workers.wa_templates.refresh_templates_task",
+        "schedule": crontab(minute=25),
     },
     "monitoring-purge": {
         "task": "app.workers.monitoring.purge_task",

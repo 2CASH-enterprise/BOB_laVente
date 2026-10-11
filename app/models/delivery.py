@@ -37,6 +37,9 @@ class Delivery(Base):
     status: Mapped[DeliveryStatus] = mapped_column(Enum(DeliveryStatus, name="delivery_status"), default=DeliveryStatus.PENDING)
     address: Mapped[str | None] = mapped_column(String(500))
     estimated_delivery: Mapped[date | None] = mapped_column(Date)
+    # Lot 68 — client prévenu (une seule fois par étape) : commande en route, puis livrée.
+    shipped_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

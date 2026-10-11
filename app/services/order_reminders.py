@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 
 from app.models.order import Order, OrderStatus
+from app.services import wa_templates
 from app.services.address_form import uses_tu
 from app.services.order_emails import _money, _ref
 
@@ -167,7 +168,13 @@ def active(tenant, now: datetime) -> bool:
             and tenant.order_reminders_enabled and not is_paused(tenant, now))
 
 
-async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=None, send_whatsapp=None) -> dict:
+def template_values(tenant, customer, order: Order) -> list[str]:
+    """Lot 68 — modèle « commande en attente de paiement » : prénom, référence, boutique, montant."""
+    return [wa_templates.first_name(customer), _ref(order), tenant.name, _money(order.total_amount, order.currency)]
+
+
+async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=None, send_whatsapp=None,
+                         send_template=None) -> dict:
     """Relances dues d'une boutique. Une commande en échec ne bloque jamais les autres."""
     from app.models.customer import Customer
     from app.services.human_reply import customer_window_open
@@ -181,6 +188,7 @@ async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=Non
     if send_email is None:
         from app.services.email_service import send_email
     send_whatsapp = send_whatsapp or _send_whatsapp
+    send_template = send_template or wa_templates.send
     orders = (await db.execute(select(Order).where(
         Order.tenant_id == tenant.id, Order.status == OrderStatus.PENDING, Order.reminders_sent < MAX_STEPS,
         Order.created_at >= now - SECOND_UNTIL, Order.created_at <= now - FIRST_AFTER,
@@ -201,6 +209,10 @@ async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=Non
             if conversation is not None and await customer_window_open(db, tenant.id, customer.id, now):
                 if await send_whatsapp(db, tenant, conversation, customer, whatsapp_text(tenant, customer, order, items, step)):
                     channel = WHATSAPP
+            elif await send_template(db, tenant, customer, conversation, "commande_paiement",
+                                     template_values(tenant, customer, order),
+                                     button=await wa_templates.ensure_pay_code(db, order), message_type="order_reminder"):
+                channel = WHATSAPP  # lot 68 : fenêtre fermée, modèle approuvé avec le bouton « Payer ma commande »
             if channel is None and customer.email and customer.marketing_consent_withdrawn_at is None:
                 mail = await reminder_email(tenant, customer, order, items, step)
                 if not send_email(**mail):

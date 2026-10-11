@@ -127,6 +127,16 @@ async def send_followup(db, tenant, appointment, now: datetime, send_email=None,
             sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "appointment_followup")
         if sent:
             channel = CHANNEL_WHATSAPP
+    elif customer is not None and appointment.outcome == OUTCOME_NO_SHOW and appointment.kind != "APPEL" \
+            and appointment.scheduled_at is not None:
+        # Lot 68 — fenêtre fermée : modèle « absence au rendez-vous » s'il est approuvé par Meta.
+        from app.services import wa_templates
+        from app.services.local_time import format_local, tenant_zone
+
+        day = format_local(appointment.scheduled_at, tenant_zone(tenant)).partition(" à ")[0]
+        if await wa_templates.send(db, tenant, customer, conversation, "rdv_absence",
+                                   [wa_templates.first_name(customer), tenant.name, day], message_type="appointment_followup"):
+            channel = CHANNEL_WHATSAPP
     if channel == CHANNEL_TASK and customer is not None and customer.email \
             and (appointment.outcome == OUTCOME_NO_SHOW or customer.marketing_consent):
         subject, body = email_text(appointment, tenant.name, powered_by=not tenant.is_paid)

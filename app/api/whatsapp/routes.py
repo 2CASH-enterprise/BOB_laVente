@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +72,7 @@ class DisplayPhoneNumberUpdate(BaseModel):
 )
 async def embedded_signup_callback(
     payload: EmbeddedSignupCallback,
+    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     oauth_client: MetaOAuthClient = Depends(get_meta_oauth_client),
@@ -112,6 +113,12 @@ async def embedded_signup_callback(
     )
     await db.commit()
     await db.refresh(account)
+    # Lot 68 — modèles de message créés chez Meta juste après la connexion (si le Super Admin les a allumés).
+    from app.models.tenant import Tenant
+    from app.services import wa_templates
+
+    if await wa_templates.active_for(db, await db.get(Tenant, current_user.tenant_id)):
+        background_tasks.add_task(wa_templates.sync_in_background, current_user.tenant_id)
     return account
 
 
@@ -150,3 +157,12 @@ async def update_display_phone_number(
     await db.commit()
     await db.refresh(account)
     return account
+
+
+@router.get("/templates")
+async def whatsapp_templates(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    """Lot 68 — modèles de message de la boutique et leur statut chez Meta (page Intégrations)."""
+    from app.models.tenant import Tenant
+    from app.services import wa_templates
+
+    return await wa_templates.overview(db, await db.get(Tenant, current_user.tenant_id))

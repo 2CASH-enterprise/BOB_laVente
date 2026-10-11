@@ -36,6 +36,9 @@ ACTION_LABELS = {
     "TENANT_REACTIVATED_BY_ADMIN": "Boutique réactivée",
     "BUSINESS_TYPE_CHANGED_BY_ADMIN": "Secteur changé",
     "PREREG_FILE_UPLOADED": "Fichier déposé pour l'installation",
+    "WA_TEMPLATES_SYNCED": "Modèles WhatsApp créés / vérifiés chez Meta",
+    "WA_TEMPLATES_ALLOWED": "Modèles WhatsApp autorisés",
+    "WA_TEMPLATES_BLOCKED": "Modèles WhatsApp désactivés pour la boutique",
 }
 PROSPECT_EVENTS = {"CLICK": "a ouvert son lien personnel", "DEMO": "a essayé la démo", "SIGNUP": "a créé son compte",
                    "REPLY": "a répondu à un email"}

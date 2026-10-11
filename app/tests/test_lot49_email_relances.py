@@ -80,6 +80,7 @@ SEND_SITES = {
     "api/messages/routes.py": 1,        # réponse humaine : ensure_reply_window_open
     "services/appointment_service.py": 1,  # messages fixes : ensure_reply_window_open (puis email)
     "api/orders/routes.py": 2,          # reçu et annulation : customer_window_open (sinon email)
+    "services/wa_templates.py": 1,      # lot 68 : modèle APPROUVÉ par Meta (seul envoi permis hors fenêtre), Utilitaire
 }
 
 

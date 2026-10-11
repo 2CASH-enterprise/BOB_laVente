@@ -21,7 +21,7 @@ from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import select
 
-from app.services import insurance
+from app.services import insurance, wa_templates
 
 logger = logging.getLogger(__name__)
 
@@ -601,6 +601,13 @@ def _contract_words(contract) -> str:
     return f"votre contrat {'d' + chr(39) if label[0] in 'aeiouyéèh' else 'de '}{label}"
 
 
+def renewal_template_values(tenant, customer, contract) -> list[str]:
+    """Lot 68 — modèle « échéance de contrat » : prénom, type de contrat, cabinet, date."""
+    from app.services.wa_templates import first_name
+
+    return [first_name(customer), insurance.branch_label(contract.branch), tenant.name, contract.expires_on.strftime("%d/%m/%Y")]
+
+
 def whatsapp_reminder(tenant, customer, contract) -> str:
     first = (customer.first_name or "").strip()
     hello = f"Bonjour {first}, ici {tenant.name}." if first else f"Bonjour, ici {tenant.name}."
@@ -747,6 +754,9 @@ async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=Non
             if conversation is not None and await customer_window_open(db, tenant.id, customer.id, now):
                 if await send_whatsapp(db, tenant, conversation, customer, whatsapp_reminder(tenant, customer, contract)):
                     channel = "WHATSAPP"
+            elif await wa_templates.send(db, tenant, customer, conversation, "contrat_echeance",
+                                         renewal_template_values(tenant, customer, contract), message_type="renewal_reminder"):
+                channel = "WHATSAPP"  # lot 68 : fenêtre fermée, modèle approuvé par Meta (jamais de prix)
             if channel is None and customer.email and customer.marketing_consent_withdrawn_at is None:
                 mail = await reminder_email(db, tenant, customer, contract)
                 if send_email(**mail):

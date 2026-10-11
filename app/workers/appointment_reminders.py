@@ -16,7 +16,8 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
-async def send_due_reminders(session_factory=None, now: datetime | None = None, send=None, send_whatsapp=None) -> dict:
+async def send_due_reminders(session_factory=None, now: datetime | None = None, send=None, send_whatsapp=None,
+                             send_template=None) -> dict:
     engine = None
     if session_factory is None:
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -29,7 +30,7 @@ async def send_due_reminders(session_factory=None, now: datetime | None = None, 
     if send is None:
         from app.services.email_service import send_email as send
     try:
-        return await _send_all(session_factory, now or datetime.now(timezone.utc), send, send_whatsapp)
+        return await _send_all(session_factory, now or datetime.now(timezone.utc), send, send_whatsapp, send_template)
     finally:
         if engine is not None:
             await engine.dispose()
@@ -43,8 +44,10 @@ async def _whatsapp_reminder(db, tenant, conversation, customer, text) -> bool:
     return sent
 
 
-async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
+async def _send_all(factory, now: datetime, send, send_whatsapp=None, send_template=None) -> dict:
     send_whatsapp = send_whatsapp or _whatsapp_reminder
+    if send_template is None:
+        from app.services.wa_templates import send as send_template
     from app.models.appointment_request import STATUS_CONFIRMED, AppointmentRequest
     from app.models.conversation import Conversation
     from app.models.customer import Customer
@@ -106,6 +109,12 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None) -> dict:
                             report["whatsapp"] += 1
                         else:
                             report["failed"] += 1
+                    elif await send_template(db, tenant, customer, conversation, "rdv_rappel",
+                                             appointment_service.reminder_template_values(appointment, tenant, customer, zone),
+                                             message_type="appointment_reminder"):
+                        # Lot 68 — fenêtre fermée : le modèle approuvé par Meta (l'email part aussi, ci-dessous).
+                        appointment.customer_whatsapp_reminder_sent_at = now
+                        report["whatsapp"] += 1
                 if due.customer:
                     subject, body = appointment_service.customer_reminder_email(appointment, tenant.name, zone,
                                                                                 powered_by=not tenant.is_paid)

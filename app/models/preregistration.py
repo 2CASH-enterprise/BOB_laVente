@@ -18,6 +18,8 @@ class PlatformSettings(Base):
     prereg_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     prereg_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     prereg_changed_by: Mapped[str | None] = mapped_column(String(120))
+    # Lot 68 — modèles WhatsApp : rien n'est créé ni envoyé chez Meta tant que le Super Admin ne l'allume pas.
+    wa_templates_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class PreregistrationFile(Base):

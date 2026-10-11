@@ -84,6 +84,15 @@ def whatsapp_reminder_message(appointment: AppointmentRequest, shop_name: str, z
             f"{when}. Pour le déplacer ou l'annuler, répondez simplement à ce message.")
 
 
+def reminder_template_values(appointment: AppointmentRequest, tenant, customer, zone) -> list[str]:
+    """Lot 68 — valeurs du modèle « rappel de rendez-vous » : prénom, entreprise, jour, heure."""
+    from app.services.wa_templates import first_name
+
+    when = format_local(appointment.scheduled_at, zone)  # « mardi 14 octobre à 10 h 30 »
+    day, _, hour = when.partition(" à ")
+    return [first_name(customer), tenant.name, day, hour]
+
+
 def rescheduled_message(appointment: AppointmentRequest, shop_name: str, zone) -> str:
     return f"C'est noté : votre {subject_phrase(appointment)} est déplacé au {format_local(appointment.scheduled_at, zone)}. À bientôt chez {shop_name} !"
 

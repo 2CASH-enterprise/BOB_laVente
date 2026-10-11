@@ -1117,6 +1117,13 @@
         </div>
       </div>
 
+      <!-- Lot 68 — modèles de message approuvés par Meta (visible seulement quand la plateforme les a allumés) -->
+      <div class="card hidden" style="max-width: 640px; margin-bottom: 20px;" id="wa-templates-card">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Messages WhatsApp après 20 h <button class="tip"></button><span class="tip-bubble" hidden>WhatsApp n'autorise un message libre que dans les 20 h qui suivent le dernier message de votre client. Au-delà, Bob utilise ces modèles, relus et approuvés par Meta : rappels de rendez-vous, échéances, paiement et livraison des commandes. Tant qu'un modèle n'est pas approuvé, Bob prévient le client par email, comme avant.</span></div>
+        <div id="wa-templates-summary" style="font-size: 13px; color: var(--muted); margin-bottom: 10px;"></div>
+        <div id="wa-templates-list"></div>
+      </div>
+
       <div class="card" style="margin-bottom: 20px;">
         <div class="label" style="margin-bottom: 4px; font-weight: 600;">Liens WhatsApp &amp; widgets <span id="cp-limit"></span><button class="tip"></button><span class="tip-bubble" hidden>Un lien à coller partout : page et catalogue Facebook, Instagram, TikTok, statut WhatsApp, publicités… Pour un site web, utilisez le code du widget (une bulle WhatsApp s'affiche). Chaque clic est compté et chaque client est rattaché au lien qui l'a amené. <br><br>Un lien par commercial : chaque client qui arrive par son lien (ou son QR code) lui est rattaché, et il reçoit comme vous les alertes de transfert et de rendez-vous de ce client.</span></div>
         <div style="display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; margin-bottom: 8px;" class="cp-form">
@@ -2569,7 +2576,7 @@ function showTab(name) {
   if (name === "reports") loadReports();  // lot 60
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
-  if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); }
+  if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); loadWaTemplates(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
@@ -5673,6 +5680,9 @@ async function deleteKnowledgeEntry(id) {
 }
 
 const DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PICKED_UP", "IN_TRANSIT", "DELIVERED", "FAILED", "CANCELLED"];
+// Lot 68 — libellés en français ; « Remise au livreur » / « En route » puis « Livrée » préviennent le client.
+var DELIVERY_LABELS = { PENDING: "En préparation", CONFIRMED: "Confirmée", PICKED_UP: "Remise au livreur", IN_TRANSIT: "En route",
+  DELIVERED: "Livrée", FAILED: "Échec de livraison", CANCELLED: "Annulée" };
 
 const STALE_ORDER_DAYS = 7;
 
@@ -5803,15 +5813,17 @@ async function renderDeliveryPanel(orderId) {
   const order = await api(`/api/v1/orders/${orderId}`);
 
   const options = DELIVERY_STATUSES.map(
-    (s) => `<option value="${s}" ${s === order.delivery_status ? "selected" : ""}>${s}</option>`
+    (s) => `<option value="${s}" ${s === order.delivery_status ? "selected" : ""}>${DELIVERY_LABELS[s]}</option>`
   ).join("");
 
   panel.innerHTML = `
-    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 600px; margin-bottom: 8px;">
-      <select id="delivery-status-${orderId}" class="input">${options}</select>
-      <input id="delivery-tracking-${orderId}" class="input" placeholder="N° de suivi" value="${order.tracking_number || ""}">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; max-width: 760px; margin-bottom: 8px;">
+      <select id="delivery-status-${orderId}" class="input" aria-label="Étape de la livraison">${options}</select>
+      <input id="delivery-tracking-${orderId}" class="input" placeholder="N° de suivi" value="${esc(order.tracking_number || "")}">
       <input id="delivery-provider-${orderId}" class="input" placeholder="Transporteur">
+      <input id="delivery-date-${orderId}" class="input" type="date" aria-label="Livraison prévue le" title="Livraison prévue le">
     </div>
+    <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 8px;"><input type="checkbox" id="delivery-notify-${orderId}" checked> Prévenir le client quand la commande part, puis quand elle est livrée</label>
     <button class="action" onclick="saveDelivery('${orderId}')">Enregistrer</button>
     <span id="delivery-msg-${orderId}" style="margin-left: 10px; font-size: 13px;"></span>
   `;
@@ -5823,15 +5835,19 @@ async function saveDelivery(orderId) {
     status: document.getElementById(`delivery-status-${orderId}`).value,
     tracking_number: document.getElementById(`delivery-tracking-${orderId}`).value.trim() || null,
     provider: document.getElementById(`delivery-provider-${orderId}`).value.trim() || null,
+    estimated_delivery: document.getElementById(`delivery-date-${orderId}`).value || null,
+    notify_customer: document.getElementById(`delivery-notify-${orderId}`).checked,
   };
   try {
-    await api(`/api/v1/orders/${orderId}/delivery`, {
+    const res = await api(`/api/v1/orders/${orderId}/delivery`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     msg.style.color = "var(--success)";
-    msg.textContent = "Enregistré.";
+    const step = res.notified_step === "SHIPPED" ? "commande en route" : "commande livrée";
+    msg.textContent = res.notified_by ? `Enregistré · client prévenu (${step}) par ${res.notified_by === "EMAIL" ? "email" : "WhatsApp"}.`
+      : (res.notified_step ? "Enregistré · client non prévenu (pas de WhatsApp possible ni d'email)." : "Enregistré.");
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
@@ -6336,6 +6352,33 @@ async function loadWhatsAppStatus() {
     const config = await fetch(API_BASE + "/api/v1/whatsapp/embedded-signup/config").then((r) => r.json());
     if (config.app_id) loadFacebookSdk(config.app_id, config.graph_api_version || "v21.0");
   } catch (e) {}
+}
+
+// Lot 68 — modèles de message WhatsApp : statut chez Meta (seulement ceux que Bob utilise pour cette boutique).
+var WA_TEMPLATE_TONES = { APPROVED: "success", PENDING: "warning", IN_APPEAL: "warning", NOT_CREATED: "muted" };
+async function loadWaTemplates() {
+  const card = document.getElementById("wa-templates-card");
+  let d;
+  try { d = await api("/api/v1/whatsapp/templates"); } catch (e) { card.classList.add("hidden"); return; }
+  if (!d.platform_enabled || !d.allowed || !d.items.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const used = d.items.filter((i) => i.used);
+  document.getElementById("wa-templates-summary").textContent = !d.connected
+    ? "Connectez d'abord votre numéro WhatsApp : les modèles seront créés automatiquement."
+    : `${d.approved} sur ${used.length} approuvés par Meta. La relecture prend en général de quelques minutes à 24 h.`;
+  document.getElementById("wa-templates-list").innerHTML = used.map((i) => {
+    const tone = WA_TEMPLATE_TONES[i.status] || "danger";
+    const color = tone === "muted" ? "var(--muted)" : `var(--${tone})`;
+    const bg = tone === "muted" ? "var(--bg)" : `var(--${tone}-soft)`;
+    return `<div style="border-top: 1px solid var(--border); padding: 10px 0;">
+      <div style="display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <b style="font-size: 14px;">${esc(i.label)}</b>
+        <span style="border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; background: ${bg}; color: ${color};">${esc(i.status_label)}</span>
+      </div>
+      <div style="font-size: 12.5px; color: var(--muted); margin-top: 4px;">Exemple : « ${esc(i.preview)} »</div>
+      ${i.reason ? `<div style="font-size: 12.5px; color: var(--danger); margin-top: 4px;">Motif de Meta : ${esc(i.reason)}</div>` : ""}
+    </div>`;
+  }).join("");
 }
 
 async function saveDisplayNumber() {

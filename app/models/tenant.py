@@ -74,6 +74,8 @@ class Tenant(Base):
     renewal_digest_on: Mapped[date | None] = mapped_column(Date)
     # Lot 63 — commerce : Bob relance les commandes non payées (actif par défaut, désactivable).
     order_reminders_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
+    # Lot 68 — modèles WhatsApp autorisés pour cette boutique (le Super Admin peut les couper, ex. compte d'examen Meta).
+    wa_templates_allowed: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 57 — délai de réponse aux réclamations annoncé au client, en jours ouvrés (CIMA 01-24, art. 11).
     complaint_delay_days: Mapped[int] = mapped_column(default=10, server_default="10", nullable=False)
     # Lot 58 (CIMA 01-24) — art. 12 : raison sociale et adresse de la compagnie (agent, agence générale) ou des

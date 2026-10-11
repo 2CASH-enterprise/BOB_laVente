@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.integrations.whatsapp.client import WhatsAppClient
 from app.models.conversation import Message, MessageSender
-from app.models.delivery import Delivery
+from app.models.delivery import Delivery, DeliveryStatus
 from app.models.order import OrderItem
 from app.repositories.order_repository import OrderRepository
 from app.schemas.delivery import DeliveryResponse, DeliveryUpdate
@@ -128,19 +128,35 @@ async def update_delivery(
         delivery = Delivery(tenant_id=current_user.tenant_id, order_id=order_id)
         db.add(delivery)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    notify_customer = changes.pop("notify_customer", True)
+    if changes.get("status") is not None and changes["status"] not in DeliveryStatus.__members__:
+        raise HTTPException(status_code=400, detail="Statut de livraison inconnu")
+    for field, value in changes.items():
         setattr(delivery, field, value)
+    await db.flush()
+
+    # Lot 68 — client prévenu une fois quand la commande part, puis quand elle est livrée.
+    notice = {"step": None, "channel": None}
+    if notify_customer:
+        from app.models.tenant import Tenant
+        from app.services import delivery_notice
+
+        notice = await delivery_notice.notify(db, await db.get(Tenant, current_user.tenant_id), order, delivery,
+                                              str(current_user.user_id))
 
     await log_audit_event(
         db,
         actor=str(current_user.user_id),
         action="DELIVERY_UPDATED",
         tenant_id=current_user.tenant_id,
-        details={"order_id": str(order_id), "status": payload.status},
+        details={"order_id": str(order_id), "status": payload.status, "customer_notified": notice["channel"]},
     )
     await db.commit()
     await db.refresh(delivery)
-    return delivery
+    response = DeliveryResponse.model_validate(delivery)
+    response.notified_step, response.notified_by = notice["step"], notice["channel"]
+    return response
 
 
 @router.put("/{order_id}/mark-paid", response_model=OrderDetailResponse, dependencies=[Depends(require_role("AGENT"))])

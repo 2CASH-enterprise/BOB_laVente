@@ -130,6 +130,13 @@ async def receive_webhook(
     except json.JSONDecodeError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload JSON invalide") from None
 
+    # Lot 68 — statut (ou catégorie) d'un modèle de message décidé par Meta : enregistré, rien d'autre.
+    from app.services import wa_templates
+
+    template_updates = wa_templates.parse_status_updates(payload)
+    if template_updates:
+        return {"status": "template_status_recorded", "recorded": await wa_templates.apply_status_updates(db, template_updates)}
+
     # Lot 51 — coexistence : copie d'un message tapé par le vendeur dans l'application WhatsApp Business
     # de son téléphone. Enregistré comme réponse du vendeur, et Bob se met en pause sur la conversation.
     from app.services import coexistence
