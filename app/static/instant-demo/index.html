@@ -315,6 +315,16 @@ function changeSector() {
 
 fillCountries();
 
+// Lot 63 — lien personnel d'un prospect (…/demo/?secteur=concession&p=CODE) : la démo s'ouvre sur son secteur.
+(function presetSector() {
+  try {
+    const SLUGS = { commerce: "ONLINE_STORE", concession: "CAR_DEALERSHIP", assurance: "INSURANCE_BROKER" };
+    const value = new URLSearchParams(window.location.search).get("secteur") || "";
+    const code = SLUGS[value.toLowerCase()] || value;
+    if (code && SECTORS[code]) chooseSector(code);
+  } catch (e) { /* adresse illisible : choix du secteur à l'écran */ }
+})();
+
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("file-input");
 

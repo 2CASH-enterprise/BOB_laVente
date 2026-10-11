@@ -138,10 +138,13 @@ def steps_of(campaign) -> list[tuple[str, str]]:
     return steps
 
 
+DEMO_BUTTON = "Voir la démo"  # lot 63 : bouton des emails, mention du message WhatsApp
+
+
 def fill(template: str, prospect) -> str:
     first = (prospect.contact_name or "").split()[0] if (prospect.contact_name or "").strip() else ""
     values = {"{bonjour}": f"Bonjour {first}" if first else "Bonjour", "{prenom}": first,
-              "{entreprise}": prospect.company or "", "{ville}": prospect.city or "", "{lien}": pros.link(prospect.code)}
+              "{entreprise}": prospect.company or "", "{ville}": prospect.city or "", "{lien}": pros.link(prospect.code, prospect.sector)}
     for key, value in values.items():
         template = template.replace(key, value)
     return template
@@ -165,7 +168,9 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
     legal = LEGAL.format(year=now_utc().year)
     why = (f"Vous recevez cet email car {prospect.company} exerce une activité ({sector}) que Bob peut aider. "
            f"Pour ne plus recevoir nos emails : {stop_url(prospect)}")
-    text = f"{text_body}\n\n{SIGNATURE}\n\n--\n{why}\n{legal}"
+    personal_line = re.compile(r"^[ \t]*" + re.escape(pros.link(prospect.code, prospect.sector)) + r"[ \t]*$", re.M)
+    plain = personal_line.sub(f"{DEMO_BUTTON} : {pros.link(prospect.code, prospect.sector)}", text_body)
+    text = f"{plain}\n\n{SIGNATURE}\n\n--\n{why}\n{legal}"
 
     def paragraph(chunk: str) -> str:
         out = []
@@ -175,12 +180,34 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
             out.append(safe)
         return f'<p style="margin:0 0 14px;">{"<br>".join(out)}</p>'
 
+    # Lot 63 — sous le lien personnel : la bannière du secteur puis un bouton « Voir la démo », tous deux vers le
+    # lien personnel (clic compté, puis la démo du secteur). Le lien seul sur sa ligne devient le bouton.
+    personal = pros.link(prospect.code, prospect.sector)
+    banner = (f'<p style="margin:4px 0 14px;"><a href="{escape(personal)}">'
+              f'<img src="{escape(pros.visual_url(prospect.sector))}" width="548" alt="Bob, vendeur IA sur WhatsApp — voir la démo" '
+              f'style="display:block;width:100%;max-width:548px;height:auto;border:0;border-radius:12px;"></a></p>')
+    button = ('<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 20px;"><tr>'
+              '<td style="border-radius:10px;background:#1B4332;">'
+              f'<a href="{escape(personal)}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;'
+              f'color:#ffffff;text-decoration:none;border-radius:10px;">{escape(DEMO_BUTTON)}</a></td></tr></table>')
+    blocks, placed = [], False
+    chunks = re.split(r"\n\s*\n", text_body)
+    for chunk in chunks:
+        lines = [line for line in chunk.split("\n") if line.strip() != personal]
+        if lines:
+            blocks.append(paragraph("\n".join(lines)))
+        if not placed and personal in chunk:
+            blocks += [banner, button]
+            placed = True
+    if not placed:  # email sans le lien (relance personnalisée) : avant la formule de fin
+        at = max(1, len(blocks) - 1)
+        blocks[at:at] = [banner, button]
     pixel = f'<img src="{_base()}/p/{prospect.code}/o/{email_id}.gif" width="1" height="1" alt="" style="display:block;border:0;">' if email_id else ""
     html = (f'<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{escape(subject)}</title></head><body style="margin:0;padding:0;background:#ffffff;">'
             f'<div style="max-width:580px;margin:0 auto;padding:20px 16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
             f'font-size:15px;line-height:1.6;color:#13241A;">'
-            + "".join(paragraph(chunk) for chunk in re.split(r"\n\s*\n", text_body))
+            + "".join(blocks)
             + f'<p style="margin:0 0 22px;font-weight:600;">{escape(SIGNATURE)}</p>'
             f'<p style="margin:0;padding-top:12px;border-top:1px solid #E3EBE6;font-size:11.5px;line-height:1.5;color:#5B6F65;">'
             f'{escape(why.split(" : ")[0])} : <a href="{escape(stop_url(prospect))}" style="color:#5B6F65;">ne plus recevoir nos emails</a>.<br>'

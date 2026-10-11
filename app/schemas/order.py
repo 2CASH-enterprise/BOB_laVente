@@ -37,6 +37,11 @@ class OrderResponse(BaseModel):
     created_by: str
     created_at: datetime | None = None  # pour signaler les commandes en attente depuis longtemps
     paid_at: datetime | None = None
+    # Lot 63 — relances de Bob (commande non payée) : affichées sous la commande.
+    reminders_sent: int | None = 0
+    first_reminder_at: datetime | None = None
+    last_reminder_at: datetime | None = None
+    last_reminder_channel: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

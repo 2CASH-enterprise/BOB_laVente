@@ -100,6 +100,11 @@ _superadmin_dir = Path(__file__).parent / "static" / "superadmin"
 if _superadmin_dir.exists():
     app.mount("/superadmin", StaticFiles(directory=str(_superadmin_dir), html=True), name="superadmin")
 
+# Lot 63 — visuels de prospection par secteur (aperçu du lien /p/CODE, bannière des emails).
+_visuals_dir = Path(__file__).parent / "static" / "visuels"
+if _visuals_dir.exists():
+    app.mount("/visuels", StaticFiles(directory=str(_visuals_dir)), name="visuels")
+
 _uploads_dir = Path(__file__).parent / "static" / "uploads"
 _uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")

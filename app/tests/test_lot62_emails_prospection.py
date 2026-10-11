@@ -78,7 +78,7 @@ def test_render_and_headers(gmail):
                  email="serge@autoprestige.ci")
     subject, text, html = mailer.render(p, "{entreprise} à {ville}", "{bonjour},\n\nVoici : {lien}\n\nMerci {prenom}", "e1")
     assert subject == "Auto <Prestige> à Marcory"
-    assert text.startswith("Bonjour Serge,\n\nVoici : ") and text.split("\n")[2].endswith("/p/abc234") and "Merci Serge" in text
+    assert text.startswith("Bonjour Serge,\n\nVoici : ") and text.split("\n")[2].endswith("/demo/?secteur=concession&p=abc234") and "Merci Serge" in text
     assert "Bob, le vendeur virtuel d'AgenC'AI" in text and "/p/abc234/stop" in text
     assert "SAS 2 Cash Enterprise (Holding) — 1 Rue Hartz Huel, 22500 Kerfot, France. Exploitation par : AgenC'AI." in text
     assert "Auto &lt;Prestige&gt;" in html and "Auto <Prestige>" not in html

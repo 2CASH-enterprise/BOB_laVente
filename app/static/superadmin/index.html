@@ -50,6 +50,7 @@
   .pill { border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--text); }
   .pill[aria-pressed="true"] { background: var(--accent); color: white; border-color: var(--accent); }
   .btn { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 8px 13px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text); }
+  a.btn { text-decoration: none; display: inline-block; }
   .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
   .btn.danger { color: var(--danger); }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin: 18px 0 10px; }
@@ -561,12 +562,13 @@ function renderProspect(p) {
     <div class="steps">${steps}</div>
     <div class="box"><h4>Son lien personnel</h4>
       <div class="row"><input id="pd-link" class="input" readonly value="${esc(p.link)}"><button class="btn" onclick="copyField('pd-link')">Copier</button></div>
-      <p class="muted" style="margin: 6px 0 0;">${p.click_count ? `Ouvert ${Number(p.click_count)} fois.` : "Pas encore ouvert."} Il mène à la présentation de Bob ; la démo et l'inscription faites ensuite lui sont rattachées.</p></div>
+      <p class="muted" style="margin: 6px 0 0;">${p.click_count ? `Ouvert ${Number(p.click_count)} fois.` : "Pas encore ouvert."} Il ouvre la démo de Bob sur son secteur ; la démo et l'inscription faites ensuite lui sont rattachées. Dans WhatsApp, l'aperçu du lien montre le visuel de son secteur.</p></div>
     ${contactable ? `<div class="box"><h4>Message à envoyer vous-même</h4>
       <textarea id="pd-message" class="input" rows="4" readonly>${esc(p.message)}</textarea>
       <div class="row"><button class="btn" onclick="copyField('pd-message')">Copier</button>
+        <a class="btn" href="${esc(p.visual_url)}" download="bob-visuel-${esc((p.sector || "commerce").toLowerCase())}.jpg">Télécharger le visuel</a>
         ${p.whatsapp_url ? `<button class="btn primary" onclick="openWhatsApp()">Ouvrir WhatsApp</button>` : `<span class="muted">Ajoutez son téléphone pour l'ouvrir dans WhatsApp.</span>`}</div>
-      <p class="muted" style="margin: 6px 0 0;">Envoyé depuis votre propre WhatsApp (jamais par Bob). « Ouvrir WhatsApp » note le contact.</p></div>
+      <p class="muted" style="margin: 6px 0 0;">Envoyé depuis votre propre WhatsApp (jamais par Bob). « Ouvrir WhatsApp » note le contact. Un message envoyé depuis votre téléphone ne peut pas porter de bouton : c'est l'aperçu du lien (visuel et titre) qui ouvre la démo. Attendez qu'il s'affiche au-dessus du message avant d'envoyer.</p></div>
     <div class="box"><h4>Noter un contact</h4>
       <div class="row"><select id="pd-channel" class="input" style="flex: 0 1 160px;">${options(d.channels, "PHONE")}</select>
         <input id="pd-note" class="input" maxlength="500" placeholder="Ce qui s'est dit (facultatif)"></div>

@@ -237,10 +237,46 @@ def group_funnel(prospects: list, stages: dict, key_of) -> list[dict]:
 
 # --- Lien personnel et rattachement de la démo / de l'inscription ------------------------------------------
 
-def link(code: str) -> str:
+# Lot 63 — visuels de prospection par secteur (app/static/visuels) : aperçu du lien, bannière des emails,
+# bouton « Télécharger le visuel » de la fiche.
+VISUALS = {"ONLINE_STORE": "prospection-commerce.jpg", "CAR_DEALERSHIP": "prospection-concession.jpg",
+           "INSURANCE_BROKER": "prospection-courtier.jpg"}
+
+
+def visual_url(sector: str | None) -> str:
     from app.core.config import get_settings
 
-    return f"{get_settings().public_base_url.rstrip('/')}/p/{code}"
+    return get_settings().public_base_url.rstrip("/") + "/visuels/" + VISUALS.get(sector or "", VISUALS["ONLINE_STORE"])
+
+
+# Lot 63 — dans l'adresse, le secteur s'écrit en clair (…/demo/?secteur=concession&p=CODE).
+SECTOR_SLUGS = {"ONLINE_STORE": "commerce", "CAR_DEALERSHIP": "concession", "INSURANCE_BROKER": "assurance"}
+
+
+def sector_from_slug(value: str | None) -> str | None:
+    value = (value or "").strip()
+    if value in SECTOR_SLUGS:
+        return value
+    return next((code for code, slug in SECTOR_SLUGS.items() if slug == value.lower()), None)
+
+
+def demo_url(sector: str | None, code: str | None = None) -> str:
+    """Lot 63 — la démo, ouverte sur le secteur s'il est connu ; avec le code du prospect, c'est son lien personnel."""
+    from urllib.parse import urlencode
+
+    from app.core.config import get_settings
+
+    params = {}
+    if sector in SECTOR_SLUGS:
+        params["secteur"] = SECTOR_SLUGS[sector]
+    if code:
+        params["p"] = code
+    return get_settings().public_base_url.rstrip("/") + "/demo/" + ("?" + urlencode(params) if params else "")
+
+
+def link(code: str, sector: str | None = None) -> str:
+    """Lien personnel du prospect : la page de démo de son secteur (lot 63), qui note le clic (?p=CODE)."""
+    return demo_url(sector, code)
 
 
 async def record_click(db, code: str, user_agent: str | None):
@@ -304,8 +340,9 @@ def message(prospect, sender: str | None) -> str:
     first = (prospect.contact_name or "").split()[0] if (prospect.contact_name or "").strip() else None
     who = f"{sender} d'AgenC'AI" if sender else "AgenC'AI"
     pitch = _PITCH.get(prospect.sector, _PITCH["ONLINE_STORE"])
+    # Lot 63 — le lien seul sur la dernière ligne : WhatsApp en fait un aperçu (visuel du secteur) qui ouvre la démo.
     return (f"Bonjour{' ' + first if first else ''}, je suis {who}. Bob, notre vendeur virtuel, {pitch}. "
-            f"Vous pouvez l'essayer en 2 minutes pour {prospect.company} : {link(prospect.code)}")
+            f"Vous pouvez l'essayer en 2 minutes pour {prospect.company}.\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}")
 
 
 def whatsapp_url(prospect, sender: str | None) -> str | None:

@@ -720,3 +720,37 @@ async def update_onboarding(payload: OnboardingReq, current_user: CurrentUser = 
     tenant.onboarding_hidden_at = datetime.now(timezone.utc) if payload.hidden else None
     await db.commit()
     return await _onboarding(db, tenant)
+
+
+# --- Lot 63 — relances des commandes non payées (boutique en ligne) ---------------------------------------
+
+class OrderRemindersReq(BaseModel):
+    enabled: bool
+
+
+def _order_reminders_response(tenant: Tenant) -> dict:
+    return {"enabled": tenant.order_reminders_enabled, "payment_link": bool(tenant.payment_link)}
+
+
+@router.get("/me/order-reminders", dependencies=[Depends(only_online_store())])
+async def get_order_reminders(current_user: CurrentUser = Depends(get_current_user),
+                              db: AsyncSession = Depends(get_db)) -> dict:
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
+    return _order_reminders_response(tenant)
+
+
+@router.put("/me/order-reminders", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])
+async def update_order_reminders(payload: OrderRemindersReq, current_user: CurrentUser = Depends(get_current_user),
+                                 db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services.audit import log_audit_event
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
+    tenant.order_reminders_enabled = payload.enabled
+    await log_audit_event(db, actor=str(current_user.user_id), action="ORDER_REMINDERS_UPDATED",
+                          tenant_id=tenant.id, details={"enabled": payload.enabled})
+    await db.commit()
+    return _order_reminders_response(tenant)

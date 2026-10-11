@@ -88,8 +88,12 @@ async def send_followup(
     tenant = await db.get(Tenant, tenant_id)
     customer = await db.get(Customer, conversation.customer_id)
     sent = False
+    # Lot 63 — une commande non payée est en cours de relance : la relance « offres » ne s'y ajoute pas.
+    from app.services.order_reminders import in_progress
+
+    busy = customer is not None and await in_progress(db, tenant, customer.id, now)
     if tenant is not None and customer is not None and customer.tenant_id == tenant_id \
-            and customer.email and customer.marketing_consent:
+            and customer.email and customer.marketing_consent and not busy:
         mail = await build_followup_email(db, tenant, customer, settings, stage, now)
         if send_email is None:
             from app.services.email_service import send_email

@@ -171,6 +171,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
     tiles = [tile("Conversations", len(conversations), conv_prev), tile("Nouveaux clients", len(new_now), new_prev)]
     funnel = [(f["label"], f["value"], "") for f in home["funnel"]]
     obtained_label = "Ventes payées"
+    relance = None  # lot 63 : commandes relancées par Bob (boutique en ligne)
     if insurance:
         from app.models.quote_request import QuoteRequest
 
@@ -238,6 +239,9 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
                   ("Commandes", sum(1 for o in orders if start <= as_utc(o.created_at) < end), ""),
                   ("Payées", len(paid_now), detail)]
         funnel_title, funnel_sub = "Vos ventes", "Du premier message au paiement"
+        from app.services.order_reminders import summary as relance_summary
+
+        relance = relance_summary(orders, start, end)
 
     # --- Ce que demandent les clients, réponses aux objections ---------------------------------------------
     from app.services.signal_service import signals_summary
@@ -300,6 +304,11 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
         count = sum(1 for at in asked if as_utc(at) >= start)
         if count:
             savings.append(("Rendez-vous obtenus sans déplacement", _plural(count, "rendez-vous", "rendez-vous")))
+    if relance and relance[0]:
+        relanced, paid_after, paid_amount = relance
+        savings.append(("Commandes relancées par Bob → payées ensuite",
+                        f"{number(relanced)} → {number(paid_after)}"
+                        + (f" ({money(paid_amount, tenant.currency)})" if paid_amount else "")))
     work_days = round(saved / 60 / 7)
     compare = (f"≈ {_plural(work_days, 'journée', 'journées')} de travail" if work_days else "")
     if relay > 1:

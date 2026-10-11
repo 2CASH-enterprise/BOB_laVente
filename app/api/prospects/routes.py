@@ -3,6 +3,7 @@ Lot 61 — prospection d'AgenC'AI : le lien personnel /p/CODE (public) et la pag
 Super Admins seulement (authentification séparée de celle des boutiques).
 """
 import json
+from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
@@ -24,17 +25,69 @@ public_router = APIRouter(tags=["prospection"])
 router = APIRouter(prefix="/api/v1/superadmin/prospects", tags=["prospection"])
 
 
-@public_router.get("/p/{code}", include_in_schema=False)
-async def prospect_link(code: str, request: Request, db: AsyncSession = Depends(get_db)) -> RedirectResponse:
-    """Lien personnel d'un prospect : clic noté, code gardé 30 jours dans le navigateur, puis la présentation de Bob."""
-    prospect = await pros.record_click(db, code, request.headers.get("user-agent"))
-    # Lot 62 : la page de présentation sous l'adresse publique de Bob (…/bob/), pas la racine du domaine.
-    response = RedirectResponse(get_settings().public_base_url.rstrip("/") + "/", status_code=302)
-    if prospect is not None:
-        response.set_cookie(pros.COOKIE, prospect.code, max_age=pros.COOKIE_DAYS * 86400, httponly=True, samesite="lax",
-                            secure=get_settings().public_base_url.startswith("https"), path="/")
-    response.headers["Cache-Control"] = "no-store"
+PREVIEW_TEXTS = {
+    "ONLINE_STORE": ("Bob, le vendeur WhatsApp de votre boutique",
+                     "Il répond à vos clients jour et nuit, conseille, prend les commandes et relance les paiements. "
+                     "Essayez-le en 30 secondes avec vos produits."),
+    "CAR_DEALERSHIP": ("Bob, le commercial WhatsApp de votre concession",
+                       "Il renseigne sur vos véhicules, qualifie le client et fixe les essais, même le soir et le week-end. "
+                       "Essayez-le en 30 secondes."),
+    "INSURANCE_BROKER": ("Bob, l'assistant WhatsApp de votre cabinet",
+                         "Il qualifie le besoin, prépare la demande de cotation et propose un rendez-vous, sans jamais "
+                         "donner de prix. Essayez-le en 30 secondes."),
+}
+
+
+def _og_tags(sector: str | None, url: str) -> str:
+    """Aperçu du lien (WhatsApp, Facebook, LinkedIn…) : titre, texte et visuel du secteur."""
+    from html import escape
+
+    title, text = PREVIEW_TEXTS.get(sector or "", PREVIEW_TEXTS["ONLINE_STORE"])
+    return (f'<meta name="description" content="{escape(text)}">\n'
+            '<meta property="og:type" content="website">\n<meta property="og:site_name" content="Bob de AgenC\'AI">\n'
+            f'<meta property="og:title" content="{escape(title)}">\n<meta property="og:description" content="{escape(text)}">\n'
+            f'<meta property="og:image" content="{escape(pros.visual_url(sector))}">\n'
+            '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">\n'
+            f'<meta property="og:url" content="{escape(url)}">\n<meta name="twitter:card" content="summary_large_image">\n')
+
+
+def _set_cookie(response: Response, prospect: Prospect) -> None:
+    response.set_cookie(pros.COOKIE, prospect.code, max_age=pros.COOKIE_DAYS * 86400, httponly=True, samesite="lax",
+                        secure=get_settings().public_base_url.startswith("https"), path="/")
+
+
+_DEMO_PAGE = Path(__file__).resolve().parents[2] / "static" / "instant-demo" / "index.html"
+
+
+@public_router.get("/demo/", include_in_schema=False)
+async def demo_page(request: Request, secteur: str | None = None, p: str | None = None,
+                    db: AsyncSession = Depends(get_db)) -> Response:
+    """
+    Lot 63 — la démo (avant le dossier statique /demo) : ouverte sur le secteur de l'adresse (?secteur=concession).
+    Avec ?p=CODE, c'est le lien personnel d'un prospect : clic noté (vrai navigateur seulement), code gardé 30 jours.
+    Un robot d'aperçu reçoit la même page avec le titre et le visuel du secteur.
+    """
+    html = _DEMO_PAGE.read_text(encoding="utf-8")
+    prospect = await pros.record_click(db, p, request.headers.get("user-agent")) if p else None
+    sector = pros.sector_from_slug(secteur) or (prospect.sector if prospect is not None else None)
+    if sector:
+        url = pros.link(prospect.code, sector) if prospect is not None else pros.demo_url(sector)
+        html = html.replace("</head>", _og_tags(sector, url) + "</head>", 1)
+    response = HTMLResponse(html, headers={"Cache-Control": "no-store"})
+    if prospect is not None and not pros.is_bot(request.headers.get("user-agent")):
+        _set_cookie(response, prospect)
     return response
+
+
+@public_router.get("/p/{code}", include_in_schema=False)
+async def prospect_link(code: str, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+    """
+    Ancien lien personnel (lots 61-62, déjà envoyé) : il mène au nouveau, la démo du secteur du prospect, qui note
+    le clic. Code inconnu : la page de présentation sous l'adresse publique de Bob (…/bob/).
+    """
+    prospect = await _by_code(db, code)
+    target = pros.link(prospect.code, prospect.sector) if prospect is not None else get_settings().public_base_url.rstrip("/") + "/"
+    return RedirectResponse(target, status_code=302, headers={"Cache-Control": "no-store"})
 
 
 # Lot 62 — ouverture d'un email (image de 1 pixel) et désinscription en un clic.
@@ -156,7 +209,7 @@ def _view(p: Prospect, stage: str, owners: dict, today: date) -> dict:
         "follow_up": pros.to_follow_up(p, stage, today),
         "next_action_on": p.next_action_on.isoformat() if p.next_action_on else None,
         "last_contact_at": p.last_contact_at.isoformat() if p.last_contact_at else None,
-        "click_count": p.click_count or 0, "notes": p.notes, "link": pros.link(p.code),
+        "click_count": p.click_count or 0, "notes": p.notes, "link": pros.link(p.code, p.sector),
         "email_step": p.email_step or 0, "opened": p.first_opened_at is not None, "replied": p.replied_at is not None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "tenant_id": str(p.tenant_id) if p.tenant_id else None,
@@ -273,7 +326,7 @@ async def export_prospects(admin: CurrentSuperAdmin = Depends(get_current_supera
              pros.SECTORS.get(p.sector, p.sector), p.source or "", owners.get(p.owner_id) or "", dict(pros.STAGES)[stages[p.id]],
              pros.STATUSES.get(p.status, p.status), p.click_count or 0,
              p.last_contact_at.strftime("%d/%m/%Y") if p.last_contact_at else "",
-             p.created_at.strftime("%d/%m/%Y") if p.created_at else "", pros.link(p.code), p.notes or ""] for p in prospects]
+             p.created_at.strftime("%d/%m/%Y") if p.created_at else "", pros.link(p.code, p.sector), p.notes or ""] for p in prospects]
     return Response(to_xlsx("Prospects", header, rows), media_type=XLSX_MEDIA,
                     headers={"Content-Disposition": 'attachment; filename="prospects.xlsx"'})
 
@@ -331,6 +384,7 @@ async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(
                        "channel": pros.CHANNELS.get(ev.channel) if ev.channel else None, "detail": ev.detail,
                        "actor": ev.actor, "at": ev.at.isoformat() if ev.at else None} for ev in events]
     data["message"] = pros.message(prospect, _first(me.full_name))
+    data["visual_url"] = pros.visual_url(prospect.sector)  # lot 63 : à joindre au message WhatsApp
     data["whatsapp_url"] = pros.whatsapp_url(prospect, _first(me.full_name)) if prospect.status == "ACTIVE" else None
     return data
 

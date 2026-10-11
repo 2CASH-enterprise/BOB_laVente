@@ -28,6 +28,7 @@ TASK_MODULES = [
     "app.workers.reports",
     "app.workers.prospects",
     "app.workers.prospect_emails",
+    "app.workers.order_reminders",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -92,6 +93,11 @@ celery_app.conf.beat_schedule = {
     "prospect-inbox": {
         "task": "app.workers.prospect_emails.read_prospect_inbox_task",
         "schedule": crontab(minute="*/15"),
+    },
+    # Lot 63 — commandes non payées : relance 3 h après, puis le lendemain (entre 9 h et 20 h, heure du pays).
+    "order-reminders": {
+        "task": "app.workers.order_reminders.check_order_reminders_task",
+        "schedule": crontab(minute=10),
     },
 }
 celery_app.conf.timezone = "UTC"

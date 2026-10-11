@@ -48,6 +48,12 @@ class Order(Base):
     # Lot 40 — emails au client : récapitulatif (promis quand Bob demande l'email) et reçu, une seule fois.
     recap_emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     receipt_emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lot 63 — relances d'une commande non payée (3 h après, puis le lendemain) : étapes passées (0 à 2),
+    # première relance réellement envoyée, dernière étape et son canal (WHATSAPP, EMAIL, NONE si rien n'a pu partir).
+    reminders_sent: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    first_reminder_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_reminder_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_reminder_channel: Mapped[str | None] = mapped_column(String(16))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

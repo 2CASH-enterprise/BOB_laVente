@@ -111,7 +111,7 @@ def test_funnel_counts_every_step_reached():
 def test_message_and_whatsapp_link():
     p = Prospect(company="Auto <Prestige>", contact_name="Serge Kouadio", sector="CAR_DEALERSHIP", code="abc234", phone="2250707000001")
     text = pros.message(p, "Koffi")
-    assert text.startswith("Bonjour Serge, je suis Koffi d'AgenC'AI.") and "rendez-vous d'essai" in text and text.endswith("/p/abc234")
+    assert text.startswith("Bonjour Serge, je suis Koffi d'AgenC'AI.") and "rendez-vous d'essai" in text and text.endswith("/demo/?secteur=concession&p=abc234")
     url = pros.whatsapp_url(p, "Koffi")
     assert url.startswith("https://wa.me/2250707000001?text=Bonjour%20Serge") and pros.whatsapp_url(Prospect(company="x", code="a"), None) is None
     assert pros.message(Prospect(company="X", sector="INSURANCE_BROKER", code="c"), None).startswith("Bonjour, je suis AgenC'AI.")
@@ -123,27 +123,37 @@ def test_message_and_whatsapp_link():
 async def test_personal_link_counts_people_not_previews(client, db_session):
     headers = await _admin(client, db_session)
     p = await _prospect(client, headers)
-    assert re.fullmatch(r"[a-z2-9]{6}", p["code"]) and p["link"].endswith(f"/p/{p['code']}")
-    preview = await client.get(f"/p/{p['code']}", headers={"User-Agent": "WhatsApp/2.24"}, follow_redirects=False)
+    # Lot 63 : le lien personnel est la démo du secteur du prospect, qui note le clic (?p=CODE)
+    assert re.fullmatch(r"[a-z2-9]{6}", p["code"]) and p["link"].endswith(f"/demo/?secteur=commerce&p={p['code']}")
+    path = f"/demo/?secteur=commerce&p={p['code']}"
+    preview = await client.get(path, headers={"User-Agent": "WhatsApp/2.24"})
     from app.core.config import get_settings
 
     home = get_settings().public_base_url.rstrip("/") + "/"  # lot 62 : la présentation sous l'adresse publique de Bob
-    assert preview.status_code == 302 and preview.headers["location"] == home
+    # Un robot d'aperçu reçoit la page avec le titre et le visuel du secteur, sans cookie ni clic.
+    assert preview.status_code == 200 and "og:image" in preview.text and "set-cookie" not in preview.headers
     stored = (await db_session.execute(select(Prospect).where(Prospect.code == p["code"]))).scalar_one()
     await db_session.refresh(stored)
     assert stored.click_count == 0 and stored.first_click_at is None  # l'aperçu de WhatsApp n'est pas un clic
-    for _ in range(2):
-        r = await client.get(f"/p/{p['code'].upper()}", headers={"User-Agent": BROWSER}, follow_redirects=False)
-        assert r.status_code == 302 and f"{pros.COOKIE}={p['code']}" in r.headers["set-cookie"]
+    for url in (path, f"/demo/?p={p['code'].upper()}"):
+        r = await client.get(url, headers={"User-Agent": BROWSER})
+        assert r.status_code == 200 and f"{pros.COOKIE}={p['code']}" in r.headers["set-cookie"]
         assert "HttpOnly" in r.headers["set-cookie"] and "Max-Age=2592000" in r.headers["set-cookie"]
+        assert "Testez votre propre vendeur IA WhatsApp" in r.text  # la page de démo elle-même
     await db_session.refresh(stored)
     assert stored.click_count == 2 and stored.first_click_at is not None
     events = (await db_session.execute(select(ProspectEvent.kind).where(ProspectEvent.prospect_id == stored.id))).scalars().all()
     assert sorted(events) == ["ADDED", "CLICK"]  # un seul événement « a cliqué »
+    for url in ("/demo/?p=zzzzzz", "/demo/?p=%3Cscript%3E", "/demo/"):
+        other = await client.get(url, headers={"User-Agent": BROWSER})
+        assert other.status_code == 200 and "set-cookie" not in other.headers and "og:image" not in other.text
+    # Ancien lien /p/CODE (déjà envoyé) : vers le nouveau ; code inconnu : la présentation
+    old = await client.get(f"/p/{p['code']}", headers={"User-Agent": BROWSER}, follow_redirects=False)
+    assert old.status_code == 302 and old.headers["location"] == p["link"] and "set-cookie" not in old.headers
     unknown = await client.get("/p/zzzzzz", headers={"User-Agent": BROWSER}, follow_redirects=False)
-    assert unknown.status_code == 302 and "set-cookie" not in unknown.headers
-    weird = await client.get("/p/%3Cscript%3E", headers={"User-Agent": BROWSER}, follow_redirects=False)
-    assert weird.status_code == 302 and "set-cookie" not in weird.headers
+    assert unknown.status_code == 302 and unknown.headers["location"] == home
+    await db_session.refresh(stored)
+    assert stored.click_count == 2  # la redirection ne compte pas : la démo comptera
 
 
 @pytest.mark.asyncio
@@ -294,7 +304,7 @@ async def test_views_search_and_funnel(client, db_session):
     c = await _prospect(client, headers, company="Cabinet Kouassi", sector="INSURANCE_BROKER", phone="0707000013", source="Réseau")
     await client.post(f"{API}/{a['id']}/contact", headers=headers, json={"channel": "VISIT", "next_action_on": "2020-01-01"})
     await client.post(f"{API}/{c['id']}/status", headers=headers, json={"status": "NOT_INTERESTED"})
-    await client.get(f"/p/{b['code']}", headers={"User-Agent": BROWSER}, follow_redirects=False)
+    await client.get(f"/demo/?p={b['code']}", headers={"User-Agent": BROWSER})
     data = (await client.get(API, headers=headers)).json()
     assert data["counts"] == {"all": 3, "todo": 1, "replied": 0, "clicked": 1, "signed_up": 0, "lost": 1}
     assert [p["company"] for p in (await client.get(f"{API}?view=todo", headers=headers)).json()["prospects"]] == ["Auto Prestige"]
@@ -355,7 +365,7 @@ async def test_import_and_export(client, db_session):
 
     sheet = [list(r) for r in load_workbook(io.BytesIO(export.content)).active.iter_rows(values_only=True)]
     assert sheet[0][:4] == ["Entreprise", "Contact", "Email", "Téléphone"] and len(sheet) == 4
-    assert all(re.search(r"/p/[a-z2-9]{6}$", str(r[14])) for r in sheet[1:])
+    assert all(re.search(r"/demo/\?secteur=[a-z]+&p=[a-z2-9]{6}$", str(r[14])) for r in sheet[1:])
 
 
 @pytest.mark.asyncio
