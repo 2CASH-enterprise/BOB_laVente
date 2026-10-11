@@ -783,7 +783,7 @@ def test_dashboard_contracts_page():
     assert "insurance-only" in nav
     assert '"contracts"' in HTML[HTML.index("function showTab("):HTML.index("async function loadTenant(")]
     assert "contracts: [\"renewals\"]" in HTML
-    render = _function("renderContracts")
+    render = _function("contractCardHtml")  # lot 64 : la carte est partagée avec la fiche client
     for piece in ("esc(c.customer)", "esc(c.branch_label)", "esc(c.insurer", "esc(c.reminder)", "esc(c.note)"):
         assert piece in render, piece
     assert "esc(c.when_label" in _function("contractWhenTag")

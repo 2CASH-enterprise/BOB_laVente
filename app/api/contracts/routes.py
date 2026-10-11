@@ -112,12 +112,35 @@ async def list_contracts(
         "premium_visible": admin,
         "renewal_reminders_enabled": tenant.renewal_reminders_enabled,
         "limit": contracts.LIST_LIMIT,
+        **_form_lists(tenant),
+    }
+
+
+def _form_lists(tenant) -> dict:
+    """Listes du formulaire de contrat (une seule source : le serveur)."""
+    return {
         "currency": tenant.currency,
-        # Listes du formulaire (une seule source : le serveur)
         "branches": [{"value": code, "label": entry[0]} for code, entry in insurance.BRANCHES.items()],
         "terms": [{"value": code, "label": label} for code, label in insurance.TERMS.items()],
         "statuses": [{"value": code, "label": contracts.STATUS_LABELS[code]} for code in contracts.MANUAL_STATUSES],
     }
+
+
+@router.get("/customer/{customer_id}")
+async def customer_overview(
+    customer_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Lot 64 — fiche client du courtier : contrats, chiffres et historique (cotations, rendez-vous, réclamations)."""
+    from app.services.insurance_customer import overview
+
+    customer = await db.get(Customer, customer_id)
+    if customer is None or customer.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Client introuvable")
+    tenant = await _tenant(db, current_user)
+    admin = _is_admin(current_user)
+    return {**await overview(db, tenant, customer, admin), "premium_visible": admin, **_form_lists(tenant)}
 
 
 @router.get("/export.xlsx", dependencies=[Depends(require_role("AGENT"))])

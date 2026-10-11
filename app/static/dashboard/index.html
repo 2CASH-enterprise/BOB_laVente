@@ -448,6 +448,28 @@
   .activity-title { font-size: 13px; font-weight: 800; }
   .activity-detail { font-size: 12px; color: var(--muted); }
   .activity-when { font-size: 11px; color: var(--muted); }
+  /* Lot 64 — fiche client du courtier */
+  .customer-section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 28px 0 12px; }
+  .customer-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .customer-tiles .label { line-height: 1.35; }
+  .customer-tiles .ci-date { font-size: 22px; white-space: nowrap; }
+  .history-card { display: grid; gap: 18px; }
+  .history-group-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+  .history-group-title span { color: var(--muted); font-weight: 500; }
+  .history-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--border); padding: 9px 4px; font: inherit; font-size: 14px; color: var(--text); cursor: pointer; border-radius: 6px; }
+  .history-row:hover, .history-row:focus-visible { background: var(--panel-2); }
+  .history-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-status { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .history-when { font-size: 12.5px; color: var(--muted); min-width: 92px; text-align: right; }
+  .history-empty { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+  .tone-text-success { color: var(--success) !important; }
+  .tone-text-warning { color: var(--warning) !important; }
+  .tone-text-info { color: var(--info) !important; }
+  .item-focus { outline: 2px solid var(--accent-light); outline-offset: 3px; }
+  @media (max-width: 600px) {
+    .history-row { grid-template-columns: minmax(0, 1fr) auto; }
+    .history-when { grid-column: 1 / -1; text-align: left; min-width: 0; margin-top: -6px; }
+  }
   .section-title { font-size: 13px; font-weight: 800; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin: 32px 0 14px; }
   @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 860px) {
@@ -2086,7 +2108,7 @@ function appointmentCard(a, view) {
       </div>`;
   }
   return `
-    <div class="appt-card">
+    <div class="appt-card" data-item-id="${esc(a.id)}">
       <div class="appt-head"><strong>${title}</strong><span>${status}${change}${waReminder}${outcomePill}${scoreBadge}</span></div>
       <p class="appt-meta">${esc(a.customer)} · disponibilités données : « ${esc(a.availability)} » · demandé le ${new Date(a.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</p>
       ${qualif ? `<ul class="appt-qualif">${qualif}</ul>` : ""}
@@ -2172,6 +2194,7 @@ async function loadAppointments(view) {
     list.innerHTML = data.items.length
       ? data.items.map((a) => appointmentCard(a, currentAppointmentView)).join("")
       : `<p style="color: var(--muted); font-size: 14px;">${empty[currentAppointmentView]}</p>`;
+    focusPendingItem();  // lot 64
   } catch (e) {
     list.innerHTML = `<p style="color: var(--danger);">${esc(e.message)}</p>`;
   }
@@ -3102,6 +3125,10 @@ async function openCustomer(id) {
   content.innerHTML = "<p class='loading-text'>Chargement</p>";
 
   const c = await api(`/api/v1/customers/${id}`);
+  currentCustomerId = c.id;
+  currentCustomerName = c.display_name;
+  const broker = currentBusinessType === "INSURANCE_BROKER";  // lot 64 : contrats et suivi du client
+  const sourceTile = `<div class="card"><div class="value">${esc(c.acquisition_channel_label || acquisitionLabel(c.acquisition_source))}</div><div class="label">Source${c.acquisition_detail ? " : " + esc(c.acquisition_detail) : ""}</div></div>`;
   const prefs = c.detected_preferences || {};
   const prefLines = [
     prefs.need ? `Recherche : ${esc(prefs.need)}` : null,
@@ -3123,12 +3150,20 @@ async function openCustomer(id) {
       </div>
     </div>
 
+    ${broker ? `
+    <div class="grid customer-tiles" id="customer-insurance-tiles">
+      <div class="card"><div class="value" id="ci-active">…</div><div class="label">Contrats en cours</div></div>
+      <div class="card"><div class="value ci-date" id="ci-next">…</div><div class="label" id="ci-next-label">Prochaine échéance</div></div>
+      <div class="card"><div class="value" id="ci-quotes">…</div><div class="label" id="ci-quotes-label">Cotations</div></div>
+      <div class="card"><div class="value" id="ci-complaints">…</div><div class="label" id="ci-complaints-label">Réclamations ouvertes</div></div>
+      ${sourceTile}
+    </div>` : `
     <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
       <div class="card"><div class="value">${c.order_count}</div><div class="label">Commandes</div></div>
       <div class="card"><div class="value">${Number(c.total_spent).toLocaleString()}</div><div class="label">Total dépensé</div></div>
       <div class="card"><div class="value">${c.products_viewed_count}</div><div class="label">Produits consultés</div></div>
-      <div class="card"><div class="value">${esc(c.acquisition_channel_label || acquisitionLabel(c.acquisition_source))}</div><div class="label">Source${c.acquisition_detail ? " : " + esc(c.acquisition_detail) : ""}</div></div>
-    </div>
+      ${sourceTile}
+    </div>`}
 
     ${c.prospect ? `
     <div class="card" style="margin-top: 14px;">
@@ -3136,6 +3171,8 @@ async function openCustomer(id) {
       <p style="font-size: 12px; color: var(--muted); margin: 0 0 8px;">Score : ${esc(c.prospect.reasons.join(", "))}.</p>
       <ul class="appt-qualif" style="margin: 0;">${ficheItems(c.prospect, ["Prospect", "Téléphone", "Score commercial"])}</ul>
     </div>` : ""}
+
+    ${broker ? `<div id="customer-insurance"><p class="loading-text">Chargement des contrats</p></div>` : ""}
 
     ${prefLines.length ? `
     <div class="card" style="margin-top: 14px;">
@@ -3167,6 +3204,91 @@ async function openCustomer(id) {
     <button class="action" style="margin-top: 14px;" onclick="jumpToCustomerConversation('${c.latest_conversation_id}')">Voir la conversation</button>
     ` : ""}
   `;
+  if (broker) loadCustomerInsurance(c.id);
+}
+
+// ---- Lot 64 : fiche client du courtier (contrats, chiffres, historique) ----
+var currentCustomerId = null;
+var currentCustomerName = "";
+var pendingFocusId = null;
+
+function frDay(iso) {
+  return new Date(iso.length === 10 ? iso + "T12:00:00Z" : iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+
+async function loadCustomerInsurance(id) {
+  const box = document.getElementById("customer-insurance");
+  if (!box) return;
+  let data;
+  try { data = await api(`/api/v1/contracts/customer/${encodeURIComponent(id)}`); } catch (e) {
+    box.innerHTML = `<p class="empty-state">${esc(e.message)}</p>`;
+    return;
+  }
+  if (id !== currentCustomerId || !document.getElementById("customer-insurance")) return;
+  Object.assign(contractMeta, { branches: data.branches, terms: data.terms, statuses: data.statuses,
+    premium_visible: data.premium_visible, currency: data.currency });
+  const s = data.summary;
+  const set = (elId, html) => { const el = document.getElementById(elId); if (el) el.innerHTML = html; };
+  set("ci-active", String(s.active));
+  set("ci-next", s.next_expiry ? `<span class="${s.next_expiry.alert ? "tone-text-danger" : ""}">${esc(frDay(s.next_expiry.date))}</span>` : "—");
+  set("ci-next-label", s.next_expiry ? `Prochaine échéance · ${esc(s.next_expiry.branch_label)}, ${esc(s.next_expiry.when_label)}` : "Prochaine échéance");
+  set("ci-quotes", String(s.quotes));
+  set("ci-quotes-label", "Cotations" + (s.quotes_open ? ` · ${s.quotes_open} en cours` : ""));
+  set("ci-complaints", `<span class="${s.complaints_late ? "tone-text-danger" : ""}">${s.complaints_open}</span>`);
+  set("ci-complaints-label", "Réclamations ouvertes" + (s.complaints_late ? ` · ${s.complaints_late} en retard` : ""));
+
+  const row = (tab, item, title, status, tone, when) => `
+      <button type="button" class="history-row" onclick="goToItem('${tab}', '${esc(item.view)}', '${esc(item.id)}')">
+        <span class="history-title">${title}</span>
+        <span class="history-status ${tone}">${esc(status)}</span>
+        <span class="history-when">${when ? esc(frDay(when)) : ""}</span>
+      </button>`;
+  const group = (title, items, more, empty) => `
+    <div class="history-group">
+      <div class="history-group-title">${title} <span>(${items.length + more})</span></div>
+      ${items.length ? items.join("") : `<p class="history-empty">${empty}</p>`}
+      ${more ? `<p class="history-empty">Et ${more} plus ancien${more > 1 ? "s" : ""}, sur la page concernée.</p>` : ""}
+    </div>`;
+  const quoteTone = { WON: "tone-text-success", LOST: "", DRAFT: "" };
+  box.innerHTML = `
+    <div class="customer-section-head">
+      <h2 class="section-title" style="margin: 0;">Contrats (${data.contracts.length})</h2>
+      <button class="action secondary" onclick="addContractForCustomer()">Ajouter un contrat</button>
+    </div>
+    <div style="display: grid; gap: 12px;">
+      ${data.contracts.length ? data.contracts.map((ct) => contractCardHtml(ct, data, true)).join("")
+        : `<p class="empty-state">Aucun contrat pour ce client. Ajoutez-le pour que Bob suive son échéance.</p>`}
+    </div>
+    <h2 class="section-title">Historique</h2>
+    <div class="card history-card">
+      ${group("Demandes de cotation", data.quotes.map((q) => row("quotes", q, esc(q.label), q.status_label, quoteTone[q.status] ?? "tone-text-info", q.at)), data.more.quotes, "Aucune demande de cotation.")}
+      ${group("Rendez-vous et appels", data.appointments.map((a) => row("appointments", a, esc(a.label), a.status_label, a.view === "pending" ? "tone-text-warning" : "", a.at)), data.more.appointments, "Aucun rendez-vous ni appel.")}
+      ${group("Réclamations et sinistres", data.complaints.map((c) => row("complaints", c, `${esc(c.reference)} · ${esc(c.label)}`, c.overdue ? c.status_label + " · en retard" : c.status_label, c.overdue ? "tone-text-danger" : c.status === "RESOLVED" ? "tone-text-success" : "tone-text-warning", c.at)), data.more.complaints, "Aucune réclamation ni sinistre.")}
+    </div>`;
+}
+
+function addContractForCustomer() {
+  if (!currentCustomerId) return;
+  openContractDialog(null, { customer_id: currentCustomerId, customer: currentCustomerName });
+}
+
+// Ouvre la page d'une ligne de l'historique, sur la bonne vue, et montre la carte concernée.
+function goToItem(tab, view, id) {
+  pendingFocusId = id;
+  if (tab === "quotes") currentQuoteView = view;
+  if (tab === "complaints") currentComplaintView = view;
+  if (tab === "appointments") currentAppointmentView = view;
+  showTab(tab);
+}
+
+function focusPendingItem() {
+  if (!pendingFocusId) return;
+  const el = [...document.querySelectorAll("[data-item-id]")].find((node) => node.dataset.itemId === pendingFocusId);
+  pendingFocusId = null;
+  if (!el) return;
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  el.classList.add("item-focus");
+  setTimeout(() => el.classList.remove("item-focus"), 2600);
 }
 
 // Lot 34 : comment l'email du client a été obtenu.
@@ -3918,7 +4040,7 @@ async function loadQuotes(view) {
   window.quoteRows = {};
   rows.forEach((q) => { window.quoteRows[q.id] = q; });
   box.innerHTML = rows.length ? rows.map((q) => `
-    <div class="card">
+    <div class="card" data-item-id="${esc(q.id)}">
       <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline;">
         <div><strong>${esc(q.customer)}</strong> · ${esc(q.branch_label)} <span class="pill tone-info">${esc(q.client_type === "ENTREPRISE" ? "Entreprise" : "Particulier")}</span>${q.prospect ? " " + scorePill(q.prospect) : ""}</div>
         <span style="font-size: 13px; color: var(--muted);">${esc(q.status_label)} · ${new Date(q.submitted_at || q.created_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>
@@ -3932,6 +4054,7 @@ async function loadQuotes(view) {
         ${(q.next_statuses || []).map((s) => `<button class="action${s === "WON" || (s === "HANDLED" && q.status === "SUBMITTED") ? "" : " secondary"}" onclick="advanceQuote('${esc(q.id)}', '${esc(s)}')">${esc(s === "HANDLED" && q.status === "LOST" ? "Rouvrir" : QUOTE_STEP_LABELS[s])}</button>`).join("")}
       </div>
     </div>`).join("") : `<p class="empty-state">${empty[currentQuoteView]}</p>`;
+  focusPendingItem();  // lot 64 : ligne ouverte depuis la fiche du client
 }
 
 async function handleQuote(id) {
@@ -3995,6 +4118,36 @@ function contractWhenTag(c) {
   return `<span class="tag ${tone}">${esc(c.when_label.charAt(0).toUpperCase() + c.when_label.slice(1))}</span>`;
 }
 
+// Lot 64 — carte d'un contrat : page « Contrats », et fiche du client (onCustomer : sans le nom du client).
+function contractCardHtml(c, data, onCustomer) {
+  contractRows[c.id] = c;
+  const money = data.premium_visible && c.premium != null
+    ? `Prime : ${Number(c.premium).toLocaleString("fr-FR")} ${esc(c.currency || "")}` : "";
+  const facts = [c.policy_number ? "N° " + c.policy_number : "", c.term_label ? "Contrat " + c.term_label.toLowerCase() : "",
+    "Échéance le " + new Date(c.expires_on + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })]
+    .filter(Boolean).map(esc).join(" · ") + (money ? " · " + money : "");
+  const active = c.status === "ACTIVE";
+  return `
+  <div class="card contract-card${c.to_handle ? " contract-due" : ""}">
+    <div class="contract-head">
+      <div class="contract-who">${onCustomer ? `<strong>${esc(c.branch_label)}</strong>` : `<strong>${esc(c.customer)}</strong> · ${esc(c.branch_label)}`}${c.insurer ? ` <span class="pill tone-info">${esc(c.insurer || "")}</span>` : ""}</div>
+      ${contractWhenTag(c)}
+    </div>
+    <p class="contract-facts">${facts}</p>
+    ${active && c.reminder ? `<p class="contract-note ${c.reminder_channel === "CALL" ? "tone-text-danger" : ""}">${esc(c.reminder)}</p>` : ""}
+    ${active && !c.reminder && c.alert && !c.renewal_handled_at ? `<p class="contract-note">Bob rappellera le client le ${esc(new Date(c.reminder_on + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "long" }))} si vous ne le prenez pas en charge.</p>` : ""}
+    ${active && c.renewal_handled_at ? `<p class="contract-note">Prise en charge le ${new Date(c.renewal_handled_at).toLocaleDateString("fr-FR")} : Bob ne rappellera pas le client.</p>` : ""}
+    ${c.note ? `<p class="contract-note">Note : ${esc(c.note)}</p>` : ""}
+    <div class="contract-actions">
+      ${active && c.to_handle ? `<button class="action" onclick="handleContract('${esc(c.id)}')">Prise en charge</button>` : ""}
+      ${active ? `<button class="action secondary" onclick="renewContract('${esc(c.id)}')">Renouveler</button>` : ""}
+      <button class="action secondary" onclick="openContractDialog('${esc(c.id)}')">Modifier</button>
+      ${active ? `<button class="action secondary" onclick="setContractStatus('${esc(c.id)}')">Changer le statut</button>` : ""}
+      ${c.conversation_id && !onCustomer ? `<button class="action secondary" onclick="jumpToCustomerConversation('${esc(c.conversation_id)}')">Voir la conversation</button>` : ""}
+    </div>
+  </div>`;
+}
+
 function renderContracts(data) {
   const box = document.getElementById("contract-list");
   contractRows = {};
@@ -4005,34 +4158,7 @@ function renderContracts(data) {
     all: "Aucun contrat pour l'instant. Ajoutez-en un, ou importez votre registre en CSV.", closed: "Aucun contrat terminé.",
   };
   if (!data.contracts.length) { box.innerHTML = `<p class="empty-state">${empty[currentContractView]}</p>`; return; }
-  box.innerHTML = data.contracts.map((c) => {
-    contractRows[c.id] = c;
-    const money = data.premium_visible && c.premium != null
-      ? `Prime : ${Number(c.premium).toLocaleString("fr-FR")} ${esc(c.currency || "")}` : "";
-    const facts = [c.policy_number ? "N° " + c.policy_number : "", c.term_label ? "Contrat " + c.term_label.toLowerCase() : "",
-      "Échéance le " + new Date(c.expires_on + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })]
-      .filter(Boolean).map(esc).join(" · ") + (money ? " · " + money : "");
-    const active = c.status === "ACTIVE";
-    return `
-    <div class="card contract-card${c.to_handle ? " contract-due" : ""}">
-      <div class="contract-head">
-        <div class="contract-who"><strong>${esc(c.customer)}</strong> · ${esc(c.branch_label)}${c.insurer ? ` <span class="pill tone-info">${esc(c.insurer || "")}</span>` : ""}</div>
-        ${contractWhenTag(c)}
-      </div>
-      <p class="contract-facts">${facts}</p>
-      ${active && c.reminder ? `<p class="contract-note ${c.reminder_channel === "CALL" ? "tone-text-danger" : ""}">${esc(c.reminder)}</p>` : ""}
-      ${active && !c.reminder && c.alert && !c.renewal_handled_at ? `<p class="contract-note">Bob rappellera le client le ${esc(new Date(c.reminder_on + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "long" }))} si vous ne le prenez pas en charge.</p>` : ""}
-      ${active && c.renewal_handled_at ? `<p class="contract-note">Prise en charge le ${new Date(c.renewal_handled_at).toLocaleDateString("fr-FR")} : Bob ne rappellera pas le client.</p>` : ""}
-      ${c.note ? `<p class="contract-note">Note : ${esc(c.note)}</p>` : ""}
-      <div class="contract-actions">
-        ${active && c.to_handle ? `<button class="action" onclick="handleContract('${esc(c.id)}')">Prise en charge</button>` : ""}
-        ${active ? `<button class="action secondary" onclick="renewContract('${esc(c.id)}')">Renouveler</button>` : ""}
-        <button class="action secondary" onclick="openContractDialog('${esc(c.id)}')">Modifier</button>
-        ${active ? `<button class="action secondary" onclick="setContractStatus('${esc(c.id)}')">Changer le statut</button>` : ""}
-        ${c.conversation_id ? `<button class="action secondary" onclick="jumpToCustomerConversation('${esc(c.conversation_id)}')">Voir la conversation</button>` : ""}
-      </div>
-    </div>`;
-  }).join("") + (data.contracts.length >= data.limit ? `<p class="card-sub">Seuls les ${data.limit} premiers contrats sont affichés : affinez la recherche.</p>` : "");
+  box.innerHTML = data.contracts.map((c) => contractCardHtml(c, data, false)).join("") + (data.contracts.length >= data.limit ? `<p class="card-sub">Seuls les ${data.limit} premiers contrats sont affichés : affinez la recherche.</p>` : "");
 }
 
 async function ensureContractMeta() {
@@ -4086,7 +4212,14 @@ async function saveContract(id, values) {
     toast(e.message, "error");
     return;
   }
+  refreshContractViews();
+}
+
+// Lot 64 — après une action sur un contrat : la page « Contrats » et/ou la fiche du client ouverte.
+function refreshContractViews() {
   if (!document.getElementById("tab-contracts").classList.contains("hidden")) loadContracts(currentContractView);
+  if (currentCustomerId && !document.getElementById("tab-customers").classList.contains("hidden")
+      && !document.getElementById("customer-detail").classList.contains("hidden")) loadCustomerInsurance(currentCustomerId);
 }
 
 async function renewContract(id) {
@@ -4113,7 +4246,7 @@ async function renewContract(id) {
   } catch (e) {
     toast(e.message, "error");
   }
-  loadContracts(currentContractView);
+  refreshContractViews();
 }
 
 async function handleContract(id) {
@@ -4123,7 +4256,7 @@ async function handleContract(id) {
   } catch (e) {
     toast(e.message, "error");
   }
-  loadContracts(currentContractView);
+  refreshContractViews();
 }
 
 async function setContractStatus(id) {
@@ -4140,7 +4273,7 @@ async function setContractStatus(id) {
   } catch (e) {
     toast(e.message, "error");
   }
-  loadContracts(currentContractView);
+  refreshContractViews();
 }
 
 async function saveRenewalSetting() {
@@ -4280,7 +4413,7 @@ function renderComplaints(data) {
     if (c.started_at) steps.push(`prise en charge le ${when(c.started_at)}`);
     if (c.resolved_at) steps.push(`traitée le ${when(c.resolved_at)}`);
     return `
-    <div class="card contract-card${c.overdue ? " complaint-late" : c.status === "RECEIVED" ? " contract-due" : ""}">
+    <div class="card contract-card${c.overdue ? " complaint-late" : c.status === "RECEIVED" ? " contract-due" : ""}" data-item-id="${esc(c.id)}">
       <div class="contract-head">
         <div class="contract-who"><strong>${esc(c.reference)}</strong> · ${esc(c.customer)} <span class="pill ${c.kind === "SINISTRE" ? "tone-warning" : "tone-info"}">${esc(c.kind_label)}</span></div>
         ${complaintDueTag(c)}
@@ -4297,6 +4430,7 @@ function renderComplaints(data) {
       </div>
     </div>`;
   }).join("");
+  focusPendingItem();  // lot 64
 }
 
 async function openComplaintDialog() {
