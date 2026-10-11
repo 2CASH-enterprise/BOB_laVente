@@ -403,6 +403,7 @@ async def test_followup_worker_sends_emails(db_session):
 
 def test_superadmin_page_shows_ai_costs():
     html = (ROOT / "static" / "superadmin" / "index.html").read_text(encoding="utf-8")
-    assert 'id="ai-costs"' in html and "loadAiCosts();" in html and "/api/v1/superadmin/ai-costs" in html
-    body = html[html.index("async function loadAiCosts()"):html.index("const PLANS")]
+    # Lot 66 : page « Coûts IA » à part dans le menu du Super Admin
+    assert 'id="aicosts-section"' in html and "loadAiCosts();" in html and "/api/v1/superadmin/ai-costs" in html
+    body = html[html.index("async function loadAiCosts()"):html.index("// ==== Lot 61")]
     assert "esc(r.tenant)" in body and "r.cost_per_conversation_usd" in body and "d.threshold_usd" in body

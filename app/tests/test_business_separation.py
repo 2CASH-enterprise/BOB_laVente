@@ -176,5 +176,13 @@ async def test_csv_vehicle_columns_only_read_for_a_dealership(client, db_session
 
 def test_superadmin_console_escapes_merchant_data():
     html = open("app/static/superadmin/index.html", encoding="utf-8").read()
-    assert "${esc(t.name)}" in html and "${esc(t.email)}" in html and "${t.name}" not in html
-    assert "changeBusinessType(" in html and "confirm(" in html
+    import re
+
+    assert "${esc(t.name)}" in html and "esc(t.email)" in html
+    # Lot 66 : le nom n'entre en clair que dans les fenêtres de confirmation, qui échappent tout (esc(title))
+    outside = re.sub(r"(saConfirm|toast)\(`[^`]*`", "", html)
+    outside = re.sub(r"toast\(active \? `[^`]*` : `[^`]*`", "", outside)
+    assert "${t.name}" not in outside and "${name}" not in outside
+    assert 'el.innerHTML = `<span>${esc(message)}</span>' in html  # les messages sont échappés eux aussi
+    assert 'id="sa-dialog-title">${esc(title)}' in html and "${esc(text)}" in html
+    assert "business-type" in html and "Changer le secteur" in html  # changement de secteur confirmé

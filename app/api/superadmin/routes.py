@@ -114,6 +114,15 @@ async def _total_commission_due(db: AsyncSession, tenant_id) -> float:
     return float((await db.execute(stmt)).scalar_one())
 
 
+async def _trace(db, current: CurrentSuperAdmin, tenant: Tenant, action: str, before=None, after=None) -> None:
+    """Lot 66 — chaque réglage changé depuis le Super Admin est tracé (historique de la fiche)."""
+    from app.services.audit import log_audit_event
+
+    details = {"from": before, "to": after} if before is not None or after is not None else None
+    await log_audit_event(db, actor=f"superadmin:{current.superadmin_user_id}", action=action, tenant_id=tenant.id,
+                          details=details)
+
+
 async def _build_summary(db: AsyncSession, tenant: Tenant) -> TenantSummaryForAdmin:
     return TenantSummaryForAdmin(
         id=tenant.id, name=tenant.name, email=tenant.email, plan=tenant.plan.value,
@@ -124,6 +133,8 @@ async def _build_summary(db: AsyncSession, tenant: Tenant) -> TenantSummaryForAd
         business_type=normalize_business_type(tenant.business_type),
         created_at=tenant.created_at,
         paid_until=tenant.paid_until, bob_status=bob_pause.status(tenant).as_dict(),
+        country=tenant.country, phone=tenant.phone,
+        prereg_locked=tenant.prereg_at is not None and tenant.access_opened_at is None,
     )
 
 
@@ -132,7 +143,7 @@ async def _build_detail(db: AsyncSession, tenant: Tenant) -> TenantDetailForAdmi
     customer_count = (await db.execute(select(func.count(Customer.id)).where(Customer.tenant_id == tenant.id))).scalar_one()
     order_count = (await db.execute(select(func.count(Order.id)).where(Order.tenant_id == tenant.id))).scalar_one()
     return TenantDetailForAdmin(
-        **summary.model_dump(), country=tenant.country, currency=tenant.currency,
+        **summary.model_dump(), currency=tenant.currency,
         customer_count=customer_count, order_count=order_count,
         total_commission_due=await _total_commission_due(db, tenant.id),
     )
@@ -169,11 +180,12 @@ async def update_tenant_plan(
     tenant = await db.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant introuvable")
+    previous = tenant.plan.value
     try:
         tenant.plan = TenantPlan(payload.plan)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Plan invalide. Valeurs possibles : {[p.value for p in TenantPlan]}") from None
-
+    await _trace(db, current, tenant, "PLAN_CHANGED_BY_ADMIN", previous, tenant.plan.value)
     await db.commit()
     return await _build_summary(db, tenant)
 
@@ -189,6 +201,8 @@ async def update_tenant_active(
     tenant = await db.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant introuvable")
+    if tenant.active != payload.active:
+        await _trace(db, current, tenant, "TENANT_REACTIVATED_BY_ADMIN" if payload.active else "TENANT_SUSPENDED_BY_ADMIN")
     tenant.active = payload.active
     await db.commit()
     return await _build_summary(db, tenant)
@@ -208,7 +222,11 @@ async def update_tenant_paid_until(
     tenant = await db.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant introuvable")
+    previous = tenant.paid_until
     tenant.paid_until = payload.paid_until
+    if previous != payload.paid_until:
+        await _trace(db, current, tenant, "PAID_UNTIL_CHANGED_BY_ADMIN", previous.isoformat() if previous else None,
+                     payload.paid_until.isoformat() if payload.paid_until else None)
     await db.commit()
     return await _build_summary(db, tenant)
 
@@ -229,7 +247,10 @@ async def update_commission_rate(
         raise HTTPException(status_code=404, detail="Tenant introuvable")
     if payload.commission_rate is not None and not (0 <= payload.commission_rate <= 100):
         raise HTTPException(status_code=400, detail="Le taux doit être compris entre 0 et 100")
+    previous = float(tenant.commission_rate) if tenant.commission_rate is not None else None
     tenant.commission_rate = payload.commission_rate
+    if previous != payload.commission_rate:
+        await _trace(db, current, tenant, "COMMISSION_CHANGED_BY_ADMIN", previous, payload.commission_rate)
     await db.commit()
     return await _build_summary(db, tenant)
 

@@ -30,10 +30,13 @@ class TenantSummaryForAdmin(BaseModel):
     # Lot 51 — abonnement : dernier jour payé (vide = pas d'échéance) et état de Bob (pause, rappel).
     paid_until: date | None = None
     bob_status: dict | None = None
+    # Lot 66 — cartes de la page Boutiques : pays, téléphone, pré-inscrit (accès pas encore ouvert).
+    country: str | None = None
+    phone: str | None = None
+    prereg_locked: bool = False
 
 
 class TenantDetailForAdmin(TenantSummaryForAdmin):
-    country: str
     currency: str
     customer_count: int
     order_count: int

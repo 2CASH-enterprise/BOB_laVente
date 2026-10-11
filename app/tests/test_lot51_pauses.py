@@ -576,9 +576,10 @@ def test_dashboard_banner_and_phone_replies():
 
 
 def test_superadmin_page_controls():
-    assert "Payé jusqu'au" in SUPERADMIN and "changePaidUntil(" in SUPERADMIN and "toggleActive(" in SUPERADMIN
-    assert "/paid-until" in SUPERADMIN and "En pause (impayé)" in SUPERADMIN and "Jour de grâce" in SUPERADMIN
-    assert "colspan='10'" in SUPERADMIN and "colspan='9'" not in SUPERADMIN
+    # Lot 66 : la date se règle dans la fiche de la boutique (avec « Prolonger d'un mois »)
+    assert "Payé jusqu'au" in SUPERADMIN and 'putShop("paid-until"' in SUPERADMIN and "toggleActive(" in SUPERADMIN
+    assert "/tenants/${currentShop.id}/${path}" in SUPERADMIN and "En pause (impayé)" in SUPERADMIN and "Jour de grâce" in SUPERADMIN
+    assert "function extendShop()" in SUPERADMIN
 
 
 def test_billing_task_is_registered_hourly():
