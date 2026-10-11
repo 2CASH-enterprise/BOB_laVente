@@ -162,6 +162,20 @@ async def overview(admin: CurrentSuperAdmin = Depends(get_current_superadmin), d
             todo.append({"kind": "AI_COST", "tone": "danger", "title": f"Coût IA de {r['tenant']} au-dessus du seuil",
                          "detail": f"{r['cost_usd']:.2f} $ ce mois-ci (seuil {threshold} $)".replace(".", ","),
                          "action": "Voir les coûts", "section": "aicosts"})
+    # Lot 67 — erreurs techniques nouvelles ou revenues (monitoring)
+    from sqlalchemy import func
+
+    from app.models.monitoring import MonitorIssue
+    from app.services import monitoring
+
+    unread = (await db.execute(select(func.count(MonitorIssue.id)).where(MonitorIssue.status.in_(monitoring.UNREAD_STATUSES)))).scalar_one()
+    if unread:
+        worst = (await db.execute(select(MonitorIssue).where(MonitorIssue.status.in_(monitoring.UNREAD_STATUSES))
+                                  .order_by(MonitorIssue.count.desc()).limit(1))).scalar_one()
+        todo.insert(0, {"kind": "MONITORING", "tone": "danger",
+                        "title": f"{unread} erreur{'s' if unread > 1 else ''} technique{'s' if unread > 1 else ''} à traiter",
+                        "detail": f"La plus fréquente : {worst.title[:90]} ({worst.count} fois)",
+                        "action": "Voir le monitoring", "section": "monitoring"})
     running = (await db.execute(select(ProspectCampaign).where(ProspectCampaign.status == "RUNNING"))).scalars().all()
     if running:
         row = await prospect_mailer.get_settings_row(db)
@@ -194,7 +208,7 @@ async def overview(admin: CurrentSuperAdmin = Depends(get_current_superadmin), d
             "active": len(active), "active_new": sum(1 for t in active if t.created_at and _utc(t.created_at) >= month_start),
             "prereg": len(locked), "prereg_with_files": len(with_files),
             "follow_up": len(follow), "replies": len(replied),
-            "ai_cost": cost, "ai_threshold": threshold, "ai_month": label,
+            "ai_cost": cost, "ai_threshold": threshold, "ai_month": label, "monitoring_new": unread,
         },
         "todo": todo,
         "funnel": pros.funnel(recent, stages) if recent else pros.funnel([], {}),

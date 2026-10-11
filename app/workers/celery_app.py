@@ -29,6 +29,7 @@ TASK_MODULES = [
     "app.workers.prospects",
     "app.workers.prospect_emails",
     "app.workers.order_reminders",
+    "app.workers.monitoring",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -99,6 +100,42 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.order_reminders.check_order_reminders_task",
         "schedule": crontab(minute=10),
     },
+    # Lot 67 — monitoring : erreurs rangées et alertes chaque minute ; effacement après 30 jours chaque nuit.
+    "monitoring-drain": {
+        "task": "app.workers.monitoring.drain_task",
+        "schedule": crontab(minute="*"),
+    },
+    "monitoring-purge": {
+        "task": "app.workers.monitoring.purge_task",
+        "schedule": crontab(hour=4, minute=10),
+    },
 }
 celery_app.conf.timezone = "UTC"
+
+
+# Lot 67 — monitoring : journal de l'application branché, tâches en échec capturées, dernier passage de chaque tâche.
+def _install_monitoring() -> None:
+    from datetime import datetime, timezone
+
+    from celery.signals import task_failure, task_postrun, task_prerun
+
+    from app.services import monitoring
+
+    monitoring.install()
+    started: dict = {}
+
+    @task_prerun.connect(weak=False)
+    def _on_prerun(task_id=None, task=None, **kwargs):
+        started[task_id] = datetime.now(timezone.utc)
+
+    @task_postrun.connect(weak=False)
+    def _on_postrun(task_id=None, task=None, state=None, **kwargs):
+        monitoring.record_task_run(getattr(task, "name", "?"), state or "?", started.pop(task_id, None))
+
+    @task_failure.connect(weak=False)
+    def _on_failure(sender=None, exception=None, einfo=None, **kwargs):
+        monitoring.capture_task_failure(getattr(sender, "name", "?"), exception, getattr(einfo, "tb", None))
+
+
+_install_monitoring()
 

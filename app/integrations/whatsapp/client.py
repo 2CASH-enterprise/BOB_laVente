@@ -11,6 +11,7 @@ import httpx
 from app.integrations.whatsapp.formatting import to_whatsapp
 
 from app.core.config import get_settings
+from app.services import monitoring  # lot 67
 
 settings = get_settings()
 
@@ -148,6 +149,7 @@ class WhatsAppClient:
                     self.phone_number_id, response.status_code, details,
                 )
                 raise WhatsAppSendError(response.status_code, details)
+            monitoring.mark("whatsapp_ok")  # lot 67 : état du service
             return response.json()
 
 

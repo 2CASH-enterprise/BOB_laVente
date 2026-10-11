@@ -7,6 +7,32 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script id="bob-monitoring">
+  // Lot 67 — erreurs du navigateur remontées au monitoring technique (10 au plus par page, jamais de donnée saisie).
+  (function () {
+    var sent = 0, seen = {};
+    var base = window.location.pathname.replace(/\/superadmin\/?.*$/, "");
+    function report(message, source, line, col, stack) {
+      try {
+        var key = String(message) + "|" + line;
+        if (seen[key] || sent >= 10) return;
+        seen[key] = 1; sent += 1;
+        var headers = { "Content-Type": "application/json" };
+        fetch(base + "/api/v1/monitoring/client-error", { method: "POST", headers: headers, keepalive: true,
+          body: JSON.stringify({ page: "superadmin", message: String(message || "").slice(0, 1000), source: String(source || "").slice(0, 400),
+            line: line || 0, col: col || 0, stack: String(stack || "").slice(0, 4000), path: window.location.pathname }) })
+          .catch(function () {});
+      } catch (e) {}
+    }
+    window.addEventListener("error", function (ev) {
+      if (ev && ev.message) report(ev.message, ev.filename, ev.lineno, ev.colno, ev.error && ev.error.stack);
+    });
+    window.addEventListener("unhandledrejection", function (ev) {
+      var r = ev && ev.reason;
+      if (r && /^(TypeError|ReferenceError|SyntaxError|RangeError)$/.test(r.name)) report(r.name + ": " + r.message, "", 0, 0, r.stack);
+    });
+  })();
+</script>
 <script>
   // Lot 66 — thème choisi (clair / sombre) appliqué avant l'affichage : pas d'éclair blanc.
   try { const t = localStorage.getItem("bob_sa_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
@@ -202,6 +228,47 @@
   @media (prefers-reduced-motion: reduce) { .sa-dialog-back, .sa-dialog, .toast, .sidebar { animation: none; transition: none; } }
   @media (max-width: 600px) { .sa-dialog-back { align-items: flex-end; padding: 0; } .sa-dialog { border-radius: 18px 18px 0 0; } .toasts { left: 12px; right: 12px; bottom: 12px; max-width: none; } }
 
+  /* Lot 67 — monitoring technique */
+  .mon-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .mon-check { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; background: var(--panel-2); min-width: 0; }
+  .mon-check > div { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+  .mon-check b { font-size: 13.5px; } .mon-check span.detail { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .light { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .light.is-ok { background: var(--success); box-shadow: 0 0 0 4px var(--success-soft); }
+  .light.is-warn { background: var(--warning); box-shadow: 0 0 0 4px var(--warning-soft); }
+  .light.is-ko { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
+  .light.is-idle { background: var(--border-strong); box-shadow: 0 0 0 4px var(--track); }
+  .mon-tasks { margin-top: 14px; font-size: 13px; } .mon-tasks summary { cursor: pointer; font-weight: 700; color: var(--accent); padding: 4px 0; }
+  .mon-tasks .table-wrap { margin-top: 10px; }
+  .mon-list { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow); }
+  .mon-head, .mon-row { display: grid; grid-template-columns: minmax(0, 1fr) 80px 150px 120px; gap: 12px; padding: 12px 20px; align-items: center; }
+  .mon-head { background: var(--panel-2); color: var(--muted); font-size: 12px; font-weight: 700; }
+  .mon-row { width: 100%; border: 0; border-top: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 14px 20px; }
+  .mon-row:hover { background: var(--panel-2); } .mon-row[aria-current="true"] { background: var(--accent-soft); }
+  .mon-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .mon-main .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .mon-main b { font-size: 14px; overflow-wrap: anywhere; }
+  .mon-where { font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mon-shops { font-size: 12.5px; color: var(--muted); }
+  .chip { border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 800; background: var(--track); color: var(--muted); white-space: nowrap; }
+  .st { justify-self: start; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .st.NEW, .st.REOPENED { background: var(--danger-soft); color: var(--danger); }
+  .st.IN_PROGRESS { background: var(--warning-soft); color: var(--warning); }
+  .st.RESOLVED { background: var(--success-soft); color: var(--success); }
+  .mon-count { text-align: right; font-size: 15px; font-weight: 800; }
+  .mon-detail { margin-top: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .mon-detail h2 { margin: 8px 0 4px; font-size: 18px; overflow-wrap: anywhere; }
+  .mon-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 13px; }
+  .mon-facts > div { background: var(--panel-2); border-radius: 10px; padding: 10px 12px; } .mon-facts span { display: block; color: var(--muted); font-size: 12px; }
+  .mon-trace { margin: 0; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.6; overflow-x: auto; white-space: pre; max-height: 360px; color: var(--text); }
+  .mon-occ { list-style: none; margin: 0; padding: 0; font-size: 13px; } .mon-occ li { padding: 7px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; } .mon-occ li:last-child { border-bottom: 0; }
+  @media (max-width: 760px) {
+    .mon-head { display: none; }
+    .mon-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main main" "when status"; gap: 8px 12px; padding: 14px 16px; }
+    .mon-row .mon-main { grid-area: main; } .mon-row .mon-when { grid-area: when; font-size: 12.5px; color: var(--muted); }
+    .mon-row .st { grid-area: status; justify-self: end; } .mon-row .mon-count { display: none; }
+    .mon-checks { grid-template-columns: 1fr; }
+  }
+
   /* Prospection, emails, pré-inscriptions (lots 61, 62, 65) */
   .stage { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
   .stage.s0, .stage.s1 { background: var(--track); color: var(--muted); }
@@ -267,6 +334,7 @@
         <button type="button" data-section="prospects" onclick="showSection('prospects')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Prospection<span class="count danger hidden" id="nav-count-prospects"></span></button>
         <button type="button" data-section="prereg" onclick="showSection('prereg')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Pré-inscriptions<span class="count warning hidden" id="nav-count-prereg"></span></button>
         <button type="button" data-section="aicosts" onclick="showSection('aicosts')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Coûts IA</button>
+        <button type="button" data-section="monitoring" onclick="showSection('monitoring')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 8-6-16-3 8H2"/></svg>Monitoring<span class="count danger hidden" id="nav-count-monitoring"></span></button>
       </nav>
       <div class="sidebar-foot">
         <div class="theme-switch" role="group" aria-label="Apparence">
@@ -330,6 +398,28 @@
         <tbody id="ai-rows"></tbody>
       </table></div>
       <p class="muted" style="margin: 10px 0 0;" id="ai-note"></p>
+     </div>
+
+     <!-- Lot 67 — Monitoring technique : état du service et erreurs regroupées -->
+     <div id="monitoring-section" class="hidden">
+      <div class="page-head">
+        <div><h1>Monitoring technique</h1><p>L'état du service et toutes les erreurs de Bob, regroupées. Les secrets sont toujours masqués.</p></div>
+        <div class="row"><span class="muted" id="mon-updated"></span><button class="btn" onclick="loadMonitoring(true)">Actualiser</button></div>
+      </div>
+      <section class="card">
+        <h2 style="margin-bottom: 14px;">État du service</h2>
+        <div class="mon-checks" id="mon-checks"><p class="muted">Chargement…</p></div>
+        <details class="mon-tasks" id="mon-tasks-wrap"><summary>Tâches automatiques : dernier passage de chacune</summary><div class="table-wrap" id="mon-tasks"></div></details>
+      </section>
+      <div class="toolbar">
+        <div class="pills" id="mon-filters"></div>
+        <div class="row" style="flex: 0 1 auto;">
+          <label for="mon-source" class="muted">Source</label>
+          <select id="mon-source" class="input" style="width: auto; margin: 0;" onchange="loadIssues()"><option value="">Toutes les sources</option></select>
+        </div>
+      </div>
+      <section class="mon-list" id="mon-list" aria-label="Erreurs"><p class="muted" style="padding: 16px 20px; margin: 0;">Chargement…</p></section>
+      <section class="card mon-detail hidden" id="mon-detail" aria-live="polite"></section>
      </div>
 
      <!-- Lot 65 — Pré-inscriptions : interrupteur, pré-inscrits, ouverture de l'accès -->
@@ -469,7 +559,7 @@ function syncThemeButtons() {
 function openMenu() { document.getElementById("sidebar").classList.add("open"); document.getElementById("backdrop").classList.add("open"); }
 function closeMenu() { document.getElementById("sidebar").classList.remove("open"); document.getElementById("backdrop").classList.remove("open"); }
 
-const SECTION_TITLES = { overview: "Vue d'ensemble", shops: "Boutiques", prospects: "Prospection", prereg: "Pré-inscriptions", aicosts: "Coûts IA" };
+const SECTION_TITLES = { overview: "Vue d'ensemble", shops: "Boutiques", prospects: "Prospection", prereg: "Pré-inscriptions", aicosts: "Coûts IA", monitoring: "Monitoring" };
 
 function showSection(name, opts) {
   opts = opts || {};
@@ -486,6 +576,7 @@ function showSection(name, opts) {
   if (name === "prospects") { if (opts.view) prospectView = opts.view; loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); }
   if (name === "prereg") loadPrereg();
   if (name === "aicosts") loadAiCosts();
+  if (name === "monitoring") loadMonitoring(true);
 }
 
 // ---- Connexion ----
@@ -493,7 +584,8 @@ function enterApp() {
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   syncThemeButtons();
-  showSection("overview");
+  // Lot 67 — lien des emails d'alerte : …/superadmin/#monitoring ouvre directement le monitoring.
+  if (location.hash === "#monitoring") { showSection("monitoring"); loadOverview(); } else showSection("overview");
 }
 
 function logout() {
@@ -552,6 +644,7 @@ const TODO_ICONS = {
   FOLLOW_UP: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
   AI_COST: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   CAMPAIGN: '<path d="M4 4h16v16H4zM4 9h16"/>',
+  MONITORING: '<path d="M22 12h-4l-3 8-6-16-3 8H2"/>',
 };
 
 function money(n) { return Number(n || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " $"; }
@@ -596,6 +689,7 @@ async function loadOverview() {
   document.getElementById("nav-count-prospects").classList.toggle("hidden", !k.replies);
   document.getElementById("nav-count-prereg").textContent = k.prereg;
   document.getElementById("nav-count-prereg").classList.toggle("hidden", !k.prereg);
+  setMonitoringBadge(k.monitoring_new || 0);
   window.overviewTodo = d.todo;
   document.getElementById("overview-todo").innerHTML = d.todo.length ? d.todo.map((t, i) => `
     <div class="todo-row">
@@ -1314,6 +1408,165 @@ async function deleteCampaign(id) {
   const r = await fetch(API_BASE + `/api/v1/superadmin/prospection/campaigns/${id}`, { method: "DELETE", headers: { Authorization: "Bearer " + token } });
   if (!r.ok) toast("Effacement impossible.", "error"); else toast("Brouillon effacé.");
   loadEmails();
+}
+
+// ---- Lot 67 : monitoring technique ----
+var monFilter = "todo";
+var monData = null;
+var monCurrent = null;
+var monUpdatedAt = null;
+var monTimer = null;
+const MON_FILTERS = [["todo", "À traiter"], ["new", "Nouvelles"], ["progress", "En cours"], ["resolved", "Corrigées"]];
+
+function setMonitoringBadge(n) {
+  const el = document.getElementById("nav-count-monitoring");
+  el.textContent = n;
+  el.classList.toggle("hidden", !n);
+}
+
+function frDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const today = new Date();
+  const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }).replace(":", " h ");
+  if (d.toDateString() === today.toDateString()) return "Aujourd'hui " + time;
+  const y = new Date(today); y.setDate(today.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Hier " + time;
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }) + " · " + time;
+}
+
+function shopsLabel(i) {
+  const n = i.shops.length;
+  const browsers = i.browsers && i.browsers.length ? " · " + i.browsers.join(", ") : "";
+  if (!n) return (i.source === "BROWSER" ? "Visiteur" : "Plateforme") + browsers;
+  return (n === 1 ? "1 boutique : " + i.shops[0] : n + " boutiques : " + i.shops.slice(0, 3).join(", ") + (n > 3 ? "…" : "")) + browsers;
+}
+
+function updatedLabel() {
+  const el = document.getElementById("mon-updated");
+  if (!el || !monUpdatedAt) return;
+  const s = Math.max(0, Math.round((Date.now() - monUpdatedAt) / 1000));
+  el.textContent = "Mis à jour " + (s < 60 ? `il y a ${s} s` : `il y a ${Math.round(s / 60)} min`);
+}
+
+async function loadMonitoring(withStatus) {
+  if (!monTimer) monTimer = setInterval(() => {
+    if (currentSection !== "monitoring" || document.hidden) return;
+    updatedLabel();
+    if (monUpdatedAt && Date.now() - monUpdatedAt > 60000) loadMonitoring(true);
+  }, 5000);
+  if (withStatus) loadServiceStatus();
+  await loadIssues();
+}
+
+async function loadServiceStatus() {
+  let d;
+  try { d = await api("/api/v1/superadmin/monitoring/status"); } catch (e) {
+    document.getElementById("mon-checks").innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return;
+  }
+  document.getElementById("mon-checks").innerHTML = d.checks.map((c) => `
+    <div class="mon-check"><span class="light is-${esc(c.status)}" role="img" aria-label="${{ ok: "Bon", warn: "À surveiller", ko: "En panne", idle: "Rien à signaler" }[c.status] || ""}"></span>
+      <div><b>${esc(c.name)}</b><span class="detail">${esc(c.detail)}</span></div>
+      ${c.test ? `<button class="btn small-btn" onclick="testCheck('${esc(c.key)}', this)">Tester</button>` : ""}</div>`).join("");
+  const late = d.tasks.filter((t) => t.status === "warn" || t.status === "ko").length;
+  document.querySelector("#mon-tasks-wrap summary").textContent = `Tâches automatiques : dernier passage de chacune${late ? ` (${late} à vérifier)` : ""}`;
+  document.getElementById("mon-tasks").innerHTML = `<table><thead><tr><th>Tâche</th><th>Fréquence</th><th>Dernier passage</th><th>État</th></tr></thead><tbody>${
+    d.tasks.map((t) => `<tr><td>${esc(t.label)}</td><td>${t.every_minutes >= 1440 ? "chaque nuit" : t.every_minutes >= 60 ? "chaque heure" : `toutes les ${t.every_minutes} min`}</td>
+      <td>${esc(t.last_run_ago)}</td><td><span class="light is-${esc(t.status)}" style="display: inline-block; margin-right: 8px;"></span>${
+      { ok: "À l'heure", warn: "En retard", ko: "En échec", idle: "Pas encore vue" }[t.status]}</td></tr>`).join("")}</tbody></table>`;
+}
+
+async function testCheck(key, button) {
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = "Test…";
+  try {
+    const r = await api(`/api/v1/superadmin/monitoring/checks/${key}/test`, { method: "POST" });
+    toast(r.detail, r.ok ? "success" : "error");
+  } catch (e) { toast(e.message, "error"); }
+  button.disabled = false;
+  button.textContent = label;
+}
+
+async function loadIssues() {
+  const source = document.getElementById("mon-source").value;
+  let d;
+  try { d = await api(`/api/v1/superadmin/monitoring?filter=${monFilter}${source ? "&source=" + encodeURIComponent(source) : ""}`); } catch (e) {
+    document.getElementById("mon-list").innerHTML = `<p class="tone-danger" style="padding: 16px 20px; margin: 0;">${esc(e.message)}</p>`; return;
+  }
+  monData = d;
+  monUpdatedAt = Date.now();
+  updatedLabel();
+  setMonitoringBadge(d.counts.new);
+  const select = document.getElementById("mon-source");
+  if (select.options.length === 1) d.sources.forEach((s) => select.add(new Option(s.label, s.code)));
+  document.getElementById("mon-filters").innerHTML = MON_FILTERS.map(([k, label]) =>
+    `<button class="pill" aria-pressed="${k === monFilter}" onclick="setMonFilter('${k}')">${label} · ${d.counts[k]}</button>`).join("");
+  const empty = { todo: "Aucune erreur à traiter. Bob tourne sans incident.", new: "Aucune nouvelle erreur.", progress: "Aucune erreur en cours de correction.", resolved: "Aucune erreur corrigée ces 30 derniers jours." }[monFilter];
+  document.getElementById("mon-list").innerHTML = `<div class="mon-head"><span>Erreur</span><span style="text-align: right;">Fois</span><span>Dernière fois</span><span>Statut</span></div>` +
+    (d.issues.length ? d.issues.map((i) => `
+    <button type="button" class="mon-row" data-id="${esc(i.id)}" aria-current="${i.id === monCurrent}" onclick="openIssue('${esc(i.id)}')">
+      <div class="mon-main"><div class="line"><span class="chip">${esc(i.source_label)}</span><b>${esc(i.title)}</b></div>
+        <span class="mon-where">${esc(i.where)}${i.location ? " · " + esc(i.location) : ""}</span>
+        <span class="mon-shops">${esc(shopsLabel(i))}${i.assignee && i.status === "IN_PROGRESS" ? " · pris en charge par " + esc(i.assignee) : ""}</span></div>
+      <span class="mon-count">${i.count}</span>
+      <span class="mon-when">${esc(frDateTime(i.last_seen))}</span>
+      <span class="st ${esc(i.status)}">${esc(i.status_label)}</span>
+    </button>`).join("") : `<p class="muted" style="padding: 18px 20px; margin: 0; font-size: 14px;">${empty}</p>`);
+  if (monCurrent) openIssue(monCurrent, true);
+}
+
+function setMonFilter(k) {
+  monFilter = k;
+  loadIssues();
+}
+
+async function openIssue(id, quiet) {
+  let i;
+  try { i = await api(`/api/v1/superadmin/monitoring/issues/${id}`); } catch (e) {
+    if (!quiet) toast(e.message, "error");
+    monCurrent = null; document.getElementById("mon-detail").classList.add("hidden"); return;
+  }
+  monCurrent = id;
+  document.querySelectorAll(".mon-row").forEach((r) => r.setAttribute("aria-current", String(r.dataset.id === id)));
+  const box = document.getElementById("mon-detail");
+  const since = i.count + " fois depuis " + frDateTime(i.first_seen).replace("Aujourd'hui", "aujourd'hui").replace("Hier", "hier");
+  const actions = [];
+  if (i.status !== "IN_PROGRESS" && i.status !== "RESOLVED") actions.push(`<button class="btn primary" onclick="setIssueStatus('${esc(i.id)}', 'IN_PROGRESS')">Je m'en occupe</button>`);
+  if (i.status !== "RESOLVED") actions.push(`<button class="btn" onclick="setIssueStatus('${esc(i.id)}', 'RESOLVED')">Marquer corrigée</button>`);
+  else actions.push(`<button class="btn" onclick="setIssueStatus('${esc(i.id)}', 'NEW')">Rouvrir</button>`);
+  const state = i.status === "IN_PROGRESS" && i.assignee ? `Pris en charge par ${i.assignee}` :
+    i.status === "RESOLVED" && i.resolved_by ? `Corrigée par ${i.resolved_by} · ${frDateTime(i.resolved_at)}` :
+    i.status === "REOPENED" ? `Revenue après correction (${i.reopened_count} fois)` : "";
+  box.innerHTML = `
+    <div class="row" style="justify-content: space-between; align-items: flex-start;">
+      <div style="min-width: 0; flex: 1 1 320px;">
+        <div class="line row"><span class="chip">${esc(i.source_label)}</span><span class="st ${esc(i.status)}">${esc(i.status_label)}</span>${state ? `<span class="muted">${esc(state)}</span>` : ""}</div>
+        <h2>${esc(i.title)}</h2>
+        <p class="muted" style="margin: 0; font-size: 13.5px;">${esc(since)} · dernière fois ${esc(frDateTime(i.last_seen).toLowerCase())} · ${esc(shopsLabel(i))}</p>
+      </div>
+      <div class="row">${actions.join("")}</div>
+    </div>
+    <div class="mon-facts">
+      <div><span>Où</span><b>${esc(i.where)}</b></div>
+      <div><span>Conséquence</span><b>${esc(i.consequence)}</b></div>
+      <div><span>Piste</span><b>${esc(i.hint)}</b></div>
+    </div>
+    ${i.location ? `<div class="mon-where" style="white-space: normal;">Dans le code : ${esc(i.location)}${i.meta_code ? " · code Meta " + esc(i.meta_code) : ""}</div>` : ""}
+    ${i.last_message ? `<div><span class="field-label">Dernier message</span><pre class="mon-trace" style="white-space: pre-wrap;">${esc(i.last_message)}</pre></div>` : ""}
+    ${i.trace ? `<div><span class="field-label">Trace (secrets masqués)</span><pre class="mon-trace">${esc(i.trace)}</pre></div>` : ""}
+    <div><span class="field-label">Dernières occurrences</span><ul class="mon-occ">${i.occurrences.map((o) =>
+      `<li><b>${esc(frDateTime(o.at))}</b>${o.shop ? " · " + esc(o.shop) : ""}<span class="muted" style="display: block;">${esc(o.message || "")}</span></li>`).join("")}</ul></div>`;
+  box.classList.remove("hidden");
+  if (!quiet) box.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function setIssueStatus(id, status) {
+  try {
+    await api(`/api/v1/superadmin/monitoring/issues/${id}/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+    toast({ IN_PROGRESS: "Erreur prise en charge.", RESOLVED: "Erreur marquée corrigée. Elle reviendra toute seule si elle se reproduit.", NEW: "Erreur rouverte." }[status]);
+    await loadIssues();
+  } catch (e) { toast(e.message, "error"); }
 }
 
 // Démarrage (en dernier : toutes les déclarations ci-dessus sont lues).

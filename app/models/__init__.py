@@ -68,3 +68,4 @@ from app.models.insurance_complaint import InsuranceComplaint  # noqa: F401 — 
 from app.models.prospect import Prospect, ProspectEvent  # noqa: F401 — lot 61
 from app.models.prospect import ProspectCampaign, ProspectEmail, ProspectionSettings, ProspectSuppression  # noqa: F401 — lot 62
 from app.models.preregistration import PlatformSettings, PreregistrationFile  # noqa: F401 — lot 65
+from app.models.monitoring import MonitorIssue, MonitorOccurrence  # noqa: F401 — lot 67

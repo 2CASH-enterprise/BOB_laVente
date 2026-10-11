@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     llm_retry_delays: list[float] = [1.0, 3.0]
     # Lot 50 — alerte au Super Admin quand le coût IA estimé d'une boutique dépasse ce montant ($/mois).
     llm_monthly_alert_usd: float = 20.0
+    # Lot 67 — monitoring technique : file d'attente des erreurs (« redis » en production, « memory » pour les tests)
+    # et seuil d'un pic (occurrences d'une même erreur en une heure) qui déclenche un email aux Super Admins.
+    monitoring_queue: str = "redis"
+    monitoring_spike_per_hour: int = 20
 
 
 @lru_cache

@@ -96,6 +96,11 @@ class CurrentUser(BaseModel):
 async def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db=Depends(get_db)) -> CurrentUser:
     payload = decode_access_token(token)
     user = CurrentUser(user_id=UUID(payload.sub), tenant_id=UUID(payload.tenant_id), role=payload.role)
+    # Lot 67 — boutique concernée si une erreur survient pendant cette requête (monitoring).
+    request.state.monitor_tenant = user.tenant_id
+    from app.services.monitoring import current_tenant
+
+    current_tenant.set(user.tenant_id)
     await _check_preregistration(request, db, user)
     return user
 

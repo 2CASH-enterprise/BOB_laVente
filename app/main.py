@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.analytics.routes import router as analytics_router
@@ -36,6 +37,7 @@ from app.api.prospects.routes import public_router as prospect_link_router, rout
 from app.api.prospects.campaigns import router as prospect_campaigns_router  # lot 62
 from app.api.preregistration.routes import admin_router as prereg_admin_router  # lot 65
 from app.api.superadmin.overview import router as superadmin_overview_router  # lot 66
+from app.api.monitoring.routes import public_router as monitoring_public_router, router as monitoring_router  # lot 67
 from app.api.preregistration.routes import public_router as prereg_public_router, router as prereg_router  # lot 65
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from app.api.whatsapp.routes import router as whatsapp_router
@@ -51,6 +53,18 @@ app = FastAPI(
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Lot 67 — monitoring technique : le journal de l'application et les erreurs 500 remontent au Super Admin.
+from app.services import monitoring as _monitoring  # noqa: E402
+
+_monitoring.install()
+
+
+@app.exception_handler(Exception)
+async def _unhandled_error(request: Request, exc: Exception):
+    _monitoring.capture_api_exception(request, exc)
+    return JSONResponse(status_code=500, content={"detail": "Erreur interne. L'équipe technique est prévenue."})
+
 
 app.include_router(auth_router)
 app.include_router(tenants_router)
@@ -90,6 +104,8 @@ app.include_router(prereg_public_router)
 app.include_router(prereg_router)
 app.include_router(prereg_admin_router)
 app.include_router(superadmin_overview_router)
+app.include_router(monitoring_public_router)
+app.include_router(monitoring_router)
 
 _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():

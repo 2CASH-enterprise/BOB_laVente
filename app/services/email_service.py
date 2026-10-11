@@ -17,6 +17,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr, parseaddr
 
 from app.core.config import get_settings
+from app.services import monitoring  # lot 67
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,9 @@ def send_email(
                 server.login(settings.smtp_username, settings.smtp_password)
             # L'enveloppe SMTP utilise toujours l'adresse brute (jamais le nom affiché).
             server.sendmail(settings.smtp_from_email, [to], msg.as_string())
+        monitoring.mark("smtp_ok")  # lot 67 : état du service
         return True
     except Exception:  # noqa: BLE001 — un échec d'envoi ne doit jamais faire planter l'appelant
+        monitoring.mark("smtp_fail")
         logger.exception("Échec de l'envoi d'email à %s", to)
         return False

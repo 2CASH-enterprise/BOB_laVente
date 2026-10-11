@@ -5,6 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bob AI — Tableau de bord</title>
 <!-- Lot 37 : Bob installable (icône sur l'écran d'accueil ou le bureau). -->
+<script id="bob-monitoring">
+  // Lot 67 — erreurs du navigateur remontées au monitoring technique (10 au plus par page, jamais de donnée saisie).
+  (function () {
+    var sent = 0, seen = {};
+    var base = window.location.pathname.replace(/\/dashboard\/?.*$/, "");
+    function report(message, source, line, col, stack) {
+      try {
+        var key = String(message) + "|" + line;
+        if (seen[key] || sent >= 10) return;
+        seen[key] = 1; sent += 1;
+        var headers = { "Content-Type": "application/json" };
+        try { var t = localStorage.getItem("bob_token"); if (t) headers.Authorization = "Bearer " + t; } catch (e) {}
+        fetch(base + "/api/v1/monitoring/client-error", { method: "POST", headers: headers, keepalive: true,
+          body: JSON.stringify({ page: "dashboard", message: String(message || "").slice(0, 1000), source: String(source || "").slice(0, 400),
+            line: line || 0, col: col || 0, stack: String(stack || "").slice(0, 4000), path: window.location.pathname }) })
+          .catch(function () {});
+      } catch (e) {}
+    }
+    window.addEventListener("error", function (ev) {
+      if (ev && ev.message) report(ev.message, ev.filename, ev.lineno, ev.colno, ev.error && ev.error.stack);
+    });
+    window.addEventListener("unhandledrejection", function (ev) {
+      var r = ev && ev.reason;
+      if (r && /^(TypeError|ReferenceError|SyntaxError|RangeError)$/.test(r.name)) report(r.name + ": " + r.message, "", 0, 0, r.stack);
+    });
+  })();
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1B4332">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">

@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
+from app.services import monitoring  # lot 67
 from app.services import prospection as pros
 
 logger = logging.getLogger(__name__)
@@ -240,6 +241,7 @@ def smtp_transport(msg: EmailMessage) -> None:
         server.starttls()
         server.login(s.prospect_smtp_username, s.prospect_smtp_password)
         server.send_message(msg)
+    monitoring.mark("gmail_ok")  # lot 67 : état du service
 
 
 # --- Qui reçoit quoi, et quand -------------------------------------------------------------------------------------
@@ -363,6 +365,7 @@ async def _error(db, message: str, now: datetime) -> None:
     row = await get_settings_row(db)
     row.last_error, row.last_error_at = message[:300], now
     await db.commit()
+    monitoring.mark("gmail_fail", now)  # lot 67 : état du service
     logger.warning("Prospection : %s", message)
 
 
@@ -467,6 +470,7 @@ def imap_fetch(last_uid: int) -> list[tuple[int, bytes]]:
     out = []
     with imaplib.IMAP4_SSL(s.prospect_imap_host) as box:
         box.login(s.prospect_smtp_username, s.prospect_smtp_password)
+        monitoring.mark("inbox_ok")  # lot 67 : état du service
         box.select("INBOX", readonly=True)
         status, data = box.uid("search", None, f"UID {last_uid + 1}:*")
         uids = [int(u) for u in (data[0] or b"").split() if int(u) > last_uid][:200]

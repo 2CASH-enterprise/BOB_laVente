@@ -4,6 +4,32 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Testez votre vendeur IA — Bob</title>
+<script id="bob-monitoring">
+  // Lot 67 — erreurs du navigateur remontées au monitoring technique (10 au plus par page, jamais de donnée saisie).
+  (function () {
+    var sent = 0, seen = {};
+    var base = window.location.pathname.replace(/\/demo\/?.*$/, "");
+    function report(message, source, line, col, stack) {
+      try {
+        var key = String(message) + "|" + line;
+        if (seen[key] || sent >= 10) return;
+        seen[key] = 1; sent += 1;
+        var headers = { "Content-Type": "application/json" };
+        fetch(base + "/api/v1/monitoring/client-error", { method: "POST", headers: headers, keepalive: true,
+          body: JSON.stringify({ page: "demo", message: String(message || "").slice(0, 1000), source: String(source || "").slice(0, 400),
+            line: line || 0, col: col || 0, stack: String(stack || "").slice(0, 4000), path: window.location.pathname }) })
+          .catch(function () {});
+      } catch (e) {}
+    }
+    window.addEventListener("error", function (ev) {
+      if (ev && ev.message) report(ev.message, ev.filename, ev.lineno, ev.colno, ev.error && ev.error.stack);
+    });
+    window.addEventListener("unhandledrejection", function (ev) {
+      var r = ev && ev.reason;
+      if (r && /^(TypeError|ReferenceError|SyntaxError|RangeError)$/.test(r.name)) report(r.name + ": " + r.message, "", 0, 0, r.stack);
+    });
+  })();
+</script>
 <style>
   :root {
     --bg: #F4FAF6; --panel: #FFFFFF; --border: #DCEBE1; --text: #14261C;
