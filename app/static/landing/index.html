@@ -358,8 +358,13 @@
 // Lot 65 — pré-inscriptions ouvertes : bouton « Je me pré-inscris » et l'offre de lancement.
 fetch("api/v1/preregistration/public").then((r) => r.ok ? r.json() : null).then((p) => {
   if (!p || !p.mode) return;
-  document.getElementById("gift-title").textContent = "Pré-inscriptions ouvertes — offre de lancement";
-  document.getElementById("gift-sub").textContent = "Pré-inscris ton entreprise : installation offerte, et tes 3 premiers mois d'abonnement à moitié prix (−50 %) à partir de l'ouverture de ton accès.";
+  // Lot 69 — compteur honnête des places de l'offre de lancement
+  document.getElementById("gift-title").textContent = p.offer_open
+    ? `Pré-inscriptions ouvertes — il reste ${p.slots_left} place${p.slots_left > 1 ? "s" : ""} sur ${p.slots_total}`
+    : "Pré-inscriptions ouvertes";
+  document.getElementById("gift-sub").textContent = p.offer_open
+    ? `Pré-inscris ton entreprise : installation offerte, et tes 3 premiers mois d'abonnement à moitié prix (−50 %) à partir de l'ouverture de ton accès. Réservé aux ${p.slots_total} premiers.`
+    : "L'offre de lancement est complète. Pré-inscris ton entreprise pour être parmi les premiers à utiliser Bob.";
   document.querySelectorAll(".prereg-cta").forEach((a) => { a.style.display = ""; });
   const header = document.getElementById("header-cta");
   header.textContent = "Je me pré-inscris";

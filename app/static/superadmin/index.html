@@ -269,6 +269,13 @@
     .mon-checks { grid-template-columns: 1fr; }
   }
 
+  /* Lot 69 — prospection du jour */
+  .today-block { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+  .today-block h3 { margin: 0 0 2px; font-size: 14.5px; display: flex; gap: 8px; align-items: center; }
+  .today-block .count { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 8px; }
+  .today-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .today-row:last-child { border-bottom: 0; }
+
   /* Prospection, emails, pré-inscriptions (lots 61, 62, 65) */
   .stage { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 800; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
   .stage.s0, .stage.s1 { background: var(--track); color: var(--muted); }
@@ -384,6 +391,8 @@
         <div class="shop-grid" id="shop-grid"><p class="muted">Chargement…</p></div>
         <!-- Lot 68 — interrupteur des modèles WhatsApp pour toute la plateforme -->
         <section class="card wa-switch" id="wa-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
+        <!-- Lot 69 — plafonds des formules et conduite au dépassement -->
+        <section class="card" id="plans-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
       </div>
       <div id="shop-detail" class="hidden"></div>
      </div>
@@ -440,6 +449,8 @@
      <!-- Lot 61 — Prospection : du premier contact au compte payant -->
      <div id="prospects-section" class="hidden">
       <div class="page-head"><div><h1>Prospection</h1><p>Du premier contact au compte payant : liens personnels, emails et suivi.</p></div></div>
+      <!-- Lot 69 — la routine du jour -->
+      <div class="card" id="today-card" style="margin-bottom: 18px;"><p class="muted">Chargement…</p></div>
       <div class="card" id="funnel-card">
         <div class="toolbar" style="margin-top: 0;">
           <h2>Parcours des prospects</h2>
@@ -457,6 +468,7 @@
             <button class="pill" data-group="by_source" aria-pressed="true" onclick="showFunnelGroup('by_source')">Source</button>
             <button class="pill" data-group="by_sector" aria-pressed="false" onclick="showFunnelGroup('by_sector')">Secteur</button>
             <button class="pill" data-group="by_owner" aria-pressed="false" onclick="showFunnelGroup('by_owner')">Suivi par</button>
+            <button class="pill" data-group="by_country" aria-pressed="false" onclick="showFunnelGroup('by_country')">Pays</button>
           </div>
         </div>
         <div class="table-wrap" id="funnel-groups-table"></div>
@@ -575,7 +587,7 @@ function showSection(name, opts) {
   window.scrollTo(0, 0);
   if (name === "overview") loadOverview();
   if (name === "shops") { if (opts.tenantId) openShop(opts.tenantId); else { closeShop(); loadTenants(); } }
-  if (name === "prospects") { if (opts.view) prospectView = opts.view; loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); }
+  if (name === "prospects") { if (opts.view) prospectView = opts.view; loadToday(); loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); }
   if (name === "prereg") loadPrereg();
   if (name === "aicosts") loadAiCosts();
   if (name === "monitoring") loadMonitoring(true);
@@ -647,6 +659,7 @@ const TODO_ICONS = {
   AI_COST: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
   CAMPAIGN: '<path d="M4 4h16v16H4zM4 9h16"/>',
   MONITORING: '<path d="M22 12h-4l-3 8-6-16-3 8H2"/>',
+  QUOTA: '<path d="M4 20h16M6 16l4-6 4 3 5-8"/>',
 };
 
 function money(n) { return Number(n || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " $"; }
@@ -746,6 +759,7 @@ function initials(name) { return (name || "?").split(/\s+/).filter((w) => /^[\p{
 
 async function loadTenants() {
   loadWaSwitch();
+  loadPlans();
   try {
     const [tenants, costs] = await Promise.all([api("/api/v1/superadmin/tenants"), api("/api/v1/superadmin/ai-costs").catch(() => ({ rows: [] }))]);
     shopsData = tenants;
@@ -839,7 +853,9 @@ async function openShop(id) {
         <div class="history">${history.items.length ? history.items.map((h) => `<div><b>${esc(h.what)}</b><div class="muted">${esc(new Date(h.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }))}${h.by ? " · par " + esc(h.by) : ""}</div></div>`).join("") : '<p class="muted">Aucun changement enregistré pour l\'instant.</p>'}</div>
       </section>
     </div>
+    <section class="card" id="shop-usage" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
     <section class="card" id="shop-wa" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>`;
+  loadShopUsage(t.id);
   loadShopTemplates(t.id);
 }
 
@@ -965,6 +981,11 @@ function renderPreregAdmin() {
       <button class="btn ${d.mode ? "" : "primary"}" onclick="setPreregMode(${d.mode ? "false" : "true"})">${d.mode ? "Éteindre (lancement)" : "Allumer les pré-inscriptions"}</button>
     </div>
     <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 8px 0 0;">Allumé : toute nouvelle inscription (inscription guidée, ou démo gardée) crée un compte <strong>pré-inscrit</strong>. Il voit seulement un accueil d'exemple de son secteur et sa fenêtre de pré-inscription ; rien d'autre ne fonctionne et Bob ne travaille pas pour lui. Les boutons publics deviennent « Je me pré-inscris ». Les comptes existants ne changent pas.<br>Offre enregistrée sur chaque pré-inscrit : ${esc(d.offer)}</p>`;
+  const sl = d.slots || { total: 100, used: 0, left: 100 };
+  document.getElementById("prereg-mode-card").insertAdjacentHTML("beforeend", `<div class="row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+      <span style="flex: 1 1 260px;"><strong>Offre de lancement :</strong> ${sl.left ? `il reste <strong>${sl.left}</strong> place${sl.left > 1 ? "s" : ""} sur ${sl.total}` : `<span class="tone-danger">complète</span> (${sl.used} comptes l'ont reçue)`}. Le compteur s'affiche sur la présentation, la démo et l'inscription.</span>
+      <label for="prereg-slots" class="muted">Places</label><input id="prereg-slots" type="number" min="0" max="10000" class="input" style="width: 110px; margin: 0;" value="${sl.total}">
+      <button class="btn" onclick="saveSlots()">Enregistrer</button></div>`);
   document.getElementById("prereg-counts").textContent = `— ${d.counts.locked} en attente · ${d.counts.opened} avec l'accès ouvert`;
   document.getElementById("prereg-open-all").disabled = !d.counts.locked;
   const size = (b) => b >= 1048576 ? (b / 1048576).toFixed(1).replace(".", ",") + " Mo" : Math.max(1, Math.round(b / 1024)) + " Ko";
@@ -987,6 +1008,13 @@ function renderPreregAdmin() {
           : `<button class="btn" onclick="relockPreregTenant('${esc(t.id)}', '${esc(t.name)}')">Remettre en pré-inscription</button>`}
       </div>
     </div>`).join("") : '<p class="muted">Aucun pré-inscrit pour l\'instant.</p>';
+}
+
+async function saveSlots() {
+  const total = Number(document.getElementById("prereg-slots").value);
+  if (!Number.isInteger(total) || total < 0) { toast("Indiquez un nombre de places.", "error"); return; }
+  try { preregData = await api("/api/v1/superadmin/preregistration/slots", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ total }) }); renderPreregAdmin(); toast("Nombre de places enregistré."); }
+  catch (e) { toast(e.message, "error"); }
 }
 
 async function setPreregMode(mode) {
@@ -1413,6 +1441,110 @@ async function deleteCampaign(id) {
   const r = await fetch(API_BASE + `/api/v1/superadmin/prospection/campaigns/${id}`, { method: "DELETE", headers: { Authorization: "Bearer " + token } });
   if (!r.ok) toast("Effacement impossible.", "error"); else toast("Brouillon effacé.");
   loadEmails();
+}
+
+// ---- Lot 69 : prospection du jour, formules ----
+var todayData = null;
+
+function todayRow(p, kind) {
+  const meta = [p.contact_name, p.country_label, p.sector_label, p.source].filter(Boolean).join(" · ");
+  const age = p.days !== null && p.days !== undefined ? ` <span class="muted">· il y a ${p.days} j</span>` : "";
+  const mails = p.email_step ? ` <span class="muted">· email ${Number(p.email_step)}/3</span>` : "";
+  let actions = "";
+  if (kind === "calls") {
+    actions = `${p.phone ? `<a class="btn small-btn" href="tel:${esc(p.phone)}">Appeler ${esc(p.phone)}</a>` : ""}
+      <button class="btn small-btn" onclick="callDone('${esc(p.id)}', 'PREREG')">Pré-inscrit</button>
+      <button class="btn small-btn" onclick="callDone('${esc(p.id)}', 'LATER')">À revoir dans 3 mois</button>
+      <button class="btn small-btn danger" onclick="callDone('${esc(p.id)}', 'NO')">Pas intéressé</button>`;
+  } else {
+    actions = `<button class="btn small-btn primary" onclick="todayWhatsApp('${esc(p.id)}', '${kind}')">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
+  }
+  return `<div class="today-row"><div style="min-width: 0; flex: 1 1 240px;"><b>${esc(p.company)}</b>${age}${mails}<div class="muted">${esc(meta)}</div></div>
+    <div class="row">${actions}<button class="btn small-btn" onclick="openProspect('${esc(p.id)}')">Fiche</button></div></div>`;
+}
+
+async function loadToday() {
+  const box = document.getElementById("today-card");
+  try { todayData = await api("/api/v1/superadmin/prospects/today"); } catch (e) { box.innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return; }
+  const d = todayData;
+  const block = (title, sub, rows, kind, empty) => `<div class="today-block"><h3>${title} <span class="count ${rows.length ? "warning" : "plain"}">${rows.length}</span></h3><p class="muted" style="margin: 0 0 8px;">${sub}</p>
+    ${rows.length ? rows.map((p) => todayRow(p, kind)).join("") : `<p class="muted" style="margin: 0;">${empty}</p>`}</div>`;
+  box.innerHTML = `<div class="toolbar" style="margin-top: 0;">
+      <div><h2>Aujourd'hui</h2><p class="muted" style="margin: 4px 0 0;">${d.sent_today} / ${d.limit} nouveaux WhatsApp envoyés aujourd'hui${d.waiting > d.to_send.length ? ` · ${d.waiting} prospects attendent leur premier message` : ""}</p></div>
+      <div class="row"><label for="today-limit" class="muted">Par jour</label><input id="today-limit" type="number" min="1" max="100" class="input" style="width: 80px; margin: 0;" value="${d.limit}"><button class="btn small-btn" onclick="saveTodayLimit()">Enregistrer</button></div>
+    </div>
+    ${block("WhatsApp à envoyer", "Jamais contactés sur WhatsApp. Le message prêt contient leur lien de démo et l'offre de lancement.", d.to_send, "to_send", d.left_today ? "Personne à contacter pour l'instant : importez la liste de la semaine." : "Objectif du jour atteint.")}
+    ${block("Relances J7", "Un seul WhatsApp il y a 7 jours ou plus, sans réaction.", d.relances, "relances", "Aucune relance à faire.")}
+    ${block("Appels J14", "Sans réaction depuis 14 jours : un appel, puis on classe.", d.calls, "calls", "Aucun appel à passer.")}`;
+}
+
+async function saveTodayLimit() {
+  const limit = Number(document.getElementById("today-limit").value);
+  try { todayData = await api("/api/v1/superadmin/prospects/today/limit", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit }) }); loadToday(); toast("Objectif du jour enregistré."); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+async function todayContact(id, body) {
+  await api(`/api/v1/superadmin/prospects/${id}/contact`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+
+async function todayWhatsApp(id, kind) {
+  const p = (todayData[kind] || []).find((x) => x.id === id);
+  if (!p || !p.whatsapp_url) return;
+  window.open(p.whatsapp_url, "_blank", "noopener");
+  try {
+    await todayContact(id, { channel: "WHATSAPP", note: kind === "relances" ? "Relance J7 envoyée depuis WhatsApp" : "Message envoyé depuis WhatsApp" });
+    loadToday(); loadProspects();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function callDone(id, outcome) {
+  const later = new Date(Date.now() + 90 * 864e5).toISOString().slice(0, 10);
+  const notes = { PREREG: "Appel : pré-inscrit pendant l'appel", LATER: "Appel : à revoir dans 3 mois", NO: "Appel : pas intéressé" };
+  try {
+    await todayContact(id, { channel: "PHONE", note: notes[outcome], next_action_on: outcome === "LATER" ? later : null });
+    if (outcome === "NO") await api(`/api/v1/superadmin/prospects/${id}/status`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "NOT_INTERESTED", reason: "Appel J14" }) });
+    toast(outcome === "LATER" ? "Noté : à revoir dans 3 mois." : "Appel noté.");
+    loadToday(); loadProspects(); loadFunnel(funnelData ? funnelData.period : "all");
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function loadPlans() {
+  const box = document.getElementById("plans-card");
+  let d;
+  try { d = await api("/api/v1/superadmin/plans"); } catch (e) { box.innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return; }
+  box.innerHTML = `<h2>Formules : plafonds de conversations</h2>
+    <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 6px 0 12px;">Par mois et par boutique. À 80 % puis à 100 %, la boutique reçoit un email et un bandeau sur son accueil, avec la formule conseillée ; la boutique apparaît dans « À faire ». Le plan gratuit garde sa limite de 100.</p>
+    <div class="table-wrap"><table><thead><tr><th>Formule</th><th>Prix</th><th>Plafond (vide = sans limite)</th></tr></thead><tbody>
+    ${d.plans.map((p) => `<tr><td><b>${esc(p.label)}</b></td><td>${esc(p.price)}</td><td><input class="input plan-quota" data-plan="${esc(p.plan)}" type="number" min="1" style="width: 140px; margin: 0;" value="${p.quota ?? ""}" aria-label="Plafond ${esc(p.label)}"></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="row" style="margin-top: 12px;"><label for="plan-mode" class="muted">Au dépassement</label>
+      <select id="plan-mode" class="input" style="width: auto; margin: 0;">${d.modes.map((m) => `<option value="${esc(m.value)}" ${m.value === d.mode ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>
+      <button class="btn primary" onclick="savePlans()">Enregistrer</button></div>`;
+}
+
+async function savePlans() {
+  const quotas = {};
+  document.querySelectorAll(".plan-quota").forEach((el) => { quotas[el.dataset.plan] = el.value === "" ? null : Number(el.value); });
+  const mode = document.getElementById("plan-mode").value;
+  if (mode === "PAUSE" && !(await saConfirm("Mettre Bob en pause au dépassement ?", "Une boutique qui dépasse son plafond verra Bob répondre un message d'attente à ses clients jusqu'au 1er du mois suivant.", { confirmLabel: "Oui, mettre en pause", danger: true }))) return;
+  try { await api("/api/v1/superadmin/plans", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quotas, mode }) }); toast("Formules enregistrées."); loadPlans(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+async function loadShopUsage(id) {
+  const box = document.getElementById("shop-usage");
+  let d;
+  try { d = await api(`/api/v1/superadmin/tenants/${id}/plan-usage`); } catch (e) { if (box) box.innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return; }
+  if (!box) return;
+  const u = d.usage;
+  const usage = !u ? `<p class="muted" style="margin: 0;">Formule sans plafond suivi (gratuit, démo ou sur devis).</p>`
+    : !u.limit ? `<p style="margin: 0;">${Number(u.used).toLocaleString("fr-FR")} conversations ce mois-ci · formule ${esc(u.plan_label)}, sans limite.</p>`
+    : `<p style="margin: 0 0 8px;"><b>${Number(u.used).toLocaleString("fr-FR")}</b> conversations ce mois-ci sur ${Number(u.limit).toLocaleString("fr-FR")} (formule ${esc(u.plan_label)}, ${u.pct} %)${u.suggested_label && u.level ? ` · conseillée : ${esc(u.suggested_label)}` : ""}${u.paused ? ' · <span class="tone-danger">Bob en pause</span>' : ""}</p>
+       <div class="meter" role="img" aria-label="${u.pct} % du plafond"><span style="width: ${Math.min(100, u.pct)}%; ${u.level >= 100 ? "background: var(--danger);" : u.level >= 80 ? "background: var(--warning);" : ""}"></span></div>`;
+  const cost = d.price ? `<p class="muted" style="margin: 10px 0 0;">Coût IA du mois : ${money(d.ai_cost_usd)} (≈ ${String(d.ai_cost_eur).replace(".", ",")} €), soit ${d.ai_share_pct} % du prix de la formule (${esc(d.price)}).${d.costly ? ' <span class="tone-danger">Cette boutique coûte cher pour sa formule.</span>' : ""}</p>`
+    : `<p class="muted" style="margin: 10px 0 0;">Coût IA du mois : ${money(d.ai_cost_usd)}.</p>`;
+  box.innerHTML = `<h2 style="margin-bottom: 10px;">Conversations et coût du mois</h2>${usage}${cost}`;
 }
 
 // ---- Lot 68 : modèles WhatsApp ----

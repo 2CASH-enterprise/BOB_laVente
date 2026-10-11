@@ -142,3 +142,5 @@ class ProspectionSettings(Base):
     last_imap_uid: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     last_error: Mapped[str | None] = mapped_column(String(300))
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lot 69 — nouveaux contacts WhatsApp (à la main) visés par jour, pour la vue « Aujourd'hui ».
+    whatsapp_daily_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=25, server_default="25")

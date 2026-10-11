@@ -254,11 +254,17 @@ def in_send_hours(prospect, now: datetime) -> bool:
 
 
 async def eligible(db, campaign) -> list:
-    """Prospects jamais contactés, avec email, correspondant aux filtres, ni désinscrits ni déjà dans une campagne."""
-    from app.models.prospect import Prospect, ProspectSuppression
+    """
+    Prospects avec email, correspondant aux filtres, ni désinscrits ni déjà dans une campagne, qui n'ont encore reçu
+    aucun email. Lot 69 : un prospect déjà contacté à la main (WhatsApp, appel) entre aussi, tant qu'il n'a pas réagi
+    (lien ouvert, démo, réponse, compte) — on peut donc lui écrire sur WhatsApp d'abord, puis par email.
+    """
+    from app.models.prospect import Prospect, ProspectEmail, ProspectSuppression
 
-    stmt = select(Prospect).where(Prospect.status == "ACTIVE", Prospect.email.is_not(None), Prospect.contacted_at.is_(None),
-                                  Prospect.campaign_id.is_(None), Prospect.tenant_id.is_(None))
+    emailed = select(ProspectEmail.id).where(ProspectEmail.prospect_id == Prospect.id).exists()
+    stmt = select(Prospect).where(Prospect.status == "ACTIVE", Prospect.email.is_not(None), ~emailed,
+                                  Prospect.first_click_at.is_(None), Prospect.demo_at.is_(None), Prospect.replied_at.is_(None),
+                                  Prospect.signed_up_at.is_(None), Prospect.campaign_id.is_(None), Prospect.tenant_id.is_(None))
     if campaign.sector:
         stmt = stmt.where(Prospect.sector == campaign.sector)
     if campaign.source:

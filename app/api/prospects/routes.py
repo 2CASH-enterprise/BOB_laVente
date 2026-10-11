@@ -22,6 +22,10 @@ from app.services import prospection as pros
 from app.services.spreadsheet import MAX_BYTES, XLSX_MEDIA, to_xlsx
 
 public_router = APIRouter(tags=["prospection"])
+from app.services.countries import COUNTRIES as _COUNTRIES  # noqa: E402 — lot 69
+
+COUNTRY_NAMES = {code: name for code, name, _ in _COUNTRIES}
+
 router = APIRouter(prefix="/api/v1/superadmin/prospects", tags=["prospection"])
 
 
@@ -291,7 +295,61 @@ async def prospect_funnel(
         "by_source": pros.group_funnel(prospects, stages, lambda p: p.source),
         "by_sector": pros.group_funnel(prospects, stages, lambda p: pros.SECTORS.get(p.sector)),
         "by_owner": pros.group_funnel(prospects, stages, lambda p: owners.get(p.owner_id)),
+        # Lot 69 — par pays (Côte d'Ivoire, Sénégal, Cameroun, France…)
+        "by_country": pros.group_funnel(prospects, stages, lambda p: COUNTRY_NAMES.get(p.country, p.country)),
     }
+
+
+async def _offer(db) -> str | None:
+    """Lot 69 — la phrase de l'offre de lancement (et des places), seulement si les pré-inscriptions sont ouvertes."""
+    from app.services import preregistration
+
+    if not await preregistration.mode_on(db):
+        return None
+    return pros.offer_line(await preregistration.slots(db))
+
+
+def _today_row(p: Prospect, text: str, sender: str | None, since=None, now=None) -> dict:
+    return {"id": str(p.id), "company": p.company, "contact_name": p.contact_name, "phone": f"+{p.phone}" if p.phone else None,
+            "country": p.country, "country_label": COUNTRY_NAMES.get(p.country, p.country),
+            "sector_label": pros.SECTORS.get(p.sector, p.sector), "source": p.source,
+            "days": (now - since).days if since and now else None, "email_step": p.email_step or 0,
+            "message": text, "whatsapp_url": pros.whatsapp_url(p, sender, text=text)}
+
+
+@router.get("/today")
+async def prospect_today(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+    """Lot 69 — la routine du jour : WhatsApp à envoyer, relances J7, appels J14."""
+    from app.services import prospect_mailer
+
+    me = await _me(db, admin)
+    now = datetime.now(timezone.utc)
+    row = await prospect_mailer.get_settings_row(db)
+    lists = await pros.today(db, now, row.whatsapp_daily_limit)
+    await db.commit()
+    offer, sender = await _offer(db), _first(me.full_name)
+    return {
+        "limit": lists["limit"], "sent_today": lists["sent_today"], "left_today": lists["left_today"], "waiting": lists["waiting"],
+        "to_send": [_today_row(p, pros.message(p, sender, offer), sender) for p in lists["to_send"]],
+        "relances": [_today_row(p, pros.relance_message(p, offer), sender, since, now) for p, since in lists["relances"]],
+        "calls": [_today_row(p, "", sender, since, now) | {"whatsapp_url": None} for p, since in lists["calls"]],
+    }
+
+
+class DailyLimitIn(BaseModel):
+    limit: int = Field(..., ge=1, le=100)
+
+
+@router.put("/today/limit")
+async def prospect_today_limit(payload: DailyLimitIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+                               db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import prospect_mailer
+
+    await _me(db, admin)
+    row = await prospect_mailer.get_settings_row(db)
+    row.whatsapp_daily_limit = payload.limit
+    await db.commit()
+    return await prospect_today(admin, db)
 
 
 @router.post("", status_code=201)
@@ -383,9 +441,10 @@ async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(
     data["events"] = [{"kind": ev.kind, "label": pros.EVENT_LABELS.get(ev.kind, ev.kind),
                        "channel": pros.CHANNELS.get(ev.channel) if ev.channel else None, "detail": ev.detail,
                        "actor": ev.actor, "at": ev.at.isoformat() if ev.at else None} for ev in events]
-    data["message"] = pros.message(prospect, _first(me.full_name))
+    offer = await _offer(db)  # lot 69 : l'offre et les places restantes dans le message prêt
+    data["message"] = pros.message(prospect, _first(me.full_name), offer)
     data["visual_url"] = pros.visual_url(prospect.sector)  # lot 63 : à joindre au message WhatsApp
-    data["whatsapp_url"] = pros.whatsapp_url(prospect, _first(me.full_name)) if prospect.status == "ACTIVE" else None
+    data["whatsapp_url"] = pros.whatsapp_url(prospect, _first(me.full_name), offer) if prospect.status == "ACTIVE" else None
     return data
 
 

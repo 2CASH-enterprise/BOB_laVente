@@ -76,6 +76,9 @@ class Tenant(Base):
     order_reminders_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 68 — modèles WhatsApp autorisés pour cette boutique (le Super Admin peut les couper, ex. compte d'examen Meta).
     wa_templates_allowed: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
+    # Lot 69 — alerte de plafond de conversations déjà envoyée ce mois-là (« 2026-10 ») et à quel seuil (80 puis 100).
+    quota_alert_month: Mapped[str | None] = mapped_column(String(7))
+    quota_alert_level: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
     # Lot 57 — délai de réponse aux réclamations annoncé au client, en jours ouvrés (CIMA 01-24, art. 11).
     complaint_delay_days: Mapped[int] = mapped_column(default=10, server_default="10", nullable=False)
     # Lot 58 (CIMA 01-24) — art. 12 : raison sociale et adresse de la compagnie (agent, agence générale) ou des

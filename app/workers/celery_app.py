@@ -31,6 +31,7 @@ TASK_MODULES = [
     "app.workers.order_reminders",
     "app.workers.monitoring",
     "app.workers.wa_templates",
+    "app.workers.plan_quota",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -110,6 +111,11 @@ celery_app.conf.beat_schedule = {
     "wa-templates-refresh": {
         "task": "app.workers.wa_templates.refresh_templates_task",
         "schedule": crontab(minute=25),
+    },
+    # Lot 69 — plafonds des formules : alertes à 80 % et 100 % (Bob ne s'arrête pas, sauf mode « pause »).
+    "plan-quota-alerts": {
+        "task": "app.workers.plan_quota.check_quotas_task",
+        "schedule": crontab(minute=40),
     },
     "monitoring-purge": {
         "task": "app.workers.monitoring.purge_task",

@@ -347,6 +347,10 @@ async def receive_webhook(
     tu = uses_tu(tenant)  # lot 38 : messages fixes au tutoiement si la boutique l'a choisi
 
     quota_exceeded = not tenant.is_demo and await is_conversation_quota_exceeded(db, tenant_id, tenant.is_paid)
+    if not quota_exceeded and tenant.is_paid and not tenant.is_demo:
+        from app.services import plan_quota
+
+        quota_exceeded = await plan_quota.paused(db, tenant)  # lot 69 : seulement si le Super Admin a choisi « pause »
 
     outage_emails: list[dict] = []
     change_outbox: list = []  # lot 35 : rendez-vous déplacés ou annulés par le client

@@ -31,7 +31,9 @@ admin_router = APIRouter(prefix="/api/v1/superadmin/preregistration", tags=["pre
 
 @public_router.get("/public")
 async def public_state(db: AsyncSession = Depends(get_db)) -> dict:
-    return {"mode": await pre.mode_on(db), "offer": pre.OFFER_TEXT}
+    s = await pre.slots(db)  # lot 69 : compteur honnête des places de l'offre de lancement
+    return {"mode": await pre.mode_on(db), "offer": pre.OFFER_TEXT, "slots_total": s["total"], "slots_left": s["left"],
+            "offer_open": s["left"] > 0}
 
 
 # --- Le compte pré-inscrit ---------------------------------------------------------------------------
@@ -56,7 +58,9 @@ async def _me_view(db, tenant, user: CurrentUser) -> dict:
         "locked": pre.is_locked(tenant), "prereg_at": tenant.prereg_at.isoformat(),
         "access_opened_at": tenant.access_opened_at.isoformat() if tenant.access_opened_at else None,
         "company": tenant.name, "first_name": first, "sector": normalize(tenant.business_type),
-        "offer": pre.OFFERS.get(tenant.launch_offer or ""), "content": pre.content(tenant.business_type),
+        "offer": pre.OFFERS.get(tenant.launch_offer or ""),
+        # Lot 69 — inscrit après la dernière place : la fenêtre ne promet pas l'offre.
+        "content": {**pre.content(tenant.business_type), **({} if tenant.launch_offer else {"offer": None})},
         "sizes": pre.CATALOG_SIZES, "prep": pre.prep_view(tenant, await pre.files_of(db, tenant.id)),
     }
 
@@ -143,7 +147,7 @@ async def _overview(db) -> dict:
             "locked": pre.is_locked(t), "offer": t.launch_offer, "prep": pre.prep_view(t, files.get(t.id, [])),
         })
     return {"mode": row.prereg_mode, "changed_at": row.prereg_changed_at.isoformat() if row.prereg_changed_at else None,
-            "changed_by": row.prereg_changed_by, "offer": pre.OFFER_TEXT,
+            "changed_by": row.prereg_changed_by, "offer": pre.OFFER_TEXT, "slots": await pre.slots(db),
             "counts": {"locked": sum(1 for r in rows if r["locked"]), "opened": sum(1 for r in rows if not r["locked"])},
             "tenants": rows}
 
@@ -166,6 +170,24 @@ async def admin_mode(payload: ModeIn, admin: CurrentSuperAdmin = Depends(get_cur
         row.prereg_changed_at = datetime.now(timezone.utc)
         row.prereg_changed_by = me.full_name or me.email
         await log_audit_event(db, actor=f"superadmin:{me.id}", action="PREREG_MODE_CHANGED", details={"mode": payload.mode})
+    await db.commit()
+    return await _overview(db)
+
+
+class SlotsIn(BaseModel):
+    total: int = Field(..., ge=0, le=10000)
+
+
+@admin_router.put("/slots")
+async def admin_slots(payload: SlotsIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+                      db: AsyncSession = Depends(get_db)) -> dict:
+    """Lot 69 — nombre de places de l'offre de lancement (100 par défaut)."""
+    me = await _admin(db, admin)
+    row = await pre.settings_row(db)
+    if row.launch_slots != payload.total:
+        await log_audit_event(db, actor=f"superadmin:{me.id}", action="LAUNCH_SLOTS_CHANGED",
+                              details={"from": row.launch_slots, "to": payload.total})
+        row.launch_slots = payload.total
     await db.commit()
     return await _overview(db)
 

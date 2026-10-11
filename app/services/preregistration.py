@@ -78,12 +78,32 @@ async def mode_on(db) -> bool:
     return bool(row and row.prereg_mode)
 
 
+DEFAULT_SLOTS = 100
+
+
+async def slots(db) -> dict:
+    """Lot 69 — places de l'offre de lancement : les N premiers comptes qui l'ont reçue (bêta-testeurs compris)."""
+    from sqlalchemy import func, select
+
+    from app.models.preregistration import PlatformSettings
+    from app.models.tenant import Tenant
+
+    row = await db.get(PlatformSettings, 1)
+    total = row.launch_slots if row is not None and row.launch_slots is not None else DEFAULT_SLOTS
+    used = (await db.execute(select(func.count(Tenant.id)).where(Tenant.launch_offer.is_not(None)))).scalar_one()
+    return {"total": total, "used": used, "left": max(total - used, 0)}
+
+
 async def on_signup(db, tenant) -> bool:
-    """À la création d'un compte (avant le commit) : pré-inscrit si le mode est allumé. Retourne True si c'est le cas."""
+    """
+    À la création d'un compte (avant le commit) : pré-inscrit si le mode est allumé. Retourne True si c'est le cas.
+    Lot 69 — l'offre de lancement seulement tant qu'il reste des places ; après, pré-inscrit sans l'offre.
+    """
     if not await mode_on(db):
         return False
     tenant.prereg_at = now_utc()
-    tenant.launch_offer = OFFER_CODE
+    if (await slots(db))["left"] > 0:
+        tenant.launch_offer = OFFER_CODE
     return True
 
 
@@ -295,7 +315,7 @@ def welcome_email(tenant, first_name: str | None) -> tuple[str, str]:
     c = content(tenant.business_type)
     lines = [f"Bonjour {first_name}," if first_name else "Bonjour,", "",
              f"Merci ! La pré-inscription de {tenant.name} à Bob est confirmée.", "",
-             "Votre avantage de pré-inscrit :", f"- {OFFER_TEXT}", "",
+             *(["Votre avantage de pré-inscrit :", f"- {OFFER_TEXT}", ""] if tenant.launch_offer else []),
              "À préparer avant le lancement :", *[f"- {line}" for line in c["prepare"]], "",
              c["support"], "",
              f"Vous pouvez dès maintenant découvrir votre tableau de bord et nous transmettre ces informations : {_dashboard_url()}",

@@ -240,7 +240,8 @@ async def test_eligible_filters(db_session, gmail):
     await _prospect(db_session, company="Bon", email="ok@x.ci", source="Salon auto")
     await _prospect(db_session, company="Autre source", email="s@x.ci", source="Réseau")
     await _prospect(db_session, company="Sans email", email=None, source="Salon auto")
-    await _prospect(db_session, company="Déjà contacté", email="d@x.ci", source="Salon auto", contacted_at=TUESDAY)
+    await _prospect(db_session, company="Déjà contacté", email="d@x.ci", source="Salon auto", contacted_at=TUESDAY)  # lot 69 : gardé
+    await _prospect(db_session, company="A cliqué", email="k@x.ci", source="Salon auto", contacted_at=TUESDAY, first_click_at=TUESDAY)
     await _prospect(db_session, company="Perdu", email="l@x.ci", source="Salon auto", status_reason=None)
     lost = (await db_session.execute(select(Prospect).where(Prospect.company == "Perdu"))).scalar_one()
     lost.status = "NOT_INTERESTED"
@@ -248,7 +249,7 @@ async def test_eligible_filters(db_session, gmail):
     await _prospect(db_session, company="Sénégal", email="sn@x.ci", source="Salon auto", country="SN")
     await db_session.commit()
     c = await _campaign(db_session, sector="CAR_DEALERSHIP", source="salon AUTO", country="CI")
-    assert [p.company for p in await mailer.eligible(db_session, c)] == ["Bon"]
+    assert [p.company for p in await mailer.eligible(db_session, c)] == ["Bon", "Déjà contacté"]
 
 
 # --- Ouverture, désinscription ---------------------------------------------------------------------------------

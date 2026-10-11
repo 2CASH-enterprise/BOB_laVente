@@ -39,6 +39,7 @@ ACTION_LABELS = {
     "WA_TEMPLATES_SYNCED": "Modèles WhatsApp créés / vérifiés chez Meta",
     "WA_TEMPLATES_ALLOWED": "Modèles WhatsApp autorisés",
     "WA_TEMPLATES_BLOCKED": "Modèles WhatsApp désactivés pour la boutique",
+    "LAUNCH_SLOTS_CHANGED": "Places de l'offre de lancement changées",
 }
 PROSPECT_EVENTS = {"CLICK": "a ouvert son lien personnel", "DEMO": "a essayé la démo", "SIGNUP": "a créé son compte",
                    "REPLY": "a répondu à un email"}
@@ -179,6 +180,16 @@ async def overview(admin: CurrentSuperAdmin = Depends(get_current_superadmin), d
                         "title": f"{unread} erreur{'s' if unread > 1 else ''} technique{'s' if unread > 1 else ''} à traiter",
                         "detail": f"La plus fréquente : {worst.title[:90]} ({worst.count} fois)",
                         "action": "Voir le monitoring", "section": "monitoring"})
+    # Lot 69 — boutiques à 80 % ou plus du plafond de leur formule ce mois-ci
+    from app.services import plan_quota
+
+    for t, u in await plan_quota.tenants_over(db):
+        more = f" · formule conseillée : {u['suggested_label']}" if u["suggested_label"] else ""
+        todo.append({"kind": "QUOTA", "tone": "danger" if u["level"] >= 100 else "warning",
+                     "title": f"{t.name} a utilisé {u['pct']} % de sa formule {u['plan_label']}",
+                     "detail": f"{u['used']} conversations sur {u['limit']} ce mois-ci" + more
+                               + (" · Bob en pause" if u["paused"] else " · Bob continue de répondre"),
+                     "action": "Ouvrir la fiche", "section": "shops", "tenant_id": str(t.id)})
     running = (await db.execute(select(ProspectCampaign).where(ProspectCampaign.status == "RUNNING"))).scalars().all()
     if running:
         row = await prospect_mailer.get_settings_row(db)

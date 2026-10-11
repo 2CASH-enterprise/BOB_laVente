@@ -261,6 +261,8 @@
   #login-error, #signup-error, #mfa-error, #forgot-error, #reset-error { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 18px; }
   /* Lot 41 — Premiers pas (accueil) */
   .onboarding { margin-bottom: 24px; }
+  .plan-usage { margin-bottom: 24px; border-left: 4px solid var(--warning); }
+  .plan-usage.over { border-left-color: var(--danger); }
   .onboarding .bar { height: 6px; border-radius: 6px; background: var(--track); overflow: hidden; margin: 10px 0 14px; }
   .onboarding .bar span { display: block; height: 100%; background: var(--accent-light); border-radius: 6px; }
   .onboarding-step { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
@@ -2087,10 +2089,10 @@ function renderPrereg() {
       <ul class="prereg-list">${c.does.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
       <h3>Ce que votre entreprise y gagne</h3>
       <ul class="prereg-list gains">${c.gains.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-      <div class="prereg-offer">
+      ${c.offer ? `<div class="prereg-offer">
         <div class="prereg-offer-title">🎁 Votre avantage de pré-inscrit</div>
         <p>${esc(c.offer)}</p>
-      </div>
+      </div>` : ""}
       <h3>À préparer avant le lancement</h3>
       <ol class="prereg-steps">${c.prepare.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>
       <p class="prereg-note">${esc(c.support)}</p>
@@ -2778,6 +2780,7 @@ function renderHome(h) {
       <div><h1>${hello}</h1><p>Voici ce que Bob a fait pour vous ces ${h.period_days} derniers jours.</p></div>
       <div class="pills"><span class="pill tone-accent">${h.ai_messages} message${h.ai_messages > 1 ? "s" : ""} traité${h.ai_messages > 1 ? "s" : ""} par Bob</span>${waiting}</div>
     </div>
+    <div id="plan-usage-card"></div>
     <div id="onboarding-card"></div>
     <div class="kpi-grid">${kpis}</div>
     <div class="home-row">
@@ -2806,6 +2809,25 @@ function renderHome(h) {
       </div>
     </div>`;
   loadOnboarding();  // lot 41
+  if (!h.example) loadPlanUsage();  // lot 69
+}
+
+// ---- Lot 69 : plafond de la formule — bandeau à partir de 80 % des conversations du mois ----
+async function loadPlanUsage() {
+  const box = document.getElementById("plan-usage-card");
+  if (!box) return;
+  let d;
+  try { d = await api("/api/v1/tenants/me/plan-usage"); } catch (e) { return; }
+  const u = d.usage;
+  if (!u || !u.limit || u.level < 80) { box.innerHTML = ""; return; }
+  const over = u.level >= 100;
+  const advice = u.suggested_label ? ` La formule ${esc(u.suggested_label)} (${u.suggested_limit ? "jusqu'à " + Number(u.suggested_limit).toLocaleString("fr-FR") + " conversations" : "sans limite"}, ${esc(u.suggested_price)}) vous conviendrait mieux : écrivez-nous pour changer.` : "";
+  const state = u.paused ? "Bob est en pause jusqu'au 1er du mois prochain : vos clients reçoivent un message d'attente." : "Bob continue de répondre à tous vos clients.";
+  box.innerHTML = `<div class="card plan-usage ${over ? "over" : ""}" role="status">
+    <div class="card-head"><h2>${over ? "Plafond de votre formule atteint" : "Votre formule arrive à son plafond"}</h2></div>
+    <p style="margin: 0 0 10px; font-size: 14px;">${Number(u.used).toLocaleString("fr-FR")} conversations ce mois-ci sur ${Number(u.limit).toLocaleString("fr-FR")} (formule ${esc(u.plan_label)}). ${state}${advice}</p>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100, u.pct)}"><span style="width: ${Math.min(100, u.pct)}%;"></span></div>
+  </div>`;
 }
 
 // ---- Lot 54 : courtier — échéances des contrats actuels de ses prospects, et scores ----
@@ -5873,7 +5895,10 @@ fetch(API_BASE + "/api/v1/preregistration/public").then((r) => r.ok ? r.json() :
   document.getElementById("login-signup-link").textContent = "Je me pré-inscris";
   document.getElementById("signup-title").textContent = "Pré-inscrire votre entreprise";
   document.getElementById("signup-create-btn").textContent = "Me pré-inscrire";
-  document.getElementById("signup-offer-text").textContent = p.offer;
+  // Lot 69 — compteur honnête des places de l'offre de lancement
+  document.getElementById("signup-offer-text").textContent = p.offer_open
+    ? `${p.offer} Il reste ${p.slots_left} place${p.slots_left > 1 ? "s" : ""} sur ${p.slots_total}.`
+    : "L'offre de lancement est complète. Pré-inscrivez-vous pour être parmi les premiers à utiliser Bob.";
   document.getElementById("signup-offer").classList.remove("hidden");
 }).catch(() => {});
 

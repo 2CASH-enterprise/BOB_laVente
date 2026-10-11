@@ -335,22 +335,95 @@ _PITCH = {
 }
 
 
-def message(prospect, sender: str | None) -> str:
+def offer_line(slots: dict | None) -> str | None:
+    """Lot 69 — l'offre de lancement et les places qui restent, seulement si elle est encore ouverte."""
+    if not slots or slots.get("left", 0) <= 0:
+        return None
+    left = slots["left"]
+    return (f"Les {slots['total']} premiers inscrits ont l'installation offerte et 3 mois à −50 % "
+            f"(il reste {left} place{'s' if left > 1 else ''}).")
+
+
+def message(prospect, sender: str | None, offer: str | None = None) -> str:
     """Texte prêt à envoyer depuis son propre WhatsApp (ou par SMS, email), avec le lien personnel."""
     first = (prospect.contact_name or "").split()[0] if (prospect.contact_name or "").strip() else None
     who = f"{sender} d'AgenC'AI" if sender else "AgenC'AI"
     pitch = _PITCH.get(prospect.sector, _PITCH["ONLINE_STORE"])
     # Lot 63 — le lien seul sur la dernière ligne : WhatsApp en fait un aperçu (visuel du secteur) qui ouvre la démo.
     return (f"Bonjour{' ' + first if first else ''}, je suis {who}. Bob, notre vendeur virtuel, {pitch}. "
-            f"Vous pouvez l'essayer en 2 minutes pour {prospect.company}.\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}")
+            f"Vous pouvez l'essayer en 2 minutes pour {prospect.company}.{' ' + offer if offer else ''}"
+            f"\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}")
 
 
-def whatsapp_url(prospect, sender: str | None) -> str | None:
+def relance_message(prospect, offer: str | None = None) -> str:
+    """Lot 69 — relance courte à J7, seulement s'il n'a pas réagi ; promet de ne plus relancer s'il le dit."""
+    first = (prospect.contact_name or "").split()[0] if (prospect.contact_name or "").strip() else None
+    places = f" {offer}" if offer else ""
+    return (f"Bonjour{' ' + first if first else ''}, je reviens vers vous au sujet de Bob, le vendeur WhatsApp de "
+            f"{prospect.company}. La démo prend 2 minutes.{places} Si ce n'est pas le bon moment, dites-le-moi simplement : "
+            f"je ne vous relancerai plus.\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}")
+
+
+def whatsapp_url(prospect, sender: str | None, offer: str | None = None, text: str | None = None) -> str | None:
     if not prospect.phone:
         return None
     from urllib.parse import quote
 
-    return f"https://wa.me/{prospect.phone}?text={quote(message(prospect, sender))}"
+    return f"https://wa.me/{prospect.phone}?text={quote(text or message(prospect, sender, offer))}"
+
+
+# --- Lot 69 : vue « Aujourd'hui » (routine de prospection) ---------------------------------------------------------
+
+RELANCE_AFTER_DAYS = 7
+CALL_AFTER_DAYS = 14
+
+
+def reacted(prospect) -> bool:
+    return bool(prospect.first_click_at or prospect.demo_at or getattr(prospect, "replied_at", None)
+                or prospect.signed_up_at or prospect.tenant_id)
+
+
+async def today(db, now: datetime, daily_limit: int) -> dict:
+    """
+    Les trois listes de la routine : WhatsApp à envoyer (jamais contactés sur WhatsApp, dans la limite du jour),
+    relances J7 (un seul WhatsApp il y a 7 jours ou plus, sans réaction ni appel) et appels J14 (premier contact il y a
+    14 jours ou plus, sans réaction ni appel). Jamais un prospect perdu, inscrit, ou avec une date de relance à venir.
+    """
+    from app.models.prospect import Prospect, ProspectEvent
+
+    prospects = (await db.execute(select(Prospect).where(Prospect.status == "ACTIVE", Prospect.tenant_id.is_(None))
+                                  .order_by(Prospect.created_at))).scalars().all()
+    events = (await db.execute(select(ProspectEvent).where(ProspectEvent.kind == "CONTACT",
+                                                           ProspectEvent.channel.in_(("WHATSAPP", "PHONE"))))).scalars().all()
+    whatsapp, calls = {}, {}
+    for ev in events:
+        (whatsapp if ev.channel == "WHATSAPP" else calls).setdefault(ev.prospect_id, []).append(aware(ev.at))
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    sent_today = sum(1 for dates in whatsapp.values() for at in dates if at and at >= day_start)
+    today_date = now.date()
+    to_send, relances, to_call = [], [], []
+    for p in prospects:
+        if reacted(p) or (p.next_action_on is not None and p.next_action_on > today_date):
+            continue
+        wa = sorted(d for d in whatsapp.get(p.id, []) if d)
+        if p.id in calls:
+            continue
+        first = wa[0] if wa else aware(p.contacted_at)
+        if not wa:
+            if not p.phone:
+                continue
+            if first is not None and first <= now - timedelta(days=CALL_AFTER_DAYS):
+                to_call.append((p, first))  # contacté autrement (emails) depuis 14 jours, sans réaction : un appel
+            else:
+                to_send.append(p)  # jamais sur WhatsApp (l'email a pu partir avant : J0 / J1)
+            continue
+        if first <= now - timedelta(days=CALL_AFTER_DAYS):
+            to_call.append((p, first))
+        elif len(wa) == 1 and first <= now - timedelta(days=RELANCE_AFTER_DAYS):
+            relances.append((p, first))
+    left = max(daily_limit - sent_today, 0)
+    return {"limit": daily_limit, "sent_today": sent_today, "left_today": left, "waiting": len(to_send),
+            "to_send": to_send[:left], "relances": relances, "calls": to_call}
 
 
 # --- Import Excel ----------------------------------------------------------------------------------------------

@@ -100,7 +100,8 @@ async def test_signup_without_mode_is_a_normal_account(client, db_session, email
     assert tenant.prereg_at is None and tenant.launch_offer is None and mails == []
     assert (await client.get("/api/v1/customers", headers=headers)).status_code == 200
     assert (await client.get("/api/v1/preregistration/me", headers=headers)).status_code == 404
-    assert (await client.get("/api/v1/preregistration/public")).json() == {"mode": False, "offer": pre.OFFER_TEXT}
+    assert (await client.get("/api/v1/preregistration/public")).json() == {"mode": False, "offer": pre.OFFER_TEXT, "slots_total": 100,
+                                                                          "slots_left": 100, "offer_open": True}  # lot 69
 
 
 @pytest.mark.asyncio
