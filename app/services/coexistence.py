@@ -9,12 +9,19 @@ téléphone ET Bob y est branché. Meta envoie à Bob une copie (« écho », ch
 - Il reprend si le client réécrit 2 h après la dernière réponse du vendeur sans nouvelle réponse de sa
   part — sauf si un conseiller a pris le contrôle depuis le tableau de bord (reprise à la main).
 - Les modifications et suppressions de messages faites sur le téléphone sont ignorées.
+
+Lot 52 — connexion d'un numéro déjà utilisé dans l'application : dans les 24 h, Bob demande à Meta les contacts
+(webhook `smb_app_state_sync`, servent seulement à nommer les clients) et l'historique des 6 derniers mois
+(webhook `history`, rangé à part : visible par le commerçant et mémoire de Bob, jamais une conversation).
 """
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
+
+logger = logging.getLogger(__name__)
 
 PHONE_ECHO_TYPE = "phone_echo"
 PHONE_PAUSE_TYPE = "phone_pause"
@@ -132,3 +139,231 @@ async def record_echoes(db, echoes: list[dict], now: datetime | None = None) -> 
         recorded.append(tenant_id)
     await db.commit()
     return recorded
+
+
+# --- Lot 52 : connexion d'un numéro déjà sur WhatsApp Business (contacts et historique du téléphone) -------------
+
+
+SYNC_WINDOW = timedelta(hours=24)  # Meta : contacts et historique à demander dans les 24 h, sinon c'est trop tard
+HISTORY_DECLINED_CODE = 2593109    # « History sync is turned off by the business from the WhatsApp Business App »
+MEMORY_DATE_FORMAT = "%d/%m/%Y"
+
+
+def digits(value) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def _values(payload: dict, key: str):
+    """Les `value` d'un webhook Meta qui contiennent `key`, avec le numéro de la boutique."""
+    try:
+        entries = payload.get("entry") or []
+    except AttributeError:
+        return
+    for entry in entries:
+        for change in (entry or {}).get("changes") or []:
+            value = (change or {}).get("value") or {}
+            if key in value:
+                yield (value.get("metadata") or {}).get("phone_number_id"), value[key]
+
+
+def parse_contacts(payload: dict) -> list[dict]:
+    """Webhook `smb_app_state_sync` : contacts ajoutés, modifiés ou supprimés sur le téléphone."""
+    items = []
+    for phone_number_id, state_sync in _values(payload, "state_sync"):
+        for item in state_sync or []:
+            if (item or {}).get("type") != "contact" or not phone_number_id:
+                continue
+            contact = item.get("contact") or {}
+            number = digits(contact.get("phone_number"))
+            if not number:
+                continue
+            items.append({"phone_number_id": phone_number_id, "action": item.get("action") or "add", "wa_number": number,
+                          "full_name": (contact.get("full_name") or "").strip() or None,
+                          "first_name": (contact.get("first_name") or "").strip() or None})
+    return items
+
+
+def _sent_at(timestamp) -> datetime | None:
+    try:
+        return datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def parse_history(payload: dict) -> list[dict]:
+    """Webhook `history` : un morceau de l'historique du téléphone (ou le refus du commerçant)."""
+    chunks = []
+    for phone_number_id, history in _values(payload, "history"):
+        if not phone_number_id:
+            continue
+        for chunk in history or []:
+            chunk = chunk or {}
+            errors = chunk.get("errors") or []
+            declined = any((e or {}).get("code") == HISTORY_DECLINED_CODE for e in errors)
+            progress = (chunk.get("metadata") or {}).get("progress")
+            messages = []
+            for thread in chunk.get("threads") or []:
+                number = digits((thread or {}).get("id"))
+                if not number:
+                    continue
+                for message in thread.get("messages") or []:
+                    kind = (message or {}).get("type") or "text"
+                    sent_at = _sent_at(message.get("timestamp"))
+                    text = echo_text(message) if kind not in IGNORED_TYPES else ""
+                    if not text or not message.get("id") or sent_at is None:
+                        continue
+                    messages.append({"wa_number": number, "from_business": digits(message.get("from")) != number,
+                                     "content": text, "wa_message_id": message["id"], "sent_at": sent_at})
+            chunks.append({"phone_number_id": phone_number_id, "declined": declined, "errors": bool(errors),
+                           "progress": progress if isinstance(progress, int) else None, "messages": messages})
+    return chunks
+
+
+def _split_name(full_name: str | None, first_name: str | None) -> tuple[str | None, str | None]:
+    first = first_name or ((full_name or "").split()[0] if full_name else None)
+    last = None
+    if full_name and first and full_name.startswith(first) and full_name[len(first):].strip():
+        last = full_name[len(first):].strip()
+    return first, last
+
+
+def apply_contact_name(customer, contact) -> bool:
+    """Nomme un client encore sans nom ; ne remplace jamais un nom déjà connu."""
+    if customer is None or contact is None or customer.first_name:
+        return False
+    first, last = _split_name(contact.full_name, contact.first_name)
+    if not first:
+        return False
+    customer.first_name = first
+    if last and not customer.last_name:
+        customer.last_name = last
+    return True
+
+
+async def record_contacts(db, items: list[dict]) -> int:
+    """Enregistre les contacts du téléphone (jamais de fiche client créée). Renvoie le nombre traité."""
+    from app.models.customer import Customer
+    from app.models.phone_history import PhoneContact
+    from app.repositories.whatsapp_account_repository import WhatsAppAccountRepository
+
+    done = 0
+    for item in items:
+        account = await WhatsAppAccountRepository(db).find_tenant_by_phone_number_id(item["phone_number_id"])
+        if account is None:
+            continue
+        tenant_id = account.tenant_id
+        contact = (await db.execute(select(PhoneContact).where(
+            PhoneContact.tenant_id == tenant_id, PhoneContact.wa_number == item["wa_number"]))).scalar_one_or_none()
+        if item["action"] == "remove":
+            if contact is not None:
+                await db.delete(contact)
+            done += 1
+            continue
+        if not (item["full_name"] or item["first_name"]):
+            continue
+        if contact is None:
+            contact = PhoneContact(tenant_id=tenant_id, wa_number=item["wa_number"])
+            db.add(contact)
+        contact.full_name, contact.first_name = item["full_name"], item["first_name"]
+        customer = (await db.execute(select(Customer).where(
+            Customer.tenant_id == tenant_id, Customer.whatsapp_number == item["wa_number"]))).scalar_one_or_none()
+        apply_contact_name(customer, contact)
+        await db.flush()
+        done += 1
+    await db.commit()
+    return done
+
+
+async def name_from_contacts(db, tenant_id, customer) -> bool:
+    """Le client qui écrit n'a pas de nom : celui du téléphone du commerçant, s'il l'a enregistré."""
+    from app.models.phone_history import PhoneContact
+
+    if customer is None or customer.first_name:
+        return False
+    contact = (await db.execute(select(PhoneContact).where(
+        PhoneContact.tenant_id == tenant_id, PhoneContact.wa_number == digits(customer.whatsapp_number)))).scalar_one_or_none()
+    return apply_contact_name(customer, contact)
+
+
+async def record_history(db, chunks: list[dict]) -> int:
+    """Enregistre l'historique du téléphone (jamais deux fois le même message). Renvoie le nombre ajouté."""
+    from app.models.phone_history import PhoneHistoryMessage
+    from app.repositories.whatsapp_account_repository import WhatsAppAccountRepository
+
+    added = 0
+    for chunk in chunks:
+        account = await WhatsAppAccountRepository(db).find_tenant_by_phone_number_id(chunk["phone_number_id"])
+        if account is None:
+            continue
+        if chunk["declined"]:
+            account.history_sync_status = "DECLINED"
+            continue
+        ids = [m["wa_message_id"] for m in chunk["messages"]]
+        known = set((await db.execute(select(PhoneHistoryMessage.wa_message_id).where(
+            PhoneHistoryMessage.tenant_id == account.tenant_id, PhoneHistoryMessage.wa_message_id.in_(ids)))).scalars().all()) if ids else set()
+        for message in chunk["messages"]:
+            if message["wa_message_id"] in known:
+                continue
+            known.add(message["wa_message_id"])
+            db.add(PhoneHistoryMessage(tenant_id=account.tenant_id, **message))
+            added += 1
+        if chunk["progress"] is not None:
+            account.history_progress = max(account.history_progress or 0, chunk["progress"])
+            account.history_sync_status = "DONE" if account.history_progress >= 100 else "IN_PROGRESS"
+    await db.commit()
+    return added
+
+
+async def phone_history(db, tenant_id, wa_number: str, limit: int = 50, before: datetime | None = None) -> list:
+    """Les derniers messages repris du téléphone pour ce numéro, du plus ancien au plus récent."""
+    from app.models.phone_history import PhoneHistoryMessage
+
+    stmt = select(PhoneHistoryMessage).where(PhoneHistoryMessage.tenant_id == tenant_id,
+                                             PhoneHistoryMessage.wa_number == digits(wa_number))
+    if before is not None:
+        stmt = stmt.where(PhoneHistoryMessage.sent_at < before)
+    rows = (await db.execute(stmt.order_by(PhoneHistoryMessage.sent_at.desc()).limit(limit))).scalars().all()
+    return list(reversed(rows))
+
+
+async def memory_messages(db, tenant_id, wa_number: str, before: datetime | None, limit: int) -> list[Message]:
+    """
+    Mémoire de Bob : les derniers échanges repris du téléphone, datés, pour qu'il connaisse le client sans
+    croire que la conversation continue. Messages en mémoire seulement (jamais enregistrés), commençant
+    toujours par un message du client.
+    """
+    if limit <= 0:
+        return []
+    rows = await phone_history(db, tenant_id, wa_number, limit=limit, before=before)
+    while rows and rows[0].from_business:
+        rows = rows[1:]
+    return [Message(tenant_id=tenant_id, sender=MessageSender.HUMAN if row.from_business else MessageSender.CUSTOMER,
+                    message_type="phone_history",
+                    content=f"[Échange du {_as_utc(row.sent_at).strftime(MEMORY_DATE_FORMAT)}, avant Bob] {row.content}")
+            for row in rows]
+
+
+async def request_syncs(db, account, oauth_client, now: datetime | None = None) -> list[str]:
+    """
+    Demande à Meta les contacts puis l'historique du téléphone (dans les 24 h qui suivent la connexion).
+    Une demande refusée sera retentée par la tâche planifiée ; jamais d'erreur pour le commerçant.
+    """
+    now = now or datetime.now(timezone.utc)
+    connected = _as_utc(account.connected_at) if account.connected_at else now
+    if not account.coexistence_mode or now - connected > SYNC_WINDOW:
+        return []
+    done = []
+    for sync_type, field in (("smb_app_state_sync", "contacts_sync_requested_at"), ("history", "history_sync_requested_at")):
+        if getattr(account, field) is not None:
+            continue
+        try:
+            await oauth_client.request_smb_sync(account.phone_number_id, sync_type, account.system_user_token)
+        except Exception:  # noqa: BLE001 — retentée plus tard ; jamais le jeton dans les journaux
+            logger.warning("Synchronisation %s non demandée (numéro %s)", sync_type, account.phone_number_id)
+            continue
+        setattr(account, field, now)
+        if sync_type == "history" and account.history_sync_status is None:
+            account.history_sync_status = "REQUESTED"
+        done.append(sync_type)
+    await db.commit()
+    return done

@@ -32,6 +32,7 @@ TASK_MODULES = [
     "app.workers.monitoring",
     "app.workers.wa_templates",
     "app.workers.plan_quota",
+    "app.workers.coexistence_sync",
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -120,6 +121,11 @@ celery_app.conf.beat_schedule = {
     "monitoring-purge": {
         "task": "app.workers.monitoring.purge_task",
         "schedule": crontab(hour=4, minute=10),
+    },
+    # Lot 52 — coexistence : contacts et historique du téléphone, redemandés à Meta pendant les 24 h.
+    "coexistence-sync-retry": {
+        "task": "app.workers.coexistence_sync.retry_syncs_task",
+        "schedule": crontab(minute="*/15"),
     },
 }
 celery_app.conf.timezone = "UTC"

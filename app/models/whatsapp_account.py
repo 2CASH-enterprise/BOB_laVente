@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Uuid, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.crypto import EncryptedString
@@ -49,6 +49,12 @@ class WhatsAppAccount(Base):
 
     system_user_token: Mapped[str] = mapped_column(EncryptedString(2048), nullable=False)  # chiffré au repos (lot 30)
     coexistence_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Lot 52 — coexistence : demandes de synchronisation à Meta (contacts, historique), à faire dans les 24 h
+    # qui suivent la connexion. Historique : REQUESTED → IN_PROGRESS → DONE, ou DECLINED (refusé sur le téléphone).
+    contacts_sync_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    history_sync_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    history_sync_status: Mapped[str | None] = mapped_column(String(16))
+    history_progress: Mapped[int | None] = mapped_column(Integer)
 
     verification_status: Mapped[str | None] = mapped_column(String(32))
     business_verification_status: Mapped[BusinessVerificationStatus] = mapped_column(

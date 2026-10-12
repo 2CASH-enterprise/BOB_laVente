@@ -143,6 +143,14 @@ async def receive_webhook(
     # de son téléphone. Enregistré comme réponse du vendeur, et Bob se met en pause sur la conversation.
     from app.services import coexistence
 
+    # Lot 52 — historique et contacts du téléphone, envoyés par Meta après une connexion en coexistence.
+    history_chunks = coexistence.parse_history(payload)
+    if history_chunks:
+        return {"status": "phone_history_recorded", "recorded": await coexistence.record_history(db, history_chunks)}
+    contacts = coexistence.parse_contacts(payload)
+    if contacts:
+        return {"status": "phone_contacts_recorded", "recorded": await coexistence.record_contacts(db, contacts)}
+
     echoes = coexistence.parse_echoes(payload)
     if echoes:
         tenant_ids = await coexistence.record_echoes(db, echoes)
@@ -168,6 +176,9 @@ async def receive_webhook(
 
     customer_repo = CustomerRepository(db)
     customer, is_new_customer = await customer_repo.get_or_create_with_created_flag(tenant_id, parsed["from"])
+
+    # Lot 52 — client encore sans nom : celui que le commerçant lui a donné dans son téléphone.
+    await coexistence.name_from_contacts(db, tenant_id, customer)
 
     conversation_repo = ConversationRepository(db)
     conversation = await conversation_repo.get_or_create_active(tenant_id, customer.id)
@@ -383,7 +394,13 @@ async def receive_webhook(
         history = list(reversed((await db.execute(history_stmt)).scalars().all()))
         # Mémoire de l'IA : uniquement ce qui suit le dernier transfert vers un humain (une
         # demande déjà transmise ne doit jamais être retransmise après la reprise par Bob).
+        full_history_length = len(history)
         history = history_since_last_transfer(history)
+        # Lot 52 — conversation sans transfert et encore courte : les derniers échanges repris du téléphone
+        # (coexistence), datés, complètent la mémoire de Bob.
+        if len(history) == full_history_length and len(history) < HISTORY_LIMIT:
+            history = await coexistence.memory_messages(db, tenant_id, customer.whatsapp_number,
+                                                        conversation.created_at, HISTORY_LIMIT - len(history)) + history
 
         # Lot 13 — règles de transmission, évaluées par le code AVANT la réponse de Bob.
         turn = await decide_turn(db, tenant, _signal_payload(signal))

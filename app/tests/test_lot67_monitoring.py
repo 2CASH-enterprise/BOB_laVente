@@ -489,8 +489,9 @@ async def test_service_status(client, db_session):
 @pytest.mark.asyncio
 async def test_status_flags_expired_whatsapp_token(db_session):
     awa = await _tenant(db_session, "Boutique Awa")
-    await monitoring.ingest(db_session, [_event(title="Meta refuse", source="SEND_WHATSAPP", meta_code="190", tenant_id=awa.id)],
-                            datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)  # pas NOW (date fixe) : le voyant ne regarde que les dernières 24 h
+    await monitoring.ingest(db_session, [_event(title="Meta refuse", source="SEND_WHATSAPP", meta_code="190", tenant_id=awa.id, at=now)],
+                            now)
     checks = {c["key"]: c for c in (await monitoring_status.checks(db_session))["checks"]}
     assert checks["whatsapp"]["status"] == "ko" and checks["whatsapp"]["detail"] == "1 boutique : jeton expiré (Boutique Awa)"
 

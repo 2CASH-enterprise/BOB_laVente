@@ -45,9 +45,16 @@ async def get_conversation(
         MessageResponse.model_validate(m).model_copy(update={"signals": signals.get(m.id)}) for m in messages
     ]
 
+    from app.models.customer import Customer
+    from app.services.coexistence import phone_history
     from app.services.human_reply import reply_window_closes_at
 
+    customer = await db.get(Customer, conversation.customer_id)
+    history_rows = await phone_history(db, current_user.tenant_id, customer.whatsapp_number) if customer else []
+
     return ConversationDetailResponse(
+        phone_history=[{"from_business": row.from_business, "content": row.content, "sent_at": row.sent_at.isoformat()}
+                       for row in history_rows],
         reply_window_closes_at=await reply_window_closes_at(db, conversation),
         id=conversation.id,
         customer_id=conversation.customer_id,

@@ -67,6 +67,7 @@ TASK_LABELS = {
     "app.workers.monitoring.purge_task": "Monitoring : effacement après 30 jours",
     "app.workers.wa_templates.refresh_templates_task": "Modèles WhatsApp : statut chez Meta",
     "app.workers.plan_quota.check_quotas_task": "Plafonds des formules : alertes",
+    "app.workers.coexistence_sync.retry_syncs_task": "Numéro partagé : contacts et historique du téléphone",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).

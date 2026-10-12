@@ -47,8 +47,10 @@ class EmbeddedSignupCallback(BaseModel):
 
     code: str
     waba_id: str
-    phone_number_id: str
+    phone_number_id: str | None = None  # lot 52 : parfois absent du parcours coexistence (retrouvé ensuite)
     business_id: str | None = None
+    # Lot 52 — numéro déjà utilisé dans l'application WhatsApp Business du téléphone (parcours coexistence).
+    coexistence: bool = False
 
 
 class WhatsAppAccountResponse(BaseModel):
@@ -57,6 +59,10 @@ class WhatsAppAccountResponse(BaseModel):
     phone_number_id: str
     display_name_status: str
     display_phone_number: str | None = None
+    # Lot 52 — numéro partagé avec le téléphone, et reprise de l'historique (REQUESTED, IN_PROGRESS, DONE, DECLINED).
+    coexistence_mode: bool = False
+    history_sync_status: str | None = None
+    history_progress: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,9 +91,18 @@ async def embedded_signup_callback(
     # Échange réel code -> access_token, puis abonnement de l'app au WABA du client
     # (section 59.5 — condition pour recevoir ses webhooks, sinon aucun message n'arrivera
     # jamais, comme on l'a découvert manuellement lors du test du tenant démo).
+    phone_number_id, display_phone_number = payload.phone_number_id, None
     try:
         access_token = await oauth_client.exchange_code_for_token(payload.code)
         await oauth_client.subscribe_app_to_waba(payload.waba_id, access_token)
+        if not phone_number_id:
+            numbers = await oauth_client.list_phone_numbers(payload.waba_id, access_token) if payload.coexistence else []
+            if not numbers:
+                raise HTTPException(status_code=400, detail="Connexion WhatsApp impossible : aucun numéro reçu de Meta, réessayez")
+            phone_number_id = str(numbers[0].get("id"))
+            display_phone_number = "".join(ch for ch in str(numbers[0].get("display_phone_number") or "") if ch.isdigit()) or None
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         from app.integrations.whatsapp.client import MetaGraphError
 
@@ -95,12 +110,18 @@ async def embedded_signup_callback(
         reason = str(exc) if isinstance(exc, MetaGraphError) else "Meta est injoignable pour le moment"
         raise HTTPException(status_code=400, detail=f"Connexion WhatsApp impossible : {reason}") from exc
 
+    taken = (await db.execute(select(WhatsAppAccount).where(WhatsAppAccount.phone_number_id == phone_number_id))).scalar_one_or_none()
+    if taken is not None:
+        raise HTTPException(status_code=409, detail="Ce numéro WhatsApp est déjà connecté à un autre compte Bob")
+
     account = WhatsAppAccount(
         tenant_id=current_user.tenant_id,
         waba_id=payload.waba_id,
-        phone_number_id=payload.phone_number_id,
+        phone_number_id=phone_number_id,
         business_id=payload.business_id,
         system_user_token=access_token,
+        display_phone_number=display_phone_number,
+        coexistence_mode=payload.coexistence,
     )
     db.add(account)
 
@@ -109,7 +130,7 @@ async def embedded_signup_callback(
         actor=str(current_user.user_id),
         action="WHATSAPP_CONNECTED",
         tenant_id=current_user.tenant_id,
-        details={"waba_id": payload.waba_id, "phone_number_id": payload.phone_number_id},
+        details={"waba_id": payload.waba_id, "phone_number_id": phone_number_id, "coexistence": payload.coexistence},
     )
     await db.commit()
     await db.refresh(account)
@@ -119,6 +140,13 @@ async def embedded_signup_callback(
 
     if await wa_templates.active_for(db, await db.get(Tenant, current_user.tenant_id)):
         background_tasks.add_task(wa_templates.sync_in_background, current_user.tenant_id)
+    if account.coexistence_mode:
+        # Lot 52 — contacts et historique du téléphone : demandés tout de suite (Meta laisse 24 h) ;
+        # en cas d'échec, la tâche planifiée réessaie.
+        from app.services.coexistence import request_syncs
+
+        await request_syncs(db, account, oauth_client)
+        await db.refresh(account)
     return account
 
 

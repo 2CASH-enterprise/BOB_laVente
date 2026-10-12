@@ -324,6 +324,13 @@
   .msg.AI { background: var(--accent-soft); margin-left: auto; color: var(--text); border-bottom-right-radius: 4px; }
   .msg.HUMAN { background: var(--accent-soft); margin-left: auto; border: 1px solid var(--accent-light); color: var(--text); border-bottom-right-radius: 4px; }
   .msg.SYSTEM { background: none; color: var(--muted); font-style: normal; font-size: 12px; text-align: center; max-width: 100%; }
+  .wa-choice { margin-bottom: 14px; }
+  .wa-choice p { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .wa-note { margin-bottom: 14px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 13px; line-height: 1.5; }
+  .phone-history { margin-bottom: 14px; border: 1px dashed var(--border); border-radius: 12px; padding: 8px 12px; }
+  .phone-history summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .phone-history .msg { opacity: 0.85; }
+  .phone-history .msg-date { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
   .msg-origin { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
   /* Lot 51 — Bob en pause pour toute la boutique, ou échéance de l'abonnement proche */
   .bob-status-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; margin-bottom: 18px; border-radius: 12px;
@@ -1110,7 +1117,18 @@
       <div class="card" style="max-width: 640px; margin-bottom: 20px;">
         <div class="label" style="margin-bottom: 12px; font-weight: 600;">Compte WhatsApp Business</div>
         <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
-        <button class="action" id="btn-connect-whatsapp" onclick="connectWhatsApp()">Connecter WhatsApp</button>
+        <div id="wa-coexistence-info" class="wa-note hidden"></div>
+        <div id="wa-connect-choices">
+          <div class="wa-choice">
+            <button class="action" id="btn-connect-whatsapp-app" onclick="connectWhatsApp(true)">J'ai déjà WhatsApp Business sur mon téléphone</button>
+            <p>Vous gardez votre numéro et votre application ; Bob s'y branche. Vos 6 derniers mois de discussions peuvent être repris.
+              Conditions : application WhatsApp Business à jour, utilisée depuis au moins 7 jours, et à ouvrir au moins tous les 14 jours.</p>
+          </div>
+          <div class="wa-choice">
+            <button class="action secondary" id="btn-connect-whatsapp" onclick="connectWhatsApp(false)">Utiliser un nouveau numéro</button>
+            <p>Un numéro qui n'est pas utilisé dans l'application WhatsApp : il sera réservé à Bob, vous répondez depuis ce tableau de bord.</p>
+          </div>
+        </div>
         <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
           <label style="font-size: 12px; color: var(--muted);">Numéro affiché (pour les QR codes, format +221XXXXXXXXX)</label>
           <input id="wa-display-number" class="input" placeholder="+221771234567" style="margin: 6px 0;">
@@ -3573,12 +3591,19 @@ async function openConversation(id) {
   document.getElementById("conv-detail-title").textContent = "Client " + c.customer_id.slice(0, 8) + "… — " + (STATUS_LABELS[c.status] || c.status);
   // Le texte vient du client (WhatsApp) : TOUJOURS échappé, sinon un message piégé pourrait
   // exécuter du code dans le dashboard du commerçant.
-  document.getElementById("conv-messages").innerHTML = c.messages
+  document.getElementById("conv-messages").innerHTML = phoneHistoryBlock(c.phone_history) + c.messages
     .map((m) => `<div class="msg ${esc(m.sender)}">${m.message_type === "phone_echo" ? '<span class="msg-origin">Vendeur · depuis le téléphone</span>' : ""}${waFormat(m.content)}${signalChips(m.signals)}</div>`)
     .join("");
   document.getElementById("btn-takeover").classList.toggle("hidden", c.status === "WAITING_HUMAN");
   document.getElementById("btn-release").classList.toggle("hidden", c.status !== "WAITING_HUMAN");
   renderReplyBox(c);
+}
+
+// Lot 52 — échanges repris du téléphone (avant Bob), repliés au-dessus de la conversation. Texte du client : esc().
+function phoneHistoryBlock(rows) {
+  if (!rows || !rows.length) return "";
+  const items = rows.map((r) => `<div class="msg ${r.from_business ? "HUMAN" : "CUSTOMER"}">${waFormat(r.content)}<span class="msg-date">${esc(new Date(r.sent_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }))}</span></div>`).join("");
+  return `<details class="phone-history"><summary>Historique du téléphone, avant Bob (${rows.length} message${rows.length > 1 ? "s" : ""})</summary>${items}</details>`;
 }
 
 // Lot 23b : réponse d'un humain, envoyée réellement sur WhatsApp. WhatsApp n'accepte un message
@@ -6353,8 +6378,9 @@ window.addEventListener("message", (event) => {
   if (!event.origin.endsWith("facebook.com")) return;
   try {
     const data = JSON.parse(event.data);
-    if (data.type === "WA_EMBEDDED_SIGNUP" && data.event === "FINISH") {
-      waSessionInfo = data.data; // { waba_id, phone_number_id, business_id? }
+    // Lot 52 : FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING = numéro déjà dans l'application (coexistence).
+    if (data.type === "WA_EMBEDDED_SIGNUP" && (data.event === "FINISH" || data.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING")) {
+      waSessionInfo = data.data; // { waba_id, phone_number_id?, business_id? }
     }
   } catch (e) {
     // message non-JSON, ignoré (autres événements Facebook sans rapport)
@@ -6363,19 +6389,21 @@ window.addEventListener("message", (event) => {
 
 async function loadWhatsAppStatus() {
   const statusEl = document.getElementById("whatsapp-status");
-  const btn = document.getElementById("btn-connect-whatsapp");
+  const choices = document.getElementById("wa-connect-choices");
+  const info = document.getElementById("wa-coexistence-info");
   try {
     const account = await api("/api/v1/whatsapp/account");
     statusEl.textContent = `Connecté — numéro ${account.phone_number_id}, statut du nom : ${account.display_name_status}`;
-    btn.textContent = "Déjà connecté";
-    btn.disabled = true;
+    choices.classList.add("hidden");
+    info.innerHTML = account.coexistence_mode ? coexistenceInfo(account) : "";
+    info.classList.toggle("hidden", !account.coexistence_mode);
     if (account.display_phone_number) {
       document.getElementById("wa-display-number").value = "+" + account.display_phone_number.replace(/^\+/, "");
     }
   } catch (e) {
     statusEl.textContent = "Aucun compte WhatsApp connecté pour le moment.";
-    btn.textContent = "Connecter WhatsApp";
-    btn.disabled = false;
+    choices.classList.remove("hidden");
+    info.classList.add("hidden");
   }
 
   try {
@@ -6428,7 +6456,26 @@ async function saveDisplayNumber() {
   }
 }
 
-function connectWhatsApp() {
+// Lot 52 — numéro partagé avec l'application du téléphone : règle des 14 jours et reprise de l'historique.
+const HISTORY_SYNC_LABELS = {
+  REQUESTED: "demandée — acceptez le partage de l'historique sur votre téléphone",
+  IN_PROGRESS: "en cours",
+  DONE: "terminée",
+  DECLINED: "refusée sur le téléphone",
+};
+function coexistenceInfo(account) {
+  let history = HISTORY_SYNC_LABELS[account.history_sync_status] || "pas encore demandée";
+  if (account.history_sync_status === "IN_PROGRESS" && account.history_progress != null) history += ` (${Number(account.history_progress)} %)`;
+  return `<strong>Numéro partagé avec votre téléphone.</strong> Vos réponses depuis l'application WhatsApp Business
+    apparaissent dans Conversations et mettent Bob en pause sur la conversation. Ouvrez l'application au moins
+    tous les 14 jours, sinon la connexion expire.<br>Reprise de l'historique : ${esc(history)}.`;
+}
+
+let waCoexistence = false;
+
+function connectWhatsApp(coexistence) {
+  waCoexistence = !!coexistence;
+  waSessionInfo = null;
   if (typeof FB === "undefined") {
     toast("Facebook n'est pas encore chargé, réessayez dans quelques secondes.", "info");
     return;
@@ -6448,14 +6495,14 @@ function connectWhatsApp() {
           config_id: config.login_config_id,
           response_type: "code",
           override_default_response_type: true,
-          extras: { setup: {}, featureType: "", sessionInfoVersion: "3" },
+          extras: { setup: {}, featureType: waCoexistence ? "whatsapp_business_app_onboarding" : "", sessionInfoVersion: "3" },
         }
       );
     });
 }
 
 async function finishEmbeddedSignup(code) {
-  if (!waSessionInfo || !waSessionInfo.waba_id || !waSessionInfo.phone_number_id) {
+  if (!waSessionInfo || !waSessionInfo.waba_id || (!waSessionInfo.phone_number_id && !waCoexistence)) {
     toast("Informations WhatsApp incomplètes reçues de Meta, réessayez.", "error");
     return;
   }
@@ -6466,8 +6513,9 @@ async function finishEmbeddedSignup(code) {
       body: JSON.stringify({
         code,
         waba_id: waSessionInfo.waba_id,
-        phone_number_id: waSessionInfo.phone_number_id,
+        phone_number_id: waSessionInfo.phone_number_id || null,
         business_id: waSessionInfo.business_id || null,
+        coexistence: waCoexistence,
       }),
     });
     toast("WhatsApp connecté avec succès !");

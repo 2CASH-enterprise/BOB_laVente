@@ -52,6 +52,27 @@ class MetaOAuthClient:
             response = await client.post(url, headers={"Authorization": f"Bearer {access_token}"})
             _raise_for_meta(response)
 
+    async def list_phone_numbers(self, waba_id: str, access_token: str) -> list[dict]:
+        """Lot 52 — numéros du compte WhatsApp (le parcours coexistence ne renvoie parfois que le compte)."""
+        url = f"{GRAPH_BASE_URL}/{self.api_version}/{waba_id}/phone_numbers"
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(url, params={"fields": "id,display_phone_number,verified_name"},
+                                        headers={"Authorization": f"Bearer {access_token}"})
+            _raise_for_meta(response)
+            return response.json().get("data") or []
+
+    async def request_smb_sync(self, phone_number_id: str, sync_type: str, access_token: str) -> dict:
+        """
+        Lot 52 — coexistence : demande à Meta d'envoyer les contacts (`smb_app_state_sync`) ou l'historique
+        (`history`) du téléphone, dans les 24 h qui suivent la connexion. La réponse arrive par webhook.
+        """
+        url = f"{GRAPH_BASE_URL}/{self.api_version}/{phone_number_id}/smb_app_data"
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(url, json={"messaging_product": "whatsapp", "sync_type": sync_type},
+                                         headers={"Authorization": f"Bearer {access_token}"})
+            _raise_for_meta(response)
+            return response.json()
+
 
 class MetaTemplatesClient:
     """

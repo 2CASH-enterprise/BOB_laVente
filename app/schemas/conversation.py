@@ -30,3 +30,5 @@ class ConversationDetailResponse(ConversationResponse):
     messages: list[MessageResponse]
     # Lot 23b : jusqu'à quand un humain peut envoyer un message libre (24 h après le dernier message du client).
     reply_window_closes_at: datetime | None = None
+    # Lot 52 — derniers échanges repris du téléphone (coexistence), avant Bob : affichés à part.
+    phone_history: list[dict] = []
