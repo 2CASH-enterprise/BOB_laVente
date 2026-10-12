@@ -314,6 +314,13 @@
     <button class="cta" onclick="login()">Se connecter</button>
     <div class="bootstrap-hint">Premier accès, aucun compte encore créé ? <button type="button" onclick="showBootstrap(true)">Créer le compte initial</button></div>
   </div>
+  <div id="code-form" class="hidden">
+    <h2>Code de connexion</h2>
+    <p class="muted" style="margin: 0 0 4px; font-size: 14px;">Un code à 6 chiffres vient d'être envoyé à votre adresse email. Il est valable 10 minutes.</p>
+    <label for="login-code">Code reçu par email</label><input id="login-code" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" onkeydown="if (event.key === 'Enter') verifyCode()">
+    <button class="cta" onclick="verifyCode()">Valider</button>
+    <div class="bootstrap-hint"><button type="button" onclick="resendCode()">Renvoyer le code</button> · <button type="button" onclick="showCodeForm(false)">← Retour</button></div>
+  </div>
   <div id="bootstrap-form" class="hidden">
     <h2>Compte initial</h2>
     <label for="bs-name">Nom complet</label><input id="bs-name" class="input" autocomplete="name">
@@ -518,6 +525,11 @@ function api(path, options = {}) {
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 }
+// Lot 70 — argument texte d'un onclick : JSON (chaîne JS sûre) PUIS échappement HTML. `esc` seul ne suffit pas :
+// le navigateur redécode « &#39; » en apostrophe avant d'exécuter l'attribut, et le texte sortirait de la chaîne.
+function jsArg(value) {
+  return esc(JSON.stringify(String(value ?? "")));
+}
 
 // ---- Lot 66 : fenêtres de Bob (confirmation) et messages, à la place des fenêtres du navigateur ----
 function toast(message, kind) {
@@ -609,6 +621,8 @@ function logout() {
   document.getElementById("login-screen").classList.remove("hidden");
 }
 
+var mfaPendingToken = null;  // lot 70 : connexion en deux temps (mot de passe, puis code reçu par email)
+
 async function login() {
   const email = document.getElementById("login-email").value;
   const password = document.getElementById("login-password").value;
@@ -616,13 +630,57 @@ async function login() {
   errorEl.textContent = "";
   try {
     const body = new URLSearchParams({ username: email, password });
-    const res = await fetch(API_BASE + "/api/v1/superadmin/login", { method: "POST", body }).then((r) => {
-      if (!r.ok) throw new Error("Email ou mot de passe incorrect");
-      return r.json();
-    });
-    token = res.access_token;
-    localStorage.setItem("bob_superadmin_token", token);
-    enterApp();
+    const r = await fetch(API_BASE + "/api/v1/superadmin/login", { method: "POST", body });
+    const res = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(r.status === 401 ? "Email ou mot de passe incorrect" : (res.detail || "Connexion impossible pour le moment"));
+    if (res.mfa_required) { mfaPendingToken = res.mfa_pending_token; showCodeForm(true); return; }
+    startSession(res.access_token);
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+function startSession(newToken) {
+  token = newToken;
+  localStorage.setItem("bob_superadmin_token", token);
+  mfaPendingToken = null;
+  document.getElementById("login-password").value = "";
+  document.getElementById("login-code").value = "";
+  showCodeForm(false);
+  enterApp();
+}
+
+function showCodeForm(on) {
+  document.getElementById("login-form").classList.toggle("hidden", on);
+  document.getElementById("code-form").classList.toggle("hidden", !on);
+  document.getElementById("login-error").textContent = "";
+  if (on) document.getElementById("login-code").focus();
+}
+
+async function verifyCode() {
+  const errorEl = document.getElementById("login-error");
+  const code = document.getElementById("login-code").value.trim();
+  errorEl.textContent = "";
+  if (!/^[0-9]{6}$/.test(code)) { errorEl.textContent = "Le code fait 6 chiffres."; return; }
+  try {
+    const r = await fetch(API_BASE + "/api/v1/superadmin/login/verify", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mfa_pending_token: mfaPendingToken, code }) });
+    const res = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(res.detail || "Code refusé");
+    startSession(res.access_token);
+  } catch (e) {
+    errorEl.textContent = e.message;
+  }
+}
+
+async function resendCode() {
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "";
+  try {
+    const r = await fetch(API_BASE + "/api/v1/superadmin/login/resend", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mfa_pending_token: mfaPendingToken }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Envoi impossible");
+    toast("Nouveau code envoyé.");
   } catch (e) {
     errorEl.textContent = e.message;
   }
@@ -781,13 +839,13 @@ function renderShops() {
   shopsData.forEach((t) => { const k = shopKind(t); counts[k] = (counts[k] || 0) + 1; });
   counts.all = shopsData.length;
   document.getElementById("shop-filters").innerHTML = SHOP_FILTERS.map(([key, label]) =>
-    `<button type="button" class="pill" aria-pressed="${key === shopFilter}" onclick="shopFilter = '${key}'; renderShops()">${label} · ${counts[key] || 0}</button>`).join("");
+    `<button type="button" class="pill" aria-pressed="${key === shopFilter}" onclick="shopFilter = ${jsArg(key)}; renderShops()">${label} · ${counts[key] || 0}</button>`).join("");
   const q = document.getElementById("shop-search").value.trim().toLowerCase();
   const sector = document.getElementById("shop-sector").value;
   const rows = shopsData.filter((t) => (shopFilter === "all" || shopKind(t) === shopFilter) && (!sector || t.business_type === sector)
     && (!q || [t.name, t.email, t.country, t.phone].filter(Boolean).join(" ").toLowerCase().includes(q)));
   document.getElementById("shop-grid").innerHTML = rows.map((t) => `
-    <button type="button" class="shop-card" onclick="openShop('${esc(t.id)}')">
+    <button type="button" class="shop-card" onclick="openShop(${jsArg(t.id)})">
       <div class="shop-head"><div class="shop-logo" aria-hidden="true">${esc(initials(t.name))}</div>
         <div style="flex: 1; min-width: 0;"><div class="shop-name">${esc(t.name)}</div><div class="muted">${esc(BUSINESS_TYPES[t.business_type] || t.business_type)}${t.country ? " · " + esc(t.country) : ""}</div></div>
         ${bobStatusBadge(t)}</div>
@@ -845,7 +903,7 @@ async function openShop(id) {
         </div>
         <div class="danger-zone">
           <div><b>${t.active ? "Suspendre la boutique" : "Réactiver la boutique"}</b><div class="muted" style="font-size: 13px;">${t.active ? "Bob s'arrête tout de suite. Les messages des clients arrivent toujours." : "Bob recommencera à répondre à ses clients."}</div></div>
-          <button type="button" class="btn ${t.active ? "danger" : "primary"}" onclick="toggleActive('${esc(t.id)}', ${t.active ? "false" : "true"}, '${esc(t.name)}')">${t.active ? "Suspendre…" : "Réactiver"}</button>
+          <button type="button" class="btn ${t.active ? "danger" : "primary"}" onclick="toggleActive(${jsArg(t.id)}, ${t.active ? "false" : "true"})">${t.active ? "Suspendre…" : "Réactiver"}</button>
         </div>
       </section>
       <section class="card side-col" style="display: block;">
@@ -903,7 +961,9 @@ async function extendShop() {
   loadTenants();
 }
 
-async function toggleActive(tenantId, active, name) {
+async function toggleActive(tenantId, active) {
+  // Lot 70 : seul l'identifiant passe par le bouton ; le nom est relu ici (jamais de texte libre dans un onclick).
+  const name = currentShop && currentShop.id === tenantId ? currentShop.name : "cette boutique";
   const ok = active
     ? await saConfirm(`Réactiver « ${name} » ?`, "Bob recommencera à répondre à ses clients.", { confirmLabel: "Réactiver" })
     : await saConfirm(`Suspendre « ${name} » ?`, "Bob arrêtera de répondre à ses clients tout de suite, et les relances, campagnes et rappels de rendez-vous s'arrêtent. Les messages des clients arrivent toujours dans ses conversations et il pourra répondre lui-même. Vous pourrez réactiver la boutique à tout moment.", { confirmLabel: "Suspendre", danger: true });
@@ -1000,12 +1060,12 @@ function renderPreregAdmin() {
       <div class="prereg-prep">
         <span>WhatsApp : <strong>${esc(t.prep.whatsapp || "—")}</strong></span>
         <span>Taille : <strong>${esc(t.prep.catalog_size || "—")}</strong></span>
-        ${t.prep.files.map((f) => `<button class="btn small-btn" onclick="downloadPreregFile('${esc(f.id)}', '${esc(f.filename)}')">⬇ ${esc(f.kind === "CUSTOMERS" ? "Clients" : "Produits / liste")} · ${esc(f.filename)} (${size(f.size)})</button>`).join("")}
+        ${t.prep.files.map((f) => `<button class="btn small-btn" onclick="downloadPreregFile(${jsArg(f.id)})">⬇ ${esc(f.kind === "CUSTOMERS" ? "Clients" : "Produits / liste")} · ${esc(f.filename)} (${size(f.size)})</button>`).join("")}
       </div>
       ${t.prep.note ? `<p class="muted" style="margin: 6px 0 0; font-size: 13px;">Note : ${esc(t.prep.note)}</p>` : ""}
       <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
-        ${t.locked ? `<button class="btn primary" onclick="openPreregTenant('${esc(t.id)}', '${esc(t.name)}')">Ouvrir l'accès complet (bêta)</button>`
-          : `<button class="btn" onclick="relockPreregTenant('${esc(t.id)}', '${esc(t.name)}')">Remettre en pré-inscription</button>`}
+        ${t.locked ? `<button class="btn primary" onclick="openPreregTenant(${jsArg(t.id)})">Ouvrir l'accès complet (bêta)</button>`
+          : `<button class="btn" onclick="relockPreregTenant(${jsArg(t.id)})">Remettre en pré-inscription</button>`}
       </div>
     </div>`).join("") : '<p class="muted">Aucun pré-inscrit pour l\'instant.</p>';
 }
@@ -1026,13 +1086,20 @@ async function setPreregMode(mode) {
   catch (e) { toast(e.message, "error"); }
 }
 
-async function openPreregTenant(id, name) {
+// Lot 70 : la boutique (et son nom) est relue d'après son identifiant.
+function preregTenant(id) {
+  return ((preregData && preregData.tenants) || []).find((t) => t.id === id) || { name: "cette boutique", prep: { files: [] } };
+}
+
+async function openPreregTenant(id) {
+  const name = preregTenant(id).name;
   if (!(await saConfirm(`Ouvrir l'accès complet à « ${name} » ?`, "Le compte pourra tout utiliser (bêta-testeur). Un email le prévient.", { confirmLabel: "Ouvrir l'accès" }))) return;
   try { preregData = await api(`/api/v1/superadmin/preregistration/tenants/${id}/open`, { method: "POST" }); renderPreregAdmin(); toast(`Accès ouvert pour « ${name} ».`); }
   catch (e) { toast(e.message, "error"); }
 }
 
-async function relockPreregTenant(id, name) {
+async function relockPreregTenant(id) {
+  const name = preregTenant(id).name;
   if (!(await saConfirm(`Remettre « ${name} » en pré-inscription ?`, "Il ne verra plus que l'accueil d'exemple.", { confirmLabel: "Remettre en pré-inscription", danger: true }))) return;
   try { preregData = await api(`/api/v1/superadmin/preregistration/tenants/${id}/relock`, { method: "POST" }); renderPreregAdmin(); toast(`« ${name} » est de nouveau pré-inscrit.`); }
   catch (e) { toast(e.message, "error"); }
@@ -1044,7 +1111,9 @@ async function openAllPrereg() {
   catch (e) { toast(e.message, "error"); }
 }
 
-async function downloadPreregFile(id, name) {
+async function downloadPreregFile(id) {
+  const file = ((preregData && preregData.tenants) || []).flatMap((t) => (t.prep && t.prep.files) || []).find((f) => f.id === id);
+  const name = file ? file.filename : "fichier";
   try {
     const r = await fetch(API_BASE + `/api/v1/superadmin/preregistration/files/${encodeURIComponent(id)}`, { headers: { Authorization: "Bearer " + token } });
     if (!r.ok) throw new Error("Téléchargement impossible.");
@@ -1092,8 +1161,8 @@ async function loadProspects(view) {
   const c = prospectData.counts;
   const views = [["all", "Tous", c.all], ["todo", "À relancer", c.todo], ["replied", "Ont répondu", c.replied], ["clicked", "Ont cliqué", c.clicked], ["signed_up", "Comptes créés", c.signed_up], ["lost", "Perdus", c.lost]];
   document.getElementById("prospect-views").innerHTML = views.map(([key, label, n]) =>
-    `<button class="pill" aria-pressed="${key === prospectView}" onclick="loadProspects('${key}')">${label} (${n ?? 0})</button>`).join("");
-  rows.innerHTML = prospectData.prospects.map((p) => `<tr class="clickable" onclick="openProspect('${esc(p.id)}')">
+    `<button class="pill" aria-pressed="${key === prospectView}" onclick="loadProspects(${jsArg(key)})">${label} (${n ?? 0})</button>`).join("");
+  rows.innerHTML = prospectData.prospects.map((p) => `<tr class="clickable" onclick="openProspect(${jsArg(p.id)})">
       <td><strong>${esc(p.company)}</strong>${p.city ? `<div class="muted">${esc(p.city)}</div>` : ""}</td>
       <td>${esc(p.contact_name || "—")}<div class="muted">${esc(p.phone || p.email || "")}</div></td>
       <td>${esc(p.sector_label)}</td><td>${esc(p.source || "—")}</td>
@@ -1139,8 +1208,8 @@ function openProspectForm(p) {
     </div>
     <label for="pf-notes">Note</label><textarea id="pf-notes" class="input" rows="3" maxlength="2000">${esc(p.notes || "")}</textarea>
     <p id="pf-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 4px 0;"></p>
-    <div class="row" style="justify-content: flex-end;"><button class="btn" onclick="${p.id ? `openProspect('${esc(p.id)}')` : "closeProspectModal()"}">Annuler</button>
-      <button class="btn primary" onclick="saveProspect(${p.id ? `'${esc(p.id)}'` : "null"})">Enregistrer</button></div>`);
+    <div class="row" style="justify-content: flex-end;"><button class="btn" onclick="${p.id ? `openProspect(${jsArg(p.id)})` : "closeProspectModal()"}">Annuler</button>
+      <button class="btn primary" onclick="saveProspect(${p.id ? `${jsArg(p.id)}` : "null"})">Enregistrer</button></div>`);
   document.getElementById("pf-company").focus();
 }
 
@@ -1328,12 +1397,12 @@ async function loadEmails() {
   const rows = d.campaigns.map((c) => {
     const st = c.stats;
     const target = [c.sector_label, c.source, c.country].filter(Boolean).map(esc).join(" · ");
-    const actions = [`<button class="small" onclick="previewCampaign('${esc(c.id)}')">Aperçu</button>`,
-      d.configured ? `<button class="small" onclick="testCampaign('${esc(c.id)}')">Essai</button>` : "",
-      c.status === "RUNNING" ? `<button class="small" onclick="campaignAction('${esc(c.id)}', 'pause')">Pause</button>`
-        : `<button class="small" onclick="campaignAction('${esc(c.id)}', 'start')">${c.status === "PAUSED" ? "Reprendre" : "Démarrer"}</button>`,
-      c.status !== "RUNNING" ? `<button class="small" onclick="openCampaignForm('${esc(c.id)}')">Modifier</button>` : "",
-      c.status === "DRAFT" ? `<button class="small" onclick="deleteCampaign('${esc(c.id)}')">Effacer</button>` : ""].join(" ");
+    const actions = [`<button class="small" onclick="previewCampaign(${jsArg(c.id)})">Aperçu</button>`,
+      d.configured ? `<button class="small" onclick="testCampaign(${jsArg(c.id)})">Essai</button>` : "",
+      c.status === "RUNNING" ? `<button class="small" onclick="campaignAction(${jsArg(c.id)}, 'pause')">Pause</button>`
+        : `<button class="small" onclick="campaignAction(${jsArg(c.id)}, 'start')">${c.status === "PAUSED" ? "Reprendre" : "Démarrer"}</button>`,
+      c.status !== "RUNNING" ? `<button class="small" onclick="openCampaignForm(${jsArg(c.id)})">Modifier</button>` : "",
+      c.status === "DRAFT" ? `<button class="small" onclick="deleteCampaign(${jsArg(c.id)})">Effacer</button>` : ""].join(" ");
     return `<tr><td><strong>${esc(c.name)}</strong><div class="muted">${target} · ${c.steps} email${c.steps > 1 ? "s" : ""}</div></td>
       <td><span class="badge ${c.status === "RUNNING" ? "active" : c.status === "PAUSED" ? "demo" : ""}">${esc(st.finished ? "Terminée" : campaignStatusLabels[c.status] || c.status)}</span>
         ${c.status !== "RUNNING" && c.eligible ? `<div class="muted">${c.eligible} prospect${c.eligible > 1 ? "s" : ""} à ajouter</div>` : ""}</td>
@@ -1380,7 +1449,7 @@ function openCampaignForm(id) {
     ${step(1, "Email 1 — le jour du lancement")}${step(2, "Relance — 4 jours après (laisser vide : pas de relance)")}${step(3, "Dernier email — 10 jours après (facultatif)")}
     <p id="cf-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 8px 0;"></p>
     <div class="row" style="justify-content: space-between;"><button class="btn" onclick="fillCampaignDefaults(true)">Remettre les textes proposés</button>
-      <div class="row"><button class="btn" onclick="closeProspectModal()">Annuler</button><button class="btn primary" onclick="saveCampaign(${c ? `'${esc(c.id)}'` : "null"})">Enregistrer</button></div></div>`);
+      <div class="row"><button class="btn" onclick="closeProspectModal()">Annuler</button><button class="btn primary" onclick="saveCampaign(${c ? `${jsArg(c.id)}` : "null"})">Enregistrer</button></div></div>`);
   if (!c) fillCampaignDefaults(true);
 }
 
@@ -1453,14 +1522,14 @@ function todayRow(p, kind) {
   let actions = "";
   if (kind === "calls") {
     actions = `${p.phone ? `<a class="btn small-btn" href="tel:${esc(p.phone)}">Appeler ${esc(p.phone)}</a>` : ""}
-      <button class="btn small-btn" onclick="callDone('${esc(p.id)}', 'PREREG')">Pré-inscrit</button>
-      <button class="btn small-btn" onclick="callDone('${esc(p.id)}', 'LATER')">À revoir dans 3 mois</button>
-      <button class="btn small-btn danger" onclick="callDone('${esc(p.id)}', 'NO')">Pas intéressé</button>`;
+      <button class="btn small-btn" onclick="callDone(${jsArg(p.id)}, 'PREREG')">Pré-inscrit</button>
+      <button class="btn small-btn" onclick="callDone(${jsArg(p.id)}, 'LATER')">À revoir dans 3 mois</button>
+      <button class="btn small-btn danger" onclick="callDone(${jsArg(p.id)}, 'NO')">Pas intéressé</button>`;
   } else {
-    actions = `<button class="btn small-btn primary" onclick="todayWhatsApp('${esc(p.id)}', '${kind}')">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
+    actions = `<button class="btn small-btn primary" onclick="todayWhatsApp(${jsArg(p.id)}, ${jsArg(kind)})">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
   }
   return `<div class="today-row"><div style="min-width: 0; flex: 1 1 240px;"><b>${esc(p.company)}</b>${age}${mails}<div class="muted">${esc(meta)}</div></div>
-    <div class="row">${actions}<button class="btn small-btn" onclick="openProspect('${esc(p.id)}')">Fiche</button></div></div>`;
+    <div class="row">${actions}<button class="btn small-btn" onclick="openProspect(${jsArg(p.id)})">Fiche</button></div></div>`;
 }
 
 async function loadToday() {
@@ -1677,7 +1746,7 @@ async function loadServiceStatus() {
   document.getElementById("mon-checks").innerHTML = d.checks.map((c) => `
     <div class="mon-check"><span class="light is-${esc(c.status)}" role="img" aria-label="${{ ok: "Bon", warn: "À surveiller", ko: "En panne", idle: "Rien à signaler" }[c.status] || ""}"></span>
       <div><b>${esc(c.name)}</b><span class="detail">${esc(c.detail)}</span></div>
-      ${c.test ? `<button class="btn small-btn" onclick="testCheck('${esc(c.key)}', this)">Tester</button>` : ""}</div>`).join("");
+      ${c.test ? `<button class="btn small-btn" onclick="testCheck(${jsArg(c.key)}, this)">Tester</button>` : ""}</div>`).join("");
   const late = d.tasks.filter((t) => t.status === "warn" || t.status === "ko").length;
   document.querySelector("#mon-tasks-wrap summary").textContent = `Tâches automatiques : dernier passage de chacune${late ? ` (${late} à vérifier)` : ""}`;
   document.getElementById("mon-tasks").innerHTML = `<table><thead><tr><th>Tâche</th><th>Fréquence</th><th>Dernier passage</th><th>État</th></tr></thead><tbody>${
@@ -1711,11 +1780,11 @@ async function loadIssues() {
   const select = document.getElementById("mon-source");
   if (select.options.length === 1) d.sources.forEach((s) => select.add(new Option(s.label, s.code)));
   document.getElementById("mon-filters").innerHTML = MON_FILTERS.map(([k, label]) =>
-    `<button class="pill" aria-pressed="${k === monFilter}" onclick="setMonFilter('${k}')">${label} · ${d.counts[k]}</button>`).join("");
+    `<button class="pill" aria-pressed="${k === monFilter}" onclick="setMonFilter(${jsArg(k)})">${label} · ${d.counts[k]}</button>`).join("");
   const empty = { todo: "Aucune erreur à traiter. Bob tourne sans incident.", new: "Aucune nouvelle erreur.", progress: "Aucune erreur en cours de correction.", resolved: "Aucune erreur corrigée ces 30 derniers jours." }[monFilter];
   document.getElementById("mon-list").innerHTML = `<div class="mon-head"><span>Erreur</span><span style="text-align: right;">Fois</span><span>Dernière fois</span><span>Statut</span></div>` +
     (d.issues.length ? d.issues.map((i) => `
-    <button type="button" class="mon-row" data-id="${esc(i.id)}" aria-current="${i.id === monCurrent}" onclick="openIssue('${esc(i.id)}')">
+    <button type="button" class="mon-row" data-id="${esc(i.id)}" aria-current="${i.id === monCurrent}" onclick="openIssue(${jsArg(i.id)})">
       <div class="mon-main"><div class="line"><span class="chip">${esc(i.source_label)}</span><b>${esc(i.title)}</b></div>
         <span class="mon-where">${esc(i.where)}${i.location ? " · " + esc(i.location) : ""}</span>
         <span class="mon-shops">${esc(shopsLabel(i))}${i.assignee && i.status === "IN_PROGRESS" ? " · pris en charge par " + esc(i.assignee) : ""}</span></div>
@@ -1742,9 +1811,9 @@ async function openIssue(id, quiet) {
   const box = document.getElementById("mon-detail");
   const since = i.count + " fois depuis " + frDateTime(i.first_seen).replace("Aujourd'hui", "aujourd'hui").replace("Hier", "hier");
   const actions = [];
-  if (i.status !== "IN_PROGRESS" && i.status !== "RESOLVED") actions.push(`<button class="btn primary" onclick="setIssueStatus('${esc(i.id)}', 'IN_PROGRESS')">Je m'en occupe</button>`);
-  if (i.status !== "RESOLVED") actions.push(`<button class="btn" onclick="setIssueStatus('${esc(i.id)}', 'RESOLVED')">Marquer corrigée</button>`);
-  else actions.push(`<button class="btn" onclick="setIssueStatus('${esc(i.id)}', 'NEW')">Rouvrir</button>`);
+  if (i.status !== "IN_PROGRESS" && i.status !== "RESOLVED") actions.push(`<button class="btn primary" onclick="setIssueStatus(${jsArg(i.id)}, 'IN_PROGRESS')">Je m'en occupe</button>`);
+  if (i.status !== "RESOLVED") actions.push(`<button class="btn" onclick="setIssueStatus(${jsArg(i.id)}, 'RESOLVED')">Marquer corrigée</button>`);
+  else actions.push(`<button class="btn" onclick="setIssueStatus(${jsArg(i.id)}, 'NEW')">Rouvrir</button>`);
   const state = i.status === "IN_PROGRESS" && i.assignee ? `Pris en charge par ${i.assignee}` :
     i.status === "RESOLVED" && i.resolved_by ? `Corrigée par ${i.resolved_by} · ${frDateTime(i.resolved_at)}` :
     i.status === "REOPENED" ? `Revenue après correction (${i.reopened_count} fois)` : "";

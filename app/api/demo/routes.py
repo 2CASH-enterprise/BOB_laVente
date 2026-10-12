@@ -9,13 +9,15 @@ import secrets
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.dependency import get_llm_client
 from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import generate_ai_reply
 from app.core.database import get_db
+from app.core.rate_limit import RateLimiter
+from app.core.rate_limit_dependency import get_rate_limiter
 from app.core.security import CurrentUser, create_access_token, get_current_user, hash_password
 from app.models.conversation import Message, MessageSender
 from app.models.customer import Customer
@@ -33,6 +35,13 @@ router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
 
 DEMO_CUSTOMER_HANDLE = "demo-web-session"
 MAX_CSV_SIZE_BYTES = 10 * 1024 * 1024
+# Lot 70 — garde-fous de coût de la démo publique.
+DEMO_CREATE_PER_IP = 5        # démos par adresse et par heure
+DEMO_CREATE_PER_DAY = 300     # démos par jour, toutes adresses confondues
+DEMO_MAX_MESSAGES = 30        # messages du visiteur par démo
+DEMO_MAX_CHARS = 1000         # caractères par message
+DEMO_LIMIT_REPLY = ("Tu as atteint la limite de {n} messages de cette démo. Pour continuer avec Bob sur ton propre "
+                    "WhatsApp, crée ton compte depuis cette page.")  # la page de démo tutoie
 # Lot 33 — créneaux par défaut d'une concession de démo (modifiables ensuite dans Rendez-vous).
 DEMO_OPENING_HOURS = {str(day): [["09:00", "12:00"], ["14:00", "18:00"]] for day in range(6)}
 
@@ -47,6 +56,7 @@ async def create_demo(
     insurance_structure: str | None = Form(None),
     file: UploadFile = None,
     db: AsyncSession = Depends(get_db),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
 ) -> DemoCreateResponse:
     """
     Aucune authentification requise : c'est le point d'entrée public de la démo,
@@ -57,6 +67,12 @@ async def create_demo(
 
     from app.services.business_type import BUSINESS_TYPES, CAR_DEALERSHIP
 
+    # Lot 70 — chaque démo crée une boutique et coûte des appels à l'IA : limite par adresse et limite globale.
+    ip = request.client.host if request.client else "unknown"
+    if not await rate_limiter.is_allowed(f"demo-create:ip:{ip}", limit=DEMO_CREATE_PER_IP, window_seconds=3600):
+        raise HTTPException(status_code=429, detail="Plusieurs démos ont déjà été créées depuis ta connexion. Réessaie dans une heure.")
+    if not await rate_limiter.is_allowed("demo-create:all", limit=DEMO_CREATE_PER_DAY, window_seconds=86400):
+        raise HTTPException(status_code=429, detail="La démo est très demandée aujourd'hui. Réessaie demain, ou écris-nous.")
     if not company_name.strip():
         raise HTTPException(status_code=400, detail="Le nom de l'entreprise est requis")
     if business_type not in BUSINESS_TYPES:
@@ -187,6 +203,8 @@ async def demo_chat(
     """
     if not payload.message.strip():
         raise HTTPException(status_code=400, detail="Message vide")
+    if len(payload.message) > DEMO_MAX_CHARS:
+        raise HTTPException(status_code=400, detail=f"Message trop long : {DEMO_MAX_CHARS} caractères au plus.")
 
     if llm_client is None:
         return DemoChatResponse(reply="La démo n'est pas encore configurée (clé IA manquante). Réessayez plus tard.")
@@ -194,6 +212,12 @@ async def demo_chat(
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Session de démo introuvable")
+
+    if tenant.is_demo:
+        sent = (await db.execute(select(func.count(Message.id)).where(
+            Message.tenant_id == tenant.id, Message.sender == MessageSender.CUSTOMER, Message.message_type == "demo"))).scalar_one()
+        if sent >= DEMO_MAX_MESSAGES:  # lot 70 : plus d'appel à l'IA au-delà
+            return DemoChatResponse(reply=DEMO_LIMIT_REPLY.format(n=DEMO_MAX_MESSAGES))
 
     customer_repo = CustomerRepository(db)
     customer = await customer_repo.get_or_create(current_user.tenant_id, DEMO_CUSTOMER_HANDLE)

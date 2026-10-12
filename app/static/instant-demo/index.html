@@ -218,7 +218,7 @@
       </div>
     </div>
     <div class="chat-input-row">
-      <input id="chat-input" placeholder="Écrivez comme le ferait un client…" onkeydown="if(event.key==='Enter') sendMessage()">
+      <input id="chat-input" maxlength="1000" placeholder="Écrivez comme le ferait un client…" onkeydown="if(event.key==='Enter') sendMessage()">
       <button onclick="sendMessage()" aria-label="Envoyer">➤</button>
     </div>
   </div>

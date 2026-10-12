@@ -11,8 +11,19 @@ class SuperAdminBootstrapRequest(BaseModel):
 
 
 class SuperAdminLoginResponse(BaseModel):
-    access_token: str
+    access_token: str | None = None  # lot 70 : absent tant que le code envoyé par email n'est pas saisi
     token_type: str = "bearer"
+    mfa_required: bool = False
+    mfa_pending_token: str | None = None
+
+
+class SuperAdminVerifyRequest(BaseModel):  # lot 70
+    mfa_pending_token: str
+    code: str
+
+
+class SuperAdminResendRequest(BaseModel):  # lot 70
+    mfa_pending_token: str
 
 
 class TenantSummaryForAdmin(BaseModel):

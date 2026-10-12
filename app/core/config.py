@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # Security
     secret_key: str  # obligatoire, jamais de valeur par défaut en dur
     access_token_expire_minutes: int = 60
+    # Lot 70 — code à 6 chiffres par email à chaque connexion Super Admin. SUPERADMIN_MFA=false (puis redémarrer)
+    # seulement en dépannage, si les emails ne partent plus.
+    superadmin_mfa: bool = True
     algorithm: str = "HS256"
     # Lot 30 — clé de chiffrement des jetons en base (Fernet). Facultative : sans elle, une clé est
     # dérivée de SECRET_KEY. Si elle est ajoutée plus tard, les jetons déjà chiffrés restent lisibles.
@@ -58,6 +61,9 @@ class Settings(BaseSettings):
     # WhatsApp (section 59)
     whatsapp_app_id: str = ""
     whatsapp_app_secret: str = ""
+    # Lot 70 — sans WHATSAPP_APP_SECRET, les messages reçus de Meta sont REFUSÉS (signature impossible à vérifier).
+    # Mettre WHATSAPP_REQUIRE_SIGNATURE=false seulement en développement local.
+    whatsapp_require_signature: bool = True
     whatsapp_webhook_verify_token: str = ""
     whatsapp_graph_api_version: str = "v25.0"
     # Lot 21 — configuration Facebook Login for Business dédiée au catalogue (catalog_management).

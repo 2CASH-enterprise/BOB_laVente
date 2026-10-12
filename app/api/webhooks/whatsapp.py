@@ -121,9 +121,11 @@ async def receive_webhook(
         signature = request.headers.get("X-Hub-Signature-256")
         if not verify_whatsapp_signature(settings.whatsapp_app_secret, raw_body, signature):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signature webhook invalide")
-    # Si WHATSAPP_APP_SECRET n'est pas configuré (dev/démo), la vérification est ignorée :
-    # c'est un choix délibéré pour ne pas bloquer le développement local, jamais acceptable
-    # en production (section 32) — WHATSAPP_APP_SECRET doit être renseigné avant mise en ligne.
+    elif settings.whatsapp_require_signature:
+        # Lot 70 — sans la clé de l'application Meta, n'importe qui pourrait envoyer de faux messages clients :
+        # on refuse tout (et le monitoring le signale). WHATSAPP_REQUIRE_SIGNATURE=false : développement local seulement.
+        logging.getLogger(__name__).error("Webhook WhatsApp refusé : WHATSAPP_APP_SECRET n'est pas configuré sur le serveur")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signature webhook impossible à vérifier")
 
     try:
         payload = json.loads(raw_body)

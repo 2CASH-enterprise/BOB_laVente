@@ -101,22 +101,33 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
     from app.services.monitoring import current_tenant
 
     current_tenant.set(user.tenant_id)
-    await _check_preregistration(request, db, user)
+    await _check_account(request, db, user)
     return user
 
 
-async def _check_preregistration(request: Request, db, user: CurrentUser) -> None:
+async def _check_account(request: Request, db, user: CurrentUser) -> None:
     """
+    Lot 70 — le compte doit encore exister, être actif et appartenir à cette boutique : un utilisateur supprimé ou
+    désactivé perd l'accès tout de suite (avant : jusqu'à l'expiration de son jeton, 60 minutes).
     Lot 65 — un compte pré-inscrit (accès pas encore ouvert) ne peut appeler que l'accueil d'exemple, sa
     pré-inscription et la connexion : tout le reste répond 403, quel que soit le chemin pris par la page.
+    Une seule requête pour les deux contrôles.
     """
     from sqlalchemy import select
 
     from app.models.tenant import Tenant
+    from app.models.user import User
     from app.services import preregistration
 
-    row = (await db.execute(select(Tenant.prereg_at, Tenant.access_opened_at).where(Tenant.id == user.tenant_id))).first()
-    if row is None or row.prereg_at is None or row.access_opened_at is not None:
+    row = (await db.execute(
+        select(User.active, Tenant.prereg_at, Tenant.access_opened_at)
+        .join(Tenant, Tenant.id == User.tenant_id)
+        .where(User.id == user.user_id, User.tenant_id == user.tenant_id)
+    )).first()
+    if row is None or row.active is False:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Compte désactivé ou introuvable",
+                            headers={"WWW-Authenticate": "Bearer"})
+    if row.prereg_at is None or row.access_opened_at is not None:
         return
     if not preregistration.allowed(request.method, request.url.path):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=preregistration.LOCKED_MESSAGE)
@@ -169,11 +180,35 @@ def create_superadmin_access_token(user_id: UUID) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
+# Lot 70 — jeton « code Super Admin en attente » : ni `superadmin` ni `mfa_pending` (celui des commerçants) dedans,
+# il ne peut donc ouvrir AUCUNE route ; il sert seulement à envoyer le code à 6 chiffres.
+class SuperAdminMfaPendingPayload(BaseModel):
+    sub: str
+    sa_mfa_pending: bool
+    exp: datetime
+
+
+def create_superadmin_mfa_pending_token(user_id: UUID) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    return jwt.encode({"sub": str(user_id), "sa_mfa_pending": True, "exp": expire}, settings.secret_key,
+                      algorithm=settings.algorithm)
+
+
+def decode_superadmin_mfa_pending_token(token: str) -> UUID:
+    try:
+        parsed = SuperAdminMfaPendingPayload(**jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm]))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Vérification expirée, reconnectez-vous") from exc
+    if not parsed.sa_mfa_pending:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide")
+    return UUID(parsed.sub)
+
+
 class CurrentSuperAdmin(BaseModel):
     superadmin_user_id: UUID
 
 
-def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_scheme)) -> CurrentSuperAdmin:
+async def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_scheme), db=Depends(get_db)) -> CurrentSuperAdmin:
     if token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Non authentifié")
     try:
@@ -183,4 +218,12 @@ def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_scheme)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide ou expiré") from exc
     if not parsed.superadmin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide")
+    # Lot 70 — un compte Super Admin désactivé (ou effacé) perd l'accès tout de suite.
+    from sqlalchemy import select
+
+    from app.models.superadmin_user import SuperAdminUser
+
+    active = (await db.execute(select(SuperAdminUser.active).where(SuperAdminUser.id == UUID(parsed.sub)))).scalar_one_or_none()
+    if not active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Compte désactivé ou introuvable")
     return CurrentSuperAdmin(superadmin_user_id=UUID(parsed.sub))

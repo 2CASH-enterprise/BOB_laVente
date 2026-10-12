@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("MONITORING_QUEUE", "memory")  # lot 67 : jamais de vrai Redis pour le monitoring en test
+os.environ.setdefault("SUPERADMIN_MFA", "false")  # lot 70 : activé dans ses propres tests
+os.environ.setdefault("WHATSAPP_REQUIRE_SIGNATURE", "false")  # lot 70 : idem
 
 from app.core.database import Base, get_db  # noqa: E402
 from app.core.rate_limit import InMemoryRateLimiter  # noqa: E402

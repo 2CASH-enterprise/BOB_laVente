@@ -21,5 +21,9 @@ class SuperAdminUser(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Lot 70 — code de connexion à 6 chiffres envoyé par email (haché, valable 10 minutes) et dernière connexion.
+    mfa_otp_code_hash: Mapped[str | None] = mapped_column(String(64))
+    mfa_otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -43,6 +43,17 @@ def _queued() -> list[dict]:
     return list(monitoring._local_queue)
 
 
+async def _member(db) -> tuple:
+    """Lot 70 : get_current_user exige désormais un utilisateur réel et actif de la boutique."""
+    from app.models.user import Role, User
+
+    tenant = await _tenant(db)
+    user = User(tenant_id=tenant.id, email=f"{uuid.uuid4().hex[:6]}@l67.ci", hashed_password="x", full_name="Awa", role=Role.ADMIN)
+    db.add(user)
+    await db.commit()
+    return tenant.id, user.id
+
+
 async def _tenant(db, name="Boutique Awa"):
     tenant = Tenant(name=name, country="CI", currency="XOF", email=f"{uuid.uuid4().hex[:6]}@l67.ci", plan=TenantPlan.PRO)
     db.add(tenant)
@@ -185,8 +196,8 @@ async def test_api_crash_is_captured_with_route_and_shop(db_session):
     async def boom(item_id: int, user: CurrentUser = Depends(get_current_user)):
         raise ValueError("division impossible token=EAAGabcdef1234567890xyzXYZ")
     app.router.routes.insert(0, APIRoute("/api/v1/zz-test/{item_id}", boom, methods=["GET"], dependency_overrides_provider=app))
-    tenant_id = uuid.uuid4()
-    token = create_access_token(uuid.uuid4(), tenant_id, "ADMIN")
+    tenant_id, user_id = await _member(db_session)
+    token = create_access_token(user_id, tenant_id, "ADMIN")
     try:
         async with AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test") as ac:
             r = await ac.get("/api/v1/zz-test/42", headers={"Authorization": f"Bearer {token}"})

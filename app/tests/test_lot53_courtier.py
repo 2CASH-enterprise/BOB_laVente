@@ -565,7 +565,7 @@ def test_dashboard_sector_switches():
 def test_quote_page_escapes_everything():
     body = _function("loadQuotes")
     for piece in ("${esc(q.customer)}", "${esc(q.branch_label)}", "${esc(l)}", "${esc(q.status_label)}",
-                  "jumpToCustomerConversation('${esc(q.conversation_id)}')", "advanceQuote('${esc(q.id)}', '${esc(s)}')", "${esc(e.message)}"):
+                  "jumpToCustomerConversation(${jsArg(q.conversation_id)})", "advanceQuote(${jsArg(q.id)}, ${jsArg(s)})", "${esc(e.message)}"):
         assert piece in body, piece
     assert 'if (item.kind === "QUOTE") return `showTab(\'quotes\')`;' in HTML
     assert 'if (name === "quotes") loadQuotes(currentQuoteView);' in HTML

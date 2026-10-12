@@ -6,7 +6,7 @@ tenant (app.core.security.get_current_superadmin), aucune route existante n'est 
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,9 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services import bob_pause
 from app.services.business_type import normalize as normalize_business_type
 from app.core.database import get_db
+from app.core.rate_limit import RateLimiter
+from app.core.rate_limit_dependency import get_rate_limiter
 from app.core.security import (
     CurrentSuperAdmin,
     create_superadmin_access_token,
+    create_superadmin_mfa_pending_token,
+    decode_superadmin_mfa_pending_token,
     get_current_superadmin,
     hash_password,
     verify_password,
@@ -32,6 +36,8 @@ from app.schemas.superadmin import (
     PlatformStats,
     SuperAdminBootstrapRequest,
     SuperAdminLoginResponse,
+    SuperAdminResendRequest,
+    SuperAdminVerifyRequest,
     TenantActiveUpdate,
     TenantBusinessTypeUpdate,
     TenantCommissionRateUpdate,
@@ -66,15 +72,124 @@ async def bootstrap_superadmin(payload: SuperAdminBootstrapRequest, db: AsyncSes
     return SuperAdminLoginResponse(access_token=token)
 
 
+# Lot 70 — connexion Super Admin protégée comme celle des commerçants, en plus strict : essais limités par email ET
+# par adresse, code à 6 chiffres par email (valable 10 minutes, 5 essais), email d'alerte à chaque connexion réussie.
+SA_LOGIN_EMAIL_LIMIT, SA_LOGIN_EMAIL_WINDOW = 5, 900
+SA_LOGIN_IP_LIMIT, SA_LOGIN_IP_WINDOW = 10, 60
+SA_TOO_MANY = "Trop de tentatives, réessayez dans quelques minutes"
+
+
+def _ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _send_code(admin: SuperAdminUser) -> bool:
+    from datetime import timedelta
+
+    from app.services.email_service import send_email
+    from app.services.otp_service import generate_otp, hash_otp
+
+    code = generate_otp()
+    admin.mfa_otp_code_hash = hash_otp(code)
+    admin.mfa_otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    return bool(send_email(
+        to=admin.email, subject="Votre code de connexion au Super Admin de Bob",
+        body=(f"Bonjour,\n\nVoici votre code de connexion au Super Admin de Bob :\n\n{code}\n\nIl expire dans 10 minutes. "
+              "Si vous n'êtes pas à l'origine de cette connexion, changez votre mot de passe tout de suite : "
+              "quelqu'un le connaît."),
+    ))
+
+
+def _alert_login(admin: SuperAdminUser, request: Request, now: datetime) -> None:
+    from app.services.email_service import send_email
+    from app.services.local_time import as_utc
+
+    when = as_utc(now).strftime("%d/%m/%Y à %H:%M") + " (heure UTC)"
+    agent = (request.headers.get("user-agent") or "inconnu")[:200]
+    send_email(to=admin.email, subject="Bob : nouvelle connexion au Super Admin",
+               body=(f"Bonjour,\n\nUne connexion au Super Admin de Bob avec votre compte vient d'avoir lieu.\n\n"
+                     f"Date : {when}\nAdresse : {_ip(request)}\nNavigateur : {agent}\n\n"
+                     "Si c'est vous, il n'y a rien à faire. Sinon, changez votre mot de passe tout de suite."))
+
+
+async def _open_session(db: AsyncSession, admin: SuperAdminUser, request: Request) -> SuperAdminLoginResponse:
+    from app.services.audit import log_audit_event
+
+    now = datetime.now(timezone.utc)
+    admin.mfa_otp_code_hash = None
+    admin.mfa_otp_expires_at = None
+    admin.last_login_at = now
+    await log_audit_event(db, actor=f"superadmin:{admin.id}", action="SUPERADMIN_LOGIN_SUCCESS", ip_address=_ip(request))
+    await db.commit()
+    _alert_login(admin, request, now)
+    return SuperAdminLoginResponse(access_token=create_superadmin_access_token(admin.id))
+
+
 @router.post("/login", response_model=SuperAdminLoginResponse)
-async def login_superadmin(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    stmt = select(SuperAdminUser).where(SuperAdminUser.email == form_data.username.strip().lower(), SuperAdminUser.active.is_(True))
+async def login_superadmin(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db),
+                           rate_limiter: RateLimiter = Depends(get_rate_limiter)):
+    from app.services.audit import log_audit_event
+    from app.core.config import get_settings
+
+    email = form_data.username.strip().lower()
+    ip = _ip(request)
+    allowed_ip = await rate_limiter.is_allowed(f"sa-login:ip:{ip}", limit=SA_LOGIN_IP_LIMIT, window_seconds=SA_LOGIN_IP_WINDOW)
+    allowed_email = await rate_limiter.is_allowed(f"sa-login:email:{email}", limit=SA_LOGIN_EMAIL_LIMIT,
+                                                  window_seconds=SA_LOGIN_EMAIL_WINDOW)
+    if not allowed_ip or not allowed_email:
+        await log_audit_event(db, actor="ANONYMOUS", action="SUPERADMIN_LOGIN_RATE_LIMITED", ip_address=ip, details={"email": email})
+        await db.commit()
+        raise HTTPException(status_code=429, detail=SA_TOO_MANY)
+
+    stmt = select(SuperAdminUser).where(SuperAdminUser.email == email, SuperAdminUser.active.is_(True))
     admin = (await db.execute(stmt)).scalar_one_or_none()
     if admin is None or not verify_password(form_data.password, admin.hashed_password):
+        await log_audit_event(db, actor="ANONYMOUS", action="SUPERADMIN_LOGIN_FAILED", ip_address=ip, details={"email": email})
+        await db.commit()
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
 
-    token = create_superadmin_access_token(admin.id)
-    return SuperAdminLoginResponse(access_token=token)
+    if not get_settings().superadmin_mfa:
+        return await _open_session(db, admin, request)
+    if not _send_code(admin):
+        raise HTTPException(status_code=503, detail="Le code de connexion n'a pas pu être envoyé par email. Réessayez dans un instant.")
+    await db.commit()
+    return SuperAdminLoginResponse(mfa_required=True, mfa_pending_token=create_superadmin_mfa_pending_token(admin.id))
+
+
+@router.post("/login/verify", response_model=SuperAdminLoginResponse)
+async def verify_superadmin_code(payload: SuperAdminVerifyRequest, request: Request, db: AsyncSession = Depends(get_db),
+                                 rate_limiter: RateLimiter = Depends(get_rate_limiter)):
+    from app.services.audit import log_audit_event
+    from app.services.otp_service import verify_otp
+
+    admin_id = decode_superadmin_mfa_pending_token(payload.mfa_pending_token)
+    if not await rate_limiter.is_allowed(f"sa-mfa:verify:{admin_id}", limit=5, window_seconds=300):
+        raise HTTPException(status_code=429, detail="Trop d'essais : reconnectez-vous pour recevoir un nouveau code")
+    admin = await db.get(SuperAdminUser, admin_id)
+    if admin is None or not admin.active or admin.mfa_otp_code_hash is None or admin.mfa_otp_expires_at is None:
+        raise HTTPException(status_code=401, detail="Aucune vérification en attente, reconnectez-vous")
+    expires = admin.mfa_otp_expires_at if admin.mfa_otp_expires_at.tzinfo else admin.mfa_otp_expires_at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires:
+        raise HTTPException(status_code=401, detail="Code expiré : reconnectez-vous pour en recevoir un autre")
+    if not verify_otp((payload.code or "").strip(), admin.mfa_otp_code_hash):
+        await log_audit_event(db, actor=f"superadmin:{admin.id}", action="SUPERADMIN_LOGIN_CODE_INVALID", ip_address=_ip(request))
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Code incorrect")
+    return await _open_session(db, admin, request)
+
+
+@router.post("/login/resend", status_code=204)
+async def resend_superadmin_code(payload: SuperAdminResendRequest, db: AsyncSession = Depends(get_db),
+                                 rate_limiter: RateLimiter = Depends(get_rate_limiter)) -> None:
+    admin_id = decode_superadmin_mfa_pending_token(payload.mfa_pending_token)
+    if not await rate_limiter.is_allowed(f"sa-mfa:resend:{admin_id}", limit=3, window_seconds=300):
+        raise HTTPException(status_code=429, detail="Trop de demandes, patientez quelques minutes")
+    admin = await db.get(SuperAdminUser, admin_id)
+    if admin is None or not admin.active:
+        raise HTTPException(status_code=401, detail="Session invalide, reconnectez-vous")
+    if not _send_code(admin):
+        raise HTTPException(status_code=503, detail="Le code n'a pas pu être envoyé. Réessayez dans un instant.")
+    await db.commit()
 
 
 @router.post("/create-colleague", response_model=SuperAdminLoginResponse)

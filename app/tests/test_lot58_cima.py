@@ -249,7 +249,7 @@ def test_dashboard():
         assert key in save, key
     assert 'classList.toggle("hidden", chosen !== "COURTIER")' in _function("insuranceStructureChanged")
     assert "downloadExport('/api/v1/contracts/export.xlsx'" in HTML and "downloadExport('/api/v1/quote-requests/export.xlsx'" in HTML
-    assert "openCustomerDossier('${esc(c.id)}')" in HTML and 'currentBusinessType === "INSURANCE_BROKER"' in HTML
+    assert "openCustomerDossier(${jsArg(c.id)})" in HTML and 'currentBusinessType === "INSURANCE_BROKER"' in HTML
     dossier = _function("openCustomerDossier")
     assert "Authorization" in dossier and "token" not in dossier.split("fetch(")[1].split(",")[0]  # jamais dans l'adresse
     assert "Authorization" in _function("downloadExport")

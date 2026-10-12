@@ -151,12 +151,12 @@ def test_home_is_first_and_existing_cards_stay_below():
 def test_home_escapes_everything_that_comes_from_customers():
     render = re.search(r"function renderHome\(h\) \{(.*?)\n\}", HTML, re.S).group(1)
     for field in ("t.customer", "t.detail", "t.reason", "a.title", "a.detail", "h.first_name", "item.conversation_id"):
-        assert f"${{esc({field}" in render or f"esc({field}" in HTML, field
+        assert f"${{esc({field}" in render or f"esc({field}" in HTML or f"jsArg({field})" in HTML, field
     assert "${t.customer}" not in render and "${t.detail}" not in render and "${a.detail}" not in render
 
 
 def test_home_actions_reuse_existing_navigation():
-    assert "jumpToCustomerConversation('${esc(item.conversation_id)}')" in HTML
+    assert "jumpToCustomerConversation(${jsArg(item.conversation_id)})" in HTML
     assert "if (item.kind === \"ORDER\") return `showTab('orders')`" in HTML
 
 
@@ -166,7 +166,7 @@ def test_catalog_card_offers_one_click_and_keeps_manual_mode_folded():
     section = _section("integrations")
     assert 'id="meta-oauth-btn"' in section and "connectMetaCatalogOAuth()" in section
     assert '<details id="meta-advanced"' in section and 'id="meta-form"' in section
-    assert "onclick=\"selectMetaCatalog('${esc(c.id)}')\">${esc(c.name)}</button>" in HTML
+    assert "onclick=\"selectMetaCatalog(${jsArg(c.id)})\">${esc(c.name)}</button>" in HTML
     assert "<li>${esc(e)}</li>" in HTML  # erreurs de synchronisation échappées
 
 
@@ -201,7 +201,7 @@ def test_segment_screen_after_signup_escapes_options_and_can_be_left_by_logout()
     assert 'id="segment-screen" class="hidden" role="dialog"' in HTML
     check = re.search(r"async function checkBusinessTypeChosen\(\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert "if (bt.chosen) return;" in check
-    assert "chooseBusinessType('${esc(o.code)}')" in check and "${sectorTitle(o)}" in check and "${esc(o.description)}" in check
+    assert "chooseBusinessType(${jsArg(o.code)})" in check and "${sectorTitle(o)}" in check and "${esc(o.description)}" in check
     assert "return esc(option.label) + (option.hint ? ` <span class=\"option-hint\">(${esc(option.hint)})</span>` : \"\");" in HTML  # lot 53
     enter = re.search(r"function enterApp\(\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert "checkBusinessTypeChosen();" in enter
@@ -247,7 +247,7 @@ def test_appointment_cards_escape_everything_from_customers_and_bob():
     card = re.search(r"function appointmentCard\(a, view\) \{(.*?)\n\}", HTML, re.S).group(1)
     for field in ("a.need", "a.budget", "a.trade_in", "a.notes", "a.kind_label", "a.vehicle", "a.customer",
                   "a.availability", "a.scheduled_label", "a.id", "a.conversation_id"):
-        assert f"esc({field})" in card, field
+        assert f"esc({field})" in card or f"jsArg({field})" in card, field  # lot 70 : jsArg = JSON puis esc
     for raw in ("${a.need}", "${a.notes}", "${a.customer}", "${a.availability}", "${a.vehicle}"):
         assert raw not in card
     assert '${notifyVia ? "checked" : "disabled"}' in card  # prévenir le client : coché par défaut

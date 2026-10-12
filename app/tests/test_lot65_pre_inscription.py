@@ -116,7 +116,7 @@ async def test_prereg_signup_lock_and_example_home(client, db_session, email_cod
     welcome = next(m for m in mails if m["to"] == email)
     assert welcome["subject"] == "Pré-inscription confirmée — Auto Plus" and pre.OFFER_TEXT in welcome["body"]
     assert "La liste de vos véhicules" in welcome["body"] and welcome["body"].rstrip().endswith("L'équipe de Bob")
-    alert = next(m for m in mails if m["to"] != email)
+    alert = next(m for m in mails if m["to"] != email and "connexion au Super Admin" not in m["subject"])  # lot 70 : alerte de connexion
     assert alert["subject"] == "Nouvelle pré-inscription — Auto Plus" and "Concession automobile" in alert["body"]
 
     # Verrou côté serveur : tout répond 403, sauf l'accueil d'exemple, la pré-inscription et la connexion
