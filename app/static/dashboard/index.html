@@ -331,6 +331,7 @@
   .phone-history summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; }
   .phone-history .msg { opacity: 0.85; }
   .phone-history .msg-date { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .msg-powered { display: block; margin-top: 6px; font-size: 11px; font-style: italic; color: var(--muted); }
   .msg-origin { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
   /* Lot 51 — Bob en pause pour toute la boutique, ou échéance de l'abonnement proche */
   .bob-status-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 16px; margin-bottom: 18px; border-radius: 12px;
@@ -3895,7 +3896,10 @@ async function toggleMfaSetting() {
 // Lot 31 : affiche le gras WhatsApp (*texte*) comme sur le téléphone du client. Le texte est
 // d'abord échappé : seules les balises <strong> ajoutées ici sont du HTML.
 function waFormat(value) {
-  return esc(value).replace(/(^|[\s(«])\*(?=\S)([^*\n]*?\S)\*(?=$|[\s.,;:!?)»])/gm, "$1<strong>$2</strong>");
+  return esc(value).replace(/(^|[\s(«])\*(?=\S)([^*\n]*?\S)\*(?=$|[\s.,;:!?)»])/gm, "$1<strong>$2</strong>")
+    // Lot 74 — mention « Propulsé par Bob » du plan gratuit : en petit et en gris, sous le message.
+    .replace(/\n*^_?(Propulsé par Bob[^\n]*?)_?$/gim, '<span class="msg-powered">$1</span>')
+    .replace(/(<span class="msg-powered">[^<]*<\/span>)+/g, "$1"); // anciens messages : mention en double affichée une fois
 }
 
 function esc(value) {

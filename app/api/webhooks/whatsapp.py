@@ -36,6 +36,7 @@ from app.services.handoff_rules import (
 from app.services.business_type import is_dealership
 from app.services.finance_guard import FINANCE_MESSAGE, FINANCE_MESSAGE_NO_TRANSFER, contains_financing_figure
 from app.services.promise_guard import contains_human_promise, remove_human_promises
+from app.services.powered_by import add_powered_by, strip_powered_by  # lot 74
 from app.services.signal_service import classify_and_store
 from app.services.strategy_service import apply_strategy
 from app.services.handoff_service import (
@@ -366,6 +367,7 @@ async def receive_webhook(
         quota_exceeded = await plan_quota.paused(db, tenant)  # lot 69 : seulement si le Super Admin a choisi « pause »
 
     outage_emails: list[dict] = []
+    powered_by = False  # lot 74 : « Propulsé par Bob », réponses de l'IA au plan gratuit seulement
     change_outbox: list = []  # lot 35 : rendez-vous déplacés ou annulés par le client
     message_outbox: list[str] = []  # lot 34b : messages fixes après la réponse (demande d'email)
     booking_outbox: list = []  # lot 29 : rendez-vous réservés par Bob, confirmés au client après sa réponse
@@ -502,8 +504,8 @@ async def receive_webhook(
             signal.strategy = strategy.code if strategy is not None and turn.rule is None else None
 
         # Freemium (jamais en démo) — mention discrète, levier de bouche-à-oreille (section freemium).
-        if not tenant.is_paid:
-            reply_text = f"{reply_text}\n\n_Propulsé par Bob 🤖_"
+        # Lot 74 : ajoutée plus bas, une seule fois, en toute dernière ligne.
+        powered_by = not tenant.is_paid
 
     # Lot 58 (CIMA 01-24, art. 7) — courtier : la première réponse de Bob à un client lui dit, une seule fois,
     # qui traite ses données, avec le lien vers la politique de confidentialité du cabinet (s'il l'a donné).
@@ -515,6 +517,13 @@ async def receive_webhook(
         if notice:
             reply_text = f"{reply_text}\n\n{notice}"
             customer.privacy_notice_at = datetime.now(timezone.utc)
+
+    # Lot 74 — Bob recopiait parfois la mention vue dans sa mémoire : le client la recevait en double. Toute
+    # copie écrite par l'IA est retirée ; la mention n'est remise qu'au plan gratuit, seule sur la dernière ligne.
+    if reply_text:
+        reply_text = strip_powered_by(reply_text)
+    if powered_by and reply_text:
+        reply_text = add_powered_by(reply_text)
 
     # Lot 31 — texte enregistré tel qu'il part sur WhatsApp (gras *…*, puces •), pour que le tableau
     # de bord montre exactement ce que le client a reçu.

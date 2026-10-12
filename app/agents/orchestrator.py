@@ -110,7 +110,12 @@ def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
     for msg in history:
         if msg.sender == MessageSender.CUSTOMER:
             messages.append({"role": "user", "content": msg.content})
-        elif msg.sender in (MessageSender.AI, MessageSender.HUMAN):
+        elif msg.sender == MessageSender.AI:
+            # Lot 74 : sans la mention « Propulsé par Bob » (ajoutée par le code), sinon Bob la recopie.
+            from app.services.powered_by import strip_powered_by
+
+            messages.append({"role": "assistant", "content": strip_powered_by(msg.content)})
+        elif msg.sender == MessageSender.HUMAN:
             messages.append({"role": "assistant", "content": msg.content})
         # SYSTEM : non inclus dans l'historique de dialogue
     return messages
