@@ -482,7 +482,7 @@ async def test_real_web_push_is_encrypted_and_signed(db_session, push_on, monkey
     import http_ece
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ec
-    from jose import jwt as jose_jwt
+    import jwt as pyjwt
 
     public, _ = push_on
     device_key = ec.generate_private_key(ec.SECP256R1())
@@ -514,7 +514,7 @@ async def test_real_web_push_is_encrypted_and_signed(db_session, push_on, monkey
     authorization = captured["headers"]["Authorization"]
     assert authorization.startswith("vapid t=") and f"k={public}" in authorization
     token = authorization.split("t=", 1)[1].split(",", 1)[0]
-    claims = jose_jwt.get_unverified_claims(token)
+    claims = pyjwt.decode(token, options={"verify_signature": False})
     assert claims["aud"] == "https://fcm.googleapis.com" and claims["sub"].startswith("mailto:")
 
 

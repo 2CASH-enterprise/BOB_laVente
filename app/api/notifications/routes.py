@@ -72,7 +72,7 @@ async def subscribe(
     try:
         endpoint = notifications.validate_endpoint(payload.endpoint)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from None
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     user = await db.get(User, current_user.user_id)
     if user is None or user.tenant_id != current_user.tenant_id or not user.active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Compte non autorisé")

@@ -49,7 +49,7 @@ DEMO_OPENING_HOURS = {str(day): [["09:00", "12:00"], ["14:00", "18:00"]] for day
 @router.post("/create", response_model=DemoCreateResponse)
 async def create_demo(
     request: Request,
-    company_name: str = Form(...),
+    company_name: str = Form(""),  # lot 72 : vide → notre message (FastAPI récent répondrait 422 en anglais)
     currency: str = Form("XOF"),
     country: str = Form("SN"),
     business_type: str = Form("ONLINE_STORE"),

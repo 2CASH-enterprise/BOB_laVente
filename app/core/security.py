@@ -10,7 +10,8 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt  # lot 72 : PyJWT remplace python-jose (failles connues, plus maintenu)
+from jwt import PyJWTError as JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
 
@@ -214,7 +215,7 @@ async def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_s
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         parsed = SuperAdminTokenPayload(**payload)
-    except Exception as exc:  # noqa: BLE001 — couvre à la fois JWTError et une validation pydantic ratée
+    except Exception as exc:  # noqa: BLE001 — couvre à la fois PyJWTError et une validation pydantic ratée
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide ou expiré") from exc
     if not parsed.superadmin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide")

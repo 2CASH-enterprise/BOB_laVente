@@ -23,7 +23,9 @@ from app.services.local_time import _MONTHS, as_utc, tenant_zone
 logger = logging.getLogger(__name__)
 
 OFFICE_START, OFFICE_END = 8, 19      # heures de bureau, heure du pays (le week-end est entièrement hors heures)
-MINUTES_PER_REPLY = 2                 # temps qu'un humain met pour répondre à un message
+# Lot 72 (demande du 12/10, précisée le 16/10) : 5 minutes PAR MESSAGE de Bob au lieu de 2 — la réponse ET les tâches
+# qui vont avec (commande, rendez-vous, demande de cotation, relance).
+MINUTES_PER_REPLY = 5
 HOURS_PER_PERSON = 173                # heures de travail d'une personne à temps plein, par mois
 DEFAULT_DAYS = 30
 MIN_DAYS, MAX_DAYS = 7, 62
@@ -299,7 +301,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
     saved = len(ai_msgs) * MINUTES_PER_REPLY
     relay = max(1, round(present * 24 / HOURS_PER_PERSON)) if present else 0
     savings = [("Messages auxquels Bob a répondu seul", number(len(ai_msgs))),
-               (f"Temps de réponse évité ({MINUTES_PER_REPLY} min par message)", duration(saved))]
+               (f"Temps libéré ({MINUTES_PER_REPLY} min par message)", duration(saved))]
     if rdv and asked:
         count = sum(1 for at in asked if as_utc(at) >= start)
         if count:
@@ -319,8 +321,8 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
                      f"les clients prêts à {'souscrire' if insurance else 'acheter'}."),
         "presence": presence, "savings": savings, "value_title": "Temps libéré", "value": duration(saved),
         "compare": compare,
-        "method": (f"Estimation : chaque réponse de Bob compte {MINUTES_PER_REPLY} minutes (le temps moyen pour répondre "
-                   f"à un message) ; une personne à temps plein travaille {HOURS_PER_PERSON} heures par mois."),
+        "method": (f"Estimation : chaque message de Bob compte {MINUTES_PER_REPLY} minutes (la réponse et les tâches "
+                   f"qui vont avec : commande, rendez-vous, demande de cotation, relance) ; une personne à temps plein travaille {HOURS_PER_PERSON} heures par mois."),
     }
 
     night = {

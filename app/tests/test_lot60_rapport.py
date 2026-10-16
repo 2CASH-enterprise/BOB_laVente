@@ -179,8 +179,9 @@ async def test_build_for_a_shop(db_session):
     bob = d["bob"]
     assert bob["presence"] == [("30 / 30", "jours de présence, dont 8 de week-end"), ("24 h / 24", "720 heures de présence"),
                                ("16 s", "pour répondre, en moyenne")]  # (7 + 11 + 30) / 3 ; l'import sans réponse ne compte pas
-    assert bob["savings"] == [("Messages auxquels Bob a répondu seul", "3"), ("Temps de réponse évité (2 min par message)", "6 min")]
-    assert bob["value"] == "6 min" and bob["compare"] == "pour la même présence 24 h / 24, il faudrait 4 personnes en relais"
+    # Lot 72 : 5 min par message de Bob (au lieu de 2).
+    assert bob["savings"] == [("Messages auxquels Bob a répondu seul", "3"), ("Temps libéré (5 min par message)", "15 min")]
+    assert bob["value"] == "15 min" and bob["compare"] == "pour la même présence 24 h / 24, il faudrait 4 personnes en relais"
     assert d["to_validate"]["items"] == [("1 commande", "en attente : si vous avez été payé, cliquez « Paiement reçu »"),
                                          ("1 commande", "en attente depuis plus de 7 jours : payées ou à annuler ?")]
     assert d["to_validate"]["url"].endswith("/dashboard/?tab=orders")
@@ -535,7 +536,9 @@ async def test_reply_delays_and_office_hours(db_session):
     d = await monthly_report.build(db_session, tenant, START, END)
     assert d["night"]["replies"] == 0 and d["headline"] == "2 conversations"
     assert d["bob"]["presence"][2] == ("10 s", "pour répondre, en moyenne")
+    # Lot 72 : 3 messages de Bob (dans 2 conversations) → 15 min : on compte les messages, pas les conversations.
     assert d["bob"]["savings"][0] == ("Messages auxquels Bob a répondu seul", "3")
+    assert d["bob"]["value"] == "15 min" and "chaque message de Bob compte 5 minutes" in d["bob"]["method"]
 
 
 @pytest.mark.asyncio
