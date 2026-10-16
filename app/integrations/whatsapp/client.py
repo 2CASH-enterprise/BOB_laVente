@@ -173,6 +173,27 @@ class WhatsAppClient:
         payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": image}
         return await self._post("/messages", payload)
 
+    async def send_product_card(self, to: str, link: str, body: str, button_id: str, button_title: str) -> dict:
+        """Lot 76 — un produit : photo, texte court et bouton de réponse rapide (« Ça m'intéresse »)."""
+        payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+                   "interactive": {"type": "button", "header": {"type": "image", "image": {"link": link}},
+                                   "body": {"text": to_whatsapp(body)[:1024]},
+                                   "action": {"buttons": [{"type": "reply",
+                                                           "reply": {"id": button_id[:256], "title": button_title[:20]}}]}}}
+        return await self._post("/messages", payload)
+
+    async def send_product_carousel(self, to: str, body: str, cards: list[dict]) -> dict:
+        """Lot 76 — 2 à 10 produits en cartes qui défilent : photo, texte (160 car.) et bouton par carte."""
+        payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+                   "interactive": {"type": "carousel", "body": {"text": to_whatsapp(body)[:1024]}, "action": {"cards": [
+                       {"card_index": i, "type": "cta_url",  # valeur de l'exemple « quick reply » de la documentation Meta
+                        "header": {"type": "image", "image": {"link": card["link"]}},
+                        "body": {"text": to_whatsapp(card["body"])[:160]},
+                        "action": {"buttons": [{"type": "quick_reply", "quick_reply": {
+                            "id": card["button_id"][:256], "title": card["button_title"][:20]}}]}}
+                       for i, card in enumerate(cards[:10])]}}}
+        return await self._post("/messages", payload)
+
     async def send_template_message(self, to: str, template_name: str, language: str = "fr",
                                     components: list | None = None) -> dict:
         template = {"name": template_name, "language": {"code": language}}
@@ -197,6 +218,29 @@ class WhatsAppClient:
             return response.json()
 
 
+def _interactive_replies(msg: dict) -> list[dict]:
+    """button_reply, list_reply… (et toute autre forme {id, title} que Meta enverrait pour un carrousel)."""
+    interactive = msg.get("interactive") or {}
+    ordered = [interactive.get("button_reply"), interactive.get("list_reply")] + list(interactive.values())
+    return [r for r in ordered if isinstance(r, dict) and ("id" in r or "title" in r)]
+
+
+def _reply_title(msg: dict) -> str | None:
+    """Lot 76 — le texte du bouton touché par le client (avant : message vide pour Bob)."""
+    for reply in _interactive_replies(msg):
+        if reply.get("title"):
+            return reply["title"]
+    button = msg.get("button") or {}  # bouton de réponse rapide d'un modèle
+    return button.get("text") or None
+
+
+def _reply_id(msg: dict) -> str | None:
+    for reply in _interactive_replies(msg):
+        if reply.get("id"):
+            return str(reply["id"])
+    return (msg.get("button") or {}).get("payload") or None
+
+
 def parse_whatsapp_message(payload: dict) -> dict | None:
     """
     Extrait le premier message entrant d'un payload de webhook Meta.
@@ -218,7 +262,9 @@ def parse_whatsapp_message(payload: dict) -> dict | None:
             "from": msg["from"],
             "wa_message_id": msg["id"],
             "type": msg.get("type", "text"),
-            "text": msg.get("text", {}).get("body"),
+            "text": msg.get("text", {}).get("body") or _reply_title(msg),
+            # Lot 76 — réponse à un bouton (carte produit, modèle) : identifiant du bouton, pour retrouver le produit.
+            "reply_id": _reply_id(msg),
             "timestamp": msg.get("timestamp"),
             # Lot 28 — publicité / publication Meta « clic vers WhatsApp » (brut, nettoyé plus loin).
             "referral": msg.get("referral"),

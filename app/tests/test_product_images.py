@@ -70,8 +70,9 @@ async def test_only_real_https_photos_of_this_shop_are_queued(db_session, unique
     assert set(result["without_photo"]) == {"Produit B", "Produit C"} and "pas encore de photo" in result["instruction"]
     assert set(others["unknown_products"]) == {str(hidden.id), str(foreign.id), "pas-un-id"}
     assert others["status"] == "no_photo_sent"
+    # Lot 76 : la carte dit le nom (et un détail de la fiche), jamais le prix.
     assert executor.pending_images == [{"product_id": str(car.id), "link": "https://cdn.example.com/p.jpg",
-                                        "caption": "Peugeot 5008 — 15 000 000 XOF"}]
+                                        "name": "Peugeot 5008", "card": "Peugeot 5008"}]
 
 
 @pytest.mark.asyncio
@@ -132,6 +133,7 @@ async def test_no_photo_and_no_text_is_still_a_failure(db_session, unique_email)
 class _WhatsAppRecorder:
     texts: list = []
     images: list = []
+    cards: list = []
     fail_images = False
 
     def __init__(self, *a, **kw):
@@ -147,10 +149,17 @@ class _WhatsAppRecorder:
         _WhatsAppRecorder.images.append({"to": to, "link": link, "caption": caption})
         return {}
 
+    async def send_product_card(self, to, link, body, button_id, button_title):  # lot 76
+        if _WhatsAppRecorder.fail_images:
+            raise RuntimeError("Meta indisponible")
+        _WhatsAppRecorder.cards.append({"to": to, "link": link, "body": body, "button_id": button_id, "title": button_title})
+        return {}
+
 
 @pytest.fixture
 def recorder(monkeypatch, wire):
     _WhatsAppRecorder.texts, _WhatsAppRecorder.images, _WhatsAppRecorder.fail_images = [], [], False
+    _WhatsAppRecorder.cards = []
     state = {"wire": wire}
     # `wire` remplace le client par un faux silencieux : on met le nôtre par-dessus.
     monkeypatch.setattr("app.api.webhooks.whatsapp.WhatsAppClient", _WhatsAppRecorder)
@@ -172,11 +181,12 @@ async def test_incident_customer_asks_for_a_photo_and_receives_it(client, db_ses
 
     assert r.json()["images_sent"] == 1
     assert _WhatsAppRecorder.texts == ["Voici la Peugeot 5008 !"]
-    assert _WhatsAppRecorder.images == [{"to": "221700000401", "link": "https://cdn.example.com/5008.jpg",
-                                         "caption": "Peugeot 5008 — 15 000 000 XOF"}]
-    stored = (await db_session.execute(select(Message).where(Message.message_type == "image"))).scalar_one()
-    assert stored.content == "📷 Photo envoyée : Peugeot 5008 — 15 000 000 XOF"
-    assert stored.message_metadata == {"image_url": "https://cdn.example.com/5008.jpg", "product_id": str(car.id)}
+    # Lot 76 : la photo part en carte avec le bouton « Ça m'intéresse ».
+    assert _WhatsAppRecorder.cards == [{"to": "221700000401", "link": "https://cdn.example.com/5008.jpg",
+                                        "body": "Peugeot 5008", "button_id": f"interest:{car.id}", "title": "Ça m'intéresse"}]
+    stored = (await db_session.execute(select(Message).where(Message.message_type == "product_cards"))).scalar_one()
+    assert stored.content == "🛍 Cartes envoyées : Peugeot 5008"
+    assert stored.message_metadata == {"product_ids": [str(car.id)], "image_urls": ["https://cdn.example.com/5008.jpg"]}
 
 
 @pytest.mark.asyncio

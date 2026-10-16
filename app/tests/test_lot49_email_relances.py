@@ -75,7 +75,8 @@ async def _customer(db, tenant, email="client@example.com", consent=True, first_
 # Chaque envoi WhatsApp du code est listé ici, avec sa justification. Un nouvel envoi fait échouer ce test
 # tant qu'on n'a pas vérifié qu'il respecte la règle des 20 h.
 SEND_SITES = {
-    "api/webhooks/whatsapp.py": 5,      # réponses au message que le client vient d'envoyer (fenêtre ouverte) ; lot 57 : accusé de réception
+    "api/webhooks/whatsapp.py": 4,      # réponses au message que le client vient d'envoyer (fenêtre ouverte) ; lot 57 : accusé de réception
+    "services/product_cards.py": 3,     # lot 76 : cartes / carrousel / photos de repli, appelés SEULEMENT par le webhook (fenêtre ouverte)
     "agents/tools.py": 1,               # confirmation de commande pendant la conversation (idem)
     "api/messages/routes.py": 1,        # réponse humaine : ensure_reply_window_open
     "services/appointment_service.py": 1,  # messages fixes : ensure_reply_window_open (puis email)
@@ -90,7 +91,7 @@ def _send_calls():
         rel = path.relative_to(ROOT).as_posix()
         if rel.startswith(("tests/", "integrations/")):
             continue
-        count = len(re.findall(r"\.send_(?:text|image|template|interactive|document)_message\(", path.read_text(encoding="utf-8")))
+        count = len(re.findall(r"\.send_(?:(?:text|image|template|interactive|document)_message|product_card|product_carousel)\(", path.read_text(encoding="utf-8")))
         if count:
             found[rel] = count
     return found

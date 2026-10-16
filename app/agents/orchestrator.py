@@ -108,6 +108,31 @@ def record_usage(db, tenant_id, conversation_id, kind: str, model: str | None, r
         logger.warning("Consommation de l'IA non enregistrée (conversation %s)", conversation_id)
 
 
+async def _cards_for_named_products(executor, text: str, insurance: bool) -> None:
+    """Lot 76 — test réel du 16/10 : Bob a listé les sacs en texte sans appeler send_product_images. Les produits
+    trouvés par ses outils, qui ont une photo et qu'il NOMME dans sa réponse, partent en cartes (3 au plus ; une carte
+    déjà montrée depuis moins d'une heure n'est pas renvoyée)."""
+    if insurance or executor.pending_images:
+        return
+    candidates = dict(executor.products_with_photo)
+    if not candidates:
+        # Test réel du 16/10 (22:08) : Bob a répondu d'après l'aperçu du catalogue, sans chercher — aucune carte.
+        # On retrouve alors les produits nommés directement dans le catalogue de CETTE boutique.
+        from sqlalchemy import select
+
+        from app.models.product import Product
+        from app.agents.tools import has_sendable_photo
+
+        rows = (await executor.db.execute(select(Product).where(
+            Product.tenant_id == executor.tenant_id, Product.active.is_(True), Product.stock_quantity > 0,
+            Product.image_url.is_not(None)).limit(500))).scalars().all()
+        candidates = {str(p.id): p.name for p in rows if has_sendable_photo(p)}
+    lowered = (text or "").lower()
+    named = [pid for pid, name in candidates.items() if name and name.lower() in lowered]
+    if named:
+        await executor.execute("send_product_images", {"product_ids": named[:3]})
+
+
 def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
     """
     Mémoire conversationnelle (section 13) : convertit l'historique en base au format
@@ -117,6 +142,10 @@ def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
     for msg in history:
         if msg.sender == MessageSender.CUSTOMER:
             messages.append({"role": "user", "content": msg.content})
+        elif msg.sender == MessageSender.AI and getattr(msg, "message_type", None) in ("product_cards", "image"):
+            # Lot 76 (test réel du 16/10, 21:55) : Bob recopiait « 🛍 Cartes envoyées : … » de sa mémoire dans sa réponse.
+            # Ces lignes ne sont que des traces pour le tableau de bord : jamais montrées à l'IA.
+            continue
         elif msg.sender == MessageSender.AI:
             # Lot 74 : sans la mention « Propulsé par Bob » (ajoutée par le code), sinon Bob la recopie.
             from app.services.powered_by import strip_powered_by
@@ -319,7 +348,17 @@ async def generate_ai_reply_detailed(
                         logger.warning("Réponse de Bob à corriger (%s, conversation %s) : nouvel essai", correction, conversation.id)
                         continue
                 if text:
+                    if image_outbox is not None and not insurance and not dealership:
+                        from app.services.product_cards import without_unasked_prices
+
+                        text = without_unasked_prices(text, incoming_text)  # lot 76 : prix seulement sur demande
                     if image_outbox is not None:
+                        await _cards_for_named_products(executor, text, insurance)  # lot 76
+                        if executor.pending_images:
+                            # Lot 76 : les cartes montrent les produits — le texte n'en refait pas la liste (ni les prix).
+                            from app.services.product_cards import text_for_cards
+
+                            text = text_for_cards(text, [i["name"] for i in executor.pending_images])
                         image_outbox.extend(executor.pending_images)  # lot 26c : seulement si Bob a répondu
                     return text, None
                 # Lot 22 — réponse vide (cas réel du 27/09 : un client répond « 1 » à un choix,

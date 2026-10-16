@@ -396,10 +396,12 @@ TOOL_DEFINITIONS = [
         # Lot 26c — envoyer la vraie photo d'un produit (boutique en ligne et concession).
         "name": "send_product_images",
         "description": (
-            "Envoie au client, sur WhatsApp, la photo réelle d'un à trois produits du catalogue (celle "
-            "enregistrée par l'entreprise). À utiliser quand le client demande une photo, ou pour montrer un "
-            "produit que tu recommandes. Les photos partent juste après ta réponse. Ne dis jamais que tu ne "
-            "peux pas envoyer de photo avant d'avoir essayé : si un produit n'en a pas, l'outil te le dit."
+            "Montre au client, sur WhatsApp, un à trois produits du catalogue en CARTES : la vraie photo, le nom, "
+            "un détail utile et un bouton « Ça m'intéresse » (lot 76). À utiliser dès que tu présentes des produits "
+            "(« vous avez des robes ? ») ou quand le client demande une photo. Les cartes partent juste après ta "
+            "réponse : ta réponse est alors une courte phrase d'introduction, sans lister les produits ni leurs prix. "
+            "Ne dis jamais que tu ne peux pas envoyer de photo avant d'avoir essayé : si un produit n'en a pas, "
+            "l'outil te le dit (cite-le alors simplement dans ta réponse)."
         ),
         "input_schema": {
             "type": "object",

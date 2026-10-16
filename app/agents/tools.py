@@ -135,7 +135,7 @@ class ToolExecutor:
             "currency": product.currency,
             "stock": product.stock_quantity,
             "active": product.active,
-            "photo": "disponible : utilise send_product_images pour l'envoyer" if has_photo else "aucune",
+            "photo": "disponible : send_product_images le montre en carte" if has_photo else "aucune",
             **({"vehicle": for_ai(product.vehicle)} if getattr(product, "vehicle", None) else {}),
             **({"fiche": fiche} if (fiche := sheet_for_ai(product)) else {}),  # lot 78 : fiche et variantes
         }
@@ -316,12 +316,11 @@ class ToolExecutor:
                 continue
             if len(self.pending_images) >= MAX_IMAGES_PER_REPLY:
                 break
-            price = f"{float(product.price):,.0f}".replace(",", " ")
-            self.pending_images.append({
-                "product_id": str(product.id),
-                "link": url,
-                "caption": f"{product.name} — {price} {product.currency}",
-            })
+            from app.services.product_cards import card_body
+
+            # Lot 76 : la carte (ou, en repli, la légende de la photo) dit le nom et un détail — jamais le prix.
+            self.pending_images.append({"product_id": str(product.id), "link": url, "name": product.name,
+                                        "card": card_body(product)})
             queued.append(product.name)
         result = {"status": "photos_queued" if queued else "no_photo_sent", "photos_sent_after_reply": queued}
         if without_photo:
@@ -344,20 +343,29 @@ class ToolExecutor:
         if getattr(self, "_recent_photos", None) is None:
             since = datetime.now(timezone.utc) - timedelta(hours=1)
             rows = (await self.db.execute(select(Message.message_metadata).where(
-                Message.conversation_id == self.conversation.id, Message.message_type == "image",
+                Message.conversation_id == self.conversation.id, Message.message_type.in_(("image", "product_cards")),
                 Message.created_at >= since,
             ))).scalars().all()
-            self._recent_photos = {str((meta or {}).get("product_id")) for meta in rows if meta}
-            if self.asks_photo_again():
+            self._recent_photos = set()
+            for meta in rows:
+                meta = meta or {}
+                if meta.get("product_id"):
+                    self._recent_photos.add(str(meta["product_id"]))
+                self._recent_photos.update(str(pid) for pid in meta.get("product_ids") or [])  # lot 76 : cartes
+            if not self.is_acknowledgement():
+                # Lot 76 (test réel du 16/10, 22:19 : « Je veux un sac » → liste sans carrousel) : on ne retient une
+                # carte déjà montrée QUE si le client répond par un simple « ok », « merci », « d'accord »…
                 self._recent_photos = set()
         return self._recent_photos
 
-    def asks_photo_again(self) -> bool:
-        """« Renvoyez la photo », « je ne vois pas l'image » : le client redemande, la photo repart."""
+    def is_acknowledgement(self) -> bool:
+        """« Okay », « merci », « d'accord », « oui », « super »… : rien à montrer de nouveau (incident du 16/10, 13:49)."""
         import re as _re
 
-        return bool(_re.search(r"(photo|image|renvo|pas re[çc]u|vois pas)",
-                               self.incoming_text or "", _re.IGNORECASE))
+        return bool(_re.fullmatch(
+            r"\s*(ok(ay|ey)?|d'?accord|dac|merci( beaucoup)?|oui|ouais|super|parfait|top|cool|tr[eè]s bien|bien|"
+            r"[çc]a marche|entendu|not[ée]|g[ée]nial|bonne (journ[ée]e|soir[ée]e)|au revoir|👍|🙏|😊)[\s!.]*",
+            self.incoming_text or "", _re.IGNORECASE))
 
     async def _booking_context(self, lock: bool = False):
         from datetime import datetime, timezone

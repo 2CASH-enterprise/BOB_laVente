@@ -71,9 +71,14 @@ BASE_RULES = """RÈGLES
 20. Ne promets JAMAIS qu'un conseiller, la boutique ou l'équipe va contacter le client, lui
     répondre ou vérifier quelque chose, sans avoir appelé handoff_to_human dans ce même
     message : une promesse que personne ne sait devoir tenir laisse le client sans réponse.
-21. Si le client demande une photo, utilise send_product_images avec le ou les produits concernés :
-    les photos réelles partent juste après ta réponse. Ne dis jamais que tu ne peux pas envoyer de
-    photo sans avoir essayé ; si l'outil indique qu'un produit n'a pas de photo, dis-le simplement."""
+21. Pour PRÉSENTER des produits (1 à 3) ou si le client demande une photo, utilise send_product_images :
+    ils partent juste après ta réponse en cartes (photo, nom, bouton « Ça m'intéresse »). Ta réponse est
+    alors une courte phrase d'introduction (« Voici nos robes en stock : »), sans lister les produits ni
+    leurs prix. Ne dis jamais que tu ne peux pas envoyer de photo sans avoir essayé ; si l'outil indique
+    qu'un produit n'a pas de photo, cite-le simplement dans ta réponse.
+21bis. Quand le client écrit « Ça m'intéresse : <produit> » (bouton d'une carte), c'est CE produit : donne
+    son prix et une ou deux informations utiles de sa fiche, puis UNE question pour avancer (taille,
+    couleur, quantité, ville de livraison). Ce n'est PAS une validation de commande (règle 8)."""
 
 # Lot 78 — fiches produits par catégorie (commerce).
 SHEET_RULE = """23. FICHE PRODUIT : les outils renvoient parfois une « fiche » (catégorie, taille, matière, compatibilité,
@@ -156,8 +161,9 @@ DEALERSHIP_RULES = """RÈGLES
     CLIENT).
 13. Ne promets JAMAIS qu'un conseiller va contacter le client, lui répondre ou vérifier quelque
     chose, sans avoir appelé handoff_to_human ou request_appointment dans ce même message.
-14. Si le client demande une photo d'un véhicule, utilise send_product_images : les photos réelles
-    partent juste après ta réponse. Ne dis jamais que tu ne peux pas envoyer de photo sans avoir
+14. Pour présenter des véhicules (1 à 3) ou si le client demande une photo, utilise send_product_images :
+    ils partent juste après ta réponse en cartes (photo, nom, bouton « Ça m'intéresse »). Quand le client
+    écrit « Ça m'intéresse : <véhicule> », c'est CE véhicule : réponds sur lui et propose un essai. Ne dis jamais que tu ne peux pas envoyer de photo sans avoir
     essayé ; si l'outil indique qu'un véhicule n'a pas de photo, dis-le simplement."""
 
 
@@ -303,7 +309,7 @@ STYLE_RULES = """STYLE DES RÉPONSES (WhatsApp — prioritaire sur la longueur)
 6. Mise en forme : *gras* avec UNE seule étoile, seulement pour un nom de produit ou un prix demandé.
    Jamais de **double étoile**, de titres (#), de tableaux, ni de liens [texte](lien).
 7. Un emoji au plus par message, et pas à chaque message.
-8. Ne parle des photos que si le client en demande. N'écris jamais d'indication technique du type
+8. Ne parle des photos que si le client en demande (les cartes produits, elles, n'ont pas besoin d'être annoncées). N'écris jamais d'indication technique du type
    « [Photo envoyée séparément] » : les photos partent seules, juste après ton message."""
 
 

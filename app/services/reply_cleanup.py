@@ -21,7 +21,11 @@ _SPACES = re.compile(r"(?<=\S)[ \t]{2,}")
 _TRIPLE_BLANK = re.compile(r"\n{3,}")
 
 
+_TRACE_LINE = re.compile(r"^[^\w\n]*(cartes envoy[ée]es|photo envoy[ée]e)\s*:[^\n]*$", re.IGNORECASE | re.MULTILINE)
+
+
 def remove_placeholders(text: str) -> str:
+    text = _TRACE_LINE.sub("", text)  # lot 76 : traces du tableau de bord recopiées par l'IA
     text = _PLACEHOLDER_LINE.sub("", text)
     return _PLACEHOLDER_INLINE.sub("", text)
 

@@ -194,6 +194,11 @@ async def receive_webhook(
         conversation.last_followup_at = None
 
     incoming_text = parsed.get("text") or ""
+    # Lot 76 — bouton « Ça m'intéresse » d'une carte produit : Bob reçoit le nom exact du produit.
+    if parsed.get("reply_id"):
+        from app.services.product_cards import interest_text
+
+        incoming_text = await interest_text(db, tenant_id, parsed["reply_id"]) or incoming_text
 
     # Lot 28 — le client arrive d'une publicité (ou publication) Facebook / Instagram : Meta joint
     # une référence au message. Source notée au tout premier contact seulement ; le contexte de
@@ -634,24 +639,28 @@ async def receive_webhook(
     if booking_messages:
         await db.commit()
 
-    # Lot 26c — photos des produits, après le texte ; chacune n'est tracée que si Meta l'accepte.
+    # Lot 76 — produits présentés en cartes (photo + « Ça m'intéresse »), après le texte ; repli sur les photos simples.
     images_sent = 0
-    for image in image_outbox:
-        try:
-            await wa_client.send_image_message(to=customer.whatsapp_number, link=image["link"], caption=image["caption"])
-        except Exception:  # noqa: BLE001 — une photo refusée ne bloque jamais la conversation
-            logging.getLogger(__name__).warning(
-                "Photo de produit non envoyée (conversation %s, produit %s)", conversation.id, image["product_id"]
-            )
-            continue
-        db.add(Message(
-            tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.AI, message_type="image",
-            content=f"📷 Photo envoyée : {image['caption']}",
-            message_metadata={"image_url": image["link"], "product_id": image["product_id"]},
-        ))
-        images_sent += 1
-    if images_sent:
-        await db.commit()
+    if image_outbox:
+        from app.services import product_cards
+
+        mode, sent = await product_cards.send(wa_client, customer.whatsapp_number, image_outbox, tu)
+        if mode == "cards" and sent:
+            db.add(Message(
+                tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.AI, message_type="product_cards",
+                content="🛍 Cartes envoyées : " + ", ".join(i["name"] for i in sent),
+                message_metadata={"product_ids": [i["product_id"] for i in sent], "image_urls": [i["link"] for i in sent]},
+            ))
+        else:
+            for item in sent:
+                db.add(Message(
+                    tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.AI, message_type="image",
+                    content=f"📷 Photo envoyée : {item['card'].splitlines()[0]}",
+                    message_metadata={"image_url": item["link"], "product_id": item["product_id"]},
+                ))
+        images_sent = len(sent)
+        if sent:
+            await db.commit()
 
     # Lot 34b/35 — messages fixes (demande d'email, confirmation de report ou d'annulation), en dernier.
     for text in message_outbox:
