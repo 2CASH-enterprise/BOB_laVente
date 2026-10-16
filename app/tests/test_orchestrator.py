@@ -193,7 +193,7 @@ async def test_max_tool_iterations_falls_back_gracefully(db_session, unique_emai
         db=db_session, tenant=tenant, conversation=conversation, history=[], incoming_text="test", llm_client=fake
     )
     assert reply == FALLBACK_MESSAGE
-    assert fake.call_count <= 5  # max_tool_iterations par défaut
+    assert fake.call_count <= 6  # max_tool_iterations (5) + le dernier appel « réponds sans outil » du lot 75
 
 
 @pytest.mark.asyncio

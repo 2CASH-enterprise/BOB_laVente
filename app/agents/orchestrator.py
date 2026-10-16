@@ -41,6 +41,13 @@ NO_PHOTO_CLAIM = re.compile(
     re.IGNORECASE,
 )
 
+FINAL_ANSWER_INSTRUCTION = (
+    "\n\nCONSIGNE FINALE (prioritaire) : n'appelle plus aucun outil. Réponds maintenant au dernier message du "
+    "client, en une ou deux phrases, avec les informations que tu as déjà. S'il te manque une information, dis-le "
+    "simplement et pose-lui une question utile."
+)
+PHOTOS_ONLY_REPLY = "Voici les photos :"  # lot 75 : neutre (tu ou vous)
+
 EMPTY_REPLY_RETRY_INSTRUCTION = (
     "\n\nCONSIGNE (ta réponse précédente était vide) : réponds maintenant au DERNIER message du client, "
     "même s'il est très court (un chiffre, « oui », « ok ») : relis tes messages précédents pour comprendre "
@@ -192,7 +199,10 @@ async def generate_ai_reply_detailed(
     knowledge_repo = KnowledgeEntryRepository(db)
     knowledge_entries = await knowledge_repo.list_active(tenant.id)
     customer_memory = await build_customer_memory(db, tenant.id, conversation.customer_id)
-    system_prompt = build_system_prompt(tenant, knowledge_entries, customer_memory)
+    from app.services.catalog_overview import catalog_overview
+
+    catalog = await catalog_overview(db, tenant.id)  # lot 75 : même réponse à « qu'avez-vous ? »
+    system_prompt = build_system_prompt(tenant, knowledge_entries, customer_memory, catalog=catalog)
     business_type = getattr(tenant, "business_type", None)
     executor = ToolExecutor(db, tenant.id, conversation, business_type=business_type)
     if booking_outbox is not None:
@@ -238,7 +248,13 @@ async def generate_ai_reply_detailed(
     claim_retry_done = False
     amount_retry_done = False
     try:
-        for _ in range(settings.max_tool_iterations):
+        for iteration in range(settings.max_tool_iterations + 1):
+            last_try = iteration == settings.max_tool_iterations
+            if last_try:
+                # Lot 75 — incident MS4 Africa du 15/10 (« Vous avez des photos ? », 8 appels puis « IA bloquée ») :
+                # au bout des tours d'outils, un dernier appel où Bob doit répondre avec ce qu'il sait déjà.
+                system_prompt += FINAL_ANSWER_INSTRUCTION
+                logger.warning("Bob tourne avec ses outils : dernier appel pour une réponse (conversation %s)", conversation.id)
             response = await _create_with_retries(llm_client, **call_kwargs(system_prompt))
             record_usage(db, tenant.id, conversation.id, "REPLY", getattr(llm_client, "model", None), response)
             content_blocks = response.get("content", [])
@@ -247,7 +263,8 @@ async def generate_ai_reply_detailed(
             if stop_reason != "tool_use":
                 text_parts = [b["text"] for b in content_blocks if b.get("type") == "text"]
                 text = "\n".join(text_parts).strip()
-                if text and not lookup_retry_done and not executor.pending_images and not executor.looked_up_products \
+                if text and not last_try and not lookup_retry_done and not executor.pending_images \
+                        and not executor.looked_up_products \
                         and NO_PHOTO_CLAIM.search(text):
                     # Lot 26e — incident réel : Bob recopie « pas de photo » de ses réponses précédentes,
                     # sans rien vérifier. Un seul nouvel essai : consulter le catalogue d'abord.
@@ -259,7 +276,8 @@ async def generate_ai_reply_detailed(
                     )
                     logger.warning("Bob a nié une photo sans vérifier (conversation %s) : nouvel essai", conversation.id)
                     continue
-                if text and not photo_retry_done and not executor.pending_images and executor.products_with_photo \
+                if text and not last_try and not photo_retry_done and not executor.pending_images \
+                        and executor.products_with_photo \
                         and NO_PHOTO_CLAIM.search(text):
                     # Lot 26d — Bob affirme qu'il n'y a pas de photo alors qu'un produit vu dans ce
                     # message en a une : un seul nouvel essai, avec les produits nommés.
@@ -277,7 +295,7 @@ async def generate_ai_reply_detailed(
                     from app.services import insurance as insurance_service
 
                     if insurance_service.contains_amount(text):
-                        if amount_retry_done:
+                        if amount_retry_done or last_try:
                             logger.warning("Réponse de Bob remplacée (AMOUNT, conversation %s)", conversation.id)
                             text = insurance_service.AMOUNT_FALLBACK
                         else:
@@ -294,6 +312,8 @@ async def generate_ai_reply_detailed(
                     if fixed is not None:
                         logger.warning("Réponse de Bob remplacée (%s, conversation %s)", correction, conversation.id)
                         text = fixed
+                    elif correction is not None and last_try:
+                        break  # plus d'essai possible : jamais une date ou un rendez-vous non vérifié
                     elif correction is not None:
                         system_prompt += _CORRECTIONS[correction](text, tenant)
                         logger.warning("Réponse de Bob à corriger (%s, conversation %s) : nouvel essai", correction, conversation.id)
@@ -309,12 +329,19 @@ async def generate_ai_reply_detailed(
                     "Réponse vide du service d'IA (conversation %s, essai %s) : %s",
                     conversation.id, empty_replies + 1, response.get("diagnostic") or {"stop_reason": stop_reason},
                 )
+                if executor.pending_images and image_outbox is not None:
+                    # Lot 75 — « Vous avez des photos ? » : les photos sont prêtes mais l'IA n'a rien écrit.
+                    # Les photos partent avec une phrase fixe, au lieu d'un transfert « IA bloquée ».
+                    image_outbox.extend(executor.pending_images)
+                    return PHOTOS_ONLY_REPLY, None
                 if empty_replies >= 1:
                     return FALLBACK_MESSAGE, FAILURE_LOOP
                 empty_replies += 1
                 system_prompt += EMPTY_REPLY_RETRY_INSTRUCTION
                 continue
 
+            if last_try:
+                break  # il veut encore un outil : on n'en exécute plus
             # Le modèle veut utiliser un ou plusieurs outils : on les exécute réellement (section 33)
             messages.append({"role": "assistant", "content": content_blocks})
             tool_results = []
@@ -332,6 +359,9 @@ async def generate_ai_reply_detailed(
             messages.append({"role": "user", "content": tool_results})
 
         # Trop d'itérations d'outils sans réponse finale : on ne laisse jamais tourner indéfiniment.
+        if executor.pending_images and image_outbox is not None:
+            image_outbox.extend(executor.pending_images)  # lot 75 : les photos prêtes partent quand même
+            return PHOTOS_ONLY_REPLY, None
         logger.warning(
             "Boucle d'outils IA interrompue (max_tool_iterations atteint) — conversation %s", conversation.id
         )

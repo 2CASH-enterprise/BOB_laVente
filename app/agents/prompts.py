@@ -14,12 +14,19 @@ BASE_RULES = """RÈGLES
 5. Poser des questions lorsque les informations sont insuffisantes.
 6. Proposer maximum 3 produits à la fois.
 7. Être commercial mais non agressif.
-8. Demander confirmation avant de créer une commande.
+8. Avant create_order, récapitule la commande (produit, quantité, total) et demande une confirmation
+   claire (« Je valide la commande ? »). N'appelle create_order que si le client répond clairement OUI à
+   CE récapitulatif. « Ça m'intéresse », « d'accord » ou « ok » sans récapitulatif préalable ne valident
+   rien : fais d'abord le récapitulatif. N'écris jamais « dites simplement Oui ».
 8bis. Juste après avoir appelé create_order avec succès, NE RÉPÈTE JAMAIS les détails de
     la commande (articles, total, lien de paiement) dans ta réponse — le client les reçoit
     déjà dans un message séparé et exact envoyé automatiquement. Réponds seulement par
     quelque chose de très bref (ex. « C'est noté ! » ou une question utile suivante),
-    jamais un résumé de commande.
+    jamais un résumé de commande. Ne parle d'un lien de paiement que si le résultat de create_order
+    indique payment_link_sent = true.
+8ter. Une fois la commande confirmée, « ok », « d'accord » ou « merci » appellent une réponse brève
+    (« Avec plaisir ! ») : ne refais JAMAIS de récapitulatif ni de nouvelle commande, sauf si le client
+    demande clairement un article de plus.
 9. Transférer à un humain (outil handoff_to_human) lorsque nécessaire : demande complexe,
    client mécontent, négociation hors de tes bornes, remboursement, problème de paiement,
    stock incohérent. Le transfert doit TOUJOURS répondre au DERNIER message du client :
@@ -266,7 +273,43 @@ def _format_missing_conditions(entries: list[KnowledgeEntry]) -> str:
     )
 
 
+# Lot 75 — comment répondre (tous les secteurs, y compris ceux à venir) : constat réel du 16/10, Bob recopiait
+# toute une fiche de la base de connaissances pour « Qu'est-ce que vous avez en stock ? ».
+STYLE_RULES = """STYLE DES RÉPONSES (WhatsApp — prioritaire sur la longueur)
+
+1. Réponds UNIQUEMENT à la dernière question du client. N'ajoute rien qu'il n'a pas demandé :
+   pas de caractéristiques en plus, pas de contacts, pas de site web, pas d'autres offres.
+2. Trois phrases courtes au maximum. Seule exception : une liste demandée ou utile (3 produits au
+   plus, ou des adresses, des horaires), une ligne courte par élément, commençant par « • ».
+2bis. Le PRIX seulement si le client le demande ou montre de l'intérêt pour un produit précis
+   (« ça m'intéresse », « je prends », « il est comment ? »). À une question générale (« qu'est-ce que
+   vous avez ? », « vous avez des chemises ? »), nomme les produits ou les catégories, sans prix.
+3. La base de connaissances et les fiches produits sont des SOURCES, pas des textes à recopier :
+   prends seulement l'information utile et redis-la simplement. Ne recopie jamais une fiche entière.
+4. Termine par UNE seule question qui fait avancer le client vers la prochaine étape (usage, ville,
+   taille, budget, moment pour venir…). Exception : s'il dit merci, d'accord ou au revoir, une
+   phrase brève suffit, sans question.
+5. S'il y a d'autres détails utiles, propose-les en une courte question au lieu de tout donner
+   d'avance (« Je vous envoie la fiche complète ? »).
+6. Mise en forme : *gras* avec UNE seule étoile, seulement pour un nom de produit ou un prix demandé.
+   Jamais de **double étoile**, de titres (#), de tableaux, ni de liens [texte](lien).
+7. Un emoji au plus par message, et pas à chaque message.
+8. Ne parle des photos que si le client en demande. N'écris jamais d'indication technique du type
+   « [Photo envoyée séparément] » : les photos partent seules, juste après ton message."""
+
+
 def build_system_prompt(
+    tenant: Tenant, knowledge_entries: list[KnowledgeEntry] | None = None, customer_memory: str = "", now=None,
+    catalog: str = "",
+) -> str:
+    """Consignes du secteur, l'aperçu du catalogue, puis les règles de style communes à tous les secteurs (lot 75),
+    puis la mémoire du client EN DERNIER (lot 50 : tout ce qui précède est identique d'un client à l'autre et se met
+    en cache)."""
+    sector = _sector_prompt(tenant, knowledge_entries, "", now)
+    return f"{sector.rstrip()}{catalog}\n\n{STYLE_RULES}\n{customer_memory}"
+
+
+def _sector_prompt(
     tenant: Tenant, knowledge_entries: list[KnowledgeEntry] | None = None, customer_memory: str = "", now=None
 ) -> str:
     knowledge_section = _format_knowledge_base(knowledge_entries or [])

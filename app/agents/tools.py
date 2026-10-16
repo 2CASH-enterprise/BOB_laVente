@@ -292,7 +292,7 @@ class ToolExecutor:
         raw_ids = tool_input.get("product_ids") or []
         if not isinstance(raw_ids, list) or not raw_ids:
             return {"error": "Indique les identifiants des produits (product_ids)."}
-        queued, without_photo, unknown = [], [], []
+        queued, without_photo, unknown, already_sent = [], [], [], []
         for raw in raw_ids[:MAX_IMAGES_PER_REPLY]:
             try:
                 product = await self.product_repo.get(tenant_id=self.tenant_id, record_id=uuid.UUID(str(raw)))
@@ -307,6 +307,10 @@ class ToolExecutor:
                 continue
             if any(img["product_id"] == str(product.id) for img in self.pending_images):
                 queued.append(product.name)
+                continue
+            if str(product.id) in await self._photos_sent_recently():
+                # Lot 75 — test réel du 16/10 : la même photo renvoyée 3 fois en 3 minutes.
+                already_sent.append(product.name)
                 continue
             if len(self.pending_images) >= MAX_IMAGES_PER_REPLY:
                 break
@@ -323,7 +327,35 @@ class ToolExecutor:
             result["instruction"] = "Dis simplement au client que ces produits n'ont pas encore de photo."
         if unknown:
             result["unknown_products"] = unknown
+        if already_sent:
+            result["already_sent_recently"] = already_sent
+            result["instruction_photos"] = ("Le client a déjà reçu la photo de ces produits il y a peu : ne la renvoie "
+                                            "pas et n'en parle pas, sauf s'il redemande explicitement la photo.")
         return result
+
+    async def _photos_sent_recently(self) -> set[str]:
+        """Produits dont la photo est partie dans cette conversation depuis moins d'une heure (lot 75)."""
+        from datetime import datetime, timedelta, timezone
+
+        from sqlalchemy import select
+
+        if getattr(self, "_recent_photos", None) is None:
+            since = datetime.now(timezone.utc) - timedelta(hours=1)
+            rows = (await self.db.execute(select(Message.message_metadata).where(
+                Message.conversation_id == self.conversation.id, Message.message_type == "image",
+                Message.created_at >= since,
+            ))).scalars().all()
+            self._recent_photos = {str((meta or {}).get("product_id")) for meta in rows if meta}
+            if self.asks_photo_again():
+                self._recent_photos = set()
+        return self._recent_photos
+
+    def asks_photo_again(self) -> bool:
+        """« Renvoyez la photo », « je ne vois pas l'image » : le client redemande, la photo repart."""
+        import re as _re
+
+        return bool(_re.search(r"(photo|image|renvo|pas re[çc]u|vois pas)",
+                               self.incoming_text or "", _re.IGNORECASE))
 
     async def _booking_context(self, lock: bool = False):
         from datetime import datetime, timezone
@@ -932,6 +964,16 @@ class ToolExecutor:
         }
 
     async def _tool_create_order(self, tool_input: dict) -> dict:
+        duplicate = await self._same_recent_order(tool_input.get("items"))
+        if duplicate is not None:
+            # Lot 75 — test réel du 16/10 : « Okay » après la commande → nouveau récapitulatif → 2e commande identique.
+            return {
+                "status": "already_ordered",
+                "order_id": str(duplicate.id),
+                "instruction": (f"Cette commande existe déjà (référence {str(duplicate.id)[:8].upper()}) : ne la recrée "
+                                "pas et ne refais pas de récapitulatif. Dis simplement au client qu'elle est bien "
+                                "enregistrée. S'il veut un article EN PLUS, il doit le dire clairement."),
+            }
         try:
             order = await create_order(
                 db=self.db,
@@ -956,10 +998,44 @@ class ToolExecutor:
             "total_amount": float(order.total_amount),
             "currency": order.currency,
         }
+        # Lot 75 — test réel du 16/10 : « le lien de paiement vient de vous être envoyé » alors qu'il n'y en a pas.
+        from app.models.tenant import Tenant as _Tenant
+
+        shop = await self.db.get(_Tenant, self.tenant_id)
+        result["payment_link_sent"] = bool(shop and shop.payment_link)
+        if not result["payment_link_sent"]:
+            result["payment_note"] = ("Aucun lien de paiement : le récapitulatif envoyé au client lui dit de "
+                                      "contacter la boutique pour payer. Ne parle pas de lien de paiement.")
         ask = await self._email_ask(REASON_ORDER)  # lot 34
         if ask:
             result["instruction"] = ask
         return result
+
+    async def _same_recent_order(self, items) -> object | None:
+        """Lot 75 — une commande EN ATTENTE identique (mêmes articles, mêmes quantités) de ce client, de moins de 2 h."""
+        from datetime import datetime, timedelta, timezone
+
+        from sqlalchemy import select
+
+        from app.models.order import Order, OrderItem, OrderStatus
+
+        try:
+            wanted = {str(uuid.UUID(str(i["product_id"]))): int(i["quantity"]) for i in (items or [])}
+        except (KeyError, ValueError, TypeError):
+            return None
+        if not wanted:
+            return None
+        since = datetime.now(timezone.utc) - timedelta(hours=2)
+        orders = (await self.db.execute(select(Order).where(
+            Order.tenant_id == self.tenant_id, Order.customer_id == self.customer_id,
+            Order.status == OrderStatus.PENDING, Order.created_at >= since,
+        ).order_by(Order.created_at.desc()))).scalars().all()
+        for order in orders:
+            rows = (await self.db.execute(select(OrderItem.product_id, OrderItem.quantity)
+                                          .where(OrderItem.order_id == order.id))).all()
+            if {str(pid): qty for pid, qty in rows} == wanted:
+                return order
+        return None
 
     async def _send_order_confirmation(self, order) -> None:
         """

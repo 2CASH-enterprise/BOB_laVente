@@ -7,7 +7,7 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from app.agents.orchestrator import FAILURE_LOOP, generate_ai_reply_detailed
+from app.agents.orchestrator import FAILURE_LOOP, PHOTOS_ONLY_REPLY, generate_ai_reply_detailed
 from app.agents.prompts import BASE_RULES, DEALERSHIP_RULES
 from app.agents.tool_definitions import TOOL_DEFINITIONS
 from app.agents.tools import ToolExecutor
@@ -98,7 +98,9 @@ async def test_empty_or_malformed_request_is_refused(db_session, unique_email):
 
 
 @pytest.mark.asyncio
-async def test_no_photo_leaves_when_bob_fails_to_answer(db_session, unique_email):
+async def test_photos_ready_but_no_text_still_leave_with_a_fixed_sentence(db_session, unique_email):
+    """Lot 75 (incident MS4 Africa du 16/10 : « Vous avez des photos ? » → « IA bloquée ») : les photos choisies
+    par Bob partent avec « Voici les photos : » au lieu d'un transfert. Remplace la règle du lot 26c."""
     tenant, conversation = await _shop(db_session, unique_email)
     car = _product(tenant, "A")
     db_session.add(car)
@@ -109,9 +111,19 @@ async def test_no_photo_leaves_when_bob_fails_to_answer(db_session, unique_email
         text_response(""), text_response(""),
     ])
 
+    reply, failure = await generate_ai_reply_detailed(db=db_session, tenant=tenant, conversation=conversation, history=[],
+                                                      incoming_text="Une photo ?", llm_client=llm, image_outbox=outbox)
+
+    assert failure is None and reply == PHOTOS_ONLY_REPLY and [img["product_id"] for img in outbox] == [str(car.id)]
+
+
+@pytest.mark.asyncio
+async def test_no_photo_and_no_text_is_still_a_failure(db_session, unique_email):
+    tenant, conversation = await _shop(db_session, unique_email)
+    outbox: list = []
+    llm = FakeLLMClient([text_response(""), text_response("")])
     _, failure = await generate_ai_reply_detailed(db=db_session, tenant=tenant, conversation=conversation, history=[],
                                                   incoming_text="Une photo ?", llm_client=llm, image_outbox=outbox)
-
     assert failure == FAILURE_LOOP and outbox == []
 
 

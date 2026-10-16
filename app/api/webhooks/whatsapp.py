@@ -430,6 +430,11 @@ async def receive_webhook(
                 message_outbox=message_outbox,
                 change_outbox=change_outbox,
             )
+            if failure is None:
+                # Lot 75 — texte écrit par l'IA : sans indication technique, un emoji au plus.
+                from app.services.reply_cleanup import clean_ai_reply
+
+                reply_text = clean_ai_reply(reply_text)
             if failure == FAILURE_LOOP:
                 # Anomalie (Bob tourne en rond) : un humain doit regarder → vrai transfert + alerte.
                 conversation.status = ConversationStatus.WAITING_HUMAN
