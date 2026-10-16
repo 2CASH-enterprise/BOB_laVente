@@ -83,7 +83,7 @@ async def test_every_setting_change_is_traced_in_the_history(client, db_session)
     await client.put(f"{base}/business-type", headers=headers, json={"business_type": "CAR_DEALERSHIP"})
     r = await client.get(f"{base}/history", headers=headers)
     items = [i["what"] for i in r.json()["items"]]
-    assert sorted(items) == sorted(["Secteur changé : Commerce → Concession automobile", "Boutique réactivée", "Boutique suspendue",
+    assert sorted(items) == sorted(["Secteur changé : Commerce → Concession auto / moto", "Boutique réactivée", "Boutique suspendue",
                      "Commission changée : — → 2.5 %", "Échéance changée (payé jusqu'au) : — → 17/11/2026",
                      "Plan changé : Pro → Starter"])  # même seconde en test : l'ordre n'est pas garanti
     assert all(i["by"] == "Koffi Yao" for i in r.json()["items"])

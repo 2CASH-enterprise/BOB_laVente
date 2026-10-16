@@ -26,7 +26,7 @@ BUSINESS_TYPES = {
         "description": "Bob répond, conseille et prend les commandes sur WhatsApp.",
     },
     CAR_DEALERSHIP: {
-        "label": "Concession automobile",
+        "label": "Concession auto / moto",  # lot 78 : les motos relèvent de la concession
         "hint": None,
         "description": "Bob renseigne sur vos véhicules, qualifie le client et obtient un rendez-vous (essai, visite, reprise).",
     },
@@ -71,6 +71,11 @@ def normalize(value: str | None) -> str:
 
 def is_dealership(tenant) -> bool:
     return normalize(getattr(tenant, "business_type", None)) == CAR_DEALERSHIP
+
+
+def is_store(tenant) -> bool:
+    """Lot 78 — secteur Commerce (fiches produits par catégorie)."""
+    return normalize(getattr(tenant, "business_type", None)) == ONLINE_STORE
 
 
 def is_insurance(tenant) -> bool:

@@ -912,12 +912,20 @@
             <input id="new-product-price" placeholder="Prix" type="number" class="input no-insurance">
             <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input no-insurance" maxlength="3">
             <input id="new-product-stock" placeholder="Stock" type="number" class="input no-insurance" style="grid-column: span 2;">
+            <select id="new-product-bob-category" class="input store-only" style="grid-column: span 2;" aria-label="Catégorie du produit"></select>
             <textarea id="new-product-description" class="input insurance-only" rows="3" style="grid-column: span 2; resize: vertical;"
               placeholder="Garanties et conditions, comme vous les présentez à vos clients (jamais de prix : Bob n'en donne pas)"></textarea>
           </div>
           <div id="new-vehicle-fields" class="hidden" style="margin-top: 8px;"></div>
           <button class="action" style="margin-top: 10px;" onclick="createProduct()">Ajouter</button>
           <div id="new-product-msg" style="margin-top: 8px; font-size: 13px;"></div>
+          <div class="store-only" id="sheet-settings" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);">
+            <label for="default-bob-category" style="font-size: 13px; display: block; margin-bottom: 4px;">Catégorie principale de la boutique
+              <span style="color: var(--muted);">(proposée pour chaque nouveau produit)</span></label>
+            <select id="default-bob-category" class="input" onchange="saveDefaultCategory()"></select>
+            <button class="action secondary" style="margin-top: 8px;" onclick="guessMissingCategories()">Proposer une catégorie aux produits qui n'en ont pas</button>
+            <div id="sheet-settings-msg" style="margin-top: 6px; font-size: 13px;"></div>
+          </div>
         </div>
         <div class="card" style="flex: 1; min-width: 280px;">
           <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span></span></div>
@@ -2218,6 +2226,104 @@ function applyBusinessType(code, label) {
   fields.classList.toggle("hidden", !dealership);
   fields.innerHTML = dealership ? vehicleFields("new", null) : "";
   document.getElementById("csv-vehicle-help").classList.toggle("hidden", !dealership);
+}
+
+// ---- Lot 78 : fiches produits par catégorie (Commerce) ----
+let productSheets = null;
+const LONG_SHEET_FIELDS = ["highlights", "features", "ingredients", "how_to", "precautions", "size_guide", "box_contents", "package_contents"];
+
+async function loadProductSheets() {
+  if (currentBusinessType !== "ONLINE_STORE") return null;
+  if (!productSheets) {
+    try { productSheets = await api("/api/v1/products/sheets"); } catch (e) { return null; }
+  }
+  const add = document.getElementById("new-product-bob-category");
+  if (add) add.innerHTML = categoryOptions(productSheets.default_category, "Catégorie : proposée d'après le nom");
+  const def = document.getElementById("default-bob-category");
+  if (def) def.innerHTML = categoryOptions(productSheets.default_category, "Aucune (proposée d'après le nom de chaque produit)");
+  return productSheets;
+}
+
+function sheetCategory(code) {
+  return productSheets ? productSheets.categories.find((c) => c.code === code) : null;
+}
+
+function categoryOptions(selected, emptyLabel) {
+  const cats = productSheets ? productSheets.categories : [];
+  return `<option value="">${esc(emptyLabel)}</option>` + cats.map((c) =>
+    `<option value="${esc(c.code)}" ${c.code === selected ? "selected" : ""}>${esc(c.label)}</option>`).join("");
+}
+
+function sheetInput(prefix, f, sheet) {
+  const id = `${prefix}-sheet-${f.key}`;
+  const value = sheet[f.key] ?? "";
+  const field = LONG_SHEET_FIELDS.includes(f.key)
+    ? `<textarea id="${id}" class="input" rows="2" placeholder="${esc(f.hint || "")}" style="resize: vertical;">${esc(value)}</textarea>`
+    : `<input id="${id}" class="input" ${f.key === "compare_at_price" ? 'type="number" step="0.01"' : ""} placeholder="${esc(f.hint || "")}" value="${esc(value)}">`;
+  return `<div><label for="${id}" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">${esc(f.label)}</label>${field}</div>`;
+}
+
+function sheetFields(prefix, code, sheet) {
+  const cat = sheetCategory(code);
+  if (!productSheets || !cat) return `<p style="font-size: 13px; color: var(--muted);">Choisissez une catégorie pour remplir la fiche.</p>`;
+  sheet = sheet || {};
+  const grid = (fields) => `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">${fields.map((f) => sheetInput(prefix, f, sheet)).join("")}</div>`;
+  const key = cat.key_fields.length ? `<div class="label" style="margin: 6px 0; font-size: 12px;">Champs clés — ce que les clients demandent le plus</div>${grid(cat.key_fields)}` : "";
+  const more = cat.optional_fields.concat(productSheets.common_fields);
+  return `${key}<details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 13px;">Plus de détails (facultatif)</summary>
+    <div style="margin-top: 8px;">${grid(more)}</div></details>
+    <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">Tout est facultatif. Bob ne dit que ce qui est écrit ici : un champ vide, il répond qu'il n'a pas l'information.</p>`;
+}
+
+function readSheet(prefix, code) {
+  const cat = sheetCategory(code);
+  if (!cat) return null;
+  const sheet = {};
+  cat.key_fields.concat(cat.optional_fields, productSheets.common_fields).forEach((f) => {
+    const el = document.getElementById(`${prefix}-sheet-${f.key}`);
+    if (el && el.value.trim() !== "") sheet[f.key] = el.value.trim();
+  });
+  return sheet;
+}
+
+function variantsSummary(variants) {
+  if (!variants || !variants.length) return "";
+  const name = (v) => Object.values(v.options || {}).join(" / ") || "Unique";
+  const ok = variants.filter((v) => (v.stock || 0) > 0).map((v) => `${name(v)} (${v.stock})`);
+  const out = variants.filter((v) => (v.stock || 0) <= 0).map(name);
+  return [ok.length ? "Disponibles : " + ok.join(", ") : "", out.length ? "Épuisées : " + out.join(", ") : ""].filter(Boolean).join(" · ");
+}
+
+function changeEditCategory(productId) {
+  const p = allProducts.find((x) => x.id === productId);
+  const prefix = `edit-${productId}`;
+  const previous = readSheet(prefix, document.getElementById(`${prefix}-sheet-box`).dataset.code) || {};
+  const code = document.getElementById(`${prefix}-bob-category`).value;
+  const box = document.getElementById(`${prefix}-sheet-box`);
+  box.dataset.code = code;
+  box.innerHTML = sheetFields(prefix, code, Object.assign({}, p.sheet || {}, previous));
+}
+
+async function saveDefaultCategory() {
+  const msg = document.getElementById("sheet-settings-msg");
+  const value = document.getElementById("default-bob-category").value || null;
+  try {
+    await api("/api/v1/tenants/me/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ default_bob_category: value }) });
+    productSheets = null;
+    await loadProductSheets();
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+  } catch (e) { msg.style.color = "var(--danger)"; msg.textContent = e.message; }
+}
+
+async function guessMissingCategories() {
+  const msg = document.getElementById("sheet-settings-msg");
+  try {
+    const r = await api("/api/v1/products/sheets/guess", { method: "POST" });
+    msg.style.color = "var(--success)";
+    msg.textContent = r.updated ? `${r.updated} produit${r.updated > 1 ? "s" : ""} classé${r.updated > 1 ? "s" : ""} : vérifiez la catégorie proposée dans « Modifier ».` : "Tous les produits ont déjà une catégorie.";
+    loadProducts();
+  } catch (e) { msg.style.color = "var(--danger)"; msg.textContent = e.message; }
 }
 
 // ---- Lot 26 : fiches véhicules ----
@@ -3683,11 +3789,12 @@ async function loadProducts() {
   const rows = document.getElementById("product-rows");
   rows.innerHTML = "<tr><td class='loading-text' colspan='7'>Chargement</td></tr>";
   allProducts = await api("/api/v1/products");
+  await loadProductSheets();  // lot 78
   productsLoaded = true;
   rows.innerHTML = allProducts
     .map(
       (p) => `<tr>
-        <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}</td>
+        <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}${p.bob_category ? `<div style="font-size: 12px; color: var(--muted);">${esc((sheetCategory(p.bob_category) || {}).label || "")}${p.sheet_completeness !== null && p.sheet_completeness !== undefined ? ` · <span class="sheet-score" style="color: ${p.sheet_completeness >= 80 ? "var(--success)" : p.sheet_completeness >= 50 ? "var(--warning)" : "var(--danger)"};">fiche ${p.sheet_completeness} %</span>` : ""}</div>` : ""}</td>
         <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix" class="no-insurance">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
         <td data-label="Stock" class="no-insurance">${p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
         <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel(${jsArg(p.id)})">Gérer</button></td>
@@ -3721,6 +3828,12 @@ function renderEditPanel(productId) {
     </div>
     <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${esc(p.description || "")}</textarea>
     ${currentBusinessType === "CAR_DEALERSHIP" || p.vehicle ? `<div style="max-width: 620px; margin-bottom: 10px;">${vehicleFields(`edit-${p.id}`, p.vehicle)}</div>` : ""}
+    ${currentBusinessType === "ONLINE_STORE" && productSheets ? `<div style="max-width: 760px; margin-bottom: 10px;">
+      <label for="edit-${p.id}-bob-category" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">Catégorie du produit</label>
+      <select id="edit-${p.id}-bob-category" class="input" style="max-width: 360px;" onchange="changeEditCategory(${jsArg(p.id)})">${categoryOptions(p.bob_category || "", "Choisir une catégorie")}</select>
+      ${p.variants && p.variants.length ? `<p style="font-size: 12px; margin: 6px 0;">Variantes (Shopify) : ${esc(variantsSummary(p.variants))}</p>` : ""}
+      <div id="edit-${p.id}-sheet-box" data-code="${esc(p.bob_category || "")}" style="margin-top: 6px;">${sheetFields(`edit-${p.id}`, p.bob_category, p.sheet)}</div>
+    </div>` : ""}
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
       <label class="file-pick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 16l5-5 4 4 3-3 4 4M15 9h.01"/></svg>
         <span id="edit-image-name-${p.id}">Choisir une photo</span>
@@ -3753,6 +3866,9 @@ async function saveProductEdit(productId) {
         description: document.getElementById(`edit-description-${productId}`).value || null,
         active: document.getElementById(`edit-active-${productId}`).checked,
         ...(document.getElementById(`edit-${productId}-vehicle-year`) ? { vehicle: readVehicle(`edit-${productId}`) } : {}),
+        ...(document.getElementById(`edit-${productId}-bob-category`) && document.getElementById(`edit-${productId}-bob-category`).value
+          ? { bob_category: document.getElementById(`edit-${productId}-bob-category`).value,
+              sheet: readSheet(`edit-${productId}`, document.getElementById(`edit-${productId}-bob-category`).value) } : {}),
       }),
     });
     msg.style.color = "var(--success)";
@@ -4844,6 +4960,8 @@ async function createProduct() {
     stock_quantity: parseInt(document.getElementById("new-product-stock").value || "0", 10),
   };
   if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");
+  const bobCategory = document.getElementById("new-product-bob-category");
+  if (currentBusinessType === "ONLINE_STORE" && bobCategory && bobCategory.value) payload.bob_category = bobCategory.value;  // lot 78
   if (currentBusinessType === "INSURANCE_BROKER") {
     // Lot 53 — un produit d'assurance n'a ni prix ni stock : seulement ses garanties.
     delete payload.price;

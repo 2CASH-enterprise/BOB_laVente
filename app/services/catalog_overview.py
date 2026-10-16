@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.models.category import Category
 from app.models.product import Product
+from app.services.product_sheets import questions_block
 
 MAX_CATEGORIES = 12
 NAMES_PER_CATEGORY = 3
@@ -16,7 +17,7 @@ OTHER = "Autres produits"
 
 async def catalog_overview(db, tenant_id) -> str:
     rows = (await db.execute(
-        select(Product.name, Category.name)
+        select(Product.name, Category.name, Product.bob_category)
         .outerjoin(Category, Category.id == Product.category_id)
         .where(Product.tenant_id == tenant_id, Product.active.is_(True), Product.stock_quantity > 0)
         .order_by(Category.name, Product.name)
@@ -24,8 +25,11 @@ async def catalog_overview(db, tenant_id) -> str:
     if not rows:
         return ""
     groups: dict[str, list[str]] = {}
-    for product_name, category_name in rows:
+    bob_codes: set[str] = set()
+    for product_name, category_name, bob_code in rows:
         groups.setdefault(category_name or OTHER, []).append(product_name)
+        if bob_code:
+            bob_codes.add(bob_code)
     if list(groups) == [OTHER]:
         names = groups[OTHER]
         more = f" (et {len(names) - MAX_NAMES_WITHOUT_CATEGORY} autres)" if len(names) > MAX_NAMES_WITHOUT_CATEGORY else ""
@@ -42,4 +46,5 @@ async def catalog_overview(db, tenant_id) -> str:
     return ("\n\nCATALOGUE EN BREF (produits disponibles, sans les prix)\n\n" + body + "\n\n"
             "À une question générale (« qu'est-ce que vous avez ? »), réponds TOUJOURS à partir de cet aperçu : "
             "cite les catégories (ou quelques produits s'il n'y a pas de catégories), sans prix, puis demande ce que "
-            "le client cherche. Pour le détail d'un produit, utilise les outils.")
+            "le client cherche. Pour le détail d'un produit, utilise les outils."
+            + questions_block(bob_codes))  # lot 78 : questions de qualification des catégories présentes

@@ -63,22 +63,66 @@ def map_shopify_product(shopify_product: dict) -> dict:
     """
     Traduit un produit Shopify vers le format interne de Bob. Ne fait jamais confiance
     à un champ absent : toute valeur manquante reçoit un repli explicite et sûr.
+
+    Lot 78 — toutes les variantes (options Taille / Couleur… et LEUR stock), la marque (vendor), le prix barré
+    (compare_at_price), le code-barres et la catégorie Bob proposée par mots-clés : sans IA, sans coût.
     """
+    from app.services.product_sheets import guess_category
+
     variants = shopify_product.get("variants") or [{}]
     variant = variants[0]
     images = shopify_product.get("images") or []
+    option_names = {int(o.get("position") or i + 1): (o.get("name") or f"Option {i + 1}")
+                    for i, o in enumerate(shopify_product.get("options") or [])}
 
     sku = (variant.get("sku") or "").strip() or f"shopify-{shopify_product.get('id')}"
     price = variant.get("price")
 
+    mapped_variants = []
+    for v in variants:
+        options = {}
+        for position in (1, 2, 3):
+            value = v.get(f"option{position}")
+            name = option_names.get(position, f"Option {position}")
+            if value and not (value == "Default Title" and name == "Title"):
+                options[name] = value
+        try:
+            v_price = float(v["price"]) if v.get("price") not in (None, "") else None
+        except (TypeError, ValueError):
+            v_price = None
+        mapped_variants.append({"options": options, "stock": int(v.get("inventory_quantity") or 0),
+                                "sku": (v.get("sku") or "").strip() or None, "price": v_price})
+    has_options = any(mv["options"] for mv in mapped_variants)
+
+    sheet = {}
+    if (shopify_product.get("vendor") or "").strip():
+        sheet["brand"] = shopify_product["vendor"].strip()
+    try:
+        compare_at = float(variant.get("compare_at_price") or 0)
+        if price is not None and compare_at > float(price):
+            sheet["compare_at_price"] = round(compare_at, 2)
+    except (TypeError, ValueError):
+        pass
+    if (variant.get("barcode") or "").strip():
+        sheet["ean"] = variant["barcode"].strip()
+
+    tags = shopify_product.get("tags")
+    tags = ", ".join(tags) if isinstance(tags, list) else (tags or "")
+    title = shopify_product.get("title") or "Produit sans nom"
+
     return {
         "external_id": str(shopify_product.get("id")),
         "sku": sku,
-        "name": shopify_product.get("title") or "Produit sans nom",
+        "name": title,
         "description": shopify_product.get("body_html"),
         "price": price,
-        "stock_quantity": variant.get("inventory_quantity") or 0,
+        # Lot 78 : le stock du produit = la somme de ses variantes (avant : la première seulement).
+        "stock_quantity": sum(mv["stock"] for mv in mapped_variants if mv["stock"] > 0) if has_options
+        else int(variant.get("inventory_quantity") or 0),
         "category": shopify_product.get("product_type") or None,
         "image_url": images[0]["src"] if images else None,
         "active": shopify_product.get("status") == "active",
+        "variants": mapped_variants if has_options else None,
+        "sheet": sheet,
+        "bob_category": guess_category(shopify_product.get("product_type"), tags, title),
     }

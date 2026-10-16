@@ -336,7 +336,7 @@ def alert_email(tenant, owner_email: str | None) -> tuple[str, str]:
     from app.core.config import get_settings
 
     base = get_settings().public_base_url.rstrip("/")
-    sector = {ONLINE_STORE: "Commerce", CAR_DEALERSHIP: "Concession automobile",
+    sector = {ONLINE_STORE: "Commerce", CAR_DEALERSHIP: "Concession auto / moto",
               INSURANCE_BROKER: "Courtier / agent d'assurance"}[normalize(tenant.business_type)]
     body = (f"Nouvelle pré-inscription : {tenant.name} ({sector}, {tenant.country}).\n"
             f"Contact : {owner_email or tenant.email}" + (f" · {tenant.phone}" if tenant.phone else "") +

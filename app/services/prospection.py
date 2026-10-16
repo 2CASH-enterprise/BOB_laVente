@@ -38,7 +38,7 @@ CHANNELS = {"WHATSAPP": "WhatsApp", "PHONE": "Appel", "EMAIL": "Email", "SMS": "
             "EVENT": "Salon, événement", "OTHER": "Autre"}
 STATUSES = {"ACTIVE": "En cours", "NOT_INTERESTED": "Pas intéressé", "UNSUBSCRIBED": "Ne plus contacter",
             "INVALID": "Coordonnées invalides"}
-SECTORS = {"ONLINE_STORE": "Commerce", "CAR_DEALERSHIP": "Concession automobile",
+SECTORS = {"ONLINE_STORE": "Commerce", "CAR_DEALERSHIP": "Concession auto / moto",
            "INSURANCE_BROKER": "Courtier / agent d'assurance"}
 EVENT_LABELS = {"ADDED": "Ajouté", "CONTACT": "Contacté", "CLICK": "A cliqué sur son lien", "DEMO": "A essayé la démo",
                 "SIGNUP": "A créé son compte", "STATUS": "Statut", "NOTE": "Note",

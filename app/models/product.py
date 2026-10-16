@@ -36,6 +36,12 @@ class Product(Base):
     # app/services/vehicle.py (année, kilométrage, carburant, boîte…). NULL pour un produit ordinaire.
     vehicle: Mapped[dict | None] = mapped_column(JSON)
 
+    # Lot 78 — commerce : catégorie Bob fixe (services/product_sheets.py), fiche de la catégorie (champs nettoyés)
+    # et variantes avec LEUR stock (Shopify : [{"options": {"Taille": "42"}, "stock": 2, "sku": …, "price": …}]).
+    bob_category: Mapped[str | None] = mapped_column(String(24))
+    sheet: Mapped[dict | None] = mapped_column(JSON)
+    variants: Mapped[list | None] = mapped_column(JSON)
+
     # Traçabilité d'origine (section 25) — NULL pour un produit saisi manuellement ou importé en CSV.
     external_source: Mapped[str | None] = mapped_column(String(32))  # ex. "SHOPIFY"
     external_id: Mapped[str | None] = mapped_column(String(128))
@@ -44,3 +50,9 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    @property
+    def sheet_completeness(self) -> int | None:
+        from app.services.product_sheets import completeness
+
+        return completeness(self)

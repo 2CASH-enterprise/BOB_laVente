@@ -322,7 +322,7 @@ async def test_views_search_and_funnel(client, db_session):
     funnel = (await client.get(f"{API}/funnel?period=all", headers=headers)).json()
     assert funnel["total"] == 3 and [s["count"] for s in funnel["funnel"]][:3] == [3, 2, 1]
     assert {r["name"]: r["total"] for r in funnel["by_source"]} == {"Réseau": 2, "Salon auto": 1}
-    assert {r["name"] for r in funnel["by_sector"]} == {"Commerce", "Concession automobile", "Courtier / agent d'assurance"}
+    assert {r["name"] for r in funnel["by_sector"]} == {"Commerce", "Concession auto / moto", "Courtier / agent d'assurance"}
     assert funnel["by_owner"][0]["total"] == 3
 
 

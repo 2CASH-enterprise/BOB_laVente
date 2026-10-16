@@ -32,6 +32,8 @@ class Tenant(Base):
     phone: Mapped[str | None] = mapped_column(String(32))
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     website_url: Mapped[str | None] = mapped_column(String(500))
+    # Lot 78 — catégorie Bob proposée par défaut pour les nouveaux produits (« je vends surtout de la mode »).
+    default_bob_category: Mapped[str | None] = mapped_column(String(24))
     company_profile: Mapped[str | None] = mapped_column(Text)  # présentation libre — injectée dans le prompt de l'agent
 
     # Section 13 — commission sur ventes. Taux fixé UNIQUEMENT par le Super Admin (négocié

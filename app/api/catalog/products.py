@@ -27,6 +27,21 @@ def _checked_vehicle(raw: dict | None, tenant=None) -> dict | None:
     return vehicle
 
 
+def _checked_sheet(tenant, code: str | None, raw: dict | None, *texts) -> dict:
+    """Lot 78 — commerce : catégorie Bob valide (proposée par mots-clés si absente) et fiche nettoyée."""
+    from app.services import product_sheets
+    from app.services.business_type import is_store
+
+    if not is_store(tenant):
+        return {"bob_category": None, "sheet": None}
+    if code and not product_sheets.is_category(code):
+        raise HTTPException(status_code=422, detail="Catégorie inconnue")
+    if not code:
+        default = getattr(tenant, "default_bob_category", None)
+        code = default if product_sheets.is_category(default) else product_sheets.guess_category(*texts)
+    return {"bob_category": code, "sheet": product_sheets.normalize_sheet(code, raw)}
+
+
 @router.post("", response_model=ProductResponse, status_code=201, dependencies=[Depends(require_role("MANAGER"))])
 async def create_product(
     payload: ProductCreate,
@@ -51,6 +66,8 @@ async def create_product(
 
     data = payload.model_dump()
     data["vehicle"] = _checked_vehicle(data.get("vehicle"), tenant)
+    data.update(_checked_sheet(tenant, data.pop("bob_category", None), data.pop("sheet", None),
+                               data.get("name"), data.get("description")))
     from app.services.business_type import is_insurance
 
     if is_insurance(tenant):
@@ -86,6 +103,45 @@ async def search_products(
         min_price=float(min_price) if min_price is not None else None,
         max_price=float(max_price) if max_price is not None else None,
     )
+
+
+@router.get("/sheets")
+async def product_sheet_definitions(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Lot 78 — catégories Bob et champs de leurs fiches (formulaire du tableau de bord). Avant /{product_id}."""
+    from app.models.tenant import Tenant
+    from app.services import product_sheets
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    return {"categories": product_sheets.definitions(), "common_fields": product_sheets.common_definitions(),
+            "default_category": getattr(tenant, "default_bob_category", None)}
+
+
+@router.post("/sheets/guess", dependencies=[Depends(require_role("MANAGER"))])
+async def guess_missing_categories(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Lot 78 — propose une catégorie Bob (mots-clés, sans IA) aux produits qui n'en ont pas encore."""
+    from sqlalchemy import select
+
+    from app.models.tenant import Tenant
+    from app.services import product_sheets
+    from app.services.business_type import is_store
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not is_store(tenant):
+        return {"updated": 0}
+    products = (await db.execute(select(Product).where(Product.tenant_id == current_user.tenant_id,
+                                                       Product.bob_category.is_(None)))).scalars().all()
+    default = getattr(tenant, "default_bob_category", None)
+    for product in products:
+        guess = product_sheets.guess_category(product.name, product.description)
+        product.bob_category = default if guess == product_sheets.GENERAL and product_sheets.is_category(default) else guess
+    await db.commit()
+    return {"updated": len(products)}
 
 
 @router.get("/export/xlsx")
@@ -155,6 +211,10 @@ async def update_product(
     tenant = await db.get(Tenant, current_user.tenant_id)
     if "vehicle" in changes:
         changes["vehicle"] = _checked_vehicle(changes["vehicle"], tenant)
+    if "bob_category" in changes or "sheet" in changes:
+        # Lot 78 — changer de catégorie garde les champs communs et ceux que la nouvelle catégorie connaît.
+        code = changes.get("bob_category") or product.bob_category
+        changes.update(_checked_sheet(tenant, code, changes.get("sheet", product.sheet), product.name))
     if is_insurance(tenant):
         for key in ("price", "cost_price", "stock_quantity"):  # lot 53 : jamais de prix chez un courtier
             changes.pop(key, None)

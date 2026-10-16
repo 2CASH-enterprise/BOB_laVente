@@ -15,6 +15,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
+from app.services.product_sheets import sheet_for_ai  # lot 78
 from app.models.delivery import Delivery
 from app.models.negotiation_settings import TenantNegotiationSettings
 from app.models.order import Order, OrderItem
@@ -136,6 +137,7 @@ class ToolExecutor:
             "active": product.active,
             "photo": "disponible : utilise send_product_images pour l'envoyer" if has_photo else "aucune",
             **({"vehicle": for_ai(product.vehicle)} if getattr(product, "vehicle", None) else {}),
+            **({"fiche": fiche} if (fiche := sheet_for_ai(product)) else {}),  # lot 78 : fiche et variantes
         }
 
     async def _tool_search_products(self, tool_input: dict) -> dict:

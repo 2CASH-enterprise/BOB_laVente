@@ -48,6 +48,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.catalog_sync.sync_meta_catalogs_task",
         "schedule": crontab(hour=3, minute=0),
     },
+    # Lot 78 — boutiques Shopify : prix, stock, variantes et fiches, chaque nuit.
+    "sync-shopify-nightly": {
+        "task": "app.workers.catalog_sync.sync_shopify_task",
+        "schedule": crontab(hour=3, minute=20),
+    },
     # Lot 25 — rappels de rendez-vous : la veille à partir de 18 h, heure de chaque boutique.
     "appointment-reminders": {
         "task": "app.workers.appointment_reminders.send_appointment_reminders_task",

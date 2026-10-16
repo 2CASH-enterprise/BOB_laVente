@@ -30,6 +30,8 @@ class ProductCreate(BaseModel):
     image_url: str | None = None
     active: bool = True
     vehicle: dict | None = None  # lot 26 — concession : année, kilométrage, carburant, boîte…
+    bob_category: str | None = None  # lot 78 — commerce : catégorie Bob (proposée par mots-clés si absente)
+    sheet: dict | None = None        # lot 78 — fiche de la catégorie
 
 
 class ProductUpdate(BaseModel):
@@ -42,6 +44,8 @@ class ProductUpdate(BaseModel):
     image_url: str | None = None
     active: bool | None = None
     vehicle: dict | None = None
+    bob_category: str | None = None
+    sheet: dict | None = None
 
 
 class ProductResponse(BaseModel):
@@ -57,6 +61,10 @@ class ProductResponse(BaseModel):
     image_url: str | None
     active: bool
     vehicle: dict | None = None
+    bob_category: str | None = None
+    sheet: dict | None = None
+    variants: list | None = None
+    sheet_completeness: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

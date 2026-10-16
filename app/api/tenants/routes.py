@@ -26,6 +26,7 @@ class TenantResponse(BaseModel):
     website_url: str | None
     company_profile: str | None
     payment_link: str | None
+    default_bob_category: str | None = None  # lot 78
     active: bool
     # Lot 51 — Bob en pause pour toute la boutique, ou échéance proche : bandeau du tableau de bord.
     bob_status: dict | None = None
@@ -38,6 +39,7 @@ class TenantProfileUpdate(BaseModel):
     website_url: str | None = None
     company_profile: str | None = None
     payment_link: str | None = None
+    default_bob_category: str | None = None  # lot 78 — catégorie par défaut des nouveaux produits
 
 
 @router.get("/me", response_model=TenantResponse)
@@ -67,7 +69,13 @@ async def update_tenant_profile(
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("default_bob_category"):
+        from app.services.product_sheets import is_category
+
+        if not is_category(changes["default_bob_category"]):
+            raise HTTPException(status_code=422, detail="Catégorie inconnue")
+    for field, value in changes.items():
         setattr(tenant, field, value)
 
     await db.commit()

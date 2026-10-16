@@ -68,6 +68,7 @@ TASK_LABELS = {
     "app.workers.wa_templates.refresh_templates_task": "Modèles WhatsApp : statut chez Meta",
     "app.workers.plan_quota.check_quotas_task": "Plafonds des formules : alertes",
     "app.workers.coexistence_sync.retry_syncs_task": "Numéro partagé : contacts et historique du téléphone",
+    "app.workers.catalog_sync.sync_shopify_task": "Catalogues Shopify (prix, stock, variantes)",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).

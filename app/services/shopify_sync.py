@@ -18,6 +18,23 @@ from app.schemas.catalog import CsvImportResponse
 PLATFORM_SHOPIFY = "SHOPIFY"
 
 
+def _apply_sheet(product, mapped: dict, store: bool) -> None:
+    """Lot 78 — variantes et champs venus de Shopify. La catégorie choisie par le commerçant n'est jamais écrasée,
+    ni les champs qu'il a remplis lui-même (seuls marque, prix barré et code-barres suivent Shopify)."""
+    from app.services.product_sheets import normalize_sheet
+
+    if not store or product is None:
+        return
+    product.variants = mapped.get("variants")
+    if not product.bob_category:
+        product.bob_category = mapped.get("bob_category")
+    sheet = dict(product.sheet or {})
+    for key in ("brand", "compare_at_price", "ean"):
+        sheet.pop(key, None)
+    sheet.update(mapped.get("sheet") or {})
+    product.sheet = normalize_sheet(product.bob_category, sheet)
+
+
 async def sync_shopify_catalog(
     db: AsyncSession,
     tenant_id,
@@ -44,6 +61,10 @@ async def sync_shopify_catalog(
             errors=[f"Échec de connexion à Shopify : {exc}"],
         )
 
+    from app.models.tenant import Tenant
+    from app.services.business_type import is_store
+
+    store = is_store(await db.get(Tenant, tenant_id))  # lot 78 : fiches et variantes, secteur Commerce seulement
     total = imported = updated = failed = available = unavailable = 0
     errors: list[str] = []
 
@@ -76,24 +97,25 @@ async def sync_shopify_catalog(
             existing.category_id = category_id
             existing.image_url = mapped["image_url"]
             existing.active = mapped["active"]
+            _apply_sheet(existing, mapped, store)
             updated += 1
         else:
-            db.add(
-                Product(
-                    tenant_id=tenant_id,
-                    external_source=PLATFORM_SHOPIFY,
-                    external_id=mapped["external_id"],
-                    sku=mapped["sku"],
-                    name=mapped["name"],
-                    description=mapped["description"],
-                    price=price,
-                    currency=currency,
-                    stock_quantity=mapped["stock_quantity"],
-                    category_id=category_id,
-                    image_url=mapped["image_url"],
-                    active=mapped["active"],
-                )
+            product = Product(
+                tenant_id=tenant_id,
+                external_source=PLATFORM_SHOPIFY,
+                external_id=mapped["external_id"],
+                sku=mapped["sku"],
+                name=mapped["name"],
+                description=mapped["description"],
+                price=price,
+                currency=currency,
+                stock_quantity=mapped["stock_quantity"],
+                category_id=category_id,
+                image_url=mapped["image_url"],
+                active=mapped["active"],
             )
+            db.add(product)
+            _apply_sheet(product, mapped, store)
             imported += 1
 
         if mapped["active"] and mapped["stock_quantity"] > 0:

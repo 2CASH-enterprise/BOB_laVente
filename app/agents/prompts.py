@@ -75,6 +75,15 @@ BASE_RULES = """RÈGLES
     les photos réelles partent juste après ta réponse. Ne dis jamais que tu ne peux pas envoyer de
     photo sans avoir essayé ; si l'outil indique qu'un produit n'a pas de photo, dis-le simplement."""
 
+# Lot 78 — fiches produits par catégorie (commerce).
+SHEET_RULE = """23. FICHE PRODUIT : les outils renvoient parfois une « fiche » (catégorie, taille, matière, compatibilité,
+    contenance, allergènes…) et des « variantes » (disponibles / épuisées). C'est ta SEULE source pour ces sujets :
+    un champ absent = « je n'ai pas cette information », jamais une supposition (surtout allergènes, composition,
+    compatibilité). Une variante épuisée : dis-le et propose celles qui sont disponibles. Utilise les points forts
+    comme arguments, un ou deux à la fois. Pour aider le client à choisir, pose les questions de sa catégorie
+    (QUESTIONS UTILES PAR CATÉGORIE), une seule à la fois."""
+
+
 # Lot 24 — concession automobile : on ne vend pas une voiture sur WhatsApp. Les règles de vente
 # directe (commande, lien de paiement, négociation) n'ont pas lieu d'être ici, et les outils
 # correspondants sont retirés à l'IA par le code (app/services/business_type.py).
@@ -377,6 +386,7 @@ Aider le client à choisir et acheter les produits disponibles dans le catalogue
 
 {BASE_RULES}
 22. {address_rule}
+{SHEET_RULE}
 
 CONTEXTE ENTREPRISE
 Devise : {tenant.currency}
