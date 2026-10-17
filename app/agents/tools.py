@@ -140,10 +140,38 @@ class ToolExecutor:
             **({"fiche": fiche} if (fiche := sheet_for_ai(product)) else {}),  # lot 78 : fiche et variantes
         }
 
+    async def _search_properties(self, tool_input: dict) -> dict:
+        """Lot 79 — agence immobilière : « T3 à louer à Lyon » devient des critères, vérifiés sur la fiche du bien."""
+        from app.services import real_estate
+
+        words, criteria = real_estate.criteria_from_query(tool_input.get("query"))
+        for key in ("transaction", "property_type", "city", "min_rooms", "min_surface"):
+            if tool_input.get(key) not in (None, ""):
+                criteria[key] = tool_input[key]
+        try:
+            for key in ("min_rooms", "min_surface"):
+                if criteria.get(key) is not None:
+                    criteria[key] = int(criteria[key])
+        except (TypeError, ValueError):
+            return {"error": "Critères de recherche invalides (pièces et surface : nombres entiers)."}
+        products = await self.product_repo.search(tenant_id=self.tenant_id, query=None,
+                                                  max_price=tool_input.get("max_price"), limit=500)
+        found = [p for p in products if real_estate.matches(p, words=words, **criteria)]
+        if not found and words:
+            # Des mots (« lumineux », « calme ») absents des fiches ne doivent pas cacher les biens qui correspondent.
+            found = [p for p in products if real_estate.matches(p, **criteria)]
+        found = [p for p in found if p.stock_quantity > 0][:10] or found[:10]
+        if not found:
+            return {"results": [], "message": "Aucun bien ne correspond à cette recherche dans l'agence."}
+        await record_product_view(self.db, self.tenant_id, self.customer_id, [p.id for p in found])
+        return {"results": [await self._product_to_dict(p) for p in found]}
+
     async def _tool_search_products(self, tool_input: dict) -> dict:
-        from app.services.business_type import CAR_DEALERSHIP, normalize
+        from app.services.business_type import CAR_DEALERSHIP, REAL_ESTATE, normalize
         from app.services.vehicle import criteria_from_query, matches
 
+        if normalize(self.business_type) == REAL_ESTATE:
+            return await self._search_properties(tool_input)
         dealership = normalize(self.business_type) == CAR_DEALERSHIP
         query = tool_input.get("query")
         criteria = {key: tool_input.get(key) for key in ("fuel", "gearbox", "min_year", "max_mileage_km", "body_type")}
@@ -867,6 +895,33 @@ class ToolExecutor:
             return {"status": "partially_saved", "rejected": rejected,
                     "instruction": "Ces valeurs n'ont pas été comprises : n'insiste pas, continue la conversation."}
         return {"status": "saved", "instruction": "Continue naturellement ; ne récite pas la fiche au client."}
+
+    async def _tool_update_property_project(self, tool_input: dict) -> dict:
+        """Lot 79 (agence immobilière) : fiche projet — achat, location, vente ou gestion de son bien."""
+        from app.services import real_estate
+
+        project = tool_input.get("project")
+        if project not in real_estate.PROJECTS:
+            return {"error": "Indique le projet : ACHAT, LOCATION, VENTE ou GESTION."}
+        from app.models.tenant import Tenant
+
+        tenant = await self.db.get(Tenant, self.tenant_id)
+        # Acheter ou vendre relève de l'activité « vente » de l'agence.
+        wanted = {"ACHAT": "VENTE", "VENTE": "VENTE", "LOCATION": "LOCATION", "GESTION": "GESTION"}[project]
+        if tenant is not None and wanted not in real_estate.activities_of(tenant):
+            return {"status": "not_offered", "instruction": (
+                f"L'agence ne propose pas « {real_estate.ACTIVITIES[wanted].lower()} » : dis-le simplement au client, "
+                "sans rien enregistrer, et demande-lui si tu peux l'aider pour autre chose.")}
+        values = {k: tool_input.get(k) for k in ("project", *real_estate.FIELDS)}
+        current, rejected = await real_estate.update_project(self.db, self.tenant_id, self.customer_id, values)
+        answer = {"status": "saved", "project": real_estate.PROJECTS[project],
+                  "instruction": "Ne récite pas la fiche au client. " + real_estate.project_instruction(project, current)}
+        if rejected:
+            answer["not_saved"] = [real_estate.FIELD_LABELS[k] for k in rejected]
+        if todo := real_estate.missing(project, current):
+            answer["useful_next"] = todo[:2]
+            answer["instruction"] += " Si c'est naturel, pose UNE question sur : " + todo[0] + "."
+        return answer
 
     async def _tool_update_insurance_request(self, tool_input: dict) -> dict:
         """Lot 53 (courtier) : demande de cotation ; c'est le code qui décide quand elle part au cabinet."""

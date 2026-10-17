@@ -547,8 +547,9 @@ def _function(name):
 
 def test_dashboard_sector_switches():
     apply = _function("applyBusinessType")
-    assert 'document.body.classList.toggle("rdv-sector", dealership || insurance);' in apply
-    assert 'productsNav.lastChild.textContent = insurance ? "Produits d\'assurance" : "Produits";' in apply
+    assert 'document.body.classList.toggle("rdv-sector", dealership || insurance || estate);' in apply  # lot 79
+    assert 'const productsLabel = insurance ? "Produits d\'assurance" : estate ? "Biens" : "Produits";' in apply  # lot 79
+    assert "productsNav.lastChild.textContent = productsLabel;" in apply
     assert "body:not(.insurance) .insurance-only { display: none !important; }" in HTML
     assert "body.insurance .no-insurance { display: none !important; }" in HTML
     assert 'id="nav-quotes" class="insurance-only"' in HTML and 'quotes: ["quotes"],' in HTML
@@ -576,7 +577,7 @@ def test_outcome_words_of_the_cabinet():
     labels = _function("outcomeLabels")
     assert 'SOLD: "Contrat souscrit"' in labels and "Absent / injoignable" in labels
     assert '${insurer ? "Contrats souscrits" : "Véhicules vendus"}' not in HTML  # libellé passé tel quel au kpi
-    assert 'insurer ? "Contrats souscrits" : "Véhicules vendus"' in HTML
+    assert 'insurer ? "Contrats souscrits" : h.business_type === "REAL_ESTATE" ? "Affaires conclues" : "Véhicules vendus"' in HTML
 
 
 def test_migration_exists():

@@ -121,7 +121,7 @@ async def strategies_summary(db: AsyncSession, tenant_id, days: int = 30, now=No
 
     now = aware(now or datetime.now(timezone.utc))
     since = now - timedelta(days=days)
-    if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER"):  # lots 45 / 54
+    if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"):  # lots 45 / 54 / 79
         return await _dealership_summary(db, tenant_id, days, since, insurance=business_type == "INSURANCE_BROKER")
     signals = (await db.execute(
         select(MessageSignal).where(

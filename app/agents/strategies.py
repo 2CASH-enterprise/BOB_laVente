@@ -16,6 +16,7 @@ STRATEGY_LIBRARY_VERSION = "v3"  # lot 54 : stratégies du courtier (boutique et
 ONLINE_STORE = "ONLINE_STORE"
 CAR_DEALERSHIP = "CAR_DEALERSHIP"
 INSURANCE_BROKER = "INSURANCE_BROKER"
+REAL_ESTATE = "REAL_ESTATE"  # lot 79 : pas encore de stratégies propres — Bob répond librement, jamais celles du commerce
 MIN_TERMINATED_FOR_RATE = 20  # en dessous, « pas encore assez de données » plutôt qu'un pourcentage trompeur
 
 GUARDRAILS = (
@@ -50,7 +51,18 @@ INSURANCE_NO_KNOWLEDGE_INSTRUCTION = (
 )
 
 
+# Lot 79 — agence immobilière : rien d'inventé sur les honoraires, les frais, les garanties ou les délais.
+REAL_ESTATE_NO_KNOWLEDGE_INSTRUCTION = (
+    "Le client pose une question sur des conditions que l'agence n'a pas renseignées. N'affirme AUCUNE condition "
+    "(honoraires, frais, dépôt de garantie, délais, garanties). Si le client pose une question précise, appelle "
+    "l'outil handoff_to_human (raison : sa question) et dis-lui que tu transmets sa question à l'agence ; sinon, "
+    "demande-lui ce qui l'inquiète."
+)
+
+
 def no_knowledge_instruction(business_type: str | None = None) -> str:
+    if business_type == REAL_ESTATE:
+        return REAL_ESTATE_NO_KNOWLEDGE_INSTRUCTION
     if business_type == INSURANCE_BROKER:
         return INSURANCE_NO_KNOWLEDGE_INSTRUCTION
     return DEALERSHIP_NO_KNOWLEDGE_INSTRUCTION if business_type == "CAR_DEALERSHIP" else NO_KNOWLEDGE_INSTRUCTION
@@ -364,20 +376,23 @@ OBJECTION_PRIORITY = ["CONFIANCE", "RUPTURE_STOCK", "PRIX_TROP_ELEVE", "FRAIS_LI
 DEALERSHIP_OBJECTION_PRIORITY = [
     "CONFIANCE", "PAPIERS", "ETAT_VEHICULE", "RUPTURE_STOCK", "FINANCEMENT", "PRIX_TROP_ELEVE", "REPRISE", "DELAI", "HESITATION",
 ]
+REAL_ESTATE_OBJECTION_PRIORITY = [
+    "CONFIANCE", "DOSSIER", "FINANCEMENT", "RUPTURE_STOCK", "PRIX_TROP_ELEVE", "HONORAIRES", "DELAI", "HESITATION",
+]
 INSURANCE_OBJECTION_PRIORITY = [
     "CONFIANCE", "PAS_BESOIN", "PAIEMENT", "PRIX_TROP_ELEVE", "DEJA_ASSURE", "COMPARAISON", "HESITATION",
 ]
 
 
 def _activity(business_type: str | None) -> str:
-    if business_type in (CAR_DEALERSHIP, INSURANCE_BROKER):
+    if business_type in (CAR_DEALERSHIP, INSURANCE_BROKER, REAL_ESTATE):
         return business_type
     return ONLINE_STORE
 
 
 def priority_for(business_type: str | None = None) -> list[str]:
-    return {CAR_DEALERSHIP: DEALERSHIP_OBJECTION_PRIORITY,
-            INSURANCE_BROKER: INSURANCE_OBJECTION_PRIORITY}.get(_activity(business_type), OBJECTION_PRIORITY)
+    return {CAR_DEALERSHIP: DEALERSHIP_OBJECTION_PRIORITY, INSURANCE_BROKER: INSURANCE_OBJECTION_PRIORITY,
+            REAL_ESTATE: REAL_ESTATE_OBJECTION_PRIORITY}.get(_activity(business_type), OBJECTION_PRIORITY)
 
 _rng = random.Random()
 

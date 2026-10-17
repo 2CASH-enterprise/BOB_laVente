@@ -135,6 +135,9 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
     currency = tenant.currency if tenant else ""
     dealership = is_appointment_sector(tenant)  # lot 47 / 53 : rendez-vous et ventes, pas paiements
     insurance = is_insurance(tenant)
+    from app.services.business_type import is_real_estate
+
+    estate = is_real_estate(tenant)  # lot 79 : agence immobilière
 
     kpis = {
         "paid": {"value": float(paid_now), "delta_pct": _delta_pct(float(paid_now), float(paid_prev))},
@@ -224,7 +227,9 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
             "kind": "OUTCOME", "customer": f"{count} rendez-vous passé{'s' if count > 1 else ''}",
             "reason": "Issue à indiquer", "tone": "info",
             "detail": ("Souscrit, à relancer, pas intéressé ou absent : pour mesurer vos contrats et relancer au bon moment"
-                       if insurance else "Venu, vendu, à relancer ou absent : pour mesurer vos ventes et relancer au bon moment"),
+                       if insurance else
+                       "Conclu, à relancer, pas intéressé ou absent : pour mesurer vos affaires et relancer au bon moment"
+                       if estate else "Venu, vendu, à relancer ou absent : pour mesurer vos ventes et relancer au bon moment"),
             "since": min(_aware(a.scheduled_at) for a in without_outcome), "action": "Indiquer",
         })
     for a in open_tasks(confirmed, now):
@@ -360,8 +365,9 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
                                business_type=tenant.business_type if tenant else None)
     if dealership:
         kpis, funnel = await _dealership_figures(db, tenant_id, since, prev_since, now, current_convs, previous_convs, kpis,
-                                                 insurance=insurance)
-        activity = sorted(activity + await _dealership_activity(db, tenant_id, now, customers, insurance=insurance),
+                                                 insurance=insurance, estate=estate)
+        activity = sorted(activity + await _dealership_activity(db, tenant_id, now, customers, insurance=insurance,
+                                                                estate=estate),
                           key=lambda e: e["at"], reverse=True)[:ACTIVITY_LIMIT]
     extra = {}
     if insurance:
@@ -464,7 +470,7 @@ def _rate(part: int, whole: int) -> float | None:
 
 
 async def _dealership_figures(db, tenant_id, since, prev_since, now, current_convs, previous_convs, kpis,
-                              insurance: bool = False) -> tuple[dict, list]:
+                              insurance: bool = False, estate: bool = False) -> tuple[dict, list]:
     from app.models.appointment_request import OUTCOME_SOLD, AppointmentRequest
 
     rows = (await db.execute(select(AppointmentRequest).where(
@@ -497,9 +503,9 @@ async def _dealership_figures(db, tenant_id, since, prev_since, now, current_con
     funnel = [
         {"key": "conversations", "label": "Conversations", "value": len(current_convs)},
         {"key": "appointments", "label": "Rendez-vous demandés", "value": len(current)},
-        {"key": "visited", "label": "Rendez-vous honorés" if insurance else "Venus au rendez-vous",
+        {"key": "visited", "label": "Rendez-vous honorés" if insurance or estate else "Venus au rendez-vous",
          "value": sum(1 for a in current if a.outcome in VISITED)},
-        {"key": "sold", "label": "Contrats souscrits" if insurance else "Vendus",
+        {"key": "sold", "label": "Contrats souscrits" if insurance else "Affaires conclues" if estate else "Vendus",
          "value": sum(1 for a in current if a.outcome == OUTCOME_SOLD)},
     ]
     return dealer_kpis, funnel
@@ -576,7 +582,7 @@ def _insurance_prospects(prospects: dict, customers: dict) -> dict:
     return {"prospect_scores": counts, "expiries": expiries[:EXPIRY_LIST_LIMIT], "expiries_total": len(expiries)}
 
 
-async def _dealership_activity(db, tenant_id, now, customers, insurance: bool = False) -> list[dict]:
+async def _dealership_activity(db, tenant_id, now, customers, insurance: bool = False, estate: bool = False) -> list[dict]:
     from app.models.appointment_request import APPOINTMENT_KINDS, OUTCOME_SOLD, AppointmentRequest
 
     since = now - timedelta(days=ACTIVITY_DAYS)
@@ -588,7 +594,8 @@ async def _dealership_activity(db, tenant_id, now, customers, insurance: bool = 
             events.append({"kind": "APPOINTMENT", "title": "Rendez-vous demandé", "detail": f"{name} · {what}",
                            "at": _aware(a.created_at)})
         if a.outcome == OUTCOME_SOLD and a.outcome_at and _aware(a.outcome_at) >= since:
-            events.append({"kind": "SALE", "title": "Contrat souscrit" if insurance else "Vente conclue",
+            events.append({"kind": "SALE", "title": "Contrat souscrit" if insurance else "Affaire conclue" if estate
+                           else "Vente conclue",
                            "detail": f"{name} · {a.vehicle_label}" if a.vehicle_label else name, "at": _aware(a.outcome_at)})
     if insurance:  # lot 54 : chaque demande de cotation transmise au cabinet
         from app.models.quote_request import QuoteRequest

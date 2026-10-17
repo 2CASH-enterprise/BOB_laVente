@@ -39,6 +39,12 @@ def card_body(product) -> str:
             if values:
                 detail = f"{option} : {', '.join(values)}"
     sheet = getattr(product, "sheet", None) or {}
+    from app.services.product_sheets import is_property
+
+    if detail is None and is_property(getattr(product, "bob_category", None)):  # lot 79 : un bien immobilier
+        from app.services.real_estate import card_detail
+
+        detail = card_detail(product)
     if detail is None and getattr(product, "bob_category", None) in CATEGORIES:
         for key, label, _ in CATEGORIES[product.bob_category]["key"]:
             if sheet.get(key):
@@ -75,9 +81,16 @@ def text_for_cards(text: str, names: list[str]) -> str:
     return cleaned or DEFAULT_INTRO
 
 
-def carousel_intro(tu: bool) -> str:
-    return ("Touche « Ça m'intéresse » sous le produit qui te plaît." if tu
-            else "Touchez « Ça m'intéresse » sous le produit qui vous plaît.")
+def carousel_intro(tu: bool, noun: str = "produit") -> str:
+    """Lot 79 : « le bien » pour une agence immobilière, « le véhicule » pour une concession."""
+    return (f"Touche « Ça m'intéresse » sous le {noun} qui te plaît." if tu
+            else f"Touchez « Ça m'intéresse » sous le {noun} qui vous plaît.")
+
+
+def card_noun(tenant) -> str:
+    from app.services.business_type import is_dealership, is_real_estate
+
+    return "bien" if is_real_estate(tenant) else ("véhicule" if is_dealership(tenant) else "produit")
 
 
 def button_id(product_id: str) -> str:
@@ -100,7 +113,7 @@ async def interest_text(db, tenant_id, reply_id: str | None) -> str | None:
     return f"{BUTTON_TITLE} : {product.name}"
 
 
-async def send(wa_client, to: str, items: list[dict], tu: bool) -> tuple[str, list[dict]]:
+async def send(wa_client, to: str, items: list[dict], tu: bool, noun: str = "produit") -> tuple[str, list[dict]]:
     """Envoie les cartes ; renvoie (« cards » ou « images », éléments réellement partis)."""
     items = items[:MAX_CARDS]
     if not items:
@@ -111,7 +124,7 @@ async def send(wa_client, to: str, items: list[dict], tu: bool) -> tuple[str, li
             await wa_client.send_product_card(to=to, link=item["link"], body=item["card"],
                                               button_id=button_id(item["product_id"]), button_title=BUTTON_TITLE)
         else:
-            await wa_client.send_product_carousel(to=to, body=carousel_intro(tu), cards=[
+            await wa_client.send_product_carousel(to=to, body=carousel_intro(tu, noun), cards=[
                 {"link": i["link"], "body": i["card"], "button_id": button_id(i["product_id"]), "button_title": BUTTON_TITLE}
                 for i in items])
         return "cards", items

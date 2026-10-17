@@ -437,6 +437,10 @@
   body:not(.rdv-sector) .dealer-only { display: none !important; }
   body:not(.insurance) .insurance-only { display: none !important; }
   body.insurance .no-insurance { display: none !important; }
+  /* Lot 79 : agence immobilière (fiche du bien, profil de l'agence) */
+  body:not(.real-estate) .estate-only { display: none !important; }
+  body.real-estate .no-estate { display: none !important; }
+  body:not(.has-sheets) .sheets-only { display: none !important; }
   .option-hint { font-weight: 400; color: var(--muted); font-size: 0.9em; }
   .tone-success { background: var(--success-soft); color: var(--success); }
   .tone-warning { background: var(--warning-soft); color: var(--warning); }
@@ -905,14 +909,14 @@
     <section id="tab-products" class="hidden">
       <div style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
         <div class="card" style="flex: 1; min-width: 280px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Ajouter un produit</div>
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;" id="new-product-title">Ajouter un produit</div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
             <input id="new-product-sku" placeholder="Référence (ex. REF-001)" class="input">
             <input id="new-product-name" placeholder="Nom" class="input">
             <input id="new-product-price" placeholder="Prix" type="number" class="input no-insurance">
             <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input no-insurance" maxlength="3">
             <input id="new-product-stock" placeholder="Stock" type="number" class="input no-insurance" style="grid-column: span 2;">
-            <select id="new-product-bob-category" class="input store-only" style="grid-column: span 2;" aria-label="Catégorie du produit"></select>
+            <select id="new-product-bob-category" class="input sheets-only" style="grid-column: span 2;" aria-label="Catégorie du produit"></select>
             <textarea id="new-product-description" class="input insurance-only" rows="3" style="grid-column: span 2; resize: vertical;"
               placeholder="Garanties et conditions, comme vous les présentez à vos clients (jamais de prix : Bob n'en donne pas)"></textarea>
           </div>
@@ -928,7 +932,7 @@
           </div>
         </div>
         <div class="card" style="flex: 1; min-width: 280px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span></span></div>
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span><span class="estate-only"><br>Biens (facultatif) : TYPE, TRANSACTION (vente ou location), VILLE, QUARTIER, SURFACE, PIECES, CHAMBRES, DPE, HONORAIRES, CHARGES. PRICE = prix de vente honoraires inclus, ou loyer mensuel charges comprises ; STOCK = 1 si le bien est disponible.</span></span></div>
           <label class="file-drop" id="csv-drop">
             <span class="file-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
             <span class="file-text">
@@ -943,7 +947,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Nom</th><th>Référence</th><th class="no-insurance">Prix</th><th class="no-insurance">Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
+        <thead><tr><th>Nom</th><th>Référence</th><th class="no-insurance">Prix</th><th class="no-insurance" id="products-stock-head">Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
 
@@ -1281,6 +1285,50 @@
           <div id="insurance-profile-preview" style="font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;"></div>
           <button class="action" onclick="saveInsuranceProfile()">Enregistrer</button>
           <div id="insurance-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+
+        <div class="card estate-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="estate-profile-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Votre agence<button class="tip"></button><span class="tip-bubble" hidden>La loi Hoguet et la loi ALUR demandent que le client sache qui lui parle (carte professionnelle, garantie financière) et puisse consulter vos honoraires. Bob donne ces informations quand un client les demande ; il n'invente jamais ce que vous n'avez pas indiqué.</span></div>
+          <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px;" id="estate-status-options"></div>
+          <div style="margin-bottom: 8px; font-size: 13px;">
+            <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Activités (Bob ne propose que celles-ci)</div>
+            <div id="estate-activity-options" style="display: flex; gap: 14px; flex-wrap: wrap;"></div>
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="estate-card" style="font-size: 12px; color: var(--muted);">Carte professionnelle (facultatif)</label>
+            <input id="estate-card" class="input" maxlength="200" placeholder="Ex. Carte T n° CPI 6901 2024 000 012 345, CCI de Lyon">
+          </div>
+          <div style="margin-bottom: 8px;" id="estate-network-row">
+            <label for="estate-network" style="font-size: 12px; color: var(--muted);">Réseau ou agence mandante (facultatif)</label>
+            <input id="estate-network" class="input" maxlength="150" placeholder="Ex. iad France">
+          </div>
+          <div style="margin-bottom: 8px;" id="estate-rsac-row">
+            <label for="estate-rsac" style="font-size: 12px; color: var(--muted);">Immatriculation RSAC (facultatif)</label>
+            <input id="estate-rsac" class="input" maxlength="150" placeholder="Ex. RSAC Lyon 123 456 789">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="estate-guarantee" style="font-size: 12px; color: var(--muted);">Garantie financière (facultatif)</label>
+            <input id="estate-guarantee" class="input" maxlength="200" placeholder="Ex. Galian, 120 000 €">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="estate-zones" style="font-size: 12px; color: var(--muted);">Secteur couvert (facultatif)</label>
+            <input id="estate-zones" class="input" maxlength="200" placeholder="Ex. Lyon et Villeurbanne">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="estate-fees-url" style="font-size: 12px; color: var(--muted);">Lien vers votre barème des honoraires (facultatif)</label>
+            <input id="estate-fees-url" class="input" type="url" maxlength="300" placeholder="https://…">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="estate-mediator" style="font-size: 12px; color: var(--muted);">Médiateur de la consommation (facultatif)</label>
+            <input id="estate-mediator" class="input" maxlength="200" placeholder="Nom et site du médiateur">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label for="estate-privacy-url" style="font-size: 12px; color: var(--muted);">Lien vers votre politique de confidentialité (facultatif)</label>
+            <input id="estate-privacy-url" class="input" type="url" maxlength="300" placeholder="https://…">
+          </div>
+          <div id="estate-profile-preview" style="font-size: 13px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;"></div>
+          <button class="action" onclick="saveRealEstateProfile()">Enregistrer</button>
+          <div id="estate-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
 
         <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card">
@@ -1877,7 +1925,7 @@ function signupGo(step) {
 function chooseSignupActivity(code) {
   signupState.businessType = code;
   document.getElementById("signup-company").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar"
-    : code === "INSURANCE_BROKER" ? "Ex. Cabinet Kouassi Assurances" : "Ex. Boutique Awa";
+    : code === "INSURANCE_BROKER" ? "Ex. Cabinet Kouassi Assurances" : code === "REAL_ESTATE" ? "Ex. Agence du Parc" : "Ex. Boutique Awa";
   signupGo(2);
 }
 
@@ -2197,11 +2245,14 @@ function sectorTitle(option) {
 }
 
 function isRdvSector() {
-  return currentBusinessType === "CAR_DEALERSHIP" || currentBusinessType === "INSURANCE_BROKER";
+  return ["CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"].includes(currentBusinessType);  // lot 79 : agence immobilière
 }
 
 // Lot 53 — issues d'un rendez-vous, dans les mots du secteur.
 function outcomeLabels() {
+  if (currentBusinessType === "REAL_ESTATE") {  // lot 79 : vente, location ou mandat signé
+    return { SOLD: "Affaire conclue (vente, location, mandat)", FOLLOW_UP: "À relancer", NOT_INTERESTED: "Pas intéressé", NO_SHOW: "Absent / injoignable" };
+  }
   return currentBusinessType === "INSURANCE_BROKER"
     ? { SOLD: "Contrat souscrit", FOLLOW_UP: "À relancer", NOT_INTERESTED: "Pas intéressé", NO_SHOW: "Absent / injoignable" }
     : APPT_OUTCOME_LABELS;
@@ -2211,16 +2262,26 @@ function applyBusinessType(code, label) {
   currentBusinessType = code;
   const dealership = code === "CAR_DEALERSHIP";
   const insurance = code === "INSURANCE_BROKER";
+  const estate = code === "REAL_ESTATE";  // lot 79
   document.body.classList.toggle("dealership", dealership);
   document.body.classList.toggle("insurance", insurance);
-  document.body.classList.toggle("rdv-sector", dealership || insurance);
+  document.body.classList.toggle("real-estate", estate);
+  document.body.classList.toggle("rdv-sector", dealership || insurance || estate);
+  document.body.classList.toggle("has-sheets", code === "ONLINE_STORE" || estate);
   const labelEl = document.getElementById("business-type-label");
   if (labelEl && label) labelEl.textContent = label;
-  // Lot 25 / 53 : la page Rendez-vous existe pour la concession et le courtier.
-  document.getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance));
+  // Lot 25 / 53 / 79 : la page Rendez-vous existe pour la concession, le courtier et l'agence immobilière.
+  document.getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance || estate));
   const productsNav = document.getElementById("nav-products");
-  productsNav.dataset.label = insurance ? "Produits d'assurance" : "Produits";
-  productsNav.lastChild.textContent = insurance ? "Produits d'assurance" : "Produits";
+  const productsLabel = insurance ? "Produits d'assurance" : estate ? "Biens" : "Produits";
+  productsNav.dataset.label = productsLabel;
+  productsNav.lastChild.textContent = productsLabel;
+  document.getElementById("new-product-title").textContent = estate ? "Ajouter un bien" : "Ajouter un produit";
+  document.getElementById("new-product-name").placeholder = estate ? "Titre (ex. T3 Lyon 3e)" : "Nom";
+  document.getElementById("new-product-price").placeholder = estate ? "Prix HAI ou loyer CC" : "Prix";
+  document.getElementById("new-product-price").title = estate ? "Vente : prix honoraires inclus. Location : loyer mensuel charges comprises." : "";
+  document.getElementById("products-stock-head").textContent = estate ? "Disponible" : "Stock";
+  document.getElementById("new-product-stock").placeholder = estate ? "Disponible : 1 (0 = vendu ou loué)" : "Stock";
   // Lot 26 : fiche véhicule dans l'ajout de produit et aide de l'import CSV.
   const fields = document.getElementById("new-vehicle-fields");
   fields.classList.toggle("hidden", !dealership);
@@ -2233,12 +2294,13 @@ let productSheets = null;
 const LONG_SHEET_FIELDS = ["highlights", "features", "ingredients", "how_to", "precautions", "size_guide", "box_contents", "package_contents"];
 
 async function loadProductSheets() {
-  if (currentBusinessType !== "ONLINE_STORE") return null;
+  if (currentBusinessType !== "ONLINE_STORE" && currentBusinessType !== "REAL_ESTATE") return null;
   if (!productSheets) {
     try { productSheets = await api("/api/v1/products/sheets"); } catch (e) { return null; }
   }
   const add = document.getElementById("new-product-bob-category");
-  if (add) add.innerHTML = categoryOptions(productSheets.default_category, "Catégorie : proposée d'après le nom");
+  if (add) add.innerHTML = categoryOptions(productSheets.default_category,
+    productSheets.real_estate ? "Type de bien : proposé d'après le titre" : "Catégorie : proposée d'après le nom");
   const def = document.getElementById("default-bob-category");
   if (def) def.innerHTML = categoryOptions(productSheets.default_category, "Aucune (proposée d'après le nom de chaque produit)");
   return productSheets;
@@ -2257,7 +2319,10 @@ function categoryOptions(selected, emptyLabel) {
 function sheetInput(prefix, f, sheet) {
   const id = `${prefix}-sheet-${f.key}`;
   const value = sheet[f.key] ?? "";
-  const field = LONG_SHEET_FIELDS.includes(f.key)
+  const field = f.options  // lot 79 : valeurs imposées (vente ou location, DPE…)
+    ? `<select id="${id}" class="input"><option value="">—</option>${f.options.map((o) => `<option value="${esc(o)}" ${o === value ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`
+    : f.numeric ? `<input id="${id}" class="input" type="number" min="0" step="any" placeholder="${esc(f.hint || "")}" value="${esc(value)}">`
+    : LONG_SHEET_FIELDS.includes(f.key)
     ? `<textarea id="${id}" class="input" rows="2" placeholder="${esc(f.hint || "")}" style="resize: vertical;">${esc(value)}</textarea>`
     : `<input id="${id}" class="input" ${f.key === "compare_at_price" ? 'type="number" step="0.01"' : ""} placeholder="${esc(f.hint || "")}" value="${esc(value)}">`;
   return `<div><label for="${id}" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">${esc(f.label)}</label>${field}</div>`;
@@ -2265,10 +2330,10 @@ function sheetInput(prefix, f, sheet) {
 
 function sheetFields(prefix, code, sheet) {
   const cat = sheetCategory(code);
-  if (!productSheets || !cat) return `<p style="font-size: 13px; color: var(--muted);">Choisissez une catégorie pour remplir la fiche.</p>`;
+  if (!productSheets || !cat) return `<p style="font-size: 13px; color: var(--muted);">${productSheets && productSheets.real_estate ? "Choisissez le type de bien" : "Choisissez une catégorie"} pour remplir la fiche.</p>`;
   sheet = sheet || {};
   const grid = (fields) => `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">${fields.map((f) => sheetInput(prefix, f, sheet)).join("")}</div>`;
-  const key = cat.key_fields.length ? `<div class="label" style="margin: 6px 0; font-size: 12px;">Champs clés — ce que les clients demandent le plus</div>${grid(cat.key_fields)}` : "";
+  const key = cat.key_fields.length ? `<div class="label" style="margin: 6px 0; font-size: 12px;">${productSheets.real_estate ? "Champs clés — honoraires obligatoires avec un prix (loi ALUR)" : "Champs clés — ce que les clients demandent le plus"}</div>${grid(cat.key_fields)}` : "";
   const more = cat.optional_fields.concat(productSheets.common_fields);
   return `${key}<details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 13px;">Plus de détails (facultatif)</summary>
     <div style="margin-top: 8px;">${grid(more)}</div></details>
@@ -2706,7 +2771,7 @@ function showTab(name) {
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); loadWaTemplates(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
-  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
@@ -2816,7 +2881,7 @@ function renderHome(h) {
       <div class="kpi-value">${value}</div>
       <div class="kpi-note">${note}</div>
     </div>`;
-  const dealer = h.business_type === "CAR_DEALERSHIP" || h.business_type === "INSURANCE_BROKER";  // lot 47 / 53 : rendez-vous et ventes, pas de paiement
+  const dealer = ["CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"].includes(h.business_type);  // lots 47 / 53 / 79 : rendez-vous, pas de paiement
   const insurer = h.business_type === "INSURANCE_BROKER";
   const conv = k.conversion;
   const kpis = insurer ? [  // lot 54 : la demande de cotation est l'étape clé du courtier
@@ -2834,7 +2899,7 @@ function renderHome(h) {
     kpi("calendar", "tone-success", "Rendez-vous obtenus", `${k.appointments.value}`,
       k.appointments.delta_pct !== null ? deltaNote(k.appointments.delta_pct, "%", "")
         : `${k.appointments.to_confirm} à confirmer`),
-    kpi("key", "tone-warning", insurer ? "Contrats souscrits" : "Véhicules vendus", `${k.sold.value}`,
+    kpi("key", "tone-warning", insurer ? "Contrats souscrits" : h.business_type === "REAL_ESTATE" ? "Affaires conclues" : "Véhicules vendus", `${k.sold.value}`,
       k.sold.delta_pct !== null ? deltaNote(k.sold.delta_pct, "%", "") : "Selon l'issue indiquée après chaque rendez-vous"),
     kpi("target", "tone-info", "Taux de rendez-vous", k.appointment_rate.value === null ? "—" : `${frNumber(k.appointment_rate.value)} <small>%</small>`,
       k.appointment_rate.delta_points !== null ? deltaNote(k.appointment_rate.delta_points, "pts", "")
@@ -3796,7 +3861,7 @@ async function loadProducts() {
       (p) => `<tr>
         <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}${p.bob_category ? `<div style="font-size: 12px; color: var(--muted);">${esc((sheetCategory(p.bob_category) || {}).label || "")}${p.sheet_completeness !== null && p.sheet_completeness !== undefined ? ` · <span class="sheet-score" style="color: ${p.sheet_completeness >= 80 ? "var(--success)" : p.sheet_completeness >= 50 ? "var(--warning)" : "var(--danger)"};">fiche ${p.sheet_completeness} %</span>` : ""}</div>` : ""}</td>
         <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix" class="no-insurance">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
-        <td data-label="Stock" class="no-insurance">${p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
+        <td data-label="${currentBusinessType === "REAL_ESTATE" ? "Disponible" : "Stock"}" class="no-insurance">${currentBusinessType === "REAL_ESTATE" ? (p.stock_quantity > 0 ? "Oui" : "Non") : p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
         <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel(${jsArg(p.id)})">Gérer</button></td>
         <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel(${jsArg(p.id)})">Modifier</button></td>
       </tr>
@@ -3828,9 +3893,9 @@ function renderEditPanel(productId) {
     </div>
     <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${esc(p.description || "")}</textarea>
     ${currentBusinessType === "CAR_DEALERSHIP" || p.vehicle ? `<div style="max-width: 620px; margin-bottom: 10px;">${vehicleFields(`edit-${p.id}`, p.vehicle)}</div>` : ""}
-    ${currentBusinessType === "ONLINE_STORE" && productSheets ? `<div style="max-width: 760px; margin-bottom: 10px;">
-      <label for="edit-${p.id}-bob-category" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">Catégorie du produit</label>
-      <select id="edit-${p.id}-bob-category" class="input" style="max-width: 360px;" onchange="changeEditCategory(${jsArg(p.id)})">${categoryOptions(p.bob_category || "", "Choisir une catégorie")}</select>
+    ${(currentBusinessType === "ONLINE_STORE" || currentBusinessType === "REAL_ESTATE") && productSheets ? `<div style="max-width: 760px; margin-bottom: 10px;">
+      <label for="edit-${p.id}-bob-category" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">${productSheets.real_estate ? "Type de bien" : "Catégorie du produit"}</label>
+      <select id="edit-${p.id}-bob-category" class="input" style="max-width: 360px;" onchange="changeEditCategory(${jsArg(p.id)})">${categoryOptions(p.bob_category || "", productSheets.real_estate ? "Choisir le type de bien" : "Choisir une catégorie")}</select>
       ${p.variants && p.variants.length ? `<p style="font-size: 12px; margin: 6px 0;">Variantes (Shopify) : ${esc(variantsSummary(p.variants))}</p>` : ""}
       <div id="edit-${p.id}-sheet-box" data-code="${esc(p.bob_category || "")}" style="margin-top: 6px;">${sheetFields(`edit-${p.id}`, p.bob_category, p.sheet)}</div>
     </div>` : ""}
@@ -4961,7 +5026,7 @@ async function createProduct() {
   };
   if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");
   const bobCategory = document.getElementById("new-product-bob-category");
-  if (currentBusinessType === "ONLINE_STORE" && bobCategory && bobCategory.value) payload.bob_category = bobCategory.value;  // lot 78
+  if ((currentBusinessType === "ONLINE_STORE" || currentBusinessType === "REAL_ESTATE") && bobCategory && bobCategory.value) payload.bob_category = bobCategory.value;  // lots 78 / 79
   if (currentBusinessType === "INSURANCE_BROKER") {
     // Lot 53 — un produit d'assurance n'a ni prix ni stock : seulement ses garanties.
     delete payload.price;
@@ -4981,7 +5046,7 @@ async function createProduct() {
   try {
     await api("/api/v1/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     msg.style.color = "var(--success)";
-    msg.textContent = "Produit ajouté.";
+    msg.textContent = currentBusinessType === "REAL_ESTATE" ? "Bien ajouté : complétez sa fiche avec « Gérer »." : "Produit ajouté.";
     ["sku", "name", "price", "currency", "stock", "description"].forEach((f) => (document.getElementById("new-product-" + f).value = ""));
     if (currentBusinessType === "CAR_DEALERSHIP") document.getElementById("new-vehicle-fields").innerHTML = vehicleFields("new", null);
     loadProducts();
@@ -5127,6 +5192,55 @@ async function previewFollowup(stage) {
     const p = await api(`/api/v1/tenants/me/followup-preview?stage=${stage}`);
     await bobAlert(`Objet : ${p.subject}`, `${p.body}\n\n(Aperçu avec un client fictif, d'après les réglages enregistrés.)`);
   } catch (e) { toast(e.message, "error"); }
+}
+
+// ---- Lot 79 : agence immobilière — qui parle au client (loi Hoguet, loi ALUR) ----
+let estateProfile = null;
+const ESTATE_TEXT_FIELDS = { card: "estate-card", network: "estate-network", rsac: "estate-rsac", guarantee: "estate-guarantee",
+  zones: "estate-zones", mediator: "estate-mediator", fees_url: "estate-fees-url" };
+
+async function loadRealEstateProfile() {
+  const box = document.getElementById("estate-status-options");
+  try { estateProfile = await api("/api/v1/tenants/me/real-estate-profile"); } catch (e) {
+    box.innerHTML = `<span style="color: var(--danger);">${esc(e.message)}</span>`;
+    return;
+  }
+  const p = estateProfile;
+  box.innerHTML = p.status_options.map((o) => `<label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="estate-status" value="${esc(o.code)}" ${o.code === p.status ? "checked" : ""} onchange="estateStatusChanged()"> ${esc(o.label)}</label>`).join("");
+  document.getElementById("estate-activity-options").innerHTML = p.activity_options.map((o) => `<label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" name="estate-activity" value="${esc(o.code)}" ${p.activities.includes(o.code) ? "checked" : ""}> ${esc(o.label)}</label>`).join("");
+  Object.entries(ESTATE_TEXT_FIELDS).forEach(([key, id]) => { document.getElementById(id).value = p[key] || ""; });
+  document.getElementById("estate-privacy-url").value = p.privacy_policy_url || "";
+  document.getElementById("estate-profile-msg").textContent = "";
+  estateStatusChanged();
+}
+
+function estateStatusChanged() {
+  const chosen = (document.querySelector('input[name="estate-status"]:checked') || {}).value;
+  document.getElementById("estate-rsac-row").classList.toggle("hidden", chosen !== "MANDATAIRE");
+  document.getElementById("estate-profile-preview").innerHTML = estateProfile && estateProfile.status
+    ? `<div style="font-size: 11px; color: var(--muted); margin-bottom: 4px;">Comment Bob se présente</div>« ${esc(estateProfile.preview)} »`
+    : `<span style="color: var(--muted);">Choisissez votre statut : en attendant, Bob se présente comme « une agence immobilière ».</span>`;
+}
+
+async function saveRealEstateProfile() {
+  const msg = document.getElementById("estate-profile-msg");
+  const status = (document.querySelector('input[name="estate-status"]:checked') || {}).value;
+  if (!status) { msg.style.color = "var(--danger)"; msg.textContent = "Choisissez votre statut."; return; }
+  const activities = [...document.querySelectorAll('input[name="estate-activity"]:checked')].map((el) => el.value);
+  if (!activities.length) { msg.style.color = "var(--danger)"; msg.textContent = "Cochez au moins une activité."; return; }
+  const body = { status, activities, privacy_policy_url: document.getElementById("estate-privacy-url").value.trim() || null };
+  Object.entries(ESTATE_TEXT_FIELDS).forEach(([key, id]) => { body[key] = document.getElementById(id).value.trim() || null; });
+  try {
+    estateProfile = await api("/api/v1/tenants/me/real-estate-profile", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré.";
+    estateStatusChanged();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
 }
 
 // ---- Lot 38 : tutoiement / vouvoiement (boutique en ligne) ----

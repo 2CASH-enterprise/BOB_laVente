@@ -194,7 +194,7 @@ async def test_home_api_for_a_dealership(client, db_session):
 
 def test_dashboard_home_speaks_dealership():
     body = HTML[HTML.index("function renderHome(h) {"):HTML.index("async function loadHome() {")]
-    assert 'const dealer = h.business_type === "CAR_DEALERSHIP" || h.business_type === "INSURANCE_BROKER";' in body  # lot 53
+    assert 'const dealer = ["CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"].includes(h.business_type);' in body  # lots 53 / 79
     dealer = body[body.index(": dealer ? ["):body.index("].join(\"\") : [", body.index(": dealer ? ["))]  # lot 54 : courtier d'abord
     assert "Rendez-vous obtenus" in dealer and "Véhicules vendus" in dealer and "Taux de rendez-vous" in dealer
     assert "Encaissé" not in dealer and "paiement" not in dealer.lower() and "commande" not in dealer.lower()

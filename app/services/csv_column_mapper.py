@@ -49,7 +49,8 @@ def _vehicle_headers(fieldnames) -> dict[str, str]:
     return found
 
 
-def map_csv_to_canonical_format(raw_csv: str, default_currency: str, keep_vehicle: bool = False) -> str:
+def map_csv_to_canonical_format(raw_csv: str, default_currency: str, keep_vehicle: bool = False,
+                                keep_property: bool = False) -> str:
     """
     Convertit un CSV quelconque (en-têtes libres) vers le format attendu par
     import_catalog_csv (section 24) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE,
@@ -60,8 +61,17 @@ def map_csv_to_canonical_format(raw_csv: str, default_currency: str, keep_vehicl
     if reader.fieldnames is None:
         raise ValueError("Fichier CSV vide ou illisible")
 
+    # Lot 79 — agence immobilière : « Type », « Ville », « Pièces »… décrivent le bien ; ces colonnes sont gardées
+    # telles quelles pour la fiche du bien (et « Type » n'est pas la catégorie libre du commerçant).
+    property_headers = {}
+    if keep_property:
+        from app.services.real_estate import csv_property_headers
+
+        property_headers = csv_property_headers(reader.fieldnames)
     column_mapping: dict[str, str] = {}
     for header in reader.fieldnames:
+        if header in property_headers:
+            continue
         canonical = _match_column(header)
         if canonical and canonical not in column_mapping.values():
             column_mapping[header] = canonical
@@ -70,6 +80,7 @@ def map_csv_to_canonical_format(raw_csv: str, default_currency: str, keep_vehicl
     output = io.StringIO()
     fieldnames = ["SKU", "NAME", "DESCRIPTION", "CATEGORY", "PRICE", "CURRENCY", "STOCK", "IMAGE_URL", "ACTIVE"]
     fieldnames += list(vehicle_headers.values())  # lot 33 : fiches véhicules conservées pour une concession
+    fieldnames += list(property_headers)  # lot 79 : colonnes du bien, sous leur nom d'origine
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -87,6 +98,7 @@ def map_csv_to_canonical_format(raw_csv: str, default_currency: str, keep_vehicl
                 "IMAGE_URL": mapped.get("IMAGE_URL", ""),
                 "ACTIVE": mapped.get("ACTIVE") or "true",
                 **{key: row.get(original, "") for original, key in vehicle_headers.items()},
+                **{original: row.get(original, "") for original in property_headers},
             }
         )
 

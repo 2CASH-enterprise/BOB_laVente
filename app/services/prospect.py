@@ -111,12 +111,16 @@ def score(fiche: dict) -> tuple[str, list[str]]:
 
 async def build_fiche(db, tenant, customer, now: datetime | None = None) -> dict | None:
     """Fiche du prospect (concession, et courtier depuis le lot 54) ; None si Bob n'a encore rien appris."""
-    from app.services.business_type import is_insurance
+    from app.services.business_type import is_insurance, is_real_estate
 
     if tenant is not None and customer is not None and is_insurance(tenant):
         from app.services import insurance_prospect
 
         return await insurance_prospect.build_fiche(db, tenant, customer, now)
+    if tenant is not None and customer is not None and is_real_estate(tenant):  # lot 79
+        from app.services import real_estate
+
+        return await real_estate.build_fiche(db, tenant, customer, now)
     if tenant is None or customer is None or not is_dealership(tenant):
         return None
     now = now or datetime.now(timezone.utc)
@@ -175,8 +179,12 @@ def fiche_block(fiche: dict | None) -> str:
 
 
 async def hot_alert_emails(db, tenant, customer, conversation, now: datetime | None = None) -> list[dict]:
-    """Prospect devenu Chaud sans rendez-vous : email à la concession et à son commercial, une seule fois."""
-    if not is_dealership(tenant):
+    """Prospect devenu Chaud sans rendez-vous : email à la concession (ou à l'agence, lot 79) et à son commercial,
+    une seule fois."""
+    from app.services.business_type import is_real_estate
+
+    estate = is_real_estate(tenant)
+    if not is_dealership(tenant) and not estate:
         return []  # lot 54 : chez le courtier, le score part avec l'email de la demande de cotation
     fiche = await build_fiche(db, tenant, customer, now)
     if not fiche or fiche["score"] != "CHAUD" or fiche["has_appointment"] or fiche["outcome"] is not None:
@@ -194,8 +202,9 @@ async def hot_alert_emails(db, tenant, customer, conversation, now: datetime | N
     from app.services.handoff_service import alert_emails, commercial_for_customer, conversation_link
 
     subject = f"Prospect chaud à rappeler : {fiche['prospect']}"
+    offer = "une visite ou une estimation" if estate else "un essai ou une visite"
     body = ("Bonjour,\n\nBob a qualifié un prospect chaud qui n'a pas encore pris rendez-vous : "
-            "rappelez-le rapidement pour lui proposer un essai ou une visite.\n\n"
+            f"rappelez-le rapidement pour lui proposer {offer}.\n\n"
             + fiche_block(fiche)
             + f"Ouvrir la conversation : {conversation_link(conversation)}")
     return alert_emails(tenant.email, await commercial_for_customer(db, customer), subject, body)

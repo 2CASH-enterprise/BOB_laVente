@@ -27,7 +27,7 @@ def _parse_active(raw: str | None) -> bool:
 
 async def import_catalog_csv(
     db: AsyncSession, tenant_id, csv_content: str, max_new_products: int | None = None,
-    with_vehicles: bool = True, without_prices: bool = False,
+    with_vehicles: bool = True, without_prices: bool = False, with_properties: bool = False,
 ) -> CsvImportResponse:
     """
     max_new_products : plafond freemium (section produits) — n'empêche jamais la mise à
@@ -105,6 +105,14 @@ async def import_catalog_csv(
             errors.append(f"Ligne {row_number} ({sku}) : {' ; '.join(vehicle_errors)}")
             continue
 
+        bob_category = sheet = None
+        has_property_columns = False
+        if with_properties:  # lot 79 : agence immobilière — type de bien et fiche lus (ou devinés) dans le fichier
+            from app.services.real_estate import property_from_csv_row
+
+            bob_category, sheet, has_property_columns = property_from_csv_row(
+                row, name, (row.get("DESCRIPTION") or "").strip() or None)
+
         existing = await product_repo.get_by_sku(tenant_id, sku)
         if existing is not None:
             existing.name = name
@@ -117,6 +125,10 @@ async def import_catalog_csv(
             existing.active = active
             if vehicle is not None:  # un fichier sans colonnes véhicule n'efface pas une fiche existante
                 existing.vehicle = vehicle
+            if with_properties and (has_property_columns or not existing.bob_category):
+                existing.bob_category = bob_category  # un fichier sans colonnes de bien n'efface pas une fiche
+                if has_property_columns:
+                    existing.sheet = sheet
             updated += 1
         else:
             if max_new_products is not None and imported >= max_new_products:
@@ -136,6 +148,8 @@ async def import_catalog_csv(
                     image_url=(row.get("IMAGE_URL") or "").strip() or None,
                     active=active,
                     vehicle=vehicle,
+                    bob_category=bob_category,
+                    sheet=sheet,
                 )
             )
             imported += 1

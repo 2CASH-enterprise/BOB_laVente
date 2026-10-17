@@ -81,6 +81,7 @@ async def create_demo(
     if len(country) != 2 or not country.isalpha():
         raise HTTPException(status_code=400, detail="Pays invalide")
     dealership = business_type == CAR_DEALERSHIP
+    estate = business_type == "REAL_ESTATE"  # lot 79 : biens avec leur fiche, visites et estimations
     if business_type == "INSURANCE_BROKER":
         # Lot 54 — démo courtier : pas de fichier, les produits d'assurance par défaut (sans prix) suffisent.
         created = await _create_insurance_demo(db, company_name, currency, country, insurance_structure)
@@ -101,7 +102,7 @@ async def create_demo(
 
     try:
         mapped_csv = map_csv_to_canonical_format(content, default_currency=currency.upper()[:3] or "XOF",
-                                                 keep_vehicle=dealership)
+                                                 keep_vehicle=dealership, keep_property=estate)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
@@ -128,8 +129,8 @@ async def create_demo(
     db.add(owner)
     await db.flush()
 
-    import_result = await import_catalog_csv(db, tenant.id, mapped_csv, with_vehicles=dealership)
-    if dealership:
+    import_result = await import_catalog_csv(db, tenant.id, mapped_csv, with_vehicles=dealership, with_properties=estate)
+    if dealership or estate:
         from app.models.appointment_settings import TenantAppointmentSettings
 
         db.add(TenantAppointmentSettings(tenant_id=tenant.id, online_booking=True,

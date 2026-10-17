@@ -81,6 +81,20 @@ DEFAULTS = {
          "{bonjour},\n\nC'est mon dernier message : si ce n'est pas le bon moment, aucun souci.\n\nLa démo de Bob pour "
          "votre cabinet reste ouverte :\n{lien}\n\nBelle continuation,"),
     ],
+    "REAL_ESTATE": [  # lot 79
+        ("{entreprise} : plus de visites et d'estimations depuis WhatsApp",
+         "{bonjour},\n\nAcheteurs, locataires et propriétaires vous écrivent sur WhatsApp, souvent le soir ou le "
+         "week-end, pendant vos visites. Bob, notre assistant virtuel, leur répond tout de suite : il présente vos biens "
+         "en photos, qualifie leur projet et leur propose une visite ou une estimation dans vos créneaux, sans jamais "
+         "donner de prix d'estimation.\n\nVous pouvez l'essayer en 2 minutes :\n{lien}\n\nBonne journée,"),
+        ("Re : visites et estimations pour {entreprise}",
+         "{bonjour},\n\nJe reviens vers vous : un propriétaire qui veut vendre et attend une réponse le dimanche a "
+         "souvent appelé une autre agence le lundi.\n\nBob répond à votre place et vous transmet un projet qualifié, "
+         "prêt pour l'estimation :\n{lien}\n\nBonne journée,"),
+        ("Dernier message de ma part",
+         "{bonjour},\n\nC'est mon dernier message : si ce n'est pas le bon moment, aucun souci.\n\nLa démo de Bob pour "
+         "votre agence reste ouverte :\n{lien}\n\nBelle continuation,"),
+    ],
 }
 
 

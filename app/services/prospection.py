@@ -39,7 +39,7 @@ CHANNELS = {"WHATSAPP": "WhatsApp", "PHONE": "Appel", "EMAIL": "Email", "SMS": "
 STATUSES = {"ACTIVE": "En cours", "NOT_INTERESTED": "Pas intéressé", "UNSUBSCRIBED": "Ne plus contacter",
             "INVALID": "Coordonnées invalides"}
 SECTORS = {"ONLINE_STORE": "Commerce", "CAR_DEALERSHIP": "Concession auto / moto",
-           "INSURANCE_BROKER": "Courtier / agent d'assurance"}
+           "INSURANCE_BROKER": "Courtier / agent d'assurance", "REAL_ESTATE": "Agence immobilière"}
 EVENT_LABELS = {"ADDED": "Ajouté", "CONTACT": "Contacté", "CLICK": "A cliqué sur son lien", "DEMO": "A essayé la démo",
                 "SIGNUP": "A créé son compte", "STATUS": "Statut", "NOTE": "Note",
                 "OPEN": "A ouvert un email (indicatif)", "REPLY": "A répondu"}
@@ -240,7 +240,7 @@ def group_funnel(prospects: list, stages: dict, key_of) -> list[dict]:
 # Lot 63 — visuels de prospection par secteur (app/static/visuels) : aperçu du lien, bannière des emails,
 # bouton « Télécharger le visuel » de la fiche.
 VISUALS = {"ONLINE_STORE": "prospection-commerce.jpg", "CAR_DEALERSHIP": "prospection-concession.jpg",
-           "INSURANCE_BROKER": "prospection-courtier.jpg"}
+           "INSURANCE_BROKER": "prospection-courtier.jpg", "REAL_ESTATE": "prospection-immobilier.jpg"}
 
 
 def visual_url(sector: str | None) -> str:
@@ -250,7 +250,8 @@ def visual_url(sector: str | None) -> str:
 
 
 # Lot 63 — dans l'adresse, le secteur s'écrit en clair (…/demo/?secteur=concession&p=CODE).
-SECTOR_SLUGS = {"ONLINE_STORE": "commerce", "CAR_DEALERSHIP": "concession", "INSURANCE_BROKER": "assurance"}
+SECTOR_SLUGS = {"ONLINE_STORE": "commerce", "CAR_DEALERSHIP": "concession", "INSURANCE_BROKER": "assurance",
+                "REAL_ESTATE": "immobilier"}
 
 
 def sector_from_slug(value: str | None) -> str | None:
@@ -332,6 +333,7 @@ _PITCH = {
     "ONLINE_STORE": "répond à vos clients sur WhatsApp 24 h / 24, prend leurs commandes et relance ceux qui hésitent",
     "CAR_DEALERSHIP": "répond à vos prospects sur WhatsApp 24 h / 24, qualifie leur projet et vous obtient des rendez-vous d'essai",
     "INSURANCE_BROKER": "répond à vos clients sur WhatsApp 24 h / 24, prépare les demandes de cotation et suit les échéances de leurs contrats",
+    "REAL_ESTATE": "répond à vos acheteurs, locataires et propriétaires sur WhatsApp 24 h / 24 et vous obtient des visites et des estimations",
 }
 
 
@@ -444,7 +446,8 @@ SYNONYMS = {
     "notes": ("note", "notes", "remarque", "remarques", "commentaire", "commentaires", "observation"),
 }
 SECTOR_WORDS = {"CAR_DEALERSHIP": ("auto", "concession", "vehicule", "voiture", "garage", "moto"),
-                "INSURANCE_BROKER": ("assur", "courtier", "courtage", "agent general", "agence generale")}
+                "INSURANCE_BROKER": ("assur", "courtier", "courtage", "agent general", "agence generale"),
+                "REAL_ESTATE": ("immobili", "immo", "mandataire", "transaction", "gestion locative", "syndic")}
 
 
 def _plain(text) -> str:

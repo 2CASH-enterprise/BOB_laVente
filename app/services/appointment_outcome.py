@@ -59,7 +59,29 @@ def _insurance_texts(appointment, shop_name: str) -> tuple[str, str]:
             "Nous restons à votre disposition pour toute information."), "Merci pour notre échange"
 
 
-def whatsapp_text(appointment, shop_name: str) -> str:
+def _real_estate_texts(appointment, shop_name: str) -> tuple[str, str]:
+    """Lot 79 — agence immobilière : (relance, titre de l'email). Jamais d'essai ni de véhicule."""
+    if appointment.outcome == OUTCOME_NO_SHOW:
+        missed = ("nous n'avons pas réussi à vous joindre" if appointment.kind == "APPEL"
+                  else f"nous ne vous avons pas vu pour votre {subject_phrase(appointment)}")
+        return (f"Bonjour, {missed} ({shop_name}). Souhaitez-vous choisir un autre moment ? "
+                "Répondez simplement à ce message."), "Votre rendez-vous"
+    about = appointment.vehicle_label or "votre projet"
+    return (f"Bonjour, merci encore pour notre rendez-vous, {shop_name} ! Avez-vous des questions sur {about} ? "
+            "Nous restons à votre disposition pour une nouvelle visite ou toute information."), "Merci pour notre rendez-vous"
+
+
+def _sector_texts(appointment, shop_name: str, business_type: str | None):
+    if business_type == "REAL_ESTATE":
+        return _real_estate_texts(appointment, shop_name)
+    if appointment.kind in INSURANCE_KINDS:
+        return _insurance_texts(appointment, shop_name)
+    return None
+
+
+def whatsapp_text(appointment, shop_name: str, business_type: str | None = None) -> str:
+    if (texts := _sector_texts(appointment, shop_name, business_type)) is not None:
+        return texts[0]
     if appointment.kind in INSURANCE_KINDS:
         return _insurance_texts(appointment, shop_name)[0]
     if appointment.outcome == OUTCOME_NO_SHOW:
@@ -69,12 +91,12 @@ def whatsapp_text(appointment, shop_name: str) -> str:
             f"{_vehicle(appointment)} ? Nous restons à votre disposition pour un nouvel essai ou toute information.")
 
 
-def email_text(appointment, shop_name: str, powered_by: bool = False) -> tuple[str, str]:
+def email_text(appointment, shop_name: str, powered_by: bool = False, business_type: str | None = None) -> tuple[str, str]:
     from app.services.email_layout import customer_footer
 
     footer = customer_footer(shop_name, powered_by)
-    if appointment.kind in INSURANCE_KINDS:
-        text, title = _insurance_texts(appointment, shop_name)
+    if (texts := _sector_texts(appointment, shop_name, business_type)) is not None:
+        text, title = texts
         reply = "Répondez simplement à cet email ou écrivez-nous sur WhatsApp."
         body = text.replace("Répondez simplement à ce message.", reply) if "Répondez simplement" in text else f"{text} {reply}"
         return f"{title} — {shop_name}", f"{body}\n\nÀ bientôt,\n{shop_name}" + footer
@@ -120,7 +142,7 @@ async def send_followup(db, tenant, appointment, now: datetime, send_email=None,
     conversation = await _latest_conversation(db, appointment)
     closes_at = await reply_window_closes_at(db, conversation) if conversation is not None else None
     if customer is not None and closes_at is not None and as_utc(now) < closes_at:
-        text = whatsapp_text(appointment, tenant.name)
+        text = whatsapp_text(appointment, tenant.name, tenant.business_type)
         if send_whatsapp is not None:
             sent = await send_whatsapp(db, tenant, conversation, customer, text)
         else:
@@ -139,7 +161,8 @@ async def send_followup(db, tenant, appointment, now: datetime, send_email=None,
             channel = CHANNEL_WHATSAPP
     if channel == CHANNEL_TASK and customer is not None and customer.email \
             and (appointment.outcome == OUTCOME_NO_SHOW or customer.marketing_consent):
-        subject, body = email_text(appointment, tenant.name, powered_by=not tenant.is_paid)
+        subject, body = email_text(appointment, tenant.name, powered_by=not tenant.is_paid,
+                                   business_type=tenant.business_type)
         if send_email(to=customer.email, subject=subject, body=body, from_name=tenant.name, reply_to=tenant.email):
             channel = CHANNEL_EMAIL
     appointment.followup_sent_at = now

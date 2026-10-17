@@ -119,7 +119,11 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
     comparable = tenant.created_at is None or as_utc(tenant.created_at) <= prev_start
     sector = normalize(tenant.business_type)
     rdv, insurance = is_appointment_sector(tenant), is_insurance(tenant)
-    place = "cabinet" if insurance else "concession" if rdv else "boutique"
+    from app.services.business_type import is_real_estate
+
+    estate = is_real_estate(tenant)  # lot 79 : agence immobilière
+    place = "cabinet" if insurance else "agence" if estate else "concession" if rdv else "boutique"
+    won_words = ("conclu", "conclus") if estate else ("vendu", "vendus")
     base = get_settings().public_base_url.rstrip("/") + "/dashboard/"
 
     home = await home_summary(db, tenant.id, days=days, now=end)
@@ -272,7 +276,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
         if insurance:
             detail = _plural(r["appointments"], "rendez-vous", "rendez-vous") + " · " + _plural(r["vehicles_sold"], "contrat", "contrats")
         elif rdv:
-            detail = _plural(r["appointments"], "rendez-vous", "rendez-vous") + " · " + _plural(r["vehicles_sold"], "vendu", "vendus")
+            detail = _plural(r["appointments"], "rendez-vous", "rendez-vous") + " · " + _plural(r["vehicles_sold"], *won_words)
         else:
             detail = _plural(r["paid_orders"], "vente", "ventes") + (f" · {money(r['revenue'], tenant.currency)}" if r["revenue"] else "")
         sources.append((r["label"], r["customers"], detail))
@@ -280,7 +284,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
     if rdv:
         for r in (await commercials_summary(db, tenant.id, start, end))[:ROWS_SHOWN + 3]:
             if r["prospects"] or r["appointments"]:
-                won = _plural(r["vehicles_sold"], "contrat", "contrats") if insurance else _plural(r["vehicles_sold"], "vendu", "vendus")
+                won = _plural(r["vehicles_sold"], "contrat", "contrats") if insurance else _plural(r["vehicles_sold"], *won_words)
                 commercials.append((r["name"], r["prospects"], f"{_plural(r['appointments'], 'rendez-vous', 'rendez-vous')} · {won}"))
 
     # --- À valider (déclaré par le commerçant) et mois qui vient ---------------------------------------------
@@ -318,7 +322,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
     bob = {
         "sentence": (f"Pas de sommeil, pas de week-end, pas de congé : Bob a tenu votre accueil WhatsApp chaque jour, "
                      f"et ce rapport est arrivé à l'heure. Il prend le relais quand votre équipe se repose et lui laisse "
-                     f"les clients prêts à {'souscrire' if insurance else 'acheter'}."),
+                     f"les clients prêts à {'souscrire' if insurance else 'visiter ou à confier leur bien' if estate else 'acheter'}."),
         "presence": presence, "savings": savings, "value_title": "Temps libéré", "value": duration(saved),
         "compare": compare,
         "method": (f"Estimation : chaque message de Bob compte {MINUTES_PER_REPLY} minutes (la réponse et les tâches "
@@ -327,7 +331,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
 
     night = {
         "replies": off_replies, "hours": hours,
-        "sentence": (f"Le soir, la nuit et le week-end, votre {place} est fermé{'e' if place in ('boutique', 'concession') else ''}. "
+        "sentence": (f"Le soir, la nuit et le week-end, votre {place} est fermé{'e' if place in ('boutique', 'concession', 'agence') else ''}. "
                      "Bob, lui, a répondu tout de suite. Sans lui, ces clients auraient attendu le lendemain, "
                      f"avec le risque qu'ils {'aillent voir ailleurs' if rdv else 'achètent ailleurs'}."),
         "stats": [(len(off_customers), "clients ont écrit hors heures"), (new_off, "nouveaux clients arrivés hors heures"),
@@ -393,7 +397,9 @@ async def _to_validate(db, tenant, end, rdv: bool, insurance: bool, base: str) -
             AppointmentRequest.scheduled_at < end, AppointmentRequest.outcome.is_(None),
             AppointmentRequest.status == "CONFIRMED"))).scalars().all()
         if past:
-            what = "contrat souscrit" if insurance else "vendu"
+            from app.services.business_type import is_real_estate
+
+            what = "contrat souscrit" if insurance else "conclu" if is_real_estate(tenant) else "vendu"
             items.append((_plural(len(past), "rendez-vous passé", "rendez-vous passés"),
                           f"sans issue indiquée ({what}, à relancer, pas intéressé, absent)"))
         url = base + "?tab=appointments"

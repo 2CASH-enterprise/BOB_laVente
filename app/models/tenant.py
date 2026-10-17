@@ -91,6 +91,10 @@ class Tenant(Base):
     insurance_partners: Mapped[list | None] = mapped_column(JSON)
     tariff_url: Mapped[str | None] = mapped_column(String(300))
     privacy_policy_url: Mapped[str | None] = mapped_column(String(300))
+    # Lot 79 — agence immobilière (loi Hoguet, loi ALUR) : statut, carte professionnelle ou RSAC, réseau, garantie
+    # financière, activités (vente, location, gestion), secteur couvert, lien vers le barème d'honoraires, médiateur.
+    # Clés et valeurs vérifiées par app/services/real_estate.py ; Bob les donne, ne les invente jamais.
+    real_estate_profile: Mapped[dict | None] = mapped_column(JSON)
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 65 — pré-inscription (avant le lancement) : compte créé pendant le « mode pré-inscription ». Tant que

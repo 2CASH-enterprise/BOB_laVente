@@ -33,7 +33,12 @@ from app.services.handoff_rules import (
     outage_message,
     transfer_message,
 )
-from app.services.business_type import is_dealership
+from app.services.business_type import is_dealership, is_real_estate
+from app.services.real_estate import (
+    VALUATION_MESSAGE,
+    VALUATION_MESSAGE_NO_TRANSFER,
+    contains_valuation_or_loan_figure,
+)
 from app.services.finance_guard import FINANCE_MESSAGE, FINANCE_MESSAGE_NO_TRANSFER, contains_financing_figure
 from app.services.promise_guard import contains_human_promise, remove_human_promises
 from app.services.powered_by import add_powered_by, strip_powered_by  # lot 74
@@ -440,6 +445,17 @@ async def receive_webhook(
                 from app.services.reply_cleanup import clean_ai_reply
 
                 reply_text = clean_ai_reply(reply_text)
+                if is_real_estate(tenant):
+                    # Lot 79 — verrou légal : jamais une pièce interdite au dossier locataire ni une question
+                    # discriminatoire ; la ligne est retirée avant l'envoi et la conversation en garde la trace.
+                    from app.services.real_estate import legal_guard
+
+                    reply_text, removed = legal_guard(reply_text)
+                    for reason in dict.fromkeys(removed):
+                        db.add(Message(
+                            tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                            message_type="legal_removed", content=f"Ligne retirée de la réponse de Bob : {reason}.",
+                        ))
             if failure == FAILURE_LOOP:
                 # Anomalie (Bob tourne en rond) : un humain doit regarder → vrai transfert + alerte.
                 conversation.status = ConversationStatus.WAITING_HUMAN
@@ -465,21 +481,26 @@ async def receive_webhook(
                 elif await rate_limiter.is_allowed(f"ai-outage:{tenant_id}", limit=1, window_seconds=3600):
                     subject, body = build_outage_alert(tenant.name)
                     outage_emails = [{"to": tenant.email, "subject": subject, "body": body}]
-            elif is_dealership(tenant) and contains_financing_figure(reply_text):
+            elif (is_dealership(tenant) and contains_financing_figure(reply_text)) or (
+                    is_real_estate(tenant) and contains_valuation_or_loan_figure(reply_text)):
                 # Lot 24 — concession : jamais de mensualité, de taux, d'apport ni de valeur de reprise
                 # annoncés par Bob. La réponse entière est remplacée ; le client est transmis à un
                 # conseiller, sauf si une règle interdit le transfert pour ce message.
                 db.add(Message(
                     tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
                     message_type="finance_removed",
-                    content="Réponse de Bob remplacée : elle contenait un chiffre de financement ou de reprise.",
+                    content=("Réponse de Bob remplacée : elle contenait une estimation du bien ou un chiffre de crédit."
+                             if is_real_estate(tenant) else
+                             "Réponse de Bob remplacée : elle contenait un chiffre de financement ou de reprise."),
                 ))
+                estate = is_real_estate(tenant)  # lot 79 : estimation du bien du client, crédit immobilier
+                no_transfer = VALUATION_MESSAGE_NO_TRANSFER if estate else FINANCE_MESSAGE_NO_TRANSFER
                 if conversation.status == ConversationStatus.WAITING_HUMAN:
-                    reply_text = FINANCE_MESSAGE_NO_TRANSFER  # déjà transmis (rendez-vous, transfert)
+                    reply_text = no_transfer  # déjà transmis (rendez-vous, transfert)
                 elif turn.mode == FORBID_TRANSFER:
-                    reply_text = FINANCE_MESSAGE_NO_TRANSFER
+                    reply_text = no_transfer
                 else:
-                    reply_text = FINANCE_MESSAGE
+                    reply_text = VALUATION_MESSAGE if estate else FINANCE_MESSAGE
                     conversation.status = ConversationStatus.WAITING_HUMAN
                     db.add(Message(
                         tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
@@ -644,7 +665,8 @@ async def receive_webhook(
     if image_outbox:
         from app.services import product_cards
 
-        mode, sent = await product_cards.send(wa_client, customer.whatsapp_number, image_outbox, tu)
+        mode, sent = await product_cards.send(wa_client, customer.whatsapp_number, image_outbox, tu,
+                                              product_cards.card_noun(tenant))
         if mode == "cards" and sent:
             db.add(Message(
                 tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.AI, message_type="product_cards",

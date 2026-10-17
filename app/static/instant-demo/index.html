@@ -129,6 +129,10 @@
           <span class="t">🚗 Concession auto / moto</span>
           <span class="d">Bob renseigne sur vos véhicules, qualifie le client et fixe un rendez-vous d'essai.</span>
         </button>
+        <button type="button" class="sector-option" onclick="chooseSector('REAL_ESTATE')">
+          <span class="t">🏠 Agence immobilière <span style="font-weight: 400; color: #8a8f98; font-size: 0.9em;">(vente, location, gestion)</span></span>
+          <span class="d">Bob présente vos biens, qualifie acheteurs, locataires et propriétaires, et fixe visites et estimations.</span>
+        </button>
         <button type="button" class="sector-option" onclick="chooseSector('INSURANCE_BROKER')">
           <span class="t">🛡️ Courtier / agent d'assurance</span>
           <span class="d">Bob qualifie le besoin, prépare la demande de cotation et propose un appel ou un rendez-vous. Jamais de prix.</span>
@@ -281,6 +285,24 @@ Toyota Hilux,21000000,Double cabine 4x4,1,Toyota,Hilux,2020,88000,Diesel,Manuell
       ["📷 Photo", "Vous avez une photo ?"],
     ],
   },
+  // Lot 79 — agence immobilière : biens avec leur fiche (type, vente ou location, ville, surface, pièces, DPE).
+  REAL_ESTATE: {
+    label: "Agence immobilière", status: "● Assistant IA en ligne", company: "Agence Exemple", items: "BIENS IMPORTÉS",
+    sample: `Nom,Prix,Description,Stock,Type,Transaction,Ville,Surface,Pièces,DPE,Honoraires
+T3 lumineux avec balcon,1150,Proche métro et commerces,1,Appartement,Location,Lyon 3e,68,3,C,Honoraires locataire : 12 €/m²
+Studio meublé étudiant,620,Idéal étudiant ou jeune actif,1,Appartement,Location,Lyon 7e,24,1,D,Honoraires locataire : 12 €/m²
+Maison familiale avec jardin,435000,Quartier calme proche écoles,1,Maison,Vente,Villeurbanne,120,5,C,5 % TTC à la charge de l'acquéreur
+T2 rénové,229000,Cuisine équipée et cave,1,Appartement,Vente,Lyon 8e,45,2,D,4 % TTC à la charge de l'acquéreur
+Terrain constructible,165000,Viabilisé,1,Terrain,Vente,Saint-Priest,600,,,5 % TTC à la charge de l'acquéreur
+Local commercial en angle,1800,Belle vitrine,1,Local,Location,Lyon 6e,85,,E,Honoraires : 15 % HT du loyer annuel`,
+    scenarios: [
+      ["🔍 T3 à louer", "Bonjour, vous avez un T3 à louer à Lyon ?"],
+      ["🏡 Estimation", "Je voudrais vendre ma maison, elle vaut combien ?"],
+      ["📄 Dossier", "Quels documents faut-il pour louer ?"],
+      ["💶 Honoraires", "Quels sont vos frais d'agence ?"],
+      ["📅 Visite", "Je peux visiter samedi matin ?"],
+    ],
+  },
   // Lot 54 — démo courtier : pas de fichier, les produits d'assurance par défaut sont créés côté serveur.
   INSURANCE_BROKER: {
     label: "Courtier / agent d'assurance", status: "● Assistant IA en ligne", company: "Assur Conseil", items: "PRODUITS D'ASSURANCE",
@@ -323,7 +345,7 @@ function chooseSector(code) {
   const sector = SECTORS[code];
   document.getElementById("sector-label").textContent = sector.label;
   document.getElementById("company-name").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar"
-    : code === "INSURANCE_BROKER" ? "Ex. Assur Conseil Abidjan" : "Ex. Boutique ABC";
+    : code === "INSURANCE_BROKER" ? "Ex. Assur Conseil Abidjan" : code === "REAL_ESTATE" ? "Ex. Agence du Parc" : "Ex. Boutique ABC";
   // Lot 54 — courtier : statut à la place du fichier catalogue.
   document.getElementById("catalog-field").classList.toggle("hidden", !!sector.noCatalog);
   document.getElementById("sample-link").classList.toggle("hidden", !!sector.noCatalog);
@@ -354,7 +376,7 @@ fetch(API_BASE + "/api/v1/preregistration/public").then((r) => r.ok ? r.json() :
 // Lot 63 — lien personnel d'un prospect (…/demo/?secteur=concession&p=CODE) : la démo s'ouvre sur son secteur.
 (function presetSector() {
   try {
-    const SLUGS = { commerce: "ONLINE_STORE", concession: "CAR_DEALERSHIP", assurance: "INSURANCE_BROKER" };
+    const SLUGS = { commerce: "ONLINE_STORE", concession: "CAR_DEALERSHIP", assurance: "INSURANCE_BROKER", immobilier: "REAL_ESTATE" };
     const value = new URLSearchParams(window.location.search).get("secteur") || "";
     const code = SLUGS[value.toLowerCase()] || value;
     if (code && SECTORS[code]) chooseSector(code);
@@ -433,7 +455,7 @@ async function createDemo() {
     document.getElementById("chat-company-name").textContent = companyName;
     const sector = SECTORS[selectedSector];
     document.getElementById("stat-imported-label").textContent = sector.items;
-    document.getElementById("ready-title").textContent = sector.noCatalog ? "Votre assistant IA est prêt !" : "Votre vendeur IA est prêt !";
+    document.getElementById("ready-title").textContent = sector.noCatalog || selectedSector === "REAL_ESTATE" ? "Votre assistant IA est prêt !" : "Votre vendeur IA est prêt !";
     document.getElementById("chat-status").textContent = sector.status;
     document.getElementById("scenarios").innerHTML = sector.scenarios
       .map(([label, text], i) => `<button class="scenario-btn" data-i="${i}">${esc(label)}</button>`).join("");

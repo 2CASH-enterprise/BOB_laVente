@@ -16,6 +16,8 @@ APPOINTMENT_KINDS = {
     "ESTIMATION_REPRISE": "Estimation de reprise",
     "CABINET": "Rendez-vous au cabinet",  # lot 53 : courtier / agent d'assurance
     "APPEL": "Appel d'un conseiller",
+    "ESTIMATION": "Estimation de votre bien",  # lot 79 : agence immobilière (le mandat)
+    "AGENCE": "Rendez-vous à l'agence",
 }
 STATUS_REQUESTED = "REQUESTED"
 STATUS_CONFIRMED = "CONFIRMED"

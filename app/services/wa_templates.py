@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, normalize
+from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, REAL_ESTATE, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ PAY_CODE_LENGTH = 10
 CATALOG = {
     "rdv_rappel": {
         "label": "Rappel de rendez-vous la veille",
-        "sectors": (CAR_DEALERSHIP, INSURANCE_BROKER),
+        "sectors": (CAR_DEALERSHIP, INSURANCE_BROKER, REAL_ESTATE),
         VOUS: "Bonjour {{1}}, petit rappel de votre rendez-vous chez {{2}} demain, {{3}}, à {{4}}. "
               "Pour le déplacer ou l'annuler, répondez simplement à ce message.",
         TU: "Bonjour {{1}}, petit rappel de ton rendez-vous chez {{2}} demain, {{3}}, à {{4}}. "
@@ -44,7 +44,7 @@ CATALOG = {
     },
     "rdv_absence": {
         "label": "Absence au rendez-vous",
-        "sectors": (CAR_DEALERSHIP,),
+        "sectors": (CAR_DEALERSHIP, REAL_ESTATE),
         VOUS: "Bonjour {{1}}, nous ne vous avons pas vu à votre rendez-vous chez {{2}} le {{3}}. "
               "Souhaitez-vous en fixer un autre ? Répondez simplement à ce message avec le jour qui vous arrange.",
         TU: "Bonjour {{1}}, on ne t'a pas vu à ton rendez-vous chez {{2}} le {{3}}. "

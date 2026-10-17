@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, normalize
+from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, REAL_ESTATE, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,13 @@ CONTENT = {
                  "Il rappelle les échéances des contrats et enregistre les réclamations (CIMA)."],
         "products": "La liste de vos contrats en cours (Excel ou CSV) : client, téléphone, branche, assureur, échéance.",
     },
+    REAL_ESTATE: {  # lot 79
+        "does": ["Il répond sur WhatsApp à chaque demande, même le soir et le week-end.",
+                 "Il présente vos biens en photos, avec leurs informations clés et vos honoraires.",
+                 "Il qualifie acheteurs, locataires et propriétaires, et fixe visites et estimations.",
+                 "Il ne demande jamais de pièce interdite au dossier locataire et vous passe la main au bon moment."],
+        "products": "La liste de vos biens (Excel ou CSV) : type, vente ou location, ville, surface, pièces, prix, photo si possible.",
+    },
 }
 GAINS = ["Plus aucun client sans réponse : Bob est là 24 h / 24, 7 jours sur 7.",
          "Du temps rendu à votre équipe : les questions répétitives sont traitées par Bob.",
@@ -153,9 +160,9 @@ def content(sector: str | None) -> dict:
         "offer": OFFER_TEXT,
         "signature": "L'équipe de Bob",
         "products_label": {ONLINE_STORE: "Fichier de vos produits", CAR_DEALERSHIP: "Liste de vos véhicules",
-                           INSURANCE_BROKER: "Liste de vos contrats"}[sector],
+                           INSURANCE_BROKER: "Liste de vos contrats", REAL_ESTATE: "Liste de vos biens"}[sector],
         "size_label": {ONLINE_STORE: "Nombre de produits", CAR_DEALERSHIP: "Nombre de véhicules",
-                       INSURANCE_BROKER: "Nombre de contrats"}[sector],
+                       INSURANCE_BROKER: "Nombre de contrats", REAL_ESTATE: "Nombre de biens"}[sector],
     }
 
 
@@ -224,6 +231,30 @@ def example_home(sector: str | None, first_name: str | None, currency: str | Non
                     {"kind": "SALE", "title": "Vente conclue", "detail": "Jean-Marc Yao · Hyundai Tucson 2022", "at": ago(hours=5)},
                     {"kind": "CUSTOMER", "title": "Nouveau client", "detail": "Aïcha Bamba · venue d'une publicité Instagram", "at": ago(hours=7)},
                 ]}
+    if sector == REAL_ESTATE:  # lot 79
+        return {**base,
+                "kpis": {"appointments": {"value": 41, "delta_pct": 18.0, "to_confirm": 4},
+                         "sold": {"value": 7, "delta_pct": 16.7},
+                         "appointment_rate": {"value": 17.2, "delta_points": 2.4, "with_appointment": 41, "conversations": 238},
+                         "conversations": {"value": 238, "delta_pct": 21.0, "bob_only": 209}},
+                "todo": [
+                    {"kind": "APPOINTMENT", "customer": "Claire Martin", "reason": "Estimation à confirmer", "tone": "warning",
+                     "detail": "Maison 5 pièces à Villeurbanne · vente sous 3 mois", "since": ago(minutes=20),
+                     "action": "Confirmer"},
+                    {"kind": "CONVERSATION", "conversation_id": None, "customer": "Karim Benali", "reason": "Demande un humain",
+                     "tone": "danger", "detail": "Je voudrais faire une offre sur le T3 de la rue Garibaldi",
+                     "since": ago(hours=1), "action": "Répondre", "hot": True}],
+                "funnel": [{"key": "conversations", "label": "Conversations", "value": 238},
+                           {"key": "appointments", "label": "Rendez-vous demandés", "value": 41},
+                           {"key": "visited", "label": "Rendez-vous honorés", "value": 29},
+                           {"key": "sold", "label": "Affaires conclues", "value": 7}],
+                "daily": _days(now, [round(n * 0.65) for n in _COUNTS], {5, 12, 19, 26}, {1, 2, 4, 7, 9, 11, 14, 16, 18, 21, 23, 25, 28}),
+                "activity": [
+                    {"kind": "APPOINTMENT", "title": "Rendez-vous demandé", "detail": "Claire Martin · Estimation de votre bien", "at": ago(minutes=20)},
+                    {"kind": "SALE", "title": "Affaire conclue", "detail": "Julien Petit · Appartement T2 Lyon 7e", "at": ago(hours=6)},
+                    {"kind": "APPOINTMENT", "title": "Rendez-vous demandé", "detail": "Sophie Bernard · Visite · Appartement T3 Lyon 3e", "at": ago(hours=9)},
+                ],
+                "prospect_scores": {"CHAUD": 9, "TIEDE": 17, "FROID": 12, "VENDU": 7}}
     return {**base,
             "kpis": {"appointments": {"value": 22, "delta_pct": 15.0, "to_confirm": 2},
                      "sold": {"value": 11, "delta_pct": 22.0},
@@ -336,8 +367,9 @@ def alert_email(tenant, owner_email: str | None) -> tuple[str, str]:
     from app.core.config import get_settings
 
     base = get_settings().public_base_url.rstrip("/")
-    sector = {ONLINE_STORE: "Commerce", CAR_DEALERSHIP: "Concession auto / moto",
-              INSURANCE_BROKER: "Courtier / agent d'assurance"}[normalize(tenant.business_type)]
+    from app.services.business_type import BUSINESS_TYPES
+
+    sector = BUSINESS_TYPES[normalize(tenant.business_type)]["label"]
     body = (f"Nouvelle pré-inscription : {tenant.name} ({sector}, {tenant.country}).\n"
             f"Contact : {owner_email or tenant.email}" + (f" · {tenant.phone}" if tenant.phone else "") +
             f"\n\nVoir les pré-inscrits : {base}/superadmin/\n\n— Bob")

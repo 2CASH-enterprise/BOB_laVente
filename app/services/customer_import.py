@@ -181,7 +181,7 @@ async def export_rows(db, tenant) -> tuple[list[str], list[list]]:
     from app.models.conversation import Conversation
     from app.models.customer import Customer
     from app.services.acquisition import channel_label, channel_of
-    from app.services.business_type import is_dealership, is_insurance
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate
     from app.services.local_time import tenant_zone
 
     zone = tenant_zone(tenant)
@@ -201,7 +201,7 @@ async def export_rows(db, tenant) -> tuple[list[str], list[list]]:
         from app.services import insurance_prospect
 
         scores = {cid: p["score_label"] for cid, p in (await insurance_prospect.for_customers(db, tenant)).items()}
-    elif is_dealership(tenant):
+    elif is_dealership(tenant) or is_real_estate(tenant):  # lot 79 : même fiche, règles de l'agence
         from app.models.appointment_request import AppointmentRequest
         from app.models.prospect_profile import ProspectProfile
         from app.services.prospect import build_fiche
@@ -215,7 +215,7 @@ async def export_rows(db, tenant) -> tuple[list[str], list[list]]:
                 scores[cid] = fiche.get("score_label") or fiche.get("score") or ""
     header = ["Prénom", "Nom", "Téléphone", "Email", "Ville", "Source", "Détail de la source", "Accepte les offres",
               "Accord donné le", "Dernier échange", "Client depuis", "Étiquettes", "Note"]
-    if scores or is_insurance(tenant) or is_dealership(tenant):
+    if scores or is_insurance(tenant) or is_dealership(tenant) or is_real_estate(tenant):
         header.insert(10, "Score")
     rows = []
     for c in customers:

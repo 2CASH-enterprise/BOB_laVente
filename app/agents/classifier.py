@@ -26,6 +26,8 @@ def build_classifier_prompt(business_type: str | None = None) -> str:
         return _dealership_prompt()
     if business_type == "INSURANCE_BROKER":
         return _insurance_prompt()
+    if business_type == "REAL_ESTATE":
+        return _real_estate_prompt()
     intents = "\n".join(f"- {code} : {definition}" for code, (_, definition) in INTENTS.items())
     objections = "\n".join(f"- {code} : {definition}" for code, (_, definition) in OBJECTIONS.items())
     return (
@@ -162,6 +164,46 @@ def _insurance_prompt() -> str:
     )
 
 
+# Lot 79 — agence immobilière : mêmes intentions, objections propres (taxonomie v1.5immo).
+REAL_ESTATE_CLASSIFIER_EXAMPLES: list[tuple[str, dict]] = [
+    ("Je vais réfléchir", {"intents": ["AUTRE"], "objections": ["HESITATION"], "offered_amount": None}),
+    ("Vous avez des T3 à louer à Lyon ?", {"intents": ["RECHERCHE_PRODUIT"], "objections": [], "offered_amount": None}),
+    ("Le loyer est trop cher pour moi", {"intents": ["AUTRE"], "objections": ["PRIX_TROP_ELEVE"], "offered_amount": None}),
+    ("Je peux mettre 250 000 € maximum", {"intents": ["AUTRE"], "objections": [], "offered_amount": 250000}),
+    ("Vos frais d'agence sont énormes, je préfère vendre seul", {"intents": ["AUTRE"], "objections": ["HONORAIRES"], "offered_amount": None}),
+    ("Je n'ai pas encore vu ma banque", {"intents": ["AUTRE"], "objections": ["FINANCEMENT"], "offered_amount": None}),
+    ("Je suis en CDD, mon dossier sera refusé ?", {"intents": ["AUTRE"], "objections": ["DOSSIER"], "offered_amount": None}),
+    ("Je veux vendre ma maison, elle vaut combien ?", {"intents": ["INTENTION_ACHAT", "DEMANDE_PRIX"], "objections": [], "offered_amount": None}),
+    ("Il est encore disponible l'appartement ?", {"intents": ["DISPONIBILITE"], "objections": [], "offered_amount": None}),
+    ("Je ne verse rien avant d'avoir visité", {"intents": ["AUTRE"], "objections": ["CONFIANCE"], "offered_amount": None}),
+    ("Je veux parler à un conseiller", {"intents": ["DEMANDE_HUMAIN"], "objections": [], "offered_amount": None}),
+    ("D'accord merci", {"intents": ["SALUTATION"], "objections": [], "offered_amount": None}),
+]
+
+
+def _real_estate_prompt() -> str:
+    intents = "\n".join(f"- {code} : {definition}" for code, (_, definition) in INTENTS.items())
+    objections = "\n".join(f"- {code} : {definition}" for code, (_, definition) in objections_for("REAL_ESTATE").items())
+    return (
+        "Tu analyses UN message qu'un client a envoyé sur WhatsApp à une agence immobilière.\n"
+        "Tu ne réponds jamais au client : tu classes seulement son message.\n\n"
+        "Réponds UNIQUEMENT par un objet JSON de la forme :\n"
+        '{"intents": ["CODE", ...], "objections": ["CODE", ...], "offered_amount": nombre ou null}\n\n'
+        "Intentions possibles (une ou plusieurs ; « produit » = bien immobilier ; « acheter » = acheter, louer, ou "
+        "confier son bien à l'agence pour le vendre ou le louer) :\n"
+        f"{intents}\n\n"
+        f"Objections possibles (zéro, une ou plusieurs) :\n{objections}\n\n"
+        "Règles :\n"
+        "- n'utilise que les codes ci-dessus, en majuscules ;\n"
+        "- une objection = tout ce qui freine ou retarde le projet, y compris une hésitation sans raison donnée ; une "
+        "simple question (« il y a un parking ? ») n'est pas une objection ; s'il n'y a aucun frein, liste vide ;\n"
+        "- offered_amount = le prix, le loyer ou le budget que le client annonce lui-même ; null s'il n'en donne aucun ;\n"
+        "- le message précédent de l'agence, s'il est fourni, sert seulement à comprendre une réponse courte "
+        "(« oui », « combien ? ») ; ne classe que le message du client.\n\n"
+        f"Exemples :\n{_examples(REAL_ESTATE_CLASSIFIER_EXAMPLES)}"
+    )
+
+
 def normalize_classification(raw, business_type: str | None = None) -> dict | None:
     """Ne garde que ce qui respecte la taxonomie de l'activité. None si la réponse est inexploitable."""
     if not isinstance(raw, dict):
@@ -190,7 +232,7 @@ class MessageClassifier(ABC):
         if not text:
             return None
         try:
-            if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER"):  # lots 45 / 54 : consignes de l'activité
+            if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"):  # lots 45 / 54 / 79
                 call = self._call(text[:MAX_MESSAGE_CHARS], previous_shop_message,
                                   system_prompt=build_classifier_prompt(business_type))
             else:
@@ -227,7 +269,9 @@ class MistralMessageClassifier(MessageClassifier):
 
         # Lot 50 — consignes identiques pour toutes les boutiques d'une même activité : une clé de cache
         # par activité (les consignes de la concession ne sont envoyées que pour une concession).
-        activity = "CAR_DEALERSHIP" if system_prompt else "ONLINE_STORE"
+        # Lot 79 : une clé par activité réelle (le courtier et l'agence immobilière ont leurs propres consignes).
+        activity = next((a for a in ("CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE")
+                         if system_prompt and system_prompt == build_classifier_prompt(a)), "ONLINE_STORE")
         response = await self._get_client().chat.complete_async(
             model=self.model_name,
             messages=[{"role": "system", "content": system_prompt or build_classifier_prompt()}, {"role": "user", "content": user}],

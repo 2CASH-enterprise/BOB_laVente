@@ -120,6 +120,29 @@ INSURANCE_OBJECTIONS: dict[str, tuple[str, str]] = {
 }
 
 
+# Lot 79 — agence immobilière : ses propres freins (prix ou loyer, honoraires, crédit, dossier de location…).
+REAL_ESTATE_TAXONOMY_VERSION = "v1.5immo"  # 8 caractères au plus (colonne taxonomy_version)
+
+REAL_ESTATE_OBJECTIONS: dict[str, tuple[str, str]] = {
+    "PRIX_TROP_ELEVE": ("Prix ou loyer trop élevé",
+                        "trouve le bien trop cher ou le loyer trop élevé, n'a pas le budget, a vu moins cher ailleurs"),
+    "HONORAIRES": ("Honoraires d'agence",
+                   "trouve les frais d'agence trop élevés, ou veut vendre, acheter ou louer sans passer par une agence"),
+    "FINANCEMENT": ("Financement", "n'a pas encore d'accord bancaire, doute d'obtenir un prêt, demande des taux"),
+    "DOSSIER": ("Dossier de location",
+                "craint d'être refusé pour une location : revenus, garant, contrat de travail, étudiant, indépendant"),
+    "CONFIANCE": ("Confiance",
+                  "doute que le bien existe ou de l'annonce, craint une arnaque, refuse de payer avant d'avoir visité"),
+    "DELAI": ("Délai", "le bien est disponible trop tard, ou trouve qu'une vente prend trop de temps"),
+    "RUPTURE_STOCK": ("Bien plus disponible", "le bien voulu est déjà vendu, loué ou retiré"),
+    "HESITATION": OBJECTIONS["HESITATION"],
+}
+
+
+def _is_real_estate(business_type: str | None) -> bool:
+    return business_type == "REAL_ESTATE"
+
+
 def _is_dealership(business_type: str | None) -> bool:
     return business_type == "CAR_DEALERSHIP"
 
@@ -129,19 +152,24 @@ def _is_insurance(business_type: str | None) -> bool:
 
 
 def objections_for(business_type: str | None = None) -> dict[str, tuple[str, str]]:
+    if _is_real_estate(business_type):
+        return REAL_ESTATE_OBJECTIONS
     if _is_insurance(business_type):
         return INSURANCE_OBJECTIONS
     return DEALERSHIP_OBJECTIONS if _is_dealership(business_type) else OBJECTIONS
 
 
 def taxonomy_version(business_type: str | None = None) -> str:
+    if _is_real_estate(business_type):
+        return REAL_ESTATE_TAXONOMY_VERSION
     if _is_insurance(business_type):
         return INSURANCE_TAXONOMY_VERSION
     return DEALERSHIP_TAXONOMY_VERSION if _is_dealership(business_type) else TAXONOMY_VERSION
 
 
 def is_known_objection(code: str) -> bool:
-    return code in OBJECTIONS or code in DEALERSHIP_OBJECTIONS or code in INSURANCE_OBJECTIONS
+    return (code in OBJECTIONS or code in DEALERSHIP_OBJECTIONS or code in INSURANCE_OBJECTIONS
+            or code in REAL_ESTATE_OBJECTIONS)
 
 
 def intent_label(code: str) -> str:
@@ -153,4 +181,5 @@ def objection_label(code: str, business_type: str | None = None) -> str:
     own = objections_for(business_type)
     if code in own:
         return own[code][0]
-    return OBJECTIONS.get(code, DEALERSHIP_OBJECTIONS.get(code, INSURANCE_OBJECTIONS.get(code, (code, ""))))[0]
+    return OBJECTIONS.get(code, DEALERSHIP_OBJECTIONS.get(code, INSURANCE_OBJECTIONS.get(
+        code, REAL_ESTATE_OBJECTIONS.get(code, (code, "")))))[0]

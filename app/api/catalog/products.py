@@ -28,10 +28,16 @@ def _checked_vehicle(raw: dict | None, tenant=None) -> dict | None:
 
 
 def _checked_sheet(tenant, code: str | None, raw: dict | None, *texts) -> dict:
-    """Lot 78 — commerce : catégorie Bob valide (proposée par mots-clés si absente) et fiche nettoyée."""
+    """Lot 78 — commerce : catégorie Bob valide (proposée par mots-clés si absente) et fiche nettoyée.
+    Lot 79 — agence immobilière : la catégorie est le type de bien (proposé d'après le nom si absent)."""
     from app.services import product_sheets
-    from app.services.business_type import is_store
+    from app.services.business_type import is_real_estate, is_store
 
+    if is_real_estate(tenant):
+        if code and not product_sheets.is_property(code):
+            raise HTTPException(status_code=422, detail="Type de bien inconnu")
+        code = code or product_sheets.guess_property_type(*texts)
+        return {"bob_category": code, "sheet": product_sheets.normalize_sheet(code, raw)}
     if not is_store(tenant):
         return {"bob_category": None, "sheet": None}
     if code and not product_sheets.is_category(code):
@@ -114,9 +120,13 @@ async def product_sheet_definitions(
     from app.models.tenant import Tenant
     from app.services import product_sheets
 
+    from app.services.business_type import is_real_estate
+
     tenant = await db.get(Tenant, current_user.tenant_id)
-    return {"categories": product_sheets.definitions(), "common_fields": product_sheets.common_definitions(),
-            "default_category": getattr(tenant, "default_bob_category", None)}
+    estate = is_real_estate(tenant)  # lot 79 : types de bien et fiche du bien
+    return {"categories": product_sheets.definitions(estate), "common_fields": product_sheets.common_definitions(estate),
+            "default_category": None if estate else getattr(tenant, "default_bob_category", None),
+            "real_estate": estate}
 
 
 @router.post("/sheets/guess", dependencies=[Depends(require_role("MANAGER"))])
@@ -131,7 +141,16 @@ async def guess_missing_categories(
     from app.services import product_sheets
     from app.services.business_type import is_store
 
+    from app.services.business_type import is_real_estate
+
     tenant = await db.get(Tenant, current_user.tenant_id)
+    if is_real_estate(tenant):  # lot 79 : type de bien proposé d'après le nom et la description
+        products = (await db.execute(select(Product).where(Product.tenant_id == current_user.tenant_id,
+                                                           Product.bob_category.is_(None)))).scalars().all()
+        for product in products:
+            product.bob_category = product_sheets.guess_property_type(product.name, product.description)
+        await db.commit()
+        return {"updated": len(products)}
     if not is_store(tenant):
         return {"updated": 0}
     products = (await db.execute(select(Product).where(Product.tenant_id == current_user.tenant_id,

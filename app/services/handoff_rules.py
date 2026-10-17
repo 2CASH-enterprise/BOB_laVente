@@ -118,6 +118,7 @@ def evaluate(
     known_categories: set[str] | None = None,
     dealership: bool = False,
     insurance: bool = False,
+    real_estate: bool = False,
 ) -> TurnDecision:
     """
     `signal` = {"intents": [...], "objections": [...], "offered_amount": float|None}, ou None.
@@ -141,7 +142,7 @@ def evaluate(
     # renseigné : Bob ne peut qu'inventer ou promettre de « vérifier ». Le code transmet
     # réellement la question (le commerçant est prévenu), avec un message fixe.
     if ("CONDITIONS_VENTE" in intents and known_categories is not None and not (known_categories & CONDITIONS_CATEGORIES)
-            and not insurance):  # lot 54 : chez le courtier, une question sur les garanties se qualifie
+            and not insurance and not real_estate):  # lot 54 / 79 : courtier et agence immobilière à part
         return TurnDecision(mode=TRANSFER_NOW, rule="MISSING_CONDITIONS")
 
     if insurance:
@@ -308,9 +309,11 @@ async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
         select(TenantNegotiationSettings).where(TenantNegotiationSettings.tenant_id == tenant.id)
     )).scalar_one_or_none()
     # Mêmes conditions que l'outil negotiate_price : activée ET plan payant.
-    from app.services.business_type import is_dealership
+    from app.services.business_type import is_dealership, is_real_estate
 
-    dealership = is_dealership(tenant)
+    # Lot 79 : l'agence immobilière suit les règles de la concession (prix discuté avec un conseiller, financement
+    # vers le rendez-vous) ; ses conditions manquantes sont traitées par la consigne 12 de Bob, pas par un transfert.
+    dealership = is_dealership(tenant) or is_real_estate(tenant)
     # Lot 24 : jamais de négociation par Bob en concession, quel que soit le réglage enregistré.
     from app.services.business_type import is_online_store
 
@@ -323,7 +326,7 @@ async def decide_turn(db, tenant, signal: dict | None) -> TurnDecision:
 
     return evaluate(
         signal, view, negotiation_active, currency=tenant.currency or "", known_categories=known, dealership=dealership,
-        insurance=is_insurance(tenant),
+        insurance=is_insurance(tenant), real_estate=is_real_estate(tenant),
     )
 
 

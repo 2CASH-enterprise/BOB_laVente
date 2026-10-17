@@ -26,7 +26,7 @@ from app.core.config import get_settings
 from app.models.conversation import Conversation, ConversationStatus, Message, MessageSender
 from app.models.order import Order, OrderStatus
 from app.models.push_subscription import NotificationState, PushSubscription
-from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER
+from app.services.business_type import APPOINTMENT_SECTORS, INSURANCE_BROKER
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ async def task_counts(db, tenant, now: datetime | None = None) -> dict:
 
     now = _aware(now or datetime.now(timezone.utc))
     tenant_id = tenant.id
-    dealership = tenant.business_type in (CAR_DEALERSHIP, INSURANCE_BROKER)  # lot 53 : secteurs à rendez-vous
+    dealership = tenant.business_type in APPOINTMENT_SECTORS  # lots 53 / 79 : secteurs à rendez-vous
     counts = dict.fromkeys(KINDS, 0)
 
     waiting = set((await db.execute(select(Conversation.id).where(

@@ -237,7 +237,7 @@ def test_appointments_page_only_for_dealerships_and_loaded_with_its_tab():
     assert 'data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden"' in nav
     apply = re.search(r"function applyBusinessType\(code, label\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert 'const dealership = code === "CAR_DEALERSHIP";' in apply
-    assert 'getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance))' in apply  # lot 53
+    assert 'getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance || estate))' in apply  # lots 53 / 79
     assert HTML.count("applyBusinessType(") >= 2  # définition + chargement
     assert "loadAppointments(currentAppointmentView)" in _show_tab_line("appointments")
     assert "if (item.kind === \"APPOINTMENT\") return `showTab('appointments')`" in HTML

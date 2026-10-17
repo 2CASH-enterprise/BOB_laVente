@@ -261,6 +261,45 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        # Lot 79 — agence immobilière : fiche projet (achat, location, vente ou gestion de son bien).
+        "name": "update_property_project",
+        "description": (
+            "Enregistre dans la fiche du client ce qu'il vient de dire sur SON projet immobilier : acheter (ACHAT), louer "
+            "(LOCATION), vendre son bien (VENTE) ou le faire louer / gérer (GESTION). Un appel par projet ; un client qui "
+            "vend pour acheter a deux projets. Appelle-le dès qu'une information NOUVELLE et concrète apparaît, sans rien "
+            "deviner : n'envoie que les champs que le client a réellement donnés. L'outil te dit quoi faire ensuite."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "enum": ["ACHAT", "LOCATION", "VENTE", "GESTION"],
+                            "description": "Le projet dont parle le client"},
+                "property_type": {"type": "string", "enum": ["APPARTEMENT", "MAISON", "TERRAIN", "LOCAL", "PARKING", "AUTRE"],
+                                  "description": "Type de bien cherché (achat, location) ou possédé (vente, gestion)"},
+                "zone": {"type": "string", "description": "Achat, location : ville ou quartiers souhaités, avec ses mots"},
+                "budget": {"type": "string", "description": "Achat : budget ; location : loyer maximal — avec ses mots"},
+                "timeline": {"type": "string", "enum": ["MOINS_1_MOIS", "UN_A_3_MOIS", "PLUS_3_MOIS", "NE_SAIT_PAS"],
+                             "description": "Quand il veut acheter, louer, vendre ou mettre en location"},
+                "rooms_min": {"type": "integer", "description": "Achat, location : nombre de pièces minimal (T3 = 3)"},
+                "surface_min": {"type": "integer", "description": "Achat, location : surface minimale en m²"},
+                "financing": {"type": "string", "enum": ["ACCORD_BANCAIRE", "EN_COURS", "COMPTANT", "A_DEFINIR"],
+                              "description": "Achat : accord bancaire obtenu, en cours, comptant ou à définir"},
+                "must_sell": {"type": "boolean", "description": "Achat : true s'il doit vendre son bien actuel avant d'acheter"},
+                "furnished": {"type": "string", "enum": ["MEUBLE", "VIDE", "INDIFFERENT"], "description": "Location : meublé ou vide"},
+                "guarantor": {"type": "string", "enum": ["GARANT", "VISALE", "AUCUN"],
+                              "description": "Location : garant, garantie Visale ou aucun — seulement s'il en a parlé"},
+                "move_in": {"type": "string", "description": "Location : date d'entrée souhaitée, avec ses mots"},
+                "address": {"type": "string", "description": "Vente, gestion : adresse ou secteur de SON bien"},
+                "surface": {"type": "integer", "description": "Vente, gestion : surface de son bien en m²"},
+                "rooms": {"type": "integer", "description": "Vente, gestion : nombre de pièces de son bien"},
+                "occupancy": {"type": "string", "enum": ["LIBRE", "LOUE", "OCCUPE_PROPRIETAIRE"],
+                              "description": "Vente, gestion : bien libre, loué ou occupé par le propriétaire"},
+                "criteria": {"type": "string", "description": "Autres critères importants, avec ses mots (jardin, calme…)"},
+            },
+            "required": ["project"],
+        },
+    },
+    {
         # Lot 43 — fiche prospect (concession) : remplie au fil de la conversation, avec ou sans rendez-vous.
         "name": "update_prospect_profile",
         "description": (

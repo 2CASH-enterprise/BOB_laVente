@@ -96,6 +96,89 @@ CATEGORIES: dict[str, dict] = {
     },
 }
 
+# Lot 79 — agence immobilière : la catégorie est le TYPE DE BIEN ; vente ou location, ville et honoraires sont des
+# champs clés de chaque bien (loi ALUR : les honoraires accompagnent toujours un prix). Le prix du produit est le prix
+# de vente honoraires inclus, ou le loyer mensuel charges comprises.
+_PROPERTY_BASE = [
+    ("transaction", "Vente ou location", ""),
+    ("city", "Ville", "Ex. Lyon 3e, Villeurbanne"),
+    ("fees", "Honoraires", "Vente : ex. 5 % TTC à la charge de l'acquéreur. Location : ex. 12 €/m² à la charge du locataire"),
+]
+_DPE = ("dpe", "Classe énergie (DPE)", "")
+_GES = ("ges", "Classe climat (GES)", "")
+_ENERGY = ("energy_cost", "Dépenses d'énergie estimées", "Ex. entre 900 € et 1 300 € par an")
+_LIVING = [
+    ("bedrooms", "Chambres", ""), ("district", "Quartier / secteur", ""), ("outdoor", "Extérieur", "Balcon, terrasse, jardin"),
+    ("parking", "Stationnement", "Ex. place en sous-sol"), ("heating", "Chauffage", "Ex. individuel gaz"),
+    ("furnished", "Meublé", ""), ("charges", "Charges", "Location : charges mensuelles ; vente : charges de copropriété par an"),
+    ("deposit", "Dépôt de garantie (location)", ""), _GES, _ENERGY, ("available_from", "Disponible à partir du", ""),
+]
+PROPERTY_COMMON_FIELDS = [
+    ("highlights", "Points forts", "3 au plus, une ligne chacun"),
+    ("reference", "Référence du mandat", ""),
+    ("visit_link", "Visite virtuelle (lien)", ""),
+]
+PROPERTY_CATEGORIES: dict[str, dict] = {
+    "APPARTEMENT": {
+        "label": "Appartement",
+        "key": _PROPERTY_BASE + [("surface", "Surface habitable (m²)", ""), ("rooms", "Pièces", "Ex. 3 pour un T3"), _DPE],
+        "optional": _LIVING[:1] + [("floor", "Étage", "Ex. 3e sur 5"), ("elevator", "Ascenseur", "")] + _LIVING[1:]
+                    + [("condo", "Copropriété", "Nombre de lots, procédure en cours")],
+        "questions": [],
+    },
+    "MAISON": {
+        "label": "Maison",
+        "key": _PROPERTY_BASE + [("surface", "Surface habitable (m²)", ""), ("rooms", "Pièces", ""), _DPE],
+        "optional": [("land_surface", "Surface du terrain (m²)", "")] + _LIVING,
+        "questions": [],
+    },
+    "TERRAIN": {
+        "label": "Terrain",
+        "key": _PROPERTY_BASE + [("land_surface", "Surface du terrain (m²)", "")],
+        "optional": [("district", "Quartier / secteur", ""), ("buildable", "Constructible / viabilisé", "Ex. constructible, viabilisé"),
+                     ("available_from", "Disponible à partir du", "")],
+        "questions": [],
+    },
+    "LOCAL": {
+        "label": "Local commercial / bureau",
+        "key": _PROPERTY_BASE + [("surface", "Surface (m²)", "")],
+        "optional": [("district", "Quartier / secteur", ""), ("activity", "Activités autorisées", ""),
+                     ("charges", "Charges", ""), ("deposit", "Dépôt de garantie (location)", ""), _DPE,
+                     ("parking", "Stationnement", ""), ("available_from", "Disponible à partir du", "")],
+        "questions": [],
+    },
+    "PARKING": {
+        "label": "Parking / box",
+        "key": list(_PROPERTY_BASE),
+        "optional": [("district", "Quartier / secteur", ""), ("parking_kind", "Type", "Box fermé, place en sous-sol, extérieur"),
+                     ("charges", "Charges", ""), ("available_from", "Disponible à partir du", "")],
+        "questions": [],
+    },
+    "AUTRE": {
+        "label": "Autre bien",
+        "key": list(_PROPERTY_BASE),
+        "optional": [("surface", "Surface (m²)", ""), ("district", "Quartier / secteur", ""),
+                     ("features", "Caractéristiques", "Une par ligne, « nom : valeur » (6 au plus)")],
+        "questions": [],
+    },
+}
+_DPE_CLASSES = ["A", "B", "C", "D", "E", "F", "G", "Vierge / non soumis"]
+FIELD_OPTIONS = {  # lot 79 : valeurs imposées (listes dans le tableau de bord)
+    "transaction": ["Vente", "Location"], "dpe": _DPE_CLASSES, "ges": _DPE_CLASSES,
+    "furnished": ["Meublé", "Vide"], "elevator": ["Oui", "Non"],
+}
+NUMERIC_FIELDS = frozenset({"surface", "rooms", "bedrooms", "land_surface"})  # lot 79 : filtrés par la recherche
+
+# Lot 79 — type de bien proposé par mots-clés (nom, description).
+PROPERTY_KEYWORDS = {
+    "APPARTEMENT": ["appartement", "appart", "studio", "duplex", "loft", "t1", "t2", "t3", "t4", "t5", "f1", "f2", "f3",
+                    "f4", "f5", "penthouse"],
+    "MAISON": ["maison", "villa", "pavillon", "longere", "mas", "chalet", "corps de ferme", "maison de ville"],
+    "TERRAIN": ["terrain", "parcelle", "lot a batir", "terrain a batir"],
+    "LOCAL": ["local", "bureau", "bureaux", "boutique", "commerce", "entrepot", "fonds de commerce", "murs commerciaux"],
+    "PARKING": ["parking", "box", "garage", "place de stationnement"],
+}
+
 # Lot 78 — catégorie proposée par mots-clés (nom, type de produit Shopify, étiquettes). Le commerçant corrige.
 KEYWORDS = {
     "FASHION": ["robe", "jupe", "pantalon", "jean", "chemise", "t-shirt", "tee-shirt", "tshirt", "pull", "sweat", "veste",
@@ -128,12 +211,34 @@ def _plain(text: str | None) -> str:
     return re.sub(r"\s+", " ", text.lower())
 
 
-def is_category(code: str | None) -> bool:
-    return code in CATEGORIES
+def is_category(code: str | None, real_estate: bool = False) -> bool:
+    return code in (PROPERTY_CATEGORIES if real_estate else CATEGORIES)
+
+
+def is_property(code: str | None) -> bool:
+    """Lot 79 — catégorie d'un bien immobilier (type de bien)."""
+    return code in PROPERTY_CATEGORIES
+
+
+def _category(code: str | None) -> dict:
+    if code in PROPERTY_CATEGORIES:
+        return PROPERTY_CATEGORIES[code]
+    return CATEGORIES.get(code or GENERAL, CATEGORIES[GENERAL])
 
 
 def label(code: str | None) -> str:
-    return CATEGORIES.get(code or GENERAL, CATEGORIES[GENERAL])["label"]
+    return _category(code)["label"]
+
+
+def guess_property_type(*texts: str | None) -> str:
+    """Lot 79 — type de bien le plus probable d'après les mots ; AUTRE si rien ne ressort."""
+    plain = " " + " ".join(_plain(t) for t in texts if t) + " "
+    best, best_score = "AUTRE", 0
+    for code, words in PROPERTY_KEYWORDS.items():
+        score = sum(1 for w in words if re.search(rf"(?<![a-z0-9]){re.escape(w)}s?(?![a-z0-9])", plain))
+        if score > best_score:
+            best, best_score = code, score
+    return best
 
 
 def guess_category(*texts: str | None) -> str:
@@ -148,8 +253,18 @@ def guess_category(*texts: str | None) -> str:
 
 
 def fields_of(code: str | None) -> list[tuple[str, str, str]]:
-    cat = CATEGORIES.get(code or GENERAL, CATEGORIES[GENERAL])
-    return COMMON_FIELDS + cat["key"] + cat["optional"]
+    cat = _category(code)
+    common = PROPERTY_COMMON_FIELDS if code in PROPERTY_CATEGORIES else COMMON_FIELDS
+    return cat["key"] + cat["optional"] + common if code in PROPERTY_CATEGORIES else common + cat["key"] + cat["optional"]
+
+
+def to_number(value) -> float | None:
+    """« 68 », « 68,5 m² », « 3 pièces » → nombre ; None si ce n'est pas un nombre positif."""
+    match = re.search(r"\d+(?:[.,]\d+)?", str(value or "").replace("\u202f", "").replace(" ", ""))
+    if not match:
+        return None
+    result = float(match.group(0).replace(",", "."))
+    return result if result > 0 else None
 
 
 def normalize_sheet(code: str | None, raw: dict | None) -> dict | None:
@@ -160,6 +275,16 @@ def normalize_sheet(code: str | None, raw: dict | None) -> dict | None:
     sheet = {}
     for key, value in raw.items():
         if key not in allowed or value is None:
+            continue
+        if key in FIELD_OPTIONS and code in PROPERTY_CATEGORIES:  # lot 79 : seulement une valeur de la liste
+            match = next((o for o in FIELD_OPTIONS[key] if _plain(o) == _plain(value)), None)
+            if match:
+                sheet[key] = match
+            continue
+        if key in NUMERIC_FIELDS and code in PROPERTY_CATEGORIES:
+            figure = to_number(value)
+            if figure is not None:
+                sheet[key] = int(figure) if figure.is_integer() else figure
             continue
         if key == "compare_at_price":
             try:
@@ -181,7 +306,7 @@ def completeness(product) -> int | None:
     if not code:
         return None
     sheet = getattr(product, "sheet", None) or {}
-    keys = [key for key, _, _ in CATEGORIES.get(code, CATEGORIES[GENERAL])["key"]] or ["features"]
+    keys = [key for key, _, _ in _category(code)["key"]] or ["features"]
     checks = [bool(getattr(product, "image_url", None)), bool((getattr(product, "description", None) or "").strip())]
     for key in keys:
         filled = bool(sheet.get(key))
@@ -226,17 +351,28 @@ def sheet_for_ai(product) -> dict | None:
     return out
 
 
-def definitions() -> list[dict]:
-    """Pour le formulaire du tableau de bord."""
-    def pack(items):
-        return [{"key": k, "label": lab, "hint": hint} for k, lab, hint in items]
+def _pack(items, real_estate: bool = False) -> list[dict]:
+    out = []
+    for k, lab, hint in items:
+        field = {"key": k, "label": lab, "hint": hint}
+        if real_estate and k in FIELD_OPTIONS:
+            field["options"] = FIELD_OPTIONS[k]
+        if real_estate and k in NUMERIC_FIELDS:
+            field["numeric"] = True
+        out.append(field)
+    return out
 
-    return [{"code": code, "label": cat["label"], "key_fields": pack(cat["key"]), "optional_fields": pack(cat["optional"]),
-             "questions": cat["questions"]} for code, cat in CATEGORIES.items()]
+
+def definitions(real_estate: bool = False) -> list[dict]:
+    """Pour le formulaire du tableau de bord (lot 79 : types de bien pour une agence immobilière)."""
+    source = PROPERTY_CATEGORIES if real_estate else CATEGORIES
+    return [{"code": code, "label": cat["label"], "key_fields": _pack(cat["key"], real_estate),
+             "optional_fields": _pack(cat["optional"], real_estate), "questions": cat["questions"]}
+            for code, cat in source.items()]
 
 
-def common_definitions() -> list[dict]:
-    return [{"key": k, "label": lab, "hint": hint} for k, lab, hint in COMMON_FIELDS]
+def common_definitions(real_estate: bool = False) -> list[dict]:
+    return _pack(PROPERTY_COMMON_FIELDS if real_estate else COMMON_FIELDS, real_estate)
 
 
 def questions_block(codes: set[str]) -> str:

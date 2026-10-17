@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_insurance, only_online_store
+from app.services.business_type import only_insurance, only_online_store, only_real_estate
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.messaging_settings import KillSwitch, OutboundMode, TenantMessagingSettings
@@ -650,6 +650,72 @@ async def update_insurance_profile(
 
 
 # ---------------------------------------------------------------------------
+# Lot 79 — agence immobilière : statut, carte professionnelle, garantie, activités, barème des honoraires
+# ---------------------------------------------------------------------------
+
+class RealEstateProfileReq(BaseModel):
+    status: str | None = Field(default=None, max_length=24)
+    activities: list[str] | None = Field(default=None, max_length=3)
+    card: str | None = Field(default=None, max_length=400)
+    network: str | None = Field(default=None, max_length=400)
+    rsac: str | None = Field(default=None, max_length=400)
+    guarantee: str | None = Field(default=None, max_length=400)
+    zones: str | None = Field(default=None, max_length=400)
+    mediator: str | None = Field(default=None, max_length=400)
+    fees_url: str | None = Field(default=None, max_length=400)
+    privacy_policy_url: str | None = Field(default=None, max_length=400)
+
+
+def _real_estate_profile_response(tenant: Tenant) -> dict:
+    from app.agents.prompts import _agency_identity
+    from app.services import real_estate
+
+    return {
+        **(tenant.real_estate_profile or {}),
+        "activities": real_estate.activities_of(tenant),
+        "privacy_policy_url": tenant.privacy_policy_url,
+        "status_options": [{"code": c, "label": lab} for c, lab in real_estate.STATUSES.items()],
+        "activity_options": [{"code": c, "label": lab} for c, lab in real_estate.ACTIVITIES.items()],
+        "preview": f"Je suis Bob, l'assistant virtuel de {tenant.name}, {_agency_identity(tenant)}.",
+    }
+
+
+@router.get("/me/real-estate-profile", dependencies=[Depends(only_real_estate())])
+async def get_real_estate_profile(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    return _real_estate_profile_response(await db.get(Tenant, current_user.tenant_id))
+
+
+@router.put("/me/real-estate-profile", dependencies=[Depends(require_role("ADMIN")), Depends(only_real_estate())])
+async def update_real_estate_profile(
+    payload: RealEstateProfileReq,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Ce que Bob dit de l'agence quand on le lui demande ; il n'invente jamais une carte ou une garantie."""
+    from app.services import insurance, real_estate
+    from app.services.audit import log_audit_event
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    try:
+        profile = real_estate.clean_profile(payload.model_dump(exclude={"privacy_policy_url"}))
+        if "privacy_policy_url" in payload.model_fields_set:
+            tenant.privacy_policy_url = insurance.clean_url(payload.privacy_policy_url)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if profile.get("status") != "MANDATAIRE":
+        profile.pop("rsac", None)  # l'immatriculation RSAC concerne le mandataire (agent commercial)
+    tenant.real_estate_profile = profile or None
+    await log_audit_event(db, actor=str(current_user.user_id), action="REAL_ESTATE_PROFILE_UPDATED", tenant_id=tenant.id,
+                          details={"status": profile.get("status")})
+    await db.commit()
+    return _real_estate_profile_response(tenant)
+
+
+# ---------------------------------------------------------------------------
 # Lot 41 — « Premiers pas » : ce qu'il reste à faire pour que Bob travaille
 # ---------------------------------------------------------------------------
 
@@ -665,9 +731,9 @@ async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
     from app.models.customer import Customer
     from app.models.product import Product
     from app.models.whatsapp_account import WhatsAppAccount
-    from app.services.business_type import is_appointment_sector, is_dealership, is_insurance
+    from app.services.business_type import is_appointment_sector, is_dealership, is_insurance, is_real_estate
 
-    dealership = is_appointment_sector(tenant)  # lot 53 : concession et courtier
+    dealership = is_appointment_sector(tenant)  # lot 53 / 79 : concession, courtier et agence immobilière
     has_whatsapp = (await db.execute(select(func.count(WhatsAppAccount.id)).where(
         WhatsAppAccount.tenant_id == tenant.id))).scalar_one() > 0
     has_products = (await db.execute(select(func.count(Product.id)).where(
@@ -690,7 +756,8 @@ async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
         {"key": "whatsapp", "label": "Connecter votre WhatsApp", "tab": "integrations",
          "hint": "Bob répond aux messages reçus sur votre numéro WhatsApp Business.", "done": has_whatsapp},
         {"key": "products", "label": ("Ajouter vos véhicules" if is_dealership(tenant) else
-                                      "Vérifier vos produits d'assurance" if is_insurance(tenant) else "Ajouter vos produits"),
+                                      "Vérifier vos produits d'assurance" if is_insurance(tenant) else
+                                      "Ajouter vos biens" if is_real_estate(tenant) else "Ajouter vos produits"),
          "tab": "products",
          "hint": "Import d'un fichier, catalogue Facebook ou ajout un par un : Bob ne propose que ce qui existe.",
          "done": has_products},
@@ -702,6 +769,10 @@ async def _onboarding(db: AsyncSession, tenant: Tenant) -> dict:
             "hint": "Cabinet de courtage, agence générale ou agent : Bob se présente correctement et répond à la "
                     "question « êtes-vous agréés ? ».",
             "done": bool(tenant.insurance_structure)}] if is_insurance(tenant) else []),
+        *([{"key": "agency", "label": "Présenter votre agence (carte, honoraires)", "tab": "bob",
+            "hint": "Statut, carte professionnelle, garantie et barème des honoraires : Bob répond à « êtes-vous une "
+                    "agence agréée ? » et « quels sont vos honoraires ? » sans rien inventer.",
+            "done": bool((tenant.real_estate_profile or {}).get("status"))}] if is_real_estate(tenant) else []),
         {"key": "test", "label": "Tester Bob", "tab": "integrations",
          "hint": "Écrivez à votre numéro WhatsApp depuis un autre téléphone, comme un client.", "done": has_conversation},
     ]

@@ -195,7 +195,7 @@ async def signals_summary(db: AsyncSession, tenant_id, days: int = 30, now: date
     objections.sort(key=lambda item: (-item["opportunities"], -item["messages"], item["label"]))
 
     extra = {}
-    if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER"):  # lots 46 / 54 : mesure en demandes obtenues
+    if business_type in ("CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"):  # lots 46 / 54 / 79 : demandes obtenues
         extra = await _with_appointments(db, tenant_id, objections, objection_first,
                                          insurance=business_type == "INSURANCE_BROKER")
 

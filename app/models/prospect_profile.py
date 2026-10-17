@@ -5,7 +5,7 @@ rendez-vous. Une fiche par client et par concession.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -28,6 +28,9 @@ class ProspectProfile(Base):
     payment: Mapped[str | None] = mapped_column(String(16))        # COMPTANT, FINANCEMENT, A_DEFINIR
     timeline: Mapped[str | None] = mapped_column(String(16))       # MOINS_1_MOIS, UN_A_3_MOIS, PLUS_3_MOIS, NE_SAIT_PAS
     trade_in: Mapped[str | None] = mapped_column(String(300))      # véhicule à reprendre
+    # Lot 79 — agence immobilière : les projets du client, un par type ({"ACHAT": {...}, "VENTE": {...}}), car
+    # vendre pour acheter est courant. Valeurs vérifiées par app/services/real_estate.py.
+    real_estate: Mapped[dict | None] = mapped_column(JSON)
     hot_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # « prospect chaud », une fois
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
