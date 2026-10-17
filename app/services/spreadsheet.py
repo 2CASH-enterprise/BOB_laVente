@@ -123,4 +123,18 @@ def to_xlsx(title: str, header: list[str], rows: list[list]) -> bytes:
     return out.getvalue()
 
 
+def add_help_sheet(raw: bytes, lines: list[list[str]], title: str = "Aide") -> bytes:
+    """Lot 78 B — ajoute une feuille d'explications (texte seul) à un classeur produit par to_xlsx."""
+    from openpyxl import load_workbook
+
+    book = load_workbook(io.BytesIO(raw))
+    ws = book.create_sheet(title[:31])
+    for line in lines:
+        ws.append([str(c) for c in line])
+    ws.column_dimensions["A"].width = 120
+    out = io.BytesIO()
+    book.save(out)
+    return out.getvalue()
+
+
 XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

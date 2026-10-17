@@ -163,6 +163,34 @@ async def guess_missing_categories(
     return {"updated": len(products)}
 
 
+@router.get("/template/xlsx")
+async def product_template_xlsx(
+    category: str | None = None,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Lot 78 B — modèle Excel vide du secteur (commerce : colonnes de la catégorie choisie). DOIT rester déclaré
+    avant /{product_id}.
+    """
+    from fastapi import Response
+
+    from app.models.tenant import Tenant
+    from app.services import product_sheets, spreadsheet
+    from app.services.catalog_import import file_columns, template_help
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if category and not product_sheets.is_category(category):
+        raise HTTPException(status_code=400, detail="Catégorie inconnue")
+    codes = [category] if category else None
+    header = [h for h, _, _ in file_columns(tenant, codes)]
+    raw = spreadsheet.to_xlsx("Catalogue", header, [])
+    raw = spreadsheet.add_help_sheet(raw, template_help(tenant))
+    suffix = f"-{category.lower()}" if category else ""
+    return Response(raw, media_type=spreadsheet.XLSX_MEDIA,
+                    headers={"Content-Disposition": f"attachment; filename=modele-catalogue-bob{suffix}.xlsx"})
+
+
 @router.get("/export/xlsx")
 async def export_products_xlsx(
     current_user: CurrentUser = Depends(get_current_user),
@@ -171,31 +199,23 @@ async def export_products_xlsx(
     """
     Export du catalogue en Excel — DOIT rester déclaré avant /{product_id} : sinon
     FastAPI tente de parser "export" comme un UUID et échoue avant même d'essayer cette route.
+    Lot 78 B : mêmes colonnes que le modèle du secteur, le fichier se réimporte tel quel (corrections en masse).
     """
-    import io
+    from fastapi import Response
 
-    from fastapi.responses import StreamingResponse
-    from openpyxl import Workbook
+    from app.models.tenant import Tenant
+    from app.services import spreadsheet
+    from app.services.catalog_import import export_cell, file_columns
 
+    tenant = await db.get(Tenant, current_user.tenant_id)
     repo = ProductRepository(db)
-    products = await repo.search(tenant_id=current_user.tenant_id, query=None, limit=10000)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Catalogue"
-    ws.append(["SKU", "Nom", "Description", "Prix", "Devise", "Stock", "Image URL", "Actif"])
-    for p in products:
-        ws.append([p.sku, p.name, p.description or "", float(p.price), p.currency, p.stock_quantity, p.image_url or "", "Oui" if p.active else "Non"])
-
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=catalogue-bob.xlsx"},
-    )
+    products = await repo.search(tenant_id=current_user.tenant_id, query=None, active_only=False, limit=10000)
+    codes = sorted({p.bob_category for p in products if p.bob_category}) or None
+    columns = file_columns(tenant, codes)
+    rows = [[export_cell(p, kind, key) for _, kind, key in columns] for p in products]
+    raw = spreadsheet.to_xlsx("Catalogue", [h for h, _, _ in columns], rows)
+    return Response(raw, media_type=spreadsheet.XLSX_MEDIA,
+                    headers={"Content-Disposition": "attachment; filename=catalogue-bob.xlsx"})
 
 
 @router.get("/{product_id}", response_model=ProductResponse)

@@ -19,7 +19,9 @@ settings = get_settings()
 
 GRAPH_BASE_URL = "https://graph.facebook.com"
 
-PRODUCT_FIELDS = "id,retailer_id,name,description,price,currency,availability,image_url,inventory"
+# Lot 78 B : marque, couleur, taille, matière, genre et code-barres remplissent la fiche du produit.
+PRODUCT_FIELDS = ("id,retailer_id,name,description,price,currency,availability,image_url,inventory,"
+                  "brand,color,size,material,gender,gtin,product_type")
 
 
 def describe_catalog_error(exc: Exception) -> str:
@@ -127,6 +129,17 @@ def parse_meta_price(price: str | None, currency: str | None) -> tuple[Decimal |
     return amount, code or None
 
 
+_GENDERS = {"female": "Femme", "male": "Homme", "unisex": "Mixte"}
+
+
+def meta_sheet(raw: dict) -> dict:
+    """Lot 78 B — champs du catalogue Meta → champs de la fiche Bob (seulement ceux que Meta renseigne)."""
+    sheet = {"brand": raw.get("brand"), "colors": raw.get("color"), "sizes": raw.get("size"),
+             "material": raw.get("material"), "ean": raw.get("gtin"),
+             "gender": _GENDERS.get(str(raw.get("gender") or "").strip().lower())}
+    return {key: str(value).strip()[:200] for key, value in sheet.items() if value and str(value).strip()}
+
+
 def map_meta_catalog_product(raw: dict) -> dict:
     """
     Traduit un produit du Meta Commerce Catalog vers le format interne de Bob.
@@ -149,7 +162,11 @@ def map_meta_catalog_product(raw: dict) -> dict:
         # binaire depuis availability plutôt que d'inventer une quantité précise.
         stock_quantity = 1 if active else 0
 
+    from app.services.product_sheets import guess_category
+
     return {
+        "sheet": meta_sheet(raw),
+        "bob_category": guess_category(raw.get("product_type"), raw.get("name")),
         "external_id": str(raw.get("id")),
         "sku": raw.get("retailer_id") or f"meta-{raw.get('id')}",
         "name": raw.get("name") or "Produit sans nom",

@@ -69,7 +69,7 @@ def test_link_owner_is_one_form_with_email_check():
 
 def test_explanations_moved_into_infobulles():
     bubbles = " ".join(_bubbles())
-    for text in ("Bob cède progressivement", "Colonnes attendues", "Le QR ne change jamais", "Un lien à coller partout",
+    for text in ("Bob cède progressivement", "Colonnes reconnues", "Le QR ne change jamais", "Un lien à coller partout",
                  "Un lien par commercial", "Ce qui décide si Bob vous passe la main", "Toujours actif : une question sur les retours",
                  "Quand un client exprime un frein", "Bob s'appuie sur ces informations", "S'applique aux réponses de Bob",
                  "Les pubs Facebook et Instagram", "Un code à 6 chiffres vous sera envoyé", "Téléphone perdu",

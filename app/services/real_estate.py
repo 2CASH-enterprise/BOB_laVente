@@ -551,3 +551,11 @@ def property_from_csv_row(row: dict, name: str, description: str | None) -> tupl
     if "furnished" in raw:
         raw["furnished"] = "Meublé" if re.search(r"^(oui|o|yes|1|meuble)", _plain(raw["furnished"])) else "Vide"
     return code, product_sheets.normalize_sheet(code, raw), bool(headers)
+
+
+# Lot 78 B — colonnes du modèle Excel (et de l'export) des biens : reconnues par csv_property_headers.
+TEMPLATE_COLUMNS = [("TYPE", "type"), ("TRANSACTION", "transaction"), ("VILLE", "city"), ("QUARTIER", "district"),
+                    ("SURFACE", "surface"), ("TERRAIN", "land_surface"), ("PIECES", "rooms"), ("CHAMBRES", "bedrooms"),
+                    ("DPE", "dpe"), ("GES", "ges"), ("HONORAIRES", "fees"), ("CHARGES", "charges"),
+                    ("DEPOT DE GARANTIE", "deposit"), ("ETAGE", "floor"), ("MEUBLE", "furnished"),
+                    ("REFERENCE MANDAT", "reference"), ("DISPONIBILITE", "available_from")]

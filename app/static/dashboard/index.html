@@ -933,17 +933,21 @@
           </div>
         </div>
         <div class="card" style="flex: 1; min-width: 280px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue CSV<button class="tip"></button><span class="tip-bubble" hidden>Colonnes attendues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE <span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span><span class="estate-only"><br>Biens (facultatif) : TYPE, TRANSACTION (vente ou location), VILLE, QUARTIER, SURFACE, PIECES, CHAMBRES, DPE, HONORAIRES, CHARGES. PRICE = prix de vente honoraires inclus, ou loyer mensuel charges comprises ; STOCK = 1 si le bien est disponible.</span></span></div>
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue Excel ou CSV<button class="tip"></button><span class="tip-bubble" hidden>Le plus simple : téléchargez le modèle Excel, remplissez une ligne par produit, puis importez-le. Colonnes reconnues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE, ou leurs équivalents en français (Référence, Nom, Prix, Devise…). L'export Excel se réimporte tel quel : pratique pour corriger beaucoup de produits d'un coup. <span class="store-only"><br>CATEGORIE_BOB et les colonnes de fiche (Matière, Tailles ou pointures, Marque…) remplissent la fiche que Bob utilise pour répondre ; une case vide efface l'information.</span><span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span><span class="estate-only"><br>Biens (facultatif) : TYPE, TRANSACTION (vente ou location), VILLE, QUARTIER, SURFACE, PIECES, CHAMBRES, DPE, HONORAIRES, CHARGES. PRICE = prix de vente honoraires inclus, ou loyer mensuel charges comprises ; STOCK = 1 si le bien est disponible.</span></span></div>
           <label class="file-drop" id="csv-drop">
             <span class="file-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
             <span class="file-text">
-              <span class="file-title" id="csv-file-name">Choisir un fichier CSV</span>
-              <span class="file-hint" id="csv-file-hint">ou glissez-le ici · fichier .csv</span>
+              <span class="file-title" id="csv-file-name">Choisir un fichier Excel ou CSV</span>
+              <span class="file-hint" id="csv-file-hint">ou glissez-le ici · fichier .xlsx ou .csv</span>
             </span>
-            <input type="file" id="csv-file-input" accept=".csv,text/csv" aria-label="Choisir un fichier CSV" onchange="showChosenCsv()">
+            <input type="file" id="csv-file-input" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Choisir un fichier Excel ou CSV" onchange="showChosenCsv()">
           </label>
           <button class="action" onclick="importCsv()">Importer</button>
           <button class="action secondary" onclick="exportXlsx()">Exporter en Excel</button>
+          <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <select id="template-category" class="input store-only" style="flex: 1; min-width: 180px;" aria-label="Catégorie du modèle"></select>
+            <button class="action secondary" onclick="downloadTemplate()">Télécharger le modèle Excel</button>
+          </div>
           <div id="csv-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
       </div>
@@ -2343,6 +2347,8 @@ async function loadProductSheets() {
     productSheets.real_estate ? "Type de bien : proposé d'après le titre" : "Catégorie : proposée d'après le nom");
   const def = document.getElementById("default-bob-category");
   if (def) def.innerHTML = categoryOptions(productSheets.default_category, "Aucune (proposée d'après le nom de chaque produit)");
+  const model = document.getElementById("template-category");  // lot 78 B : modèle Excel d'une catégorie
+  if (model && !productSheets.real_estate) model.innerHTML = categoryOptions(productSheets.default_category, "Modèle : toutes les catégories");
   return productSheets;
 }
 
@@ -4229,6 +4235,25 @@ async function deleteProduct(productId) {
   loadProducts();
 }
 
+async function downloadFile(path, filename) {
+  const res = await fetch(API_BASE + path, { headers: { Authorization: "Bearer " + token } });
+  if (!res.ok) throw new Error("Téléchargement impossible");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(await res.blob());
+  a.download = filename;
+  a.click();
+}
+
+// Lot 78 B — modèle Excel vide, aux colonnes du secteur (et de la catégorie choisie, en commerce).
+async function downloadTemplate() {
+  const select = document.getElementById("template-category");
+  const code = select && currentBusinessType === "ONLINE_STORE" ? select.value : "";
+  try {
+    await downloadFile("/api/v1/products/template/xlsx" + (code ? "?category=" + encodeURIComponent(code) : ""),
+      "modele-catalogue-bob" + (code ? "-" + code.toLowerCase() : "") + ".xlsx");
+  } catch (e) { toast(e.message, "error"); }
+}
+
 async function exportXlsx() {
   try {
     const res = await fetch(API_BASE + "/api/v1/products/export/xlsx", { headers: { Authorization: "Bearer " + token } });
@@ -5315,10 +5340,10 @@ function showChosenCsv() {
   const input = document.getElementById("csv-file-input");
   const file = input.files[0];
   document.getElementById("csv-drop").classList.toggle("has-file", !!file);
-  document.getElementById("csv-file-name").textContent = file ? file.name : "Choisir un fichier CSV";
+  document.getElementById("csv-file-name").textContent = file ? file.name : "Choisir un fichier Excel ou CSV";
   document.getElementById("csv-file-hint").textContent = file
     ? `${file.size < 1024 ? file.size + " o" : Math.max(1, Math.round(file.size / 1024)) + " Ko"} · cliquez pour en choisir un autre`
-    : "ou glissez-le ici · fichier .csv";
+    : "ou glissez-le ici · fichier .xlsx ou .csv";
   document.getElementById("csv-import-msg").textContent = "";
 }
 
@@ -5333,10 +5358,10 @@ function initCsvDrop() {
     zone.classList.remove("dragging");
     const file = e.dataTransfer && e.dataTransfer.files[0];
     if (!file) return;
-    if (!/\.csv$/i.test(file.name)) {
+    if (!/\.(csv|xlsx)$/i.test(file.name)) {
       const msg = document.getElementById("csv-import-msg");
       msg.style.color = "var(--danger)";
-      msg.textContent = "Seuls les fichiers .csv peuvent être importés.";
+      msg.textContent = "Seuls les fichiers Excel (.xlsx) ou .csv peuvent être importés.";
       return;
     }
     const data = new DataTransfer();
@@ -5352,7 +5377,7 @@ async function importCsv() {
   msg.textContent = "";
   if (!fileInput.files.length) {
     msg.style.color = "var(--danger)";
-    msg.textContent = "Choisissez un fichier CSV d'abord.";
+    msg.textContent = "Choisissez un fichier Excel ou CSV d'abord.";
     return;
   }
   const formData = new FormData();
@@ -5361,8 +5386,11 @@ async function importCsv() {
     const result = await api("/api/v1/catalog/import-csv", { method: "POST", body: formData });
     fileInput.value = "";  // lot 48 : prêt pour le fichier suivant
     showChosenCsv();
-    msg.style.color = "var(--success)";
-    msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour, ${result.failed} échecs.`;
+    msg.style.color = result.failed ? "var(--danger)" : "var(--success)";
+    // Lot 78 B : les premières erreurs sont montrées (ligne, référence, motif) pour corriger le fichier.
+    const shown = (result.errors || []).slice(0, 3).join(" · ");
+    msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour, ${result.failed} échecs.` +
+      (shown ? ` ${shown}${result.errors.length > 3 ? " …" : ""}` : "");
     loadProducts();
   } catch (e) {
     msg.style.color = "var(--danger)";

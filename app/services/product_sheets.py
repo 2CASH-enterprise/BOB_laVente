@@ -385,3 +385,74 @@ def questions_block(codes: set[str]) -> str:
         return ""
     return ("\n\nQUESTIONS UTILES PAR CATÉGORIE (une seule à la fois, seulement si le client n'a pas déjà répondu)\n\n"
             + "\n".join(lines))
+
+
+# --- Lot 78 B : saisie en masse (modèle Excel par catégorie, import, export), recherche dans les fiches -------------
+
+BASE_COLUMNS = ["SKU", "NAME", "DESCRIPTION", "PRICE", "CURRENCY", "STOCK", "IMAGE_URL", "ACTIVE"]
+CATEGORY_HEADER = "CATEGORIE_BOB"
+_CATEGORY_HEADERS = {"categorie_bob", "categorie bob", "bob category", "bob_category"}
+
+
+def field_columns(codes: list[str] | None = None) -> list[tuple[str, str]]:
+    """(en-tête, clé) des champs de fiche des catégories données (toutes sinon), une colonne par clé, champs clés d'abord."""
+    seen, out = set(), []
+    chosen = [c for c in (codes or list(CATEGORIES)) if c in CATEGORIES]
+    groups = [CATEGORIES[c]["key"] for c in chosen] + [CATEGORIES[c]["optional"] for c in chosen] + [COMMON_FIELDS]
+    for group in groups:
+        for key, label, _ in group:
+            if key not in seen:
+                seen.add(key)
+                out.append((label, key))
+    return out
+
+
+def _header_keys() -> dict[str, str]:
+    mapping = {}
+    for code in CATEGORIES:
+        for key, label, _ in fields_of(code):
+            mapping.setdefault(_plain(label), key)
+            mapping.setdefault(_plain(key), key)
+    return mapping
+
+
+def is_category_header(header: str) -> bool:
+    return _plain(header).replace("é", "e") in _CATEGORY_HEADERS
+
+
+def is_sheet_header(header: str) -> bool:
+    return _plain(header) in _header_keys()
+
+
+def category_from_value(value: str | None) -> str | None:
+    """« FASHION » ou « Mode, chaussures et accessoires » → FASHION ; None si inconnu."""
+    plain = _plain(value)
+    if not plain:
+        return None
+    for code, cat in CATEGORIES.items():
+        if plain in (_plain(code), _plain(cat["label"])):
+            return code
+    return None
+
+
+def sheet_from_row(row: dict, code: str | None) -> tuple[dict | None, bool]:
+    """(fiche lue dans les colonnes de la ligne, le fichier avait-il des colonnes de fiche)."""
+    mapping = _header_keys()
+    raw, found = {}, False
+    for header, value in row.items():
+        key = mapping.get(_plain(header))
+        if key is None:
+            continue
+        found = True
+        if str(value or "").strip():
+            raw[key] = str(value).strip()
+    return normalize_sheet(code, raw), found
+
+
+def flatten(sheet: dict | None, variants: list | None = None) -> str | None:
+    """Texte à plat des valeurs de la fiche et des variantes, pour la recherche (« coton », « Samsung », « 42 »)."""
+    parts = [str(v) for v in (sheet or {}).values() if v not in (None, "")]
+    for variant in variants or []:
+        parts += [str(v) for v in (variant.get("options") or {}).values() if v]
+    text = " | ".join(dict.fromkeys(p.strip() for p in parts if p.strip()))
+    return text[:4000] or None

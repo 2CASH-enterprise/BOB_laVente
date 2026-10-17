@@ -44,7 +44,13 @@ class ProductRepository(TenantScopedRepository[Product]):
             stmt = stmt.where(Product.active.is_(True))
         if query:
             # Nom ou description : « familiale », « 7 places » se trouvent souvent dans la description.
-            stmt = stmt.where(or_(Product.name.ilike(f"%{query}%"), Product.description.ilike(f"%{query}%")))
+            # Lot 78 B : aussi dans la fiche (matière, marque, taille…), et chaque mot peut être dans un champ différent
+            # (« robe coton » trouve la robe dont la matière est coton).
+            words = [w for w in query.split() if w] or [query]
+            for word in words[:6]:
+                pattern = f"%{word}%"
+                stmt = stmt.where(or_(Product.name.ilike(pattern), Product.description.ilike(pattern),
+                                      Product.sheet_text.ilike(pattern)))
         if category_id is not None:
             stmt = stmt.where(Product.category_id == category_id)
         if min_price is not None:

@@ -31,10 +31,10 @@ def test_every_file_field_has_the_bob_design():
 def test_csv_picker_shows_the_file_and_accepts_drops():
     zone = HTML[HTML.index('<label class="file-drop" id="csv-drop">'):]
     zone = zone[:zone.index("</label>")]
-    assert 'id="csv-file-input"' in zone and 'onchange="showChosenCsv()"' in zone and "Choisir un fichier CSV" in zone
+    assert 'id="csv-file-input"' in zone and 'onchange="showChosenCsv()"' in zone and "Choisir un fichier Excel ou CSV" in zone
     js = HTML[HTML.index("function showChosenCsv() {"):HTML.index("async function importCsv() {")]
     assert "file.name" in js and "has-file" in js and "Ko" in js
-    assert 'addEventListener("drop"' in js and "\\.csv$" in js and "Seuls les fichiers .csv" in js and "new DataTransfer()" in js
+    assert 'addEventListener("drop"' in js and "\\.(csv|xlsx)$" in js and "Seuls les fichiers Excel (.xlsx) ou .csv" in js and "new DataTransfer()" in js
     importer = HTML[HTML.index("async function importCsv() {"):HTML.index("async function loadCompanyProfile()")]
     assert 'fileInput.value = "";' in importer and "showChosenCsv();" in importer
     assert "initCsvDrop();" in HTML[HTML.index("async function loadProducts() {"):][:200]

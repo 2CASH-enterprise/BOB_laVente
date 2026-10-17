@@ -17,6 +17,24 @@ from app.schemas.catalog import CsvImportResponse
 PLATFORM_META_CATALOG = "META_CATALOG"
 
 
+def _meta_sheet(mapped: dict, store: bool) -> dict | None:
+    from app.services.product_sheets import normalize_sheet
+
+    return normalize_sheet(mapped["bob_category"], mapped.get("sheet")) if store else None
+
+
+def _apply_sheet(product, mapped: dict, store: bool) -> None:
+    """Lot 78 B — champs venus du catalogue Meta. La catégorie choisie par le commerçant n'est jamais écrasée ; seuls
+    les champs que Meta renseigne sont mis à jour (une valeur saisie dans Bob reste si Meta n'en donne pas)."""
+    from app.services.product_sheets import normalize_sheet
+
+    if not store:
+        return
+    if not product.bob_category:
+        product.bob_category = mapped.get("bob_category")
+    product.sheet = normalize_sheet(product.bob_category, {**(product.sheet or {}), **(mapped.get("sheet") or {})})
+
+
 async def sync_meta_catalog(
     db: AsyncSession,
     tenant_id,
@@ -39,6 +57,10 @@ async def sync_meta_catalog(
     from app.models.tenant import Tenant
 
     tenant = await db.get(Tenant, tenant_id)
+    from app.services import product_sheets
+    from app.services.business_type import is_store
+
+    store = bool(tenant) and is_store(tenant)  # lot 78 B : fiche remplie pour le secteur Commerce seulement
     shop_currency = (tenant.currency or "").upper() if tenant else ""
 
     total = imported = updated = failed = available = unavailable = 0
@@ -72,6 +94,9 @@ async def sync_meta_catalog(
             )
             continue
 
+        if store and mapped["bob_category"] == product_sheets.GENERAL and product_sheets.is_category(
+                tenant.default_bob_category):
+            mapped["bob_category"] = tenant.default_bob_category
         existing = await product_repo.get_by_external_id(tenant_id, PLATFORM_META_CATALOG, mapped["external_id"])
 
         if existing is not None:
@@ -82,6 +107,7 @@ async def sync_meta_catalog(
             existing.stock_quantity = mapped["stock_quantity"]
             existing.image_url = mapped["image_url"]
             existing.active = mapped["active"]
+            _apply_sheet(existing, mapped, store)
             updated += 1
         else:
             db.add(
@@ -97,6 +123,8 @@ async def sync_meta_catalog(
                     stock_quantity=mapped["stock_quantity"],
                     image_url=mapped["image_url"],
                     active=mapped["active"],
+                    bob_category=mapped["bob_category"] if store else None,
+                    sheet=_meta_sheet(mapped, store),
                 )
             )
             imported += 1

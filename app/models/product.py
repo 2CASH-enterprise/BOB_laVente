@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, Uuid, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, Uuid, event, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -41,6 +41,9 @@ class Product(Base):
     bob_category: Mapped[str | None] = mapped_column(String(24))
     sheet: Mapped[dict | None] = mapped_column(JSON)
     variants: Mapped[list | None] = mapped_column(JSON)
+    # Lot 78 B — valeurs de la fiche et des variantes à plat (« coton | Nike | M | Rouge »), pour que la recherche
+    # trouve un produit par sa matière, sa marque ou sa taille. Tenu à jour automatiquement (voir plus bas).
+    sheet_text: Mapped[str | None] = mapped_column(Text)
 
     # Traçabilité d'origine (section 25) — NULL pour un produit saisi manuellement ou importé en CSV.
     external_source: Mapped[str | None] = mapped_column(String(32))  # ex. "SHOPIFY"
@@ -56,3 +59,12 @@ class Product(Base):
         from app.services.product_sheets import completeness
 
         return completeness(self)
+
+
+@event.listens_for(Product, "before_insert")
+@event.listens_for(Product, "before_update")
+def _refresh_sheet_text(mapper, connection, target) -> None:
+    """Lot 78 B — quel que soit le chemin (tableau de bord, import, Shopify, Meta), le texte de recherche suit la fiche."""
+    from app.services.product_sheets import flatten
+
+    target.sheet_text = flatten(target.sheet, target.variants)

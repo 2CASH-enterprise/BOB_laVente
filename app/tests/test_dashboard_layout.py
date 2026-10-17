@@ -25,7 +25,7 @@ def _show_tab_line(tab: str) -> str:
     ("integrations", ["Compte WhatsApp Business", "Liens WhatsApp &amp; widgets", "Shopify", "Catalogue Facebook (Meta)"]),
     ("bob", ["Négociation de prix", "Transmission à un humain", "Réponses aux objections", "Relances par email"]),
     ("settings", ["Sécurité du compte"]),
-    ("products", ["Ajouter un produit", "Importer un catalogue CSV", "Codes QR produits"]),
+    ("products", ["Ajouter un produit", "Importer un catalogue Excel ou CSV", "Codes QR produits"]),
 ])
 def test_each_card_is_in_its_tab(tab, cards):
     section = _section(tab)

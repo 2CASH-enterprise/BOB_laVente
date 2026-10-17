@@ -17,18 +17,29 @@ async def import_csv(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Section 24 — import du catalogue au format CSV."""
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Seul le format CSV est accepté (le format Excel suit)")
+    """Section 24 — import du catalogue ; lot 78 B : fichier Excel (.xlsx) ou CSV (« , » ou « ; »), en-têtes français."""
+    from app.services import spreadsheet
+    from app.services.catalog_import import table_to_import_csv
+
+    name = (file.filename or "").lower()
+    if not name.endswith((".csv", ".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Formats acceptés : Excel (.xlsx) ou CSV")
 
     raw = await file.read()
     if len(raw) > MAX_CSV_SIZE_BYTES:
         raise HTTPException(status_code=413, detail="Fichier trop volumineux (max 10 Mo)")
 
     try:
-        content = raw.decode("utf-8-sig")  # tolère le BOM Excel
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Encodage du fichier non supporté, utilisez UTF-8") from None
+        if name.endswith(".csv"):
+            table = [row for row in spreadsheet._rows_from_csv(raw) if any(row)]
+            header, rows = (table[0], table[1:]) if table else ([], [])
+        else:
+            read = spreadsheet.read_table(raw, name)
+            header, rows = read["header"], read["rows"]
+    except spreadsheet.SpreadsheetError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if not header:
+        raise HTTPException(status_code=400, detail="Le fichier est vide")
 
     from app.models.tenant import Tenant
     from app.services.plan_limits import remaining_product_slots
@@ -36,8 +47,12 @@ async def import_csv(
     tenant = await db.get(Tenant, current_user.tenant_id)
     max_new = await remaining_product_slots(db, current_user.tenant_id, tenant.is_paid)
 
-    from app.services.business_type import is_dealership, is_insurance, is_real_estate
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate, is_store
 
+    store, dealership, estate = is_store(tenant), is_dealership(tenant), is_real_estate(tenant)
+    content = table_to_import_csv(header, rows, keep_vehicle=dealership, keep_property=estate,
+                                  default_currency=None if is_insurance(tenant) else tenant.currency)
     return await import_catalog_csv(db, current_user.tenant_id, content, max_new_products=max_new,
-                                    with_vehicles=is_dealership(tenant), without_prices=is_insurance(tenant),
-                                    with_properties=is_real_estate(tenant))
+                                    with_vehicles=dealership, without_prices=is_insurance(tenant),
+                                    with_properties=estate, with_sheets=store,
+                                    default_category=tenant.default_bob_category)
