@@ -122,21 +122,36 @@ app.include_router(pay_router)
 app.include_router(superadmin_plans_router)
 app.include_router(plan_usage_router)
 
+class FreshPages(StaticFiles):
+    """
+    Lot 78 C — pages (HTML), service worker et manifeste toujours revalidés auprès du serveur (« no-cache » + ETag :
+    une réponse 304 sans contenu quand rien n'a changé). Sans cela, le navigateur garde parfois l'ancienne page
+    quelques heures après une mise à jour, et l'ancien code ne comprend plus les nouvelles réponses de l'API.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        media = response.headers.get("content-type", "")
+        if media.startswith("text/html") or path.endswith(("sw.js", ".webmanifest")):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 _static_dir = Path(__file__).parent / "static" / "dashboard"
 if _static_dir.exists():
-    app.mount("/dashboard", StaticFiles(directory=str(_static_dir), html=True), name="dashboard")
+    app.mount("/dashboard", FreshPages(directory=str(_static_dir), html=True), name="dashboard")
 
 _legal_dir = Path(__file__).parent / "static" / "legal"
 if _legal_dir.exists():
-    app.mount("/legal", StaticFiles(directory=str(_legal_dir), html=True), name="legal")
+    app.mount("/legal", FreshPages(directory=str(_legal_dir), html=True), name="legal")
 
 _demo_dir = Path(__file__).parent / "static" / "instant-demo"
 if _demo_dir.exists():
-    app.mount("/demo", StaticFiles(directory=str(_demo_dir), html=True), name="instant-demo")
+    app.mount("/demo", FreshPages(directory=str(_demo_dir), html=True), name="instant-demo")
 
 _superadmin_dir = Path(__file__).parent / "static" / "superadmin"
 if _superadmin_dir.exists():
-    app.mount("/superadmin", StaticFiles(directory=str(_superadmin_dir), html=True), name="superadmin")
+    app.mount("/superadmin", FreshPages(directory=str(_superadmin_dir), html=True), name="superadmin")
 
 # Lot 63 — visuels de prospection par secteur (aperçu du lien /p/CODE, bannière des emails).
 _visuals_dir = Path(__file__).parent / "static" / "visuels"
@@ -157,4 +172,4 @@ async def health() -> dict[str, str]:
 # déclarées après lui (API, /dashboard, /demo, /legal, /health).
 _landing_dir = Path(__file__).parent / "static" / "landing"
 if _landing_dir.exists():
-    app.mount("/", StaticFiles(directory=str(_landing_dir), html=True), name="landing")
+    app.mount("/", FreshPages(directory=str(_landing_dir), html=True), name="landing")

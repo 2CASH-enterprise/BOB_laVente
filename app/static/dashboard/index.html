@@ -2928,8 +2928,10 @@ function renderHome(h) {
       <div class="kpi-value">${value}</div>
       <div class="kpi-note">${note}</div>
     </div>`;
-  const dealer = ["CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"].includes(h.business_type);  // lots 47 / 53 / 79 : rendez-vous, pas de paiement
-  const insurer = h.business_type === "INSURANCE_BROKER";
+  // Lots 47 / 53 / 79 : rendez-vous, pas de paiement. Lot 78 C : la forme vient des chiffres reçus (jamais d'erreur
+  // si la page et le serveur ne sont pas de la même version, par exemple juste après une mise à jour).
+  const dealer = !!k.appointments || (!k.paid && ["CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"].includes(h.business_type));
+  const insurer = h.business_type === "INSURANCE_BROKER" && !!k.quotes;
   const conv = k.conversion;
   const kpis = insurer ? [  // lot 54 : la demande de cotation est l'étape clé du courtier
     kpi("shield", "tone-info", "Demandes de cotation", `${k.quotes.value}`,
