@@ -393,7 +393,8 @@ def test_no_commerce_strategy_for_an_agency():
     from app.agents.strategies import no_knowledge_instruction, priority_for, select_strategy
     from app.agents.taxonomy import objection_label, objections_for, taxonomy_version
 
-    assert select_strategy(["PRIX_TROP_ELEVE", "HESITATION"], set(), business_type=REAL_ESTATE) == (None, None)
+    chosen, _ = select_strategy(["PRIX_TROP_ELEVE", "HESITATION"], set(), business_type=REAL_ESTATE)
+    assert chosen.activity == REAL_ESTATE and chosen.code.startswith("IMMO_PRIX_")  # lot 79 B : jamais celles du commerce
     assert priority_for(REAL_ESTATE)[0] == "CONFIANCE" and "HONORAIRES" in priority_for(REAL_ESTATE)
     assert "l'agence" in no_knowledge_instruction(REAL_ESTATE)
     assert taxonomy_version(REAL_ESTATE) == "v1.5immo" and len(taxonomy_version(REAL_ESTATE)) <= 8

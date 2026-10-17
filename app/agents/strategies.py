@@ -12,11 +12,11 @@ alterner ne fait prendre aucun risque au client) et prépare l'apprentissage de 
 import random
 from dataclasses import dataclass
 
-STRATEGY_LIBRARY_VERSION = "v3"  # lot 54 : stratégies du courtier (boutique et concession inchangées)
+STRATEGY_LIBRARY_VERSION = "v4"  # lot 79 B : stratégies de l'agence immobilière (les autres secteurs inchangés)
 ONLINE_STORE = "ONLINE_STORE"
 CAR_DEALERSHIP = "CAR_DEALERSHIP"
 INSURANCE_BROKER = "INSURANCE_BROKER"
-REAL_ESTATE = "REAL_ESTATE"  # lot 79 : pas encore de stratégies propres — Bob répond librement, jamais celles du commerce
+REAL_ESTATE = "REAL_ESTATE"  # lot 79 B : ses propres stratégies (jamais celles du commerce)
 MIN_TERMINATED_FOR_RATE = 20  # en dessous, « pas encore assez de données » plutôt qu'un pourcentage trompeur
 
 GUARDRAILS = (
@@ -369,6 +369,131 @@ STRATEGIES += [
           "conseiller pour répondre à ses questions : get_available_slots pour lui proposer un créneau s'il accepte."),
 ]
 
+# --- Lot 79 B : agence immobilière ------------------------------------------------------------------------
+# Bob ne conclut rien sur WhatsApp : chaque stratégie lève le frein avec des faits RÉELS (fiche du bien, informations
+# de l'agence, base de connaissances) et vise une visite, une estimation ou un échange avec un conseiller. Jamais de
+# prix d'estimation ni de chiffre de crédit, jamais de remise sur les honoraires, jamais de promesse qu'un dossier sera
+# accepté, jamais de fausse concurrence (« d'autres visites sont prévues ») ; aucune pièce interdite, aucun critère
+# discriminatoire (consignes 9 et 10 de l'agence, verrous du lot 79).
+_VISIT = ("propose-lui une visite : get_available_slots pour lui proposer un créneau, puis request_appointment "
+          "(VISITE, avec l'identifiant du bien) quand il en choisit un")
+_ADVISOR = ("propose-lui un appel d'un conseiller ou un rendez-vous à l'agence : get_available_slots, puis "
+            "request_appointment (APPEL ou AGENCE) quand il choisit un créneau")
+
+
+def _immo(code, objection, label, description, instruction, requires=frozenset()):
+    return Strategy(code, objection, label, description, instruction, requires=requires, activity=REAL_ESTATE)
+
+
+STRATEGIES += [
+    _immo("IMMO_PRIX_ALTERNATIVE", "PRIX_TROP_ELEVE", "Autres biens",
+          "Bob cherche des biens qui correspondent mieux au budget, et les montre en cartes.",
+          "Le client trouve le prix ou le loyer trop élevé. Cherche des biens comparables moins chers avec "
+          "search_products (même type, même secteur, son budget comme prix maximal s'il l'a donné) et montre-les avec "
+          "send_product_images s'il y en a ; sinon, dis-le simplement et demande-lui quel critère pourrait bouger "
+          "(secteur, surface, nombre de pièces)."),
+    _immo("IMMO_PRIX_VALEUR", "PRIX_TROP_ELEVE", "Ce qui justifie le prix",
+          "Bob rappelle les vrais atouts du bien, d'après sa fiche (surface, extérieur, DPE, quartier…).",
+          "Le client trouve le prix ou le loyer trop élevé. Rappelle en une ou deux phrases les atouts réels du bien, "
+          "uniquement d'après sa fiche (surface, pièces, extérieur, stationnement, DPE, quartier, points forts) ; "
+          "n'invente aucun atout. N'annonce aucune baisse de prix : une offre se discute avec le conseiller. "
+          f"S'il reste intéressé, {_VISIT}."),
+    _immo("IMMO_PRIX_BUDGET", "PRIX_TROP_ELEVE", "Budget et critères",
+          "Bob demande le budget et le critère le plus important, les note sur la fiche projet et cherche ce qui convient.",
+          "Le client trouve le prix ou le loyer trop élevé. Demande-lui poliment son budget et ce qui compte le plus "
+          "pour lui (secteur, surface, extérieur…) ; note-les avec update_property_project, puis cherche avec "
+          "search_products ce qui correspond."),
+    _immo("IMMO_HONORAIRES_TRANSPARENCE", "HONORAIRES", "Transparence",
+          "Bob donne les honoraires tels qu'écrits (fiche du bien, barème de l'agence), sans rien négocier.",
+          "Le client trouve les honoraires trop élevés ou veut passer sans agence. Donne les honoraires exactement tels "
+          "qu'écrits dans la fiche du bien (à la charge de qui, montant ou pourcentage) et, s'il est indiqué dans les "
+          "INFORMATIONS DE L'AGENCE, le lien vers le barème. Si la fiche ne les donne pas, dis que le conseiller les "
+          "précisera. N'accorde JAMAIS de remise et ne critique jamais la vente entre particuliers."),
+    _immo("IMMO_HONORAIRES_SERVICE", "HONORAIRES", "Ce que fait l'agence",
+          "Bob explique ce que comprend l'accompagnement de l'agence, seulement d'après sa présentation.",
+          "Le client trouve les honoraires trop élevés ou veut passer sans agence. Explique en deux phrases ce que "
+          "comprend l'accompagnement de l'agence, UNIQUEMENT d'après la présentation de l'agence et la base de "
+          "connaissances (visites, dossier, sécurisation de la vente ou du bail…). Si rien n'y est écrit, n'invente "
+          f"rien : {_ADVISOR}. N'accorde jamais de remise."),
+    _immo("IMMO_HONORAIRES_CONSEILLER", "HONORAIRES", "Voir avec un conseiller",
+          "Bob ne négocie rien et propose d'en parler avec un conseiller.",
+          "Le client discute les honoraires. Ne négocie rien et n'accorde aucune remise : explique que les honoraires "
+          f"se discutent avec un conseiller de l'agence et {_ADVISOR}."),
+    _immo("IMMO_FIN_POINT", "FINANCEMENT", "Où en est le financement",
+          "Bob demande où en est le financement et le note sur la fiche projet, sans aucun chiffre.",
+          "Le client parle de son financement. Ne donne AUCUN chiffre (taux, mensualité, apport, capacité d'emprunt). "
+          "Demande-lui simplement s'il a déjà vu sa banque ou un courtier, et note sa réponse avec "
+          "update_property_project (financing). Dis-lui que le conseiller pourra l'orienter."),
+    _immo("IMMO_FIN_PARALLELE", "FINANCEMENT", "Visiter en parallèle",
+          "Bob propose de visiter pendant que le financement avance, sans rien promettre.",
+          "Le client n'a pas encore son financement. Ne donne AUCUN chiffre et ne promets rien sur son prêt. "
+          "Explique qu'il peut visiter pendant que son financement avance, pour être prêt quand il trouve le bon bien, "
+          f"et {_VISIT}."),
+    _immo("IMMO_FIN_CONSEILLER", "FINANCEMENT", "Orienter vers un conseiller",
+          "Bob propose qu'un conseiller l'oriente ; il ne cite un partenaire que s'il figure dans la base.",
+          "Le client s'inquiète de son financement. Ne donne AUCUN chiffre. Si la base de connaissances cite un "
+          "courtier ou une banque partenaire de l'agence, mentionne-le tel quel ; sinon, n'en cite aucun. Puis "
+          f"{_ADVISOR}."),
+    _immo("IMMO_DOSSIER_PIECES", "DOSSIER", "Pièces du dossier",
+          "Bob donne la liste légale des pièces et parle du garant ou de la garantie Visale, sans rien promettre.",
+          "Le client craint un refus de son dossier de location. Donne-lui seulement les pièces autorisées (consigne 9) "
+          "et précise qu'un garant, ou la garantie Visale d'Action Logement selon sa situation, peut renforcer un "
+          "dossier. Ne dis JAMAIS que son dossier sera accepté ou refusé, et ne demande aucune autre pièce."),
+    _immo("IMMO_DOSSIER_ETUDE", "DOSSIER", "Chaque dossier est étudié",
+          "Bob explique que chaque dossier est étudié par l'agence et le propriétaire, et propose la visite.",
+          "Le client craint un refus de son dossier (CDD, étudiant, indépendant…). Ne juge jamais sa situation et ne "
+          "promets rien : explique que chaque dossier est étudié par l'agence et le propriétaire, puis "
+          f"{_VISIT}."),
+    _immo("IMMO_DOSSIER_GARANT", "DOSSIER", "Garant",
+          "Bob demande s'il a un garant ou Visale et le note sur la fiche projet.",
+          "Le client craint un refus de son dossier. Demande-lui simplement s'il a un garant ou la garantie Visale, et "
+          "note sa réponse avec update_property_project (guarantor). Ne pose aucune question sur sa vie personnelle et "
+          "ne promets rien."),
+    _immo("IMMO_CONFIANCE_FAITS", "CONFIANCE", "Faits de l'agence",
+          "Bob donne les faits vérifiables : carte professionnelle, garantie financière, adresse de l'agence.",
+          "Le client doute du sérieux de l'agence ou craint une arnaque. Donne-lui uniquement les faits vérifiables "
+          "présents dans les INFORMATIONS DE L'AGENCE et la base de connaissances (carte professionnelle, garantie "
+          "financière, adresse, horaires) ; n'invente rien de ce qui n'y figure pas. Rappelle qu'aucun paiement ne lui "
+          "est demandé sur WhatsApp."),
+    _immo("IMMO_CONFIANCE_VISITE", "CONFIANCE", "Visiter d'abord",
+          "Bob rappelle que rien n'est à payer pour visiter et propose une visite.",
+          f"Le client se méfie (bien réel, paiement avant visite). Rappelle que rien n'est à payer pour visiter et "
+          f"{_VISIT}."),
+    _immo("IMMO_CONFIANCE_AGENCE", "CONFIANCE", "Rencontrer l'agence",
+          "Bob propose de passer à l'agence ou d'être appelé par un conseiller.",
+          f"Le client doute de l'agence. Propose-lui de rencontrer l'équipe : {_ADVISOR}."),
+    _immo("IMMO_DELAI_DATE", "DELAI", "Date réelle",
+          "Bob donne la date de disponibilité écrite dans la fiche et note la date souhaitée par le client.",
+          "Le client trouve le délai trop long. Donne la date de disponibilité uniquement si la fiche du bien la donne ; "
+          "sinon, dis que le conseiller la confirmera. Demande sa date d'entrée souhaitée et note-la avec "
+          "update_property_project (date d'entrée ou délai)."),
+    _immo("IMMO_DELAI_AUTRES", "DELAI", "Biens disponibles plus tôt",
+          "Bob cherche d'autres biens qui conviennent et sont disponibles plus tôt.",
+          "Le client trouve le délai trop long. Cherche avec search_products d'autres biens qui correspondent à son "
+          "projet ; montre-les avec send_product_images s'il y en a, sans affirmer de date absente de leur fiche."),
+    _immo("IMMO_INDISPO_AUTRES", "RUPTURE_STOCK", "Biens comparables",
+          "Bob propose des biens comparables encore disponibles.",
+          "Le bien voulu n'est plus disponible. Dis-le simplement, puis cherche avec search_products des biens "
+          "comparables (même type, même secteur, même budget) et montre-les avec send_product_images s'il y en a."),
+    _immo("IMMO_INDISPO_ALERTE", "RUPTURE_STOCK", "Être prévenu",
+          "Bob propose d'être prévenu des nouveaux biens qui correspondent (alertes du lot 80).",
+          "Le bien voulu n'est plus disponible. Dis-le simplement, note son projet avec update_property_project s'il "
+          "manque des critères, puis demande-lui s'il accepte d'être prévenu des nouveaux biens qui correspondent à sa "
+          "recherche ; s'il répond clairement, utilise record_marketing_consent."),
+    _immo("IMMO_HESITATION_CLARIFIER", "HESITATION", "Clarifier",
+          "Bob cherche ce qui fait hésiter : le prix, le bien, le financement ou le dossier ?",
+          "Le client hésite. Demande-lui, avec une seule question simple, ce qui le fait hésiter : plutôt le prix, le "
+          "bien lui-même, le financement ou le dossier ? Propose ensuite ton aide sur ce point."),
+    _immo("IMMO_HESITATION_RESPECTER", "HESITATION", "Respecter",
+          "Bob prend acte, résume le projet en une phrase et reste disponible, sans insister.",
+          "Le client hésite. Respecte sa décision : résume en une phrase son projet et indique que tu restes "
+          "disponible. N'insiste pas et ne pose pas de question."),
+    _immo("IMMO_HESITATION_VISITE", "HESITATION", "Visite sans engagement",
+          "Bob propose, une seule fois, une visite sans engagement pour se faire une idée.",
+          "Le client hésite. Propose-lui, une seule fois et sans insister, une visite sans engagement pour se faire une "
+          "idée : get_available_slots pour lui proposer un créneau s'il accepte."),
+]
+
 STRATEGIES_BY_CODE = {s.code: s for s in STRATEGIES}
 
 # Une seule objection traitée par message : la plus bloquante d'abord.
@@ -441,6 +566,15 @@ INSURANCE_GUARDRAILS = (
 )
 
 
+# Lot 79 B — garde-fous de l'agence immobilière (lois Hoguet et ALUR, non-discrimination, verrous du lot 79).
+REAL_ESTATE_GUARDRAILS = (
+    "Garde-fous : n'invente jamais de bien, de caractéristique, d'honoraires ni d'avis client ; ne donne jamais de prix "
+    "d'estimation ni de chiffre de crédit ; n'accorde aucune remise ; ne promets jamais qu'un dossier sera accepté ; "
+    "pas de fausse urgence ni de fausse concurrence (« d'autres visites sont prévues ») ; aucune question sur la vie "
+    "personnelle ; n'insiste pas si le client refuse clairement."
+)
+
+
 def strategy_instruction(strategy: Strategy) -> str:
-    guardrails = INSURANCE_GUARDRAILS if strategy.activity == INSURANCE_BROKER else GUARDRAILS
+    guardrails = {INSURANCE_BROKER: INSURANCE_GUARDRAILS, REAL_ESTATE: REAL_ESTATE_GUARDRAILS}.get(strategy.activity, GUARDRAILS)
     return f"{strategy.instruction}\n{guardrails}"

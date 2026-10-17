@@ -53,9 +53,10 @@ def test_every_tool_cited_in_an_instruction_exists():
 def test_every_instruction_carries_the_honesty_guardrails():
     for strategy in STRATEGIES:
         text = strategy_instruction(strategy)
-        from app.agents.strategies import INSURANCE_BROKER, INSURANCE_GUARDRAILS
+        from app.agents.strategies import INSURANCE_BROKER, INSURANCE_GUARDRAILS, REAL_ESTATE, REAL_ESTATE_GUARDRAILS
 
-        assert (INSURANCE_GUARDRAILS if strategy.activity == INSURANCE_BROKER else GUARDRAILS) in text  # lot 54
+        expected = {INSURANCE_BROKER: INSURANCE_GUARDRAILS, REAL_ESTATE: REAL_ESTATE_GUARDRAILS}.get(strategy.activity, GUARDRAILS)
+        assert expected in text  # lots 54 / 79 B
         assert "n'invente jamais" in text and "fausse urgence" in text
 
 
