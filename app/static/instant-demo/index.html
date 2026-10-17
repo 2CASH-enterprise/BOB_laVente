@@ -94,6 +94,9 @@
 
   .whatsapp-cta { margin: 12px; padding: 16px; background: var(--accent-soft); border-radius: 14px; text-align: center; }
   .whatsapp-cta p { font-size: 13px; color: var(--text); margin: 0 0 10px; }
+  .fb-follow { margin: 10px 0 0 !important; font-size: 12px !important; }
+  .whatsapp-cta .fb-follow a { background: none; color: var(--accent); padding: 0; font-weight: 600; text-decoration: underline; }
+  .fb-follow a[href=""], .fb-follow a[href^="__"] { display: none !important; }
   .whatsapp-cta a { display: inline-block; background: var(--accent); color: white; text-decoration: none; padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; }
 
   /* Lot 33 : choix du secteur */
@@ -220,6 +223,8 @@
         </div>
         <div id="promote-error" style="color: var(--danger); font-size: 12px; margin-top: 8px; min-height: 14px;"></div>
       </div>
+      <!-- Lot 82 — page Facebook de Bob (adresse mise par le serveur ; masquée si elle n'est pas réglée) -->
+      <p class="fb-follow"><a href="__FACEBOOK_PAGE_URL__" target="_blank" rel="noopener">Suis Bob sur Facebook : conseils et nouveautés</a></p>
     </div>
     <div class="chat-input-row">
       <input id="chat-input" maxlength="1000" placeholder="Écrivez comme le ferait un client…" onkeydown="if(event.key==='Enter') sendMessage()">

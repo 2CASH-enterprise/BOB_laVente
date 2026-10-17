@@ -484,6 +484,9 @@
       <!-- Lot 62 — emails de prospection -->
       <div class="card" id="email-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></div>
 
+      <!-- Lot 82 — liens de publication (Facebook, Instagram, LinkedIn, groupes…) -->
+      <div class="card" id="links-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></div>
+
       <div class="toolbar">
         <div class="pills" id="prospect-views"></div>
         <div class="row" style="flex: 0 1 auto;">
@@ -599,7 +602,7 @@ function showSection(name, opts) {
   window.scrollTo(0, 0);
   if (name === "overview") loadOverview();
   if (name === "shops") { if (opts.tenantId) openShop(opts.tenantId); else { closeShop(); loadTenants(); } }
-  if (name === "prospects") { if (opts.view) prospectView = opts.view; loadToday(); loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); }
+  if (name === "prospects") { if (opts.view) prospectView = opts.view; loadToday(); loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); loadAdLinks(); }
   if (name === "prereg") loadPrereg();
   if (name === "aicosts") loadAiCosts();
   if (name === "monitoring") loadMonitoring(true);
@@ -1381,6 +1384,56 @@ async function runProspectImport() {
     document.getElementById("pi-run").disabled = false;
   }
 }
+// ==== Lot 82 — liens de publication ====
+async function loadAdLinks() {
+  const card = document.getElementById("links-card");
+  let d;
+  try { d = await api("/api/v1/superadmin/prospection/links"); } catch (e) {
+    card.innerHTML = `<p style="color: var(--danger);">${esc(e.message)}</p>`; return;
+  }
+  const rows = d.links.map((l, i) => {
+    const rate = (a, b) => b ? ` <span class="muted">(${Math.round(a / b * 100)} %)</span>` : "";
+    return `<tr${l.archived ? ' style="opacity: 0.55;"' : ""}><td><strong>${esc(l.name)}</strong><div class="muted">${esc(l.channel_label)} · ${esc(l.sector_label)}${l.archived ? " · archivé" : ""}</div></td>
+      <td><div class="row" style="flex-wrap: nowrap;"><input id="ad-link-${i}" class="input" readonly value="${esc(l.url)}" style="min-width: 180px; font-size: 12px;">
+        <button class="small" onclick="copyAdLink(${i})">Copier</button></div></td>
+      <td><span class="stat"><b>${l.clicks}</b> visiteurs</span><span class="stat"><b>${l.demos}</b> démos${rate(l.demos, l.clicks)}</span><span class="stat"><b>${l.signups}</b> comptes${rate(l.signups, l.demos)}</span></td>
+      <td><button class="small" onclick="archiveAdLink(${jsArg(l.id)})">${l.archived ? "Réactiver" : "Archiver"}</button></td></tr>`;
+  }).join("");
+  const options = (obj, empty) => (empty ? `<option value="">${esc(empty)}</option>` : "") + Object.entries(obj).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("");
+  card.innerHTML = `<div class="toolbar" style="margin-top: 0;"><h2 style="font-size: 16px; margin: 0;">Liens de publication</h2></div>
+    <p class="muted" style="margin: 0 0 12px;">Un lien par publication, publicité ou groupe : il ouvre la démo et compte les visiteurs (une fois chacun, jamais les aperçus de lien), puis les démos et les comptes créés dans les 30 jours. Aucun cookie publicitaire, rien n'est transmis à Facebook.
+      ${d.facebook_page_url ? `Page Facebook de Bob : <a href="${esc(d.facebook_page_url)}" target="_blank" rel="noopener">ouvrir</a> (proposée en fin de démo et dans les emails).` : ""}</p>
+    <div class="row" style="margin-bottom: 12px;">
+      <input id="ad-link-name" class="input" maxlength="120" placeholder="Nom (ex. Publicité mandataires Lyon, octobre)" style="min-width: 220px;">
+      <select id="ad-link-channel" class="input" style="flex: 0 1 auto; width: auto;" aria-label="Canal">${options(d.channels)}</select>
+      <select id="ad-link-sector" class="input" style="flex: 0 1 auto; width: auto;" aria-label="Démo ouverte">${options(d.sectors, "Démo : tous secteurs")}</select>
+      <button class="btn primary" onclick="createAdLink()">Créer le lien</button>
+    </div>
+    ${d.links.length ? `<div style="overflow-x: auto;"><table><thead><tr><th>Lien</th><th>Adresse à publier</th><th>Résultats</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<p class="muted">Aucun lien : créez-en un avant chaque publication ou publicité, puis collez l'adresse dans le texte ou le bouton de la publicité.</p>`}`;
+}
+
+async function copyAdLink(i) {
+  await copyField("ad-link-" + i);
+  toast("Lien copié");
+}
+
+async function createAdLink() {
+  const name = document.getElementById("ad-link-name").value.trim();
+  if (!name) { toast("Donnez un nom au lien.", "error"); return; }
+  try {
+    await api("/api/v1/superadmin/prospection/links", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, channel: document.getElementById("ad-link-channel").value, sector: document.getElementById("ad-link-sector").value || null }) });
+    toast("Lien créé : copiez-le dans votre publication.");
+  } catch (e) { toast(e.message, "error"); return; }
+  loadAdLinks();
+}
+
+async function archiveAdLink(id) {
+  try { await api(`/api/v1/superadmin/prospection/links/${id}/archive`, { method: "POST" }); } catch (e) { toast(e.message, "error"); return; }
+  loadAdLinks();
+}
+
 // ==== Lot 62 — emails de prospection ====
 var emailData = null;
 var campaignStatusLabels = { DRAFT: "Brouillon", RUNNING: "En cours", PAUSED: "En pause" };

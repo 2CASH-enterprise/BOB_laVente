@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     # App
     app_name: str = "Bob - Agent vendeur IA"
     environment: str = "development"  # development | staging | production
+    # Lot 82 — page Facebook de Bob, proposée en fin de démo et dans les emails de prospection (vide : rien n'est affiché).
+    facebook_page_url: str = "https://www.facebook.com/share/1KPHXStciM/"
     public_base_url: str = "https://agenc-ai.com/bob"  # préfixe absolu — nécessaire pour les URLs d'images envoyées via WhatsApp
 
     # SMTP — envoi des codes de double authentification (section 2FA). Si non configuré,

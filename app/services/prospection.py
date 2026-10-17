@@ -301,6 +301,9 @@ async def record_click(db, code: str, user_agent: str | None):
 async def attach(db, request, tenant_id, kind: str, email: str | None = None) -> None:
     """Démo (DEMO) ou compte (SIGNUP) rattaché au prospect du lien ; ne fait jamais échouer l'inscription."""
     from app.models.prospect import Prospect
+    from app.services import ad_links
+
+    await ad_links.attach(db, request, tenant_id, kind)  # lot 82 : lien de publication (Facebook…)
 
     try:
         code = (request.cookies.get(COOKIE) or "").strip().lower() if request is not None else ""
@@ -346,9 +349,27 @@ def offer_line(slots: dict | None) -> str | None:
             f"(il reste {left} place{'s' if left > 1 else ''}).")
 
 
+# Lot 82 — France : agents et mandataires immobiliers, petites boutiques. Message court qui dit d'où vient le contact,
+# qui écrit, et comment refuser (prospection entre professionnels : identité de l'expéditeur et refus simple).
+_FRANCE = {
+    "REAL_ESTATE": ("Bonjour{name}, j'ai vu vos annonces{city}. {who}. Nous avons créé Bob, un assistant qui répond à vos "
+                    "acheteurs et locataires sur WhatsApp en moins d'une minute, même le soir, et vous propose les visites. "
+                    "Vous pouvez l'essayer en 2 minutes."),
+    "ONLINE_STORE": ("Bonjour{name}, j'ai vu que vos clients vous commandent par WhatsApp. {who}. Bob répond à leurs "
+                     "questions avec votre catalogue, montre les produits et prend les commandes, même quand vous n'êtes "
+                     "pas disponible. Essai en 2 minutes."),
+}
+STOP_LINE = "Si ça ne vous intéresse pas, répondez STOP et je ne vous écrirai plus."
+
+
 def message(prospect, sender: str | None, offer: str | None = None) -> str:
     """Texte prêt à envoyer depuis son propre WhatsApp (ou par SMS, email), avec le lien personnel."""
     first = (prospect.contact_name or "").split()[0] if (prospect.contact_name or "").strip() else None
+    if (prospect.country or "").upper() == "FR" and prospect.sector in _FRANCE:
+        who = f"Je suis {sender}, d'AgenC'AI" if sender else "Je vous écris de la part d'AgenC'AI"
+        city = f" à {prospect.city.strip()}" if (getattr(prospect, "city", None) or "").strip() else ""
+        text = _FRANCE[prospect.sector].format(name=f" {first}" if first else "", who=who, city=city)
+        return f"{text} {STOP_LINE}\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}"
     who = f"{sender} d'AgenC'AI" if sender else "AgenC'AI"
     pitch = _PITCH.get(prospect.sector, _PITCH["ONLINE_STORE"])
     # Lot 63 — le lien seul sur la dernière ligne : WhatsApp en fait un aperçu (visuel du secteur) qui ouvre la démo.

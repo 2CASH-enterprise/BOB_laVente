@@ -236,3 +236,51 @@ async def pause_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(g
     campaign.status = "PAUSED"
     await db.commit()
     return await _view(db, campaign)
+
+
+# --- Lot 82 : liens de publication (Facebook, Instagram, LinkedIn, groupes…) ---------------------------------------
+
+class AdLinkIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    channel: str = "FACEBOOK_POST"
+    sector: str | None = None
+
+
+@router.get("/links")
+async def list_ad_links(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import ad_links
+
+    return {"links": await ad_links.overview(db), "channels": ad_links.CHANNELS, "sectors": pros.SECTORS,
+            "facebook_page_url": ad_links.facebook_page_url()}
+
+
+@router.post("/links", status_code=201)
+async def create_ad_link(payload: AdLinkIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+                         db: AsyncSession = Depends(get_db)) -> dict:
+    from app.models.ad_link import AdLink
+    from app.services import ad_links
+
+    if payload.channel not in ad_links.CHANNELS:
+        raise HTTPException(status_code=400, detail="Canal inconnu")
+    if payload.sector and payload.sector not in pros.SECTORS:
+        raise HTTPException(status_code=400, detail="Secteur inconnu")
+    me = await _me(db, admin)
+    link = AdLink(code=ad_links.new_code(payload.name), name=" ".join(payload.name.split()), channel=payload.channel,
+                  sector=payload.sector or None, created_by=me.email)
+    db.add(link)
+    await db.commit()
+    return {"id": str(link.id), "code": link.code, "url": ad_links.url(link)}
+
+
+@router.post("/links/{link_id}/archive")
+async def archive_ad_link(link_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+                          db: AsyncSession = Depends(get_db)) -> dict:
+    """Archiver (le lien ne compte plus rien et ouvre la démo comme un lien ordinaire) ou réactiver."""
+    from app.models.ad_link import AdLink
+
+    link = await db.get(AdLink, link_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="Lien introuvable")
+    link.archived = not link.archived
+    await db.commit()
+    return {"archived": link.archived}

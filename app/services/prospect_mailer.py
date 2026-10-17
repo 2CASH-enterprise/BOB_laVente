@@ -185,7 +185,11 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
            f"Pour ne plus recevoir nos emails : {stop_url(prospect)}")
     personal_line = re.compile(r"^[ \t]*" + re.escape(pros.link(prospect.code, prospect.sector)) + r"[ \t]*$", re.M)
     plain = personal_line.sub(f"{DEMO_BUTTON} : {pros.link(prospect.code, prospect.sector)}", text_body)
-    text = f"{plain}\n\n{SIGNATURE}\n\n--\n{why}\n{legal}"
+    from app.services.ad_links import facebook_page_url
+
+    facebook = facebook_page_url()  # lot 82 : page Facebook de Bob sous la signature
+    follow = f"\nSuivez Bob sur Facebook : {facebook}" if facebook else ""
+    text = f"{plain}\n\n{SIGNATURE}{follow}\n\n--\n{why}\n{legal}"
 
     def paragraph(chunk: str) -> str:
         out = []
@@ -224,7 +228,9 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
             f'font-size:15px;line-height:1.6;color:#13241A;">'
             + "".join(blocks)
             + f'<p style="margin:0 0 22px;font-weight:600;">{escape(SIGNATURE)}</p>'
-            f'<p style="margin:0;padding-top:12px;border-top:1px solid #E3EBE6;font-size:11.5px;line-height:1.5;color:#5B6F65;">'
+            + (f'<p style="margin:-14px 0 22px;font-size:13px;"><a href="{escape(facebook)}" style="color:#1B4332;">'
+               f'Suivez Bob sur Facebook</a></p>' if facebook else "")
+            + f'<p style="margin:0;padding-top:12px;border-top:1px solid #E3EBE6;font-size:11.5px;line-height:1.5;color:#5B6F65;">'
             f'{escape(why.split(" : ")[0])} : <a href="{escape(stop_url(prospect))}" style="color:#5B6F65;">ne plus recevoir nos emails</a>.<br>'
             f'{escape(legal)}</p>{pixel}</div></body></html>')
     return subject, text, html

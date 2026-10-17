@@ -3,6 +3,7 @@ Lot 61 — prospection d'AgenC'AI : le lien personnel /p/CODE (public) et la pag
 Super Admins seulement (authentification séparée de celle des boutiques).
 """
 import json
+from html import escape
 from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
@@ -47,8 +48,7 @@ PREVIEW_TEXTS = {
 
 def _og_tags(sector: str | None, url: str) -> str:
     """Aperçu du lien (WhatsApp, Facebook, LinkedIn…) : titre, texte et visuel du secteur."""
-    from html import escape
-
+    
     title, text = PREVIEW_TEXTS.get(sector or "", PREVIEW_TEXTS["ONLINE_STORE"])
     return (f'<meta name="description" content="{escape(text)}">\n'
             '<meta property="og:type" content="website">\n<meta property="og:site_name" content="Bob de AgenC\'AI">\n'
@@ -67,22 +67,33 @@ _DEMO_PAGE = Path(__file__).resolve().parents[2] / "static" / "instant-demo" / "
 
 
 @public_router.get("/demo/", include_in_schema=False)
-async def demo_page(request: Request, secteur: str | None = None, p: str | None = None,
+async def demo_page(request: Request, secteur: str | None = None, p: str | None = None, src: str | None = None,
                     db: AsyncSession = Depends(get_db)) -> Response:
     """
     Lot 63 — la démo (avant le dossier statique /demo) : ouverte sur le secteur de l'adresse (?secteur=concession).
     Avec ?p=CODE, c'est le lien personnel d'un prospect : clic noté (vrai navigateur seulement), code gardé 30 jours.
     Un robot d'aperçu reçoit la même page avec le titre et le visuel du secteur.
     """
+    from app.services import ad_links
+
     html = _DEMO_PAGE.read_text(encoding="utf-8")
+    # Lot 82 — page Facebook de Bob en fin de démo (lien masqué si le réglage est vide).
+    facebook = ad_links.facebook_page_url()
+    html = html.replace("__FACEBOOK_PAGE_URL__", escape(facebook) if facebook else "")
     prospect = await pros.record_click(db, p, request.headers.get("user-agent")) if p else None
-    sector = pros.sector_from_slug(secteur) or (prospect.sector if prospect is not None else None)
+    ad_link = await ad_links.record_click(db, src, request.headers.get("user-agent"),
+                                          request.cookies.get(ad_links.COOKIE)) if src else None
+    sector = pros.sector_from_slug(secteur) or (prospect.sector if prospect is not None else None) or (
+        ad_link.sector if ad_link is not None else None)
     if sector:
         url = pros.link(prospect.code, sector) if prospect is not None else pros.demo_url(sector)
         html = html.replace("</head>", _og_tags(sector, url) + "</head>", 1)
     response = HTMLResponse(html, headers={"Cache-Control": "no-store"})
     if prospect is not None and not pros.is_bot(request.headers.get("user-agent")):
         _set_cookie(response, prospect)
+    if ad_link is not None:  # lot 82 : déjà filtré (robots, lien archivé)
+        response.set_cookie(ad_links.COOKIE, ad_link.code, max_age=ad_links.COOKIE_DAYS * 86400, httponly=True,
+                            samesite="lax", secure=get_settings().public_base_url.startswith("https"), path="/")
     return response
 
 
