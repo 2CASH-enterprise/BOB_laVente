@@ -805,6 +805,7 @@
       <button data-tab="customers" data-label="Clients" onclick="showTab('customers')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7"/></svg></span>Clients</button>
       <button data-tab="products" data-label="Produits" id="nav-products" onclick="showTab('products')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg></span>Produits</button>
       <button data-tab="orders" data-label="Commandes" class="store-only" onclick="showTab('orders')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4"/></svg></span>Commandes</button>
+      <button data-tab="pige" data-label="Pige" id="nav-pige" class="estate-only" onclick="showTab('pige')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6M11 8v6"/></svg></span>Pige</button>
       <button data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden" onclick="showTab('appointments')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3v3H8z"/></svg></span>Rendez-vous</button>
       <button data-tab="quotes" data-label="Demandes de cotation" id="nav-quotes" class="insurance-only" onclick="showTab('quotes')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6zM9 12l2 2 4-4"/></svg></span>Demandes de cotation</button>
       <button data-tab="contracts" data-label="Contrats" id="nav-contracts" class="insurance-only" onclick="showTab('contracts')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg></span>Contrats</button>
@@ -1044,6 +1045,35 @@
         <button class="action secondary" onclick="editComplaintDelay()">Délai de réponse : <span id="complaint-delay">10</span> jours ouvrés</button>
       </div>
       <div id="complaint-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
+    </section>
+
+    <section id="tab-pige" class="hidden">
+      <template class="page-tip-src">Collez une annonce de particulier que vous avez consultée : Bob en tire la fiche, la compare aux ventes réelles du secteur, lui donne une priorité et vous prépare l'argumentaire d'appel. Bob ne contacte jamais le vendeur lui-même : c'est vous qui appelez.</template>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px;">
+        <div class="card" style="flex: 2; min-width: 300px;">
+          <div class="label" style="margin-bottom: 8px; font-weight: 600;">Ajouter une annonce</div>
+          <textarea id="pige-text" class="input" rows="6" style="resize: vertical;" placeholder="Collez ici le texte complet de l'annonce : titre, description, prix, ville, téléphone…"></textarea>
+          <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 8px;">
+            <input id="pige-url" class="input" type="url" placeholder="Lien de l'annonce (facultatif)">
+            <input id="pige-days" class="input" type="number" min="0" placeholder="Jours en ligne" title="Depuis combien de jours l'annonce est en ligne">
+          </div>
+          <label style="font-size: 13px; display: flex; gap: 6px; align-items: center; margin-top: 8px;"><input type="checkbox" id="pige-dropped"> Le prix a déjà baissé</label>
+          <button class="action" style="margin-top: 10px;" onclick="addPigeListing()">Analyser l'annonce</button>
+          <div id="pige-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+        <div class="card" style="flex: 1; min-width: 260px; font-size: 13px;">
+          <div class="label" style="margin-bottom: 8px; font-weight: 600;">Règles de la pige</div>
+          <ul style="margin: 0; padding-left: 18px; line-height: 1.5;">
+            <li>Appel manuel seulement : pas de SMS, d'email ni de WhatsApp sans l'accord du vendeur.</li>
+            <li>Vérifiez la liste Bloctel avant d'appeler.</li>
+            <li>Dites dès le début où vous avez trouvé son numéro.</li>
+            <li>« Agences s'abstenir » : on n'appelle pas.</li>
+            <li>S'il ne veut plus être contacté : « Ne plus contacter ». Ses données sont effacées.</li>
+          </ul>
+          <p id="pige-quota" style="margin: 10px 0 0; color: var(--muted);"></p>
+        </div>
+      </div>
+      <div id="pige-list"></div>
     </section>
 
     <section id="tab-appointments" class="hidden">
@@ -2769,7 +2799,7 @@ function showTab(name) {
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
-  ["overview", "conversations", "customers", "complaints", "products", "orders", "appointments", "quotes", "contracts", "reports", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
+  ["overview", "conversations", "customers", "complaints", "products", "orders", "pige", "appointments", "quotes", "contracts", "reports", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
@@ -2781,6 +2811,7 @@ function showTab(name) {
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); loadWaTemplates(); }
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
+  if (name === "pige") loadPige();  // lot 81
   if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
@@ -3882,6 +3913,141 @@ async function loadProducts() {
     .join("") || "<tr><td colspan='7'>Aucun produit</td></tr>";
   loadQrCodes();
   if (currentBusinessType === "REAL_ESTATE") loadPropertyAlerts();  // lot 80
+}
+
+// ---- Lot 81 : assistant de pige ----
+let pigeSettings = null;
+let pigeListings = [];
+const PIGE_STATUSES = { A_APPELER: "À appeler", PAS_JOINT: "Pas joint", A_RAPPELER: "À rappeler", RDV: "Rendez-vous d'estimation",
+  MANDAT: "Mandat signé", PAS_INTERESSE: "Pas intéressé", OPPOSITION: "Ne plus contacter" };
+const PIGE_TONES = { HAUTE: "tone-success", MOYENNE: "tone-warning", BASSE: "tone-info", NE_PAS_APPELER: "tone-danger" };
+
+async function loadPige() {
+  const list = document.getElementById("pige-list");
+  try { pigeSettings = await api("/api/v1/pige/settings"); } catch (e) { list.textContent = e.message; return; }
+  if (!pigeSettings.available) {
+    list.innerHTML = `<div class="card"><p style="margin: 0;">${esc(pigeSettings.message)}</p></div>`;
+    document.getElementById("pige-quota").textContent = "";
+    return;
+  }
+  const s = pigeSettings;
+  document.getElementById("pige-quota").textContent = (s.quota === null ? `${s.used} annonce${s.used > 1 ? "s" : ""} ce mois-ci (sans plafond)` : `${s.used} / ${s.quota} annonces ce mois-ci`)
+    + (s.pro ? (s.ai ? " · lecture par l'IA" : "") + " · rapprochement avec vos acheteurs" : "");
+  list.innerHTML = "<p class='loading-text'>Chargement</p>";
+  try { pigeListings = await api("/api/v1/pige"); } catch (e) { list.textContent = e.message; return; }
+  list.innerHTML = pigeListings.length ? pigeListings.map(pigeCard).join("") : `<div class="card"><p style="margin: 0; color: var(--muted);">Aucune annonce pour l'instant. Collez la première ci-dessus.</p></div>`;
+}
+
+function pigeFacts(l) {
+  const money = l.price ? `${Number(l.price).toLocaleString("fr-FR")} €${l.transaction === "LOCATION" ? " / mois" : ""}` : null;
+  return [l.transaction_label, l.property_label, l.rooms ? `${l.rooms} p.` : null, l.surface ? `${l.surface} m²` : null, money,
+    [l.city, l.postal_code].filter(Boolean).join(" ") || null, l.dpe ? `DPE ${l.dpe}` : null].filter(Boolean).join(" · ");
+}
+
+function pigeCard(l) {
+  const a = l.analysis || {};
+  const dvf = a.dvf;
+  const dvfLine = !dvf ? "" : dvf.status === "OK"
+    ? `<div style="margin-top: 6px;">Ventes du secteur : <strong>${Number(dvf.median_m2).toLocaleString("fr-FR")} €/m²</strong> en médiane (${dvf.count} ventes, ${esc(dvf.period)} ; la moitié entre ${Number(dvf.low_m2).toLocaleString("fr-FR")} et ${Number(dvf.high_m2).toLocaleString("fr-FR")} €/m²). Annonce : ${Number(dvf.listing_m2).toLocaleString("fr-FR")} €/m² (${dvf.delta_pct > 0 ? "+" : ""}${dvf.delta_pct} %).<div style="font-size: 11px; color: var(--muted);">${esc(dvf.note)}</div></div>`
+    : `<div style="margin-top: 6px; color: var(--muted);">${esc(dvf.message)}</div>`;
+  const due = l.next_call_at ? `<span style="font-size: 12px;"> · rappel le ${new Date(l.next_call_at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>` : "";
+  return `<div class="card" style="margin-bottom: 12px; font-size: 13px;" id="pige-${l.id}">
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <strong style="font-size: 14px;">${esc(l.title || "Annonce")}</strong>
+      ${a.priority ? `<span class="pill ${PIGE_TONES[a.priority] || ""}" style="height: 22px; font-size: 11px; padding: 0 8px;">${esc(a.priority_label)}</span>` : ""}
+      <span class="pill tone-accent" style="height: 22px; font-size: 11px; padding: 0 8px;">${esc(l.status_label)}</span>${due}
+      ${l.source_url ? `<a href="${esc(l.source_url)}" target="_blank" rel="noopener" style="margin-left: auto;">${esc(l.site || "Voir l'annonce")}</a>` : ""}
+    </div>
+    <div style="margin-top: 4px;">${esc(pigeFacts(l)) || "<span style='color: var(--muted);'>Fiche à compléter</span>"}</div>
+    ${l.owner_phone || l.owner_name ? `<div style="margin-top: 4px;">Vendeur : ${esc([l.owner_name, l.owner_phone].filter(Boolean).join(" · "))}</div>` : ""}
+    ${a.reasons && a.reasons.length ? `<div style="margin-top: 4px; color: var(--muted);">${esc(a.reasons.join(" · "))}</div>` : ""}
+    ${dvfLine}
+    ${a.buyers && a.buyers.length ? `<div style="margin-top: 6px;">Acheteurs de votre base : ${esc(a.buyers.join(", "))}</div>` : ""}
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+      ${l.status !== "OPPOSITION" && a.priority !== "NE_PAS_APPELER" ? `<button class="action" onclick="togglePigeScript(${jsArg(l.id)})">Argumentaire d'appel</button>` : ""}
+      ${l.status !== "OPPOSITION" ? `<button class="action secondary" onclick="togglePigeEdit(${jsArg(l.id)})">Suivi et fiche</button>` : ""}
+      ${l.status !== "OPPOSITION" ? `<button class="action secondary" onclick="deletePige(${jsArg(l.id)})">Supprimer</button>` : ""}
+    </div>
+    <div id="pige-script-${l.id}" class="hidden" style="margin-top: 10px;"></div>
+    <div id="pige-edit-${l.id}" class="hidden" style="margin-top: 10px;"></div>
+  </div>`;
+}
+
+async function togglePigeScript(id) {
+  const box = document.getElementById(`pige-script-${id}`);
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  box.innerHTML = "<p class='loading-text'>Chargement</p>";
+  try {
+    const sc = await api(`/api/v1/pige/${id}/script`);
+    box.innerHTML = `<div style="background: var(--warning-soft); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px;">${sc.before.map(esc).join("<br>")}</div>`
+      + (sc.blocked ? `<p style="color: var(--danger);">Ne pas appeler : ${esc(sc.blocked)}</p>`
+        : sc.steps.map((st) => `<div style="margin-bottom: 8px;"><div class="label" style="font-size: 12px; font-weight: 600;">${esc(st.title)}</div><div>${esc(st.text)}</div></div>`).join(""));
+  } catch (e) { box.textContent = e.message; }
+}
+
+function togglePigeEdit(id) {
+  const box = document.getElementById(`pige-edit-${id}`);
+  if (!box.classList.contains("hidden")) { box.classList.add("hidden"); return; }
+  const l = pigeListings.find((x) => x.id === id);
+  const field = (key, label, type = "text", value = l[key]) => `<div><label for="pige-${key}-${id}" style="font-size: 12px; color: var(--muted); display: block;">${label}</label><input id="pige-${key}-${id}" class="input" type="${type}" value="${esc(value ?? "")}"></div>`;
+  const select = (key, label, options, value) => `<div><label for="pige-${key}-${id}" style="font-size: 12px; color: var(--muted); display: block;">${label}</label><select id="pige-${key}-${id}" class="input">${options.map(([v, t]) => `<option value="${esc(v)}" ${v === (value || "") ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></div>`;
+  const local = l.next_call_at ? new Date(new Date(l.next_call_at).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
+  box.innerHTML = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px;">
+      ${select("status", "Suivi", Object.entries(PIGE_STATUSES), l.status)}
+      ${field("next_call_at", "Rappeler le", "datetime-local", local)}
+      ${select("transaction", "Vente ou location", [["", "—"], ["VENTE", "Vente"], ["LOCATION", "Location"]], l.transaction)}
+      ${select("property_type", "Type de bien", [["", "—"], ["APPARTEMENT", "Appartement"], ["MAISON", "Maison"], ["TERRAIN", "Terrain"], ["LOCAL", "Local"], ["PARKING", "Parking"], ["AUTRE", "Autre"]], l.property_type)}
+      ${field("price", "Prix ou loyer (€)", "number")}${field("surface", "Surface (m²)", "number")}${field("rooms", "Pièces", "number")}
+      ${field("city", "Ville")}${field("postal_code", "Code postal")}${field("dpe", "DPE (A à G)")}
+      ${field("owner_name", "Nom du vendeur")}${field("owner_phone", "Téléphone")}${field("online_days", "En ligne depuis (jours)", "number")}
+    </div>
+    <label style="font-size: 13px; display: flex; gap: 6px; align-items: center; margin-top: 8px;"><input type="checkbox" id="pige-price_dropped-${id}" ${l.price_dropped ? "checked" : ""}> Le prix a déjà baissé</label>
+    <label style="font-size: 13px; display: flex; gap: 6px; align-items: center; margin-top: 4px;"><input type="checkbox" id="pige-no_agency-${id}" ${l.no_agency ? "checked" : ""}> L'annonce refuse les agences</label>
+    <textarea id="pige-notes-${id}" class="input" rows="2" style="margin-top: 8px; resize: vertical;" placeholder="Notes de l'appel">${esc(l.notes || "")}</textarea>
+    <button class="action" style="margin-top: 8px;" onclick="savePige(${jsArg(id)})">Enregistrer</button>
+    <span id="pige-save-msg-${id}" style="margin-left: 8px; font-size: 13px;"></span>`;
+  box.classList.remove("hidden");
+}
+
+async function savePige(id) {
+  const msg = document.getElementById(`pige-save-msg-${id}`);
+  const v = (key) => document.getElementById(`pige-${key}-${id}`).value.trim();
+  const status = v("status");
+  if (status === "OPPOSITION" && !(await bobConfirm("Ne plus contacter ce vendeur ?", "Ses informations seront effacées ; seule une empreinte de son numéro reste, pour ne jamais le rappeler.", { confirmLabel: "Ne plus contacter", danger: true }))) return;
+  const body = { status, transaction: v("transaction") || null, property_type: v("property_type") || null, city: v("city") || null,
+    postal_code: v("postal_code") || null, dpe: v("dpe").toUpperCase() || null, owner_name: v("owner_name") || null, owner_phone: v("owner_phone") || null,
+    price: v("price") || null, surface: v("surface") || null, rooms: v("rooms") ? parseInt(v("rooms"), 10) : null,
+    online_days: v("online_days") ? parseInt(v("online_days"), 10) : null, notes: v("notes") || null,
+    next_call_at: v("next_call_at") ? new Date(v("next_call_at")).toISOString() : null,
+    price_dropped: document.getElementById(`pige-price_dropped-${id}`).checked, no_agency: document.getElementById(`pige-no_agency-${id}`).checked };
+  try {
+    await api(`/api/v1/pige/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast("Enregistré.");
+    loadPige();
+  } catch (e) { msg.style.color = "var(--danger)"; msg.textContent = e.message; }
+}
+
+async function addPigeListing() {
+  const msg = document.getElementById("pige-msg");
+  const text = document.getElementById("pige-text").value.trim();
+  if (text.length < 30) { msg.style.color = "var(--danger)"; msg.textContent = "Collez le texte complet de l'annonce."; return; }
+  msg.style.color = "var(--muted)"; msg.textContent = "Analyse…";
+  const days = document.getElementById("pige-days").value;
+  try {
+    await api("/api/v1/pige", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      text, url: document.getElementById("pige-url").value.trim() || null, online_days: days ? parseInt(days, 10) : null,
+      price_dropped: document.getElementById("pige-dropped").checked }) });
+    ["pige-text", "pige-url", "pige-days"].forEach((i) => (document.getElementById(i).value = ""));
+    document.getElementById("pige-dropped").checked = false;
+    msg.style.color = "var(--success)"; msg.textContent = "Annonce ajoutée : vérifiez la fiche, puis ouvrez l'argumentaire.";
+    loadPige();
+  } catch (e) { msg.style.color = "var(--danger)"; msg.textContent = e.message; }
+}
+
+async function deletePige(id) {
+  if (!(await bobConfirm("Supprimer cette annonce ?", "Elle sera retirée de votre pige.", { confirmLabel: "Supprimer", danger: true }))) return;
+  try { await api(`/api/v1/pige/${id}`, { method: "DELETE" }); loadPige(); } catch (e) { toast(e.message, "error"); }
 }
 
 // ---- Lot 80 : alertes « nouveau bien » et bailleurs en DPE F ou G ----

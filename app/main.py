@@ -28,6 +28,7 @@ from app.api.unsubscribe.routes import router as unsubscribe_router
 from app.api.appointments.routes import router as appointments_router
 from app.api.quotes.routes import router as quotes_router  # lot 53
 from app.api.property_alerts.routes import router as property_alerts_router  # lot 80
+from app.api.pige.routes import router as pige_router  # lot 81
 from app.api.contracts.routes import router as contracts_router  # lot 55
 from app.api.complaints.routes import router as complaints_router  # lot 57
 from app.api.dossier.routes import router as dossier_router  # lot 58
@@ -101,6 +102,7 @@ app.include_router(unsubscribe_router)
 app.include_router(appointments_router)
 app.include_router(quotes_router)
 app.include_router(property_alerts_router)
+app.include_router(pige_router)
 app.include_router(contracts_router)
 app.include_router(complaints_router)
 app.include_router(dossier_router)

@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     mistral_model: str = "mistral-large-latest"
     # Classificateur de messages (phase 1) : petit modèle rapide, appel séparé, jamais bloquant.
     mistral_classifier_model: str = "mistral-small-latest"
+    # Lot 81 — ventes réelles DVF (data.gouv.fr, licence ouverte) : un fichier par année et par département,
+    # {dvf_base_url}/{année}/departements/{département}.csv.gz
+    dvf_base_url: str = "https://files.data.gouv.fr/geo-dvf/latest/csv"
     classifier_timeout_seconds: float = 5.0
     max_tool_iterations: int = 5
     # Nouveaux essais du modèle principal sur erreur passagère (secondes d'attente avant chacun).

@@ -70,6 +70,8 @@ TASK_LABELS = {
     "app.workers.coexistence_sync.retry_syncs_task": "Numéro partagé : contacts et historique du téléphone",
     "app.workers.catalog_sync.sync_shopify_task": "Catalogues Shopify (prix, stock, variantes)",
     "app.workers.property_alerts.run_alerts_task": "Alertes « nouveau bien » (agences immobilières)",
+    "app.workers.pige.refresh_dvf_task": "Pige : chargement des ventes DVF",
+    "app.workers.pige.purge_listings_task": "Pige : effacement des annonces après 6 mois",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).
