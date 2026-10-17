@@ -82,6 +82,7 @@ SEND_SITES = {
     "services/appointment_service.py": 1,  # messages fixes : ensure_reply_window_open (puis email)
     "api/orders/routes.py": 2,          # reçu et annulation : customer_window_open (sinon email)
     "services/wa_templates.py": 1,      # lot 68 : modèle APPROUVÉ par Meta (seul envoi permis hors fenêtre), Utilitaire
+    "services/property_alerts.py": 3,   # lot 80 : alerte « nouveau bien » : customer_window_open juste avant l'envoi
 }
 
 
@@ -111,6 +112,12 @@ def test_proactive_sends_check_the_20h_window():
     assert fixed.index("ensure_reply_window_open(") < fixed.index(".send_text_message(")
     replies = (ROOT / "api/messages/routes.py").read_text(encoding="utf-8")
     assert replies.index("ensure_reply_window_open(") < replies.index(".send_text_message(")
+
+
+def test_property_alert_checks_the_20h_window_before_sending():
+    source = (ROOT / "services/property_alerts.py").read_text(encoding="utf-8")
+    sender = source[source.index("async def _send_whatsapp("):source.index("def _email(")]
+    assert sender.index("customer_window_open(") < sender.index(".send_text_message(")
 
 
 def test_relances_never_use_whatsapp():

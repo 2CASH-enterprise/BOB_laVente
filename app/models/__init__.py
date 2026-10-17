@@ -71,3 +71,4 @@ from app.models.prospect import ProspectCampaign, ProspectEmail, ProspectionSett
 from app.models.preregistration import PlatformSettings, PreregistrationFile  # noqa: F401 — lot 65
 from app.models.monitoring import MonitorIssue, MonitorOccurrence  # noqa: F401 — lot 67
 from app.models.whatsapp_template import WhatsAppTemplate  # noqa: F401 — lot 68
+from app.models.property_alert import PropertyAlert  # noqa: F401 — lot 80

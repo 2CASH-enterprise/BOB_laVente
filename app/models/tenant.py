@@ -4,6 +4,7 @@ from enum import StrEnum
 
 from sqlalchemy import JSON, Date, DateTime, Enum, Numeric, String, Text, Uuid, func
 from sqlalchemy import true as sa_true
+from sqlalchemy import false as sa_false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -95,6 +96,9 @@ class Tenant(Base):
     # financière, activités (vente, location, gestion), secteur couvert, lien vers le barème d'honoraires, médiateur.
     # Clés et valeurs vérifiées par app/services/real_estate.py ; Bob les donne, ne les invente jamais.
     real_estate_profile: Mapped[dict | None] = mapped_column(JSON)
+    # Lot 80 — alertes « nouveau bien » (plan Pro) : envoi automatique, et modèles WhatsApp payants hors 20 h.
+    property_alerts_auto: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
+    property_alert_templates: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 65 — pré-inscription (avant le lancement) : compte créé pendant le « mode pré-inscription ». Tant que

@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, REAL_ESTATE, normalize
+from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, REAL_ESTATE, normalize  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,17 @@ CATALOG = {
             "Un souci avec la commande ? Réponds simplement à ce message.",
         "example": ["Awa", "3F2A1B4C", "Boutique Awa"],
     },
+    # Lot 80 — alerte « nouveau bien » : modèle MARKETING (payant), réservé au plan Pro ; seulement aux contacts qui
+    # ont accepté d'être prévenus. Hors Pro, l'alerte part par email (ou par WhatsApp gratuit dans les 20 h).
+    "nouveau_bien": {
+        "label": "Nouveau bien pour un acheteur ou un locataire",
+        "sectors": (REAL_ESTATE,),
+        "category": "MARKETING",
+        "plans": ("PRO", "ENTERPRISE"),
+        VOUS: "Bonjour {{1}}, un bien de {{2}} correspond à votre recherche : {{3}}. Pour en savoir plus ou le "
+              "visiter, répondez simplement à ce message. Pour ne plus recevoir ces alertes, répondez STOP.",
+        "example": ["Claire", "Agence du Parc", "T3 lumineux avec balcon (À louer · 3 pièces · 68 m² · Lyon 3e)"],
+    },
 }
 
 STATUS_LABELS = {
@@ -105,9 +116,20 @@ def forms_for(tenant) -> tuple[str, ...]:
     return (VOUS, TU) if normalize(getattr(tenant, "business_type", None)) == ONLINE_STORE else (VOUS,)
 
 
+def category_of(key: str) -> str:
+    """Lot 80 : « UTILITY » sauf mention contraire (l'alerte « nouveau bien » est un modèle MARKETING)."""
+    return CATALOG[key].get("category", CATEGORY)
+
+
+def _plan_ok(tenant, spec: dict) -> bool:
+    plan = getattr(getattr(tenant, "plan", None), "value", getattr(tenant, "plan", None))
+    return "plans" not in spec or plan in spec["plans"]
+
+
 def wanted(tenant) -> list[tuple[str, str]]:
     sector = normalize(getattr(tenant, "business_type", None))
-    return [(key, form) for key, spec in CATALOG.items() if sector in spec["sectors"] for form in forms_for(tenant)]
+    return [(key, form) for key, spec in CATALOG.items() if sector in spec["sectors"] and _plan_ok(tenant, spec)
+            for form in forms_for(tenant)]
 
 
 def form_of(tenant) -> str:
@@ -129,7 +151,7 @@ def create_payload(key: str, form: str) -> dict:
         components.append({"type": "BUTTONS", "buttons": [{
             "type": "URL", "text": PAY_BUTTON, "url": pay_url("{{1}}"), "example": [pay_url("K7P2QX9M3D")],
         }]})
-    return {"name": template_name(key, form), "language": LANGUAGE, "category": CATEGORY, "components": components}
+    return {"name": template_name(key, form), "language": LANGUAGE, "category": category_of(key), "components": components}
 
 
 def clean_value(value) -> str:
@@ -187,7 +209,8 @@ async def rows_of(db, tenant_id) -> dict:
 def _apply_remote(row, remote: dict) -> None:
     row.meta_id = str(remote.get("id") or row.meta_id or "")[:64] or None
     row.status = str(remote.get("status") or row.status or "PENDING")[:16]
-    row.category = str(remote.get("category") or row.category or CATEGORY)[:16]
+    default = category_of(row.key) if getattr(row, "key", None) in CATALOG else CATEGORY  # lot 80 : modèle marketing
+    row.category = str(remote.get("category") or row.category or default)[:16]
     reason = remote.get("rejected_reason")
     row.reason = None if not reason or reason == "NONE" else str(reason)[:300]
 
@@ -348,7 +371,9 @@ async def approved(db, tenant, key: str):
         return None
     row = (await db.execute(select(WhatsAppTemplate).where(
         WhatsAppTemplate.tenant_id == tenant.id, WhatsAppTemplate.name == template_name(key, form_of(tenant))))).scalar_one_or_none()
-    if row is None or row.status != "APPROVED" or (row.category or CATEGORY) != CATEGORY:
+    if row is None or row.status != "APPROVED" or (row.category or category_of(key)) != category_of(key):
+        return None
+    if not _plan_ok(tenant, CATALOG[key]):  # lot 80 : modèle payant réservé à certains plans
         return None
     return row
 

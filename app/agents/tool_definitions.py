@@ -294,6 +294,8 @@ TOOL_DEFINITIONS = [
                 "rooms": {"type": "integer", "description": "Vente, gestion : nombre de pièces de son bien"},
                 "occupancy": {"type": "string", "enum": ["LIBRE", "LOUE", "OCCUPE_PROPRIETAIRE"],
                               "description": "Vente, gestion : bien libre, loué ou occupé par le propriétaire"},
+                "dpe": {"type": "string", "enum": list("ABCDEFG"),
+                        "description": "Vente, gestion : classe DPE de son bien, seulement s'il la connaît"},
                 "criteria": {"type": "string", "description": "Autres critères importants, avec ses mots (jardin, calme…)"},
             },
             "required": ["project"],

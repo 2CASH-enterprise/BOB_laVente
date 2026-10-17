@@ -91,7 +91,7 @@ def test_texts_are_the_validated_ones():
 @pytest.mark.parametrize("key", list(wt.CATALOG))
 def test_catalog_respects_meta_rules(key):
     spec = wt.CATALOG[key]
-    for form in (wt.VOUS, wt.TU):
+    for form in (f for f in (wt.VOUS, wt.TU) if f in spec):  # lot 80 : « nouveau bien » n'existe qu'au vouvoiement
         text = spec[form]
         numbers = [int(n) for n in re.findall(r"\{\{(\d+)\}\}", text)]
         assert numbers == list(range(1, len(numbers) + 1)) == list(range(1, len(spec["example"]) + 1))
@@ -99,7 +99,7 @@ def test_catalog_respects_meta_rules(key):
         assert "}}{{" not in text.replace(" ", "") and "prix" not in text.lower() and "promo" not in text.lower()
         payload = wt.create_payload(key, form)
         assert payload["name"] == f"bob_{key}_{form.lower()}" and re.fullmatch(r"[a-z0-9_]+", payload["name"])
-        assert payload["category"] == "UTILITY" and payload["language"] == "fr"
+        assert payload["category"] == ("MARKETING" if key == "nouveau_bien" else "UTILITY") and payload["language"] == "fr"
         assert payload["components"][0]["example"]["body_text"] == [spec["example"]]
     if spec.get("button"):
         button = wt.create_payload(key, wt.VOUS)["components"][1]["buttons"][0]

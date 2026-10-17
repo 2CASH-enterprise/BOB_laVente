@@ -153,7 +153,10 @@ def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:
             messages.append({"role": "assistant", "content": strip_powered_by(msg.content)})
         elif msg.sender == MessageSender.HUMAN:
             messages.append({"role": "assistant", "content": msg.content})
-        # SYSTEM : non inclus dans l'historique de dialogue
+        elif msg.sender == MessageSender.SYSTEM and getattr(msg, "message_type", None) == "property_alert":
+            # Lot 80 : l'alerte « nouveau bien » envoyée au client — Bob doit savoir de quel bien il parle s'il répond.
+            messages.append({"role": "assistant", "content": msg.content})
+        # Autres SYSTEM : non inclus dans l'historique de dialogue
     return messages
 
 

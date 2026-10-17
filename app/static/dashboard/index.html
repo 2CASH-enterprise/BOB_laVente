@@ -946,6 +946,16 @@
           <div id="csv-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
       </div>
+      <div class="estate-only" style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
+        <div class="card" style="flex: 1; min-width: 280px;" id="alerts-card">
+          <div class="label" style="margin-bottom: 8px; font-weight: 600;">Alertes « nouveau bien »<button class="tip"></button><span class="tip-bubble" hidden>Quand vous ajoutez un bien (ou baissez son prix), Bob le compare aux projets d'achat et de location de vos contacts. Seuls ceux qui ont accepté d'être prévenus le reçoivent : par WhatsApp (gratuit) s'ils vous ont écrit il y a moins de 20 h, sinon par email. Jamais deux fois le même bien, deux alertes par semaine au plus.</span></div>
+          <div id="alerts-settings" style="font-size: 13px;"></div>
+        </div>
+        <div class="card" style="flex: 1; min-width: 280px;" id="dpe-card">
+          <div class="label" style="margin-bottom: 8px; font-weight: 600;">Bailleurs à rappeler : DPE F ou G<button class="tip"></button><span class="tip-bubble" hidden>Les logements classés G ne peuvent plus être loués (nouveau bail ou renouvellement) depuis le 1er janvier 2025 ; les F à partir du 1er janvier 2028. Bob note la classe DPE quand un propriétaire la donne. Rien n'est envoyé automatiquement : à vous d'appeler.</span></div>
+          <div id="dpe-owners" style="font-size: 13px;"></div>
+        </div>
+      </div>
       <table>
         <thead><tr><th>Nom</th><th>Référence</th><th class="no-insurance">Prix</th><th class="no-insurance" id="products-stock-head">Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
         <tbody id="product-rows"></tbody>
@@ -3859,17 +3869,95 @@ async function loadProducts() {
   rows.innerHTML = allProducts
     .map(
       (p) => `<tr>
-        <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}${p.bob_category ? `<div style="font-size: 12px; color: var(--muted);">${esc((sheetCategory(p.bob_category) || {}).label || "")}${p.sheet_completeness !== null && p.sheet_completeness !== undefined ? ` · <span class="sheet-score" style="color: ${p.sheet_completeness >= 80 ? "var(--success)" : p.sheet_completeness >= 50 ? "var(--warning)" : "var(--danger)"};">fiche ${p.sheet_completeness} %</span>` : ""}</div>` : ""}</td>
+        <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}${p.bob_category ? `<div style="font-size: 12px; color: var(--muted);">${esc((sheetCategory(p.bob_category) || {}).label || "")}${p.sheet_completeness !== null && p.sheet_completeness !== undefined ? ` · <span class="sheet-score" style="color: ${p.sheet_completeness >= 80 ? "var(--success)" : p.sheet_completeness >= 50 ? "var(--warning)" : "var(--danger)"};">fiche ${p.sheet_completeness} %</span>` : ""}</div>` : ""}${currentBusinessType === "REAL_ESTATE" ? `<div id="alert-link-${p.id}"></div>` : ""}</td>
         <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix" class="no-insurance">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
         <td data-label="${currentBusinessType === "REAL_ESTATE" ? "Disponible" : "Stock"}" class="no-insurance">${currentBusinessType === "REAL_ESTATE" ? (p.stock_quantity > 0 ? "Oui" : "Non") : p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
         <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel(${jsArg(p.id)})">Gérer</button></td>
         <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel(${jsArg(p.id)})">Modifier</button></td>
       </tr>
       <tr id="upsell-row-${p.id}" class="hidden"><td colspan="7"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>
-      <tr id="edit-row-${p.id}" class="hidden"><td colspan="7"><div id="edit-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
+      <tr id="edit-row-${p.id}" class="hidden"><td colspan="7"><div id="edit-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>
+      <tr id="alert-row-${p.id}" class="hidden"><td colspan="7"><div id="alert-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>`
     )
     .join("") || "<tr><td colspan='7'>Aucun produit</td></tr>";
   loadQrCodes();
+  if (currentBusinessType === "REAL_ESTATE") loadPropertyAlerts();  // lot 80
+}
+
+// ---- Lot 80 : alertes « nouveau bien » et bailleurs en DPE F ou G ----
+let alertSettings = null;
+
+async function loadPropertyAlerts() {
+  const box = document.getElementById("alerts-settings");
+  try { alertSettings = await api("/api/v1/property-alerts/settings"); } catch (e) { box.textContent = e.message; return; }
+  const s = alertSettings;
+  if (!s.available) {
+    box.innerHTML = `<p style="color: var(--muted); margin: 0;">${esc(s.message)}</p>`;
+  } else {
+    const quota = s.quota === null ? `${s.used} alerte${s.used > 1 ? "s" : ""} ce mois-ci (sans plafond)` : `${s.used} / ${s.quota} alertes ce mois-ci`;
+    box.innerHTML = `<p style="margin: 0 0 8px;">${esc(quota)}</p>` + (s.pro ? `
+      <label style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;"><input type="checkbox" id="alerts-auto" ${s.auto ? "checked" : ""} onchange="savePropertyAlertSettings()"> Envoi automatique (entre 9 h et 20 h)</label>
+      <label style="display: flex; gap: 8px; align-items: center;"><input type="checkbox" id="alerts-templates" ${s.templates ? "checked" : ""} onchange="savePropertyAlertSettings()"> Modèle WhatsApp payant pour les contacts sans email (environ 0,14 $ par message, facturé par Meta)</label>
+      ${s.templates && !s.template_approved ? `<p style="color: var(--warning); margin: 6px 0 0;">Le modèle « Nouveau bien » n'est pas encore approuvé par Meta (Intégrations → Modèles WhatsApp).</p>` : ""}`
+      : `<p style="color: var(--muted); margin: 0;">Vous choisissez à qui envoyer, bien par bien (bouton « Correspond à… » dans la liste). Envoi automatique et WhatsApp hors 20 h : plan Pro.</p>`);
+    try {
+      const counts = await api("/api/v1/property-alerts/counts");
+      Object.entries(counts).forEach(([id, c]) => {
+        const cell = document.getElementById(`alert-link-${id}`);
+        if (cell) cell.innerHTML = `<button class="action secondary" style="font-size: 12px; padding: 3px 8px; margin-top: 4px;" onclick="togglePropertyAlertPanel(${jsArg(id)})">Correspond à ${c.matches} contact${c.matches > 1 ? "s" : ""}${c.ready ? ` · ${c.ready} à prévenir` : ""}</button>`;
+      });
+    } catch (e) { /* les biens restent affichés */ }
+  }
+  const dpe = document.getElementById("dpe-owners");
+  if (!alertSettings.pro) { dpe.innerHTML = `<p style="color: var(--muted); margin: 0;">Disponible avec le plan Pro.</p>`; return; }
+  try {
+    const { items } = await api("/api/v1/property-alerts/dpe-owners");
+    dpe.innerHTML = items.length ? items.map((o) => `<div style="padding: 6px 0; border-bottom: 1px solid var(--border);">
+        <strong>${esc(o.customer)}</strong>${o.phone ? ` · ${esc(o.phone)}` : ""} <span class="pill ${o.dpe === "G" ? "tone-danger" : "tone-warning"}" style="height: 22px; font-size: 11px; padding: 0 8px;">DPE ${esc(o.dpe)}</span>
+        <div style="color: var(--muted);">${esc(o.project)}</div><div style="font-size: 12px;">${esc(o.deadline)}</div>
+        ${o.conversation_id ? `<button class="action secondary" style="font-size: 12px; padding: 4px 10px; margin-top: 4px;" onclick="jumpToCustomerConversation(${jsArg(o.conversation_id)})">Ouvrir la conversation</button>` : ""}</div>`).join("")
+      : `<p style="color: var(--muted); margin: 0;">Aucun propriétaire avec un logement F ou G pour l'instant.</p>`;
+  } catch (e) { dpe.textContent = e.message; }
+}
+
+async function savePropertyAlertSettings() {
+  try {
+    alertSettings = await api("/api/v1/property-alerts/settings", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auto: document.getElementById("alerts-auto").checked, templates: document.getElementById("alerts-templates").checked }) });
+    toast("Enregistré.");
+    loadPropertyAlerts();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function togglePropertyAlertPanel(productId) {
+  const row = document.getElementById(`alert-row-${productId}`);
+  const wasHidden = row.classList.contains("hidden");
+  document.querySelectorAll("[id^='edit-row-'], [id^='upsell-row-'], [id^='alert-row-']").forEach((r) => r.classList.add("hidden"));
+  if (!wasHidden) return;
+  row.classList.remove("hidden");
+  const panel = document.getElementById(`alert-panel-${productId}`);
+  panel.innerHTML = "<p class='loading-text'>Chargement</p>";
+  try {
+    const data = await api(`/api/v1/property-alerts/products/${productId}`);
+    const list = data.items.map((i) => `<div style="padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px;">
+        <strong>${esc(i.customer)}</strong>${i.price_drop ? ` <span class="pill tone-info" style="height: 22px; font-size: 11px; padding: 0 8px;">baisse de prix</span>` : ""}
+        <div style="color: var(--muted);">${esc(i.project)}</div>
+        <div>${i.blocked ? `<span style="color: var(--muted);">Non prévenu : ${esc(i.blocked)}</span>` : `Par ${esc(i.channel_label)}`}</div></div>`).join("");
+    const quota = data.quota_left === null ? "" : ` (${data.quota_left} alerte${data.quota_left > 1 ? "s" : ""} restante${data.quota_left > 1 ? "s" : ""} ce mois-ci)`;
+    panel.innerHTML = `<div style="max-width: 640px;">${list || "<p>Aucun contact ne correspond.</p>"}
+      ${data.ready ? `<button class="action" style="margin-top: 10px;" onclick="sendPropertyAlerts(${jsArg(productId)})">Prévenir ${data.ready} contact${data.ready > 1 ? "s" : ""}</button><span style="font-size: 12px; color: var(--muted); margin-left: 8px;">${esc(quota)}</span>` : ""}
+      <div id="alert-msg-${productId}" style="margin-top: 8px; font-size: 13px;"></div></div>`;
+  } catch (e) { panel.textContent = e.message; }
+}
+
+async function sendPropertyAlerts(productId) {
+  const msg = document.getElementById(`alert-msg-${productId}`);
+  try {
+    const r = await api(`/api/v1/property-alerts/products/${productId}/send`, { method: "POST" });
+    msg.style.color = "var(--success)";
+    msg.textContent = `${r.sent} contact${r.sent > 1 ? "s" : ""} prévenu${r.sent > 1 ? "s" : ""}.` + (r.failed ? ` ${r.failed} envoi(s) impossible(s).` : "") + (r.quota_reached ? " Plafond du mois atteint." : "");
+    loadPropertyAlerts();
+  } catch (e) { msg.style.color = "var(--danger)"; msg.textContent = e.message; }
 }
 
 function toggleEditPanel(productId) {

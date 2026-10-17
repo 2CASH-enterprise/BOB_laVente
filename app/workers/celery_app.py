@@ -33,6 +33,7 @@ TASK_MODULES = [
     "app.workers.wa_templates",
     "app.workers.plan_quota",
     "app.workers.coexistence_sync",
+    "app.workers.property_alerts",  # lot 80
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -94,6 +95,11 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=3, minute=40),
     },
     # Lot 62 — emails de prospection : un email toutes les 3 minutes au plus (plafond et heures d'envoi vérifiés).
+    # Lot 80 — alertes « nouveau bien » automatiques (agences Pro qui les ont activées), entre 9 h et 20 h.
+    "property-alerts": {
+        "task": "app.workers.property_alerts.run_alerts_task",
+        "schedule": crontab(minute="*/30"),
+    },
     "prospect-emails": {
         "task": "app.workers.prospect_emails.send_prospect_email_task",
         "schedule": crontab(minute="*/3"),

@@ -69,6 +69,7 @@ TASK_LABELS = {
     "app.workers.plan_quota.check_quotas_task": "Plafonds des formules : alertes",
     "app.workers.coexistence_sync.retry_syncs_task": "Numéro partagé : contacts et historique du téléphone",
     "app.workers.catalog_sync.sync_shopify_task": "Catalogues Shopify (prix, stock, variantes)",
+    "app.workers.property_alerts.run_alerts_task": "Alertes « nouveau bien » (agences immobilières)",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).

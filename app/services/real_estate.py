@@ -110,6 +110,7 @@ FINANCING = {"ACCORD_BANCAIRE": "accord bancaire obtenu", "EN_COURS": "financeme
 FURNISHED = {"MEUBLE": "meublé", "VIDE": "vide", "INDIFFERENT": "meublé ou vide"}
 GUARANTORS = {"GARANT": "avec garant", "VISALE": "garantie Visale", "AUCUN": "sans garant"}
 OCCUPANCY = {"LIBRE": "libre", "LOUE": "loué", "OCCUPE_PROPRIETAIRE": "occupé par le propriétaire"}
+DPE_CLASSES = {c: f"DPE {c}" for c in "ABCDEFG"}  # lot 80 : classe énergie du bien du propriétaire
 
 # champ : (projets concernés, type, contrainte) — type : text (longueur), int, enum (dict), bool
 FIELDS = {
@@ -128,6 +129,7 @@ FIELDS = {
     "surface": (("VENTE", "GESTION"), "int", 100000),
     "rooms": (("VENTE", "GESTION"), "int", 50),
     "occupancy": (("VENTE", "GESTION"), "enum", OCCUPANCY),
+    "dpe": (("VENTE", "GESTION"), "enum", DPE_CLASSES),
     "criteria": (("ACHAT", "LOCATION", "VENTE", "GESTION"), "text", 300),
 }
 # Ordre des questions utiles (une à la fois), par projet.
@@ -143,6 +145,7 @@ FIELD_LABELS = {
     "must_sell": "bien à vendre avant d'acheter", "furnished": "meublé ou vide", "guarantor": "garant",
     "move_in": "date d'entrée souhaitée", "address": "adresse ou secteur du bien", "surface": "surface du bien",
     "rooms": "nombre de pièces du bien", "occupancy": "bien libre ou loué", "criteria": "critères",
+    "dpe": "classe DPE du bien",
 }
 
 
@@ -187,6 +190,8 @@ async def update_project(db, tenant_id, customer_id, values: dict) -> tuple[dict
             rejected.append(key)
         else:
             current[key] = cleaned
+    # Lot 80 : date de la dernière information, pour ne plus utiliser un projet resté sans nouvelle depuis 90 jours.
+    current["updated_at"] = datetime.now(timezone.utc).isoformat()
     projects[project] = current
     data["projects"] = projects
     profile.real_estate = data  # nouvel objet : SQLAlchemy voit le changement du JSON
@@ -271,7 +276,7 @@ def _project_line(project: str, data: dict) -> str:
     if data.get("budget"):
         parts.append(f"budget {data['budget']}")
     for key, labels in (("financing", FINANCING), ("furnished", FURNISHED), ("guarantor", GUARANTORS),
-                        ("occupancy", OCCUPANCY)):
+                        ("occupancy", OCCUPANCY), ("dpe", DPE_CLASSES)):
         if data.get(key):
             parts.append(labels[data[key]])
     if data.get("move_in"):
