@@ -65,6 +65,7 @@
     --bg: #F5F8F6; --panel: #FFFFFF; --panel-2: #F8FBF9; --border: #E3EBE6; --border-strong: #CFDDD5;
     --text: #13241A; --muted: #5B6F65;
     --accent: #1B4332;          /* texte et liens de marque */
+    --brand-whatsapp: #25D366; --brand-shopify: #5E8E3E; --brand-facebook: #0866FF; /* lot 73 : logos des connexions */
     --accent-fill: #1B4332;     /* fond des boutons principaux */
     --accent-fill-hover: #143325;
     --on-accent: #FFFFFF;
@@ -88,6 +89,7 @@
     --bg: #0D1511; --panel: #15201A; --panel-2: #111B16; --border: #24342B; --border-strong: #33473C;
     --text: #E4EEE8; --muted: #9AAEA2;
     --accent: #7FD6A8;
+    --brand-whatsapp: #25D366; --brand-shopify: #95BF47; --brand-facebook: #0866FF; /* lot 73 : couleurs officielles (vert Shopify clair sur fond sombre) */
     --accent-fill: #52B788; --accent-fill-hover: #66C497; --on-accent: #0D1511;
     --accent-light: #52B788; --accent-soft: #1C3327; --accent-soft-hover: #24402F;
     --success: #5CC08A; --success-soft: #173226;
@@ -325,13 +327,17 @@
   .msg.HUMAN { background: var(--accent-soft); margin-left: auto; border: 1px solid var(--accent-light); color: var(--text); border-bottom-right-radius: 4px; }
   .msg.SYSTEM { background: none; color: var(--muted); font-style: normal; font-size: 12px; text-align: center; max-width: 100%; }
   .wa-choice { margin-bottom: 14px; }
-  /* Lot 73 — icône à côté de chaque connexion (pictogrammes neutres, remplaçables par les logos officiels) */
-  .app-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px;
-    border-radius: 8px; background: var(--accent-soft); color: var(--accent); margin-right: 8px; vertical-align: middle; }
-  .app-icon svg { width: 16px; height: 16px; }
-  .app-icon.sm { width: 22px; height: 22px; border-radius: 6px; margin-right: 6px; }
+  /* Lot 73 — logo de chaque connexion dans une pastille blanche, couleurs officielles des marques */
+  .app-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px;
+    border-radius: 10px; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+    color: var(--accent); margin-right: 12px; vertical-align: middle; }
+  .app-icon svg { width: 20px; height: 20px; }
+  .app-icon.whatsapp { color: var(--brand-whatsapp); }
+  .app-icon.shopify { color: var(--brand-shopify); }
+  .app-icon.facebook { color: var(--brand-facebook); }
+  .app-icon.sm { width: 24px; height: 24px; border-radius: 7px; margin-right: 8px; box-shadow: none; }
   .app-icon.sm svg { width: 13px; height: 13px; }
-  .app-title { display: flex; align-items: center; }
+  .app-title { display: flex; align-items: center; font-size: 15px; }
   .wa-choice p { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
   .wa-note { margin-bottom: 14px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 13px; line-height: 1.5; }
   .phone-history { margin-bottom: 14px; border: 1px dashed var(--border); border-radius: 12px; padding: 8px 12px; }
@@ -678,11 +684,13 @@
 </style>
 </head>
 <body>
-<!-- Lot 73 — pictogrammes des connexions (dessins neutres ; un logo officiel fourni remplacera le symbole) -->
+<!-- Lot 73 — logos des connexions : tracés officiels repris de simple-icons 16.35.0 (CC0), sans modification ;
+     marques de leurs propriétaires (WhatsApp, Facebook : Meta ; Shopify), utilisées seulement pour désigner la connexion.
+     Gmail et Outlook : enveloppe neutre (pas de logo libre d'usage). -->
 <svg width="0" height="0" style="position: absolute;" aria-hidden="true" focusable="false">
-  <symbol id="ico-chat" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-5 4V6a1 1 0 0 1 1-1z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 10h8M8 13h5"/></symbol>
-  <symbol id="ico-bag" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M5 8h14l-1 12H6L5 8z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
-  <symbol id="ico-catalog" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="4" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="4" y="13" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="13" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="ico-whatsapp" viewBox="0 0 24 24"><title>WhatsApp</title><path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></symbol>
+  <symbol id="ico-shopify" viewBox="0 0 24 24"><title>Shopify</title><path fill="currentColor" d="M15.337 23.979l7.216-1.561s-2.604-17.613-2.625-17.73c-.018-.116-.114-.192-.211-.192s-1.929-.136-1.929-.136-1.275-1.274-1.439-1.411c-.045-.037-.075-.057-.121-.074l-.914 21.104h.023zM11.71 11.305s-.81-.424-1.774-.424c-1.447 0-1.504.906-1.504 1.141 0 1.232 3.24 1.715 3.24 4.629 0 2.295-1.44 3.76-3.406 3.76-2.354 0-3.54-1.465-3.54-1.465l.646-2.086s1.245 1.066 2.28 1.066c.675 0 .975-.545.975-.932 0-1.619-2.654-1.694-2.654-4.359-.034-2.237 1.571-4.416 4.827-4.416 1.257 0 1.875.361 1.875.361l-.945 2.715-.02.01zM11.17.83c.136 0 .271.038.405.135-.984.465-2.064 1.639-2.508 3.992-.656.213-1.293.405-1.889.578C7.697 3.75 8.951.84 11.17.84V.83zm1.235 2.949v.135c-.754.232-1.583.484-2.394.736.466-1.777 1.333-2.645 2.085-2.971.193.501.309 1.176.309 2.1zm.539-2.234c.694.074 1.141.867 1.429 1.755-.349.114-.735.231-1.158.366v-.252c0-.752-.096-1.371-.271-1.871v.002zm2.992 1.289c-.02 0-.06.021-.078.021s-.289.075-.714.21c-.423-1.233-1.176-2.37-2.508-2.37h-.115C12.135.209 11.669 0 11.265 0 8.159 0 6.675 3.877 6.21 5.846c-1.194.365-2.063.636-2.16.674-.675.213-.694.232-.772.87-.075.462-1.83 14.063-1.83 14.063L15.009 24l.927-21.166z"/></symbol>
+  <symbol id="ico-facebook" viewBox="0 0 24 24"><title>Facebook</title><path fill="currentColor" d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z"/></symbol>
   <symbol id="ico-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3.5 6.5 12 13l8.5-6.5"/></symbol>
 </svg>
 
@@ -1196,7 +1204,7 @@
 
     <section id="tab-integrations" class="hidden">
       <div class="card" style="max-width: 640px; margin-bottom: 20px;">
-        <div class="label app-title" style="margin-bottom: 12px; font-weight: 600;"><span class="app-icon" aria-hidden="true"><svg><use href="#ico-chat"/></svg></span>Compte WhatsApp Business</div>
+        <div class="label app-title" style="margin-bottom: 12px; font-weight: 600;"><span class="app-icon whatsapp" aria-hidden="true"><svg><use href="#ico-whatsapp"/></svg></span>Compte WhatsApp Business</div>
         <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
         <div id="wa-coexistence-info" class="wa-note hidden"></div>
         <div id="wa-connect-choices">
@@ -1250,7 +1258,7 @@
 
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
         <div class="card" style="flex: 1; min-width: 300px;">
-          <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;"><span class="app-icon" aria-hidden="true"><svg><use href="#ico-bag"/></svg></span>Shopify</div>
+          <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;"><span class="app-icon shopify" aria-hidden="true"><svg><use href="#ico-shopify"/></svg></span>Shopify</div>
           <div id="shopify-status" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Vérification…</div>
           <div id="shopify-form">
             <input id="shopify-domain" placeholder="ma-boutique.myshopify.com" class="input" style="margin-bottom: 8px;">
@@ -1261,7 +1269,7 @@
           <div id="shopify-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
         <div class="card" style="flex: 1; min-width: 300px;">
-          <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;"><span class="app-icon" aria-hidden="true"><svg><use href="#ico-catalog"/></svg></span>Catalogue Facebook (Meta)</div>
+          <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;"><span class="app-icon facebook" aria-hidden="true"><svg><use href="#ico-facebook"/></svg></span>Catalogue Facebook (Meta)</div>
           <div id="meta-status" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Vérification…</div>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button class="action hidden" id="meta-oauth-btn" onclick="connectMetaCatalogOAuth()">Connecter mon catalogue Facebook</button>

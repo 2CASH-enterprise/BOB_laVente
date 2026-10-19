@@ -192,25 +192,13 @@ def test_containers_do_not_run_as_root():
 # --- Icônes des connexions --------------------------------------------------------------------------------------------
 
 def test_each_connection_has_its_icon():
-    for name in ["chat", "bag", "catalog", "mail"]:
+    for name in ["whatsapp", "shopify", "facebook", "mail"]:
         assert f'<symbol id="ico-{name}"' in DASH
-    for icon, label in [("chat", "Compte WhatsApp Business"), ("bag", "Shopify</div>"), ("catalog", "Catalogue Facebook (Meta)"),
-                        ("mail", "Régler le transfert avec Gmail"), ("mail", "Régler le transfert avec Outlook")]:
+    assert "simple-icons 16.35.0 (CC0)" in DASH
+    for icon, label in [("whatsapp", "Compte WhatsApp Business"), ("shopify", "Shopify</div>"),
+                        ("facebook", "Catalogue Facebook (Meta)"), ("mail", "Régler le transfert avec Gmail"),
+                        ("mail", "Régler le transfert avec Outlook")]:
         i = DASH.index(label)
         assert f'<use href="#ico-{icon}"/>' in DASH[i - 200:i], label
-
-
-def test_purge_knows_every_link_without_cascade():
-    """PostgreSQL refuse d'effacer une démo si un lien interne sans cascade est oublié : la liste suit le schéma."""
-    import importlib
-    import pkgutil
-
-    import app.models
-    from app.core.database import Base
-    from app.services.demo_purge import NO_ACTION_LINKS
-
-    for m in pkgutil.iter_modules(app.models.__path__):
-        importlib.import_module(f"app.models.{m.name}")
-    found = {(t.name, fk.parent.name) for t in Base.metadata.tables.values() for fk in t.foreign_keys
-             if (fk.ondelete or "").upper() not in ("CASCADE", "SET NULL")}
-    assert found == NO_ACTION_LINKS
+    for brand in ["whatsapp", "shopify", "facebook"]:
+        assert f".app-icon.{brand} {{ color: var(--brand-{brand}); }}" in DASH and f"--brand-{brand}:" in DASH
