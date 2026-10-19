@@ -64,12 +64,20 @@ class WhatsAppAccountResponse(BaseModel):
     display_name_status: str
     display_phone_number: str | None = None
     display_name: str | None = None  # lot 73 d : nom vérifié par Meta
+    profile_picture_url: str | None = None  # lot 73 e : photo de profil WhatsApp, enregistrée chez Bob
     # Lot 52 — numéro partagé avec le téléphone, et reprise de l'historique (REQUESTED, IN_PROGRESS, DONE, DECLINED).
     coexistence_mode: bool = False
     history_sync_status: str | None = None
     history_progress: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def _view(account: WhatsAppAccount) -> WhatsAppAccountResponse:
+    from app.services import wa_account_info
+
+    return WhatsAppAccountResponse.model_validate(account).model_copy(
+        update={"profile_picture_url": wa_account_info.profile_url(account.tenant_id)})
 
 
 class DisplayPhoneNumberUpdate(BaseModel):
@@ -87,7 +95,7 @@ async def embedded_signup_callback(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     oauth_client: MetaOAuthClient = Depends(get_meta_oauth_client),
-) -> WhatsAppAccount:
+) -> WhatsAppAccountResponse:
     existing_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
     existing = (await db.execute(existing_stmt)).scalar_one_or_none()
     if existing is not None and not payload.replace:
@@ -169,20 +177,20 @@ async def embedded_signup_callback(
 
         await request_syncs(db, account, oauth_client)
         await db.refresh(account)
-    return account
+    return _view(account)
 
 
 @router.get("/account", response_model=WhatsAppAccountResponse)
 async def get_whatsapp_account(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> WhatsAppAccount:
+) -> WhatsAppAccountResponse:
     stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
     result = await db.execute(stmt)
     account = result.scalar_one_or_none()
     if account is None:
         raise HTTPException(status_code=404, detail="Aucun numéro WhatsApp n'est connecté à votre compte")
-    return account
+    return _view(account)
 
 
 @router.post("/account/refresh", response_model=WhatsAppAccountResponse)
@@ -191,7 +199,7 @@ async def refresh_whatsapp_account(
     db: AsyncSession = Depends(get_db),
     oauth_client: MetaOAuthClient = Depends(get_meta_oauth_client),
     rate_limiter: RateLimiter = Depends(get_rate_limiter),
-) -> WhatsAppAccount:
+) -> WhatsAppAccountResponse:
     """Lot 73 d — numéro, nom et statut du nom redemandés à Meta (au plus toutes les 5 minutes par boutique)."""
     from app.services import wa_account_info
 
@@ -205,7 +213,7 @@ async def refresh_whatsapp_account(
     if allowed:
         await wa_account_info.refresh(db, account, oauth_client)
         await db.refresh(account)
-    return account
+    return _view(account)
 
 
 @router.put(
@@ -215,7 +223,7 @@ async def update_display_phone_number(
     payload: DisplayPhoneNumberUpdate,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> WhatsAppAccount:
+) -> WhatsAppAccountResponse:
     """Numéro affiché (format humain) — utilisé pour construire les liens wa.me des QR codes."""
     digits = "".join(ch for ch in payload.display_phone_number if ch.isdigit() or ch == "+")
     if len(digits) < 8:
@@ -229,7 +237,7 @@ async def update_display_phone_number(
     account.display_phone_number = digits
     await db.commit()
     await db.refresh(account)
-    return account
+    return _view(account)
 
 
 @router.get("/templates")

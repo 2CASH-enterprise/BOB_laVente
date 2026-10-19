@@ -30,6 +30,8 @@ class TenantResponse(BaseModel):
     active: bool
     # Lot 51 — Bob en pause pour toute la boutique, ou échéance proche : bandeau du tableau de bord.
     bob_status: dict | None = None
+    # Lot 73 e — photo de profil WhatsApp Business (barre latérale), si elle existe.
+    logo_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,7 +58,10 @@ async def get_my_tenant(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
     from app.services import bob_pause
 
-    return TenantResponse.model_validate(tenant).model_copy(update={"bob_status": bob_pause.status(tenant).as_dict()})
+    from app.services.wa_account_info import profile_url
+
+    return TenantResponse.model_validate(tenant).model_copy(update={"bob_status": bob_pause.status(tenant).as_dict(),
+                                                                    "logo_url": profile_url(tenant.id)})
 
 
 @router.put("/me/profile", response_model=TenantResponse, dependencies=[Depends(require_role("ADMIN"))])

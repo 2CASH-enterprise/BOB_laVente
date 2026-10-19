@@ -70,6 +70,36 @@ class MetaOAuthClient:
             _raise_for_meta(response)
             return response.json() or {}
 
+    async def profile_picture_url(self, phone_number_id: str, access_token: str) -> str | None:
+        """Lot 73 e — adresse (temporaire) de la photo de profil WhatsApp Business ; None s'il n'y en a pas."""
+        url = f"{GRAPH_BASE_URL}/{self.api_version}/{phone_number_id}/whatsapp_business_profile"
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(url, params={"fields": "profile_picture_url"},
+                                        headers={"Authorization": f"Bearer {access_token}"})
+            _raise_for_meta(response)
+            data = (response.json() or {}).get("data") or [{}]
+            return (data[0] or {}).get("profile_picture_url") or None
+
+    async def download_image(self, url: str, max_bytes: int) -> tuple[bytes, str] | None:
+        """Lot 73 e — télécharge l'image depuis les serveurs de Meta seulement (jamais une autre adresse)."""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url or "")
+        host = (parsed.hostname or "").lower()
+        if parsed.scheme != "https" or not host.endswith((".fbcdn.net", ".whatsapp.net", ".fbsbx.com")):
+            return None
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            async with client.stream("GET", url) as response:
+                if response.status_code != 200:
+                    return None
+                kind = response.headers.get("content-type", "").split(";")[0].strip().lower()
+                content = b""
+                async for chunk in response.aiter_bytes():
+                    content += chunk
+                    if len(content) > max_bytes:
+                        return None
+                return content, kind
+
     async def request_smb_sync(self, phone_number_id: str, sync_type: str, access_token: str) -> dict:
         """
         Lot 52 — coexistence : demande à Meta d'envoyer les contacts (`smb_app_state_sync`) ou l'historique

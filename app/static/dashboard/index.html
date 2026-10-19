@@ -331,6 +331,9 @@
   .wa-connected { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); margin-bottom: 14px; }
   .wa-number { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; color: var(--text); }
+  .wa-id { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .wa-photo { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: none; border: 1px solid var(--border); }
+  .sidebar-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
   .wa-number.muted-number { font-size: 14px; font-weight: 600; color: var(--muted); }
   .wa-name { font-size: 13px; color: var(--muted); margin-top: 4px; }
   .wa-pill { display: inline-block; margin-top: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
@@ -1224,7 +1227,8 @@
         <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
         <!-- Lot 73 c : état toujours visible (connecté → numéro, nom, reconnexion ; à vérifier → Réessayer) -->
         <div id="wa-connected" class="wa-connected hidden">
-          <div><div class="wa-number" id="wa-number"></div><div id="wa-name-status"></div></div>
+          <div class="wa-id"><img id="wa-photo" class="wa-photo hidden" alt="Photo de profil WhatsApp">
+            <div><div class="wa-number" id="wa-number"></div><div id="wa-name-status"></div></div></div>
           <button class="action secondary" id="btn-wa-reconnect" onclick="reconnectWhatsApp()">Reconnecter ou changer de numéro</button>
         </div>
         <button class="action secondary hidden" id="btn-wa-retry" onclick="loadWhatsAppStatus()">Réessayer</button>
@@ -2889,7 +2893,10 @@ async function loadTenant() {
   try {
     const t = await api("/api/v1/tenants/me");
     document.getElementById("tenant-tag").textContent = t.name;
-    document.getElementById("tenant-avatar").textContent = (t.name || "B").trim().charAt(0).toUpperCase();
+    const avatar = document.getElementById("tenant-avatar");
+    avatar.dataset.initial = (t.name || "B").trim().charAt(0).toUpperCase();
+    avatar.textContent = avatar.dataset.initial;
+    if (t.logo_url) setTenantAvatar(t.logo_url);  // lot 73 e : photo de profil WhatsApp
     renderBobStatus(t.bob_status);
   } catch (e) {}
 }
@@ -7143,7 +7150,7 @@ async function loadWhatsAppStatus() {
     info.innerHTML = account.coexistence_mode ? coexistenceInfo(account) : "";
     info.classList.toggle("hidden", !account.coexistence_mode);
     // Lot 73 d : numéro ou nom pas encore connus → on les redemande à Meta, sans bloquer la page.
-    if (!account.display_phone_number || account.display_name_status !== "APPROVED") {
+    if (!account.display_phone_number || account.display_name_status !== "APPROVED" || !account.profile_picture_url) {
       api("/api/v1/whatsapp/account/refresh", { method: "POST" }).then((fresh) => renderWaAccount(fresh, false)).catch(() => {});
     }
   } catch (e) {
@@ -7172,6 +7179,22 @@ function renderWaAccount(account, waiting) {
   document.getElementById("wa-name-status").innerHTML = name + `<span class="wa-pill ${tone}">${esc(label)}</span>`;
   const input = document.getElementById("wa-display-number");
   if (digits && !input.value) input.value = "+" + digits;
+  // Lot 73 e : photo de profil WhatsApp (dans la carte et dans la barre latérale)
+  const photo = document.getElementById("wa-photo");
+  photo.classList.toggle("hidden", !account.profile_picture_url);
+  if (account.profile_picture_url) {
+    photo.src = account.profile_picture_url;
+    setTenantAvatar(account.profile_picture_url);
+  }
+}
+
+function setTenantAvatar(url) {
+  const box = document.getElementById("tenant-avatar");
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = "";
+  img.onerror = () => { box.textContent = box.dataset.initial || "B"; };
+  box.replaceChildren(img);
 }
 
 async function reconnectWhatsApp() {
