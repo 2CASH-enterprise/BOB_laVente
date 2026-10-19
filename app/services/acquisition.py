@@ -40,6 +40,7 @@ AUTO_CHANNELS = {
     NAOMY: "NaomyIA",
     "IMPORT": "Import",
     "DIRECT": "Direct",
+    "PORTAL": "Portail immobilier ou site (email)",  # lot 83
 }
 
 CHANNEL_LABELS = {**LINK_CHANNELS, **AUTO_CHANNELS}

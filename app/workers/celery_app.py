@@ -35,6 +35,7 @@ TASK_MODULES = [
     "app.workers.coexistence_sync",
     "app.workers.property_alerts",  # lot 80
     "app.workers.pige",  # lot 81
+    "app.workers.inbound_leads",  # lot 83
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -98,6 +99,15 @@ celery_app.conf.beat_schedule = {
     # Lot 62 — emails de prospection : un email toutes les 3 minutes au plus (plafond et heures d'envoi vérifiés).
     # Lot 80 — alertes « nouveau bien » automatiques (agences Pro qui les ont activées), entre 9 h et 20 h.
     # Lot 81 — pige : ventes DVF des départements utiles (chaque heure), effacement après 6 mois (chaque nuit).
+    # Lot 83 — demandes des agences reçues par email (portails, formulaire du site) : lues chaque minute.
+    "leads-inbox": {
+        "task": "app.workers.inbound_leads.read_leads_inbox_task",
+        "schedule": crontab(minute="*"),
+    },
+    "leads-purge": {
+        "task": "app.workers.inbound_leads.purge_leads_task",
+        "schedule": crontab(hour=4, minute=20),
+    },
     "pige-dvf": {
         "task": "app.workers.pige.refresh_dvf_task",
         "schedule": crontab(minute=25),

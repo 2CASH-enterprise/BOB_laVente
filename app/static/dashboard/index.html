@@ -401,7 +401,8 @@
   .import-col { font-weight: 700; }
   /* Lot 60 : aperçu du rapport mensuel (l'email tel qu'il part) */
   .report-periods .pill, .sources-periods .pill { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
-  .report-periods .pill[aria-pressed="true"], .sources-periods .pill[aria-pressed="true"] { background: var(--accent-fill); color: var(--on-accent); border-color: transparent; }
+  .lead-views .pill { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .report-periods .pill[aria-pressed="true"], .sources-periods .pill[aria-pressed="true"], .lead-views .pill[aria-pressed="true"] { background: var(--accent-fill); color: var(--on-accent); border-color: transparent; }
   .report-loading { opacity: .45; pointer-events: none; transition: opacity .15s; }
   .report-frame { width: 100%; height: 1800px; border: 0; border-radius: var(--radius-sm); background: #F4FAF6; display: block; }
   /* L'aperçu reste un vrai tableau sur téléphone (les autres tableaux y deviennent des cartes) : on le fait défiler */
@@ -802,6 +803,7 @@
     <nav>
       <button class="active" data-tab="overview" data-label="Accueil" onclick="showTab('overview')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>Accueil</button>
       <button data-tab="conversations" data-label="Conversations" onclick="showTab('conversations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></span>Conversations</button>
+      <button data-tab="leads" data-label="Demandes" id="nav-leads" class="estate-only" onclick="showTab('leads')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v12H4zM4 7l8 6 8-6"/></svg></span>Demandes</button>
       <button data-tab="customers" data-label="Clients" onclick="showTab('customers')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7"/></svg></span>Clients</button>
       <button data-tab="products" data-label="Produits" id="nav-products" onclick="showTab('products')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg></span>Produits</button>
       <button data-tab="orders" data-label="Commandes" class="store-only" onclick="showTab('orders')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h4"/></svg></span>Commandes</button>
@@ -1049,6 +1051,14 @@
         <button class="action secondary" onclick="editComplaintDelay()">Délai de réponse : <span id="complaint-delay">10</span> jours ouvrés</button>
       </div>
       <div id="complaint-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
+    </section>
+
+    <!-- Lot 83 — demandes reçues par email (portails immobiliers, formulaire du site) -->
+    <section id="tab-leads" class="hidden">
+      <template class="page-tip-src">Les contacts de SeLoger, Leboncoin, Bien'ici, Logic-Immo, PAP et du formulaire de votre site arrivent ici quand vous les faites suivre à votre adresse Bob. Bob prépare une réponse en une à deux minutes, avec la fiche du bien, une ou deux questions pour préparer la visite et un lien pour continuer sur WhatsApp. Il ne donne jamais d'estimation ni de chiffre de crédit.</template>
+      <div id="leads-settings"></div>
+      <div class="pills lead-views" id="lead-views" style="margin: 16px 0 12px; display: flex; gap: 8px; flex-wrap: wrap;"></div>
+      <div id="leads-list"></div>
     </section>
 
     <section id="tab-pige" class="hidden">
@@ -2805,7 +2815,7 @@ function showTab(name) {
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
-  ["overview", "conversations", "customers", "complaints", "products", "orders", "pige", "appointments", "quotes", "contracts", "reports", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
+  ["overview", "conversations", "leads", "customers", "complaints", "products", "orders", "pige", "appointments", "quotes", "contracts", "reports", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
@@ -2818,6 +2828,7 @@ function showTab(name) {
   if (name === "knowledge") { loadKnowledge(); loadCompanyProfile(); }
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "pige") loadPige();  // lot 81
+  if (name === "leads") loadLeads();  // lot 83
   if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
@@ -3777,7 +3788,7 @@ function focusPendingItem() {
 }
 
 // Lot 34 : comment l'email du client a été obtenu.
-const EMAIL_SOURCE_LABELS = { BOB: "Donné à Bob", WHATSAPP_MESSAGE: "Écrit par le client sur WhatsApp", MANUAL: "Saisi à la main" };
+const EMAIL_SOURCE_LABELS = { BOB: "Donné à Bob", WHATSAPP_MESSAGE: "Écrit par le client sur WhatsApp", MANUAL: "Saisi à la main", PORTAL: "Demande reçue par email (portail ou site)" };
 
 async function saveCustomerNotes(id) {
   const msg = document.getElementById("customer-notes-msg");
@@ -3921,6 +3932,137 @@ async function loadProducts() {
     .join("") || "<tr><td colspan='7'>Aucun produit</td></tr>";
   loadQrCodes();
   if (currentBusinessType === "REAL_ESTATE") loadPropertyAlerts();  // lot 80
+}
+
+// ---- Lot 83 : demandes reçues par email (portails, formulaire du site) ----
+let leadsSettings = null;
+let leadsData = [];
+let leadView = "";
+const LEAD_TONES = { DRAFT: "tone-warning", SENT: "tone-success", TO_HANDLE: "tone-danger", IGNORED: "tone-info", FAILED: "tone-danger" };
+const LEAD_VIEWS = [["", "Toutes"], ["DRAFT", "À valider"], ["TO_HANDLE", "À traiter"], ["SENT", "Répondues"]];
+
+function leadDelay(seconds) {
+  if (seconds === null || seconds === undefined) return "—";
+  if (seconds < 90) return `${seconds} s`;
+  if (seconds < 5400) return `${Math.round(seconds / 60)} min`;
+  return `${Math.round(seconds / 3600)} h`;
+}
+
+async function loadLeads() {
+  const box = document.getElementById("leads-settings");
+  try { leadsSettings = await api("/api/v1/leads/settings"); } catch (e) { box.textContent = e.message; return; }
+  const s = leadsSettings;
+  if (!s.available) {
+    box.innerHTML = `<div class="card"><p style="margin: 0;">${esc(s.message)}</p></div>`;
+    document.getElementById("leads-list").innerHTML = "";
+    document.getElementById("lead-views").innerHTML = "";
+    return;
+  }
+  const sources = s.by_source.length ? s.by_source.map((x) => `${esc(x.label)} : <b>${x.count}</b>`).join(" · ") : "aucune pour l'instant";
+  const domains = s.portals.map((p) => p.domains.join(" OR ")).join(" OR ");
+  box.innerHTML = `<div style="display: flex; gap: 16px; flex-wrap: wrap;">
+    <div class="card" style="flex: 2; min-width: 300px;">
+      <div class="label" style="margin-bottom: 8px; font-weight: 600;">Votre adresse Bob pour les demandes</div>
+      ${s.configured ? "" : `<p style="color: var(--danger); font-size: 13px; margin: 0 0 8px;">La boîte des demandes n'est pas encore activée par l'équipe Bob : votre adresse fonctionnera dès qu'elle le sera.</p>`}
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;"><input id="lead-address" class="input" readonly value="${esc(s.address || "")}" style="flex: 1; min-width: 220px;">
+        <button class="action secondary" onclick="copyLeadAddress()">Copier</button></div>
+      ${s.whatsapp_connected ? "" : `<p style="font-size: 13px; color: var(--danger); margin: 8px 0 0;">Aucun numéro WhatsApp n'est connecté à Bob : les réponses ne contiennent pas encore le bouton « Écrire sur WhatsApp ». Connectez votre numéro dans Intégrations.</p>`}
+      <p style="font-size: 13px; color: var(--muted); margin: 8px 0 0;">Faites suivre à cette adresse les emails de vos portails et du formulaire de votre site. Les clients qui répondent à Bob écrivent à <b>${esc(s.reply_to)}</b>.</p>
+      ${s.gmail_code ? `<div class="card" style="margin-top: 10px; background: var(--accent-soft, var(--panel-2));"><b>Code de confirmation Gmail : <span style="font-size: 18px; letter-spacing: 2px;">${esc(s.gmail_code)}</span></b><br><span style="font-size: 13px;">Recopiez-le dans Gmail (Paramètres → Transfert) pour terminer le réglage du transfert.</span></div>` : ""}
+      <details style="margin-top: 10px; font-size: 13px;"><summary style="cursor: pointer; font-weight: 600;">Régler le transfert avec Gmail</summary>
+        <ol style="margin: 8px 0 0; padding-left: 20px; line-height: 1.6;">
+          <li>Dans Gmail : Paramètres (roue dentée) → Voir tous les paramètres → Transfert et POP/IMAP → « Ajouter une adresse de transfert » : collez votre adresse Bob.</li>
+          <li>Gmail envoie un code à cette adresse : il s'affiche ici en une à deux minutes (rechargez la page). Recopiez-le dans Gmail.</li>
+          <li>Ne transférez pas tout : créez un filtre (Paramètres → Filtres → Créer un filtre), « De » : <code>${esc(domains)}</code>, puis « Transférer à » votre adresse Bob. Faites de même pour l'adresse d'envoi de votre formulaire de site.</li>
+        </ol></details>
+      <details style="margin-top: 6px; font-size: 13px;"><summary style="cursor: pointer; font-weight: 600;">Régler le transfert avec Outlook</summary>
+        <ol style="margin: 8px 0 0; padding-left: 20px; line-height: 1.6;">
+          <li>Dans Outlook : Paramètres → Courrier → Règles → « Ajouter une nouvelle règle ».</li>
+          <li>Condition : « De » contient seloger.com, leboncoin.fr, bienici.com, logic-immo.com, pap.fr (et l'adresse de votre formulaire).</li>
+          <li>Action : « Transférer à » votre adresse Bob. Enregistrez.</li>
+        </ol></details>
+      <p style="font-size: 13px; margin: 8px 0 0;">Vous pouvez aussi donner votre adresse Bob directement à vos portails comme email de réception des contacts.</p>
+    </div>
+    <div class="card" style="flex: 1; min-width: 260px; font-size: 13px;">
+      <div class="label" style="margin-bottom: 8px; font-weight: 600;">Réponses de Bob</div>
+      <label style="display: flex; gap: 8px; align-items: flex-start;"><input type="checkbox" id="lead-auto" ${s.auto_send ? "checked" : ""} onchange="saveLeadAuto(this.checked)">
+        <span>Envoyer automatiquement les réponses de Bob<br><span style="color: var(--muted);">Sinon, vous validez chaque réponse d'un clic (conseillé au début).</span></span></label>
+      <p style="margin: 12px 0 0;">30 derniers jours : ${sources}</p>
+      <p style="margin: 6px 0 0;">Délai de réponse médian : <b>${leadDelay(s.median_seconds)}</b></p>
+      <p style="margin: 6px 0 0; color: var(--muted);">${s.quota === null ? `${s.month_used} demandes ce mois-ci (sans plafond)` : `${s.month_used} / ${s.quota} demandes ce mois-ci`}</p>
+      <button class="action secondary" style="margin-top: 12px;" onclick="sendLeadTest()" ${s.configured ? "" : "disabled"}>Envoyer un email de test</button>
+      <div id="lead-test-msg" style="margin-top: 6px;"></div>
+    </div></div>`;
+  document.getElementById("lead-views").innerHTML = LEAD_VIEWS.map(([code, label]) =>
+    `<button class="pill" aria-pressed="${leadView === code}" onclick="showLeadView(${jsArg(code)})">${esc(label)}</button>`).join("");
+  await loadLeadList();
+}
+
+async function loadLeadList() {
+  const list = document.getElementById("leads-list");
+  try { leadsData = await api("/api/v1/leads" + (leadView ? "?status=" + leadView : "")); } catch (e) { list.textContent = e.message; return; }
+  list.innerHTML = leadsData.length ? leadsData.map(leadCard).join("")
+    : `<div class="card"><p style="margin: 0; color: var(--muted);">Aucune demande ${leadView ? "dans cette vue" : "pour l'instant : réglez le transfert ci-dessus, puis envoyez un email de test"}.</p></div>`;
+}
+
+function showLeadView(code) { leadView = code; loadLeads(); }
+
+function leadCard(l) {
+  const who = [l.contact_name, l.contact_email, l.contact_phone].filter(Boolean).map(esc).join(" · ") || "Contact non reconnu";
+  const editable = l.status !== "SENT" && l.status !== "IGNORED";
+  return `<div class="card" style="margin-bottom: 12px; font-size: 13px;" id="lead-${esc(l.id)}">
+    <div style="display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+      <div><b>${esc(l.source_label)}</b>${l.is_test ? " <span class='tag tone-info'>test</span>" : ""} · ${new Date(l.received_at).toLocaleString("fr-FR")}${l.product_name ? ` · ${esc(l.product_name)}` : l.reference ? ` · réf. ${esc(l.reference)}` : ""}</div>
+      <span class="tag ${LEAD_TONES[l.status] || ""}">${esc(l.status_label)}</span>
+    </div>
+    <div style="margin-top: 6px;">${who}</div>
+    ${l.message ? `<div style="margin-top: 6px; white-space: pre-wrap; color: var(--muted);">${esc(l.message)}</div>` : ""}
+    ${l.reason ? `<div style="margin-top: 6px; color: var(--danger);">${esc(l.reason)}</div>` : ""}
+    ${l.reply_text ? (editable ? `<div style="margin-top: 10px;"><label for="lead-subject-${esc(l.id)}" style="font-weight: 600;">Réponse de Bob</label>
+        <input id="lead-subject-${esc(l.id)}" class="input" maxlength="255" value="${esc(l.reply_subject || "")}" style="margin-top: 4px;">
+        <textarea id="lead-text-${esc(l.id)}" class="input" rows="9" style="margin-top: 6px; resize: vertical;" aria-label="Texte de la réponse">${esc(l.reply_text)}</textarea>
+        <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+          ${l.contact_email ? `<button class="action" onclick="sendLead(${jsArg(l.id)})">Envoyer</button>` : ""}
+          <button class="action secondary" onclick="saveLead(${jsArg(l.id)})">Enregistrer</button>
+          <button class="action secondary" onclick="ignoreLead(${jsArg(l.id)})">Écarter</button></div></div>`
+      : `<details style="margin-top: 8px;"><summary style="cursor: pointer;">Réponse envoyée${l.replied_at ? " le " + new Date(l.replied_at).toLocaleString("fr-FR") : ""}</summary><div style="white-space: pre-wrap; margin-top: 6px;">${esc(l.reply_text)}</div></details>`)
+      : (editable ? `<div style="margin-top: 8px;"><button class="action secondary" onclick="ignoreLead(${jsArg(l.id)})">Écarter</button></div>` : "")}
+  </div>`;
+}
+
+async function copyLeadAddress() {
+  const el = document.getElementById("lead-address");
+  try { await navigator.clipboard.writeText(el.value); toast("Adresse copiée."); } catch (e) { el.select(); }
+}
+
+async function saveLeadAuto(on) {
+  try { await api("/api/v1/leads/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ auto_send: on }) });
+    toast(on ? "Bob enverra ses réponses tout seul." : "Vous validerez chaque réponse."); } catch (e) { toast(e.message, "error"); loadLeads(); }
+}
+
+async function saveLead(id, quiet) {
+  const body = { reply_subject: document.getElementById("lead-subject-" + id).value.trim(), reply_text: document.getElementById("lead-text-" + id).value.trim() };
+  try { await api(`/api/v1/leads/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!quiet) toast("Réponse enregistrée."); return true; } catch (e) { toast(e.message, "error"); return false; }
+}
+
+async function sendLead(id) {
+  if (!(await saveLead(id, true))) return;
+  try { await api(`/api/v1/leads/${id}/send`, { method: "POST" }); toast("Réponse envoyée."); } catch (e) { toast(e.message, "error"); }
+  loadLeads();
+}
+
+async function ignoreLead(id) {
+  if (!(await bobConfirm("Écarter cette demande ?", "Bob ne répondra pas à cette demande. Vous pourrez toujours la retrouver dans « Toutes »."))) return;
+  try { await api(`/api/v1/leads/${id}/ignore`, { method: "POST" }); } catch (e) { toast(e.message, "error"); }
+  loadLeads();
+}
+
+async function sendLeadTest() {
+  const msg = document.getElementById("lead-test-msg");
+  try { const r = await api("/api/v1/leads/test", { method: "POST" });
+    msg.textContent = "Email de test envoyé : il apparaît ci-dessous dans une à deux minutes (rechargez la page)."; msg.style.color = "var(--success)";
+  } catch (e) { msg.textContent = e.message; msg.style.color = "var(--danger)"; }
 }
 
 // ---- Lot 81 : assistant de pige ----

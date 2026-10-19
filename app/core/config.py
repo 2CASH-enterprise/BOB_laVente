@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     prospect_imap_host: str = "imap.gmail.com"
     prospect_from_name: str = "Bob de AgenC'AI"
     prospect_copy_to: str = ""         # copie des réponses des prospects (adresse habituelle)
+    # Lot 83 — boîte Gmail DÉDIÉE aux demandes des agences (portails, formulaires) : reçues sur
+    # LEADS_SMTP_USERNAME avec « +code » de l'agence, réponses envoyées au nom de l'agence. Mot de passe d'application.
+    leads_smtp_username: str = ""
+    leads_smtp_password: str = ""
     debug: bool = False
 
     # Database

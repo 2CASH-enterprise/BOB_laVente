@@ -72,6 +72,8 @@ TASK_LABELS = {
     "app.workers.property_alerts.run_alerts_task": "Alertes « nouveau bien » (agences immobilières)",
     "app.workers.pige.refresh_dvf_task": "Pige : chargement des ventes DVF",
     "app.workers.pige.purge_listings_task": "Pige : effacement des annonces après 6 mois",
+    "app.workers.inbound_leads.read_leads_inbox_task": "Demandes des portails et des sites (agences)",
+    "app.workers.inbound_leads.purge_leads_task": "Demandes par email : effacement après un an",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).
@@ -86,6 +88,7 @@ WHERE_LABELS = {
     "app/api/prospects/campaigns.py": "Emails de prospection (Super Admin)",
     "app/services/email_service.py": "Envoi d'email",
     "app/services/prospect_mailer.py": "Emails de prospection (Gmail)",
+    "app/services/inbound_leads.py": "Demandes des portails et des sites (Gmail)",
     "app/agents/orchestrator.py": "Réponse de Bob (IA)",
     "app/agents/classifier.py": "Lecture de l'intention du client (IA)",
     "app/services/signal_service.py": "Lecture de l'intention du client (IA)",

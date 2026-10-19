@@ -99,6 +99,13 @@ class Tenant(Base):
     # Lot 80 — alertes « nouveau bien » (plan Pro) : envoi automatique, et modèles WhatsApp payants hors 20 h.
     property_alerts_auto: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
     property_alert_templates: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
+    # Lot 83 — demandes reçues par email (portails, formulaire du site) : code de l'adresse de l'agence
+    # (bob.contacts+CODE@…), envoi automatique (sinon l'agent valide chaque réponse), dernier code de confirmation
+    # du transfert Gmail reçu pour l'agence.
+    lead_inbox_code: Mapped[str | None] = mapped_column(String(32), unique=True)
+    lead_auto_send: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
+    lead_gmail_code: Mapped[str | None] = mapped_column(String(32))
+    lead_gmail_code_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 41 — carte « Premiers pas » de l'accueil masquée par le commerçant.
     onboarding_hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 65 — pré-inscription (avant le lancement) : compte créé pendant le « mode pré-inscription ». Tant que
