@@ -327,6 +327,20 @@
   .msg.HUMAN { background: var(--accent-soft); margin-left: auto; border: 1px solid var(--accent-light); color: var(--text); border-bottom-right-radius: 4px; }
   .msg.SYSTEM { background: none; color: var(--muted); font-style: normal; font-size: 12px; text-align: center; max-width: 100%; }
   .wa-choice { margin-bottom: 14px; }
+  /* Lot 73 c — carte WhatsApp connectée */
+  .wa-connected { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); margin-bottom: 14px; }
+  .wa-number { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; color: var(--text); }
+  .wa-pill { display: inline-block; margin-top: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+  .wa-pill.success { background: var(--success-soft); color: var(--success); }
+  .wa-pill.warning { background: var(--warning-soft); color: var(--warning); }
+  .wa-pill.danger { background: var(--danger-soft); color: var(--danger); }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; text-decoration: underline; cursor: pointer; font: inherit; }
+  .home-wa-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+    padding: 16px 18px; margin-bottom: 18px; border-radius: var(--radius); border: 1px solid var(--warning);
+    background: var(--warning-soft); color: var(--text); }
+  .home-wa-banner b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .home-wa-banner span { font-size: 13px; color: var(--muted); }
   /* Lot 73 — logo de chaque connexion dans une pastille blanche, couleurs officielles des marques */
   .app-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px;
     border-radius: 10px; background: var(--panel); border: 1px solid var(--border); box-shadow: var(--shadow);
@@ -1203,11 +1217,18 @@
     </section>
 
     <section id="tab-integrations" class="hidden">
-      <div class="card" style="max-width: 640px; margin-bottom: 20px;">
+      <div class="card" id="wa-card" style="max-width: 640px; margin-bottom: 20px;">
         <div class="label app-title" style="margin-bottom: 12px; font-weight: 600;"><span class="app-icon whatsapp" aria-hidden="true"><svg><use href="#ico-whatsapp"/></svg></span>Compte WhatsApp Business</div>
         <div id="whatsapp-status" style="margin-bottom: 16px; font-size: 14px; color: var(--muted);">Vérification…</div>
+        <!-- Lot 73 c : état toujours visible (connecté → numéro, nom, reconnexion ; à vérifier → Réessayer) -->
+        <div id="wa-connected" class="wa-connected hidden">
+          <div><div class="wa-number" id="wa-number"></div><div id="wa-name-status"></div></div>
+          <button class="action secondary" id="btn-wa-reconnect" onclick="reconnectWhatsApp()">Reconnecter ou changer de numéro</button>
+        </div>
+        <button class="action secondary hidden" id="btn-wa-retry" onclick="loadWhatsAppStatus()">Réessayer</button>
+        <div id="wa-replace-note" class="wa-note hidden">Choisissez comment connecter le nouveau numéro (ou le même, pour renouveler la connexion). Le numéro actuel reste en place tant que la nouvelle connexion n'est pas terminée. <button type="button" class="link-btn" onclick="cancelReconnect()">Annuler</button></div>
         <div id="wa-coexistence-info" class="wa-note hidden"></div>
-        <div id="wa-connect-choices">
+        <div id="wa-connect-choices" class="hidden">
           <div class="wa-choice">
             <button class="action" id="btn-connect-whatsapp-app" onclick="connectWhatsApp(true)">J'ai déjà WhatsApp Business sur mon téléphone</button>
             <p>Vous gardez votre numéro et votre application ; Bob s'y branche. Vos 6 derniers mois de discussions peuvent être repris.
@@ -1828,7 +1849,11 @@ function api(path, options = {}, retried = false) {
       logout();
       throw new Error("Session expirée, reconnectez-vous.");
     }
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+    if (!r.ok) {
+      const err = new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+      err.status = r.status;  // lot 73 c : « aucun compte » (404) n'est pas « impossible de vérifier »
+      throw err;
+    }
     // Lot 37b : une action (confirmer, répondre, encaisser…) peut terminer une tâche.
     if ((original.method || "GET").toUpperCase() !== "GET" && !path.startsWith("/api/v1/notifications")) scheduleTaskCounts();
     if (r.status === 204) return null;
@@ -3047,7 +3072,11 @@ function renderHome(h) {
 
   const insuranceRow = insurer ? insuranceHomeRow(h) : "";  // lot 54
 
-  document.getElementById("home-root").innerHTML = (h.example ? `<div class="example-ribbon"><span aria-hidden="true">👁</span><span>Exemple : voici à quoi ressemblera votre accueil quand Bob travaillera pour vous. Chiffres et clients fictifs.</span></div>` : "") + `
+  // Lot 73 c : tant qu'aucun numéro n'est connecté, la première chose à faire est rappelée en haut de l'accueil.
+  const waBanner = h.whatsapp_connected === false ? `<div class="home-wa-banner" id="home-wa-banner">
+      <div><b>Connectez votre WhatsApp pour que Bob réponde à vos clients</b><span>C'est la première étape : quelques minutes, avec votre compte Facebook.</span></div>
+      <button class="action" onclick="openWhatsAppCard()">Connecter WhatsApp</button></div>` : "";
+  document.getElementById("home-root").innerHTML = waBanner + (h.example ? `<div class="example-ribbon"><span aria-hidden="true">👁</span><span>Exemple : voici à quoi ressemblera votre accueil quand Bob travaillera pour vous. Chiffres et clients fictifs.</span></div>` : "") + `
     <div class="home-hero">
       <div><h1>${hello}</h1><p>Voici ce que Bob a fait pour vous ces ${h.period_days} derniers jours.</p></div>
       <div class="pills"><span class="pill tone-accent">${h.ai_messages} message${h.ai_messages > 1 ? "s" : ""} traité${h.ai_messages > 1 ? "s" : ""} par Bob</span>${waiting}</div>
@@ -7071,29 +7100,85 @@ window.addEventListener("message", (event) => {
   }
 });
 
+var WA_NAME_STATUS = {
+  APPROVED: ["success", "Nom approuvé par Meta"],
+  PENDING: ["warning", "Nom en cours de vérification par Meta"],
+  REJECTED: ["danger", "Nom refusé par Meta : à corriger dans le Gestionnaire WhatsApp de Meta"],
+};
+let waReplace = false;
+// Numéro lisible : +33 6 12 34 56 78, +225 07 00 00 00 01 (indicatif reconnu), sinon chiffres bruts.
+function prettyPhone(digits) {
+  const cc = ["225", "221", "223", "228", "229", "237", "241", "242", "243", "33", "32", "41"].find((c) => digits.startsWith(c));
+  if (!cc) return "+" + digits;
+  const rest = digits.slice(cc.length);
+  const sizes = { "33": [1, 2, 2, 2, 2], "221": [2, 3, 2, 2], "237": [1, 2, 2, 2, 2], "32": [3, 2, 2, 2] }[cc];
+  let groups = [];
+  if (sizes && sizes.reduce((x, y) => x + y, 0) === rest.length) {
+    let i = 0;
+    groups = sizes.map((n) => rest.slice(i, (i += n)));
+  } else {
+    groups = rest.match(/.{1,2}/g) || [];
+  }
+  return ["+" + cc, ...groups].join(" ");
+}
+
 async function loadWhatsAppStatus() {
   const statusEl = document.getElementById("whatsapp-status");
   const choices = document.getElementById("wa-connect-choices");
   const info = document.getElementById("wa-coexistence-info");
+  const connected = document.getElementById("wa-connected");
+  const retry = document.getElementById("btn-wa-retry");
+  waReplace = false;
+  document.getElementById("wa-replace-note").classList.add("hidden");
+  statusEl.textContent = "Vérification…";
+  statusEl.classList.remove("hidden");
+  [choices, connected, retry, info].forEach((el) => el.classList.add("hidden"));
   try {
     const account = await api("/api/v1/whatsapp/account");
-    statusEl.textContent = `Connecté — numéro ${account.phone_number_id}, statut du nom : ${account.display_name_status}`;
-    choices.classList.add("hidden");
+    statusEl.classList.add("hidden");
+    const digits = String(account.display_phone_number || "").replace(/\D/g, "");
+    document.getElementById("wa-number").textContent = digits ? prettyPhone(digits) : "Numéro connecté";
+    const [tone, label] = WA_NAME_STATUS[account.display_name_status] || ["warning", "Statut du nom inconnu"];
+    document.getElementById("wa-name-status").innerHTML = `<span class="wa-pill ${tone}">${esc(label)}</span>`;
+    connected.classList.remove("hidden");
     info.innerHTML = account.coexistence_mode ? coexistenceInfo(account) : "";
     info.classList.toggle("hidden", !account.coexistence_mode);
-    if (account.display_phone_number) {
-      document.getElementById("wa-display-number").value = "+" + account.display_phone_number.replace(/^\+/, "");
-    }
+    if (digits) document.getElementById("wa-display-number").value = "+" + digits;
   } catch (e) {
-    statusEl.textContent = "Aucun compte WhatsApp connecté pour le moment.";
-    choices.classList.remove("hidden");
-    info.classList.add("hidden");
+    if (e.status === 404) {
+      statusEl.textContent = "Aucun numéro WhatsApp connecté : Bob ne peut pas encore répondre à vos clients. Choisissez comment connecter le vôtre.";
+      choices.classList.remove("hidden");
+    } else {
+      statusEl.textContent = "Impossible de vérifier votre connexion WhatsApp pour l'instant.";
+      retry.classList.remove("hidden");
+    }
   }
 
   try {
     const config = await fetch(API_BASE + "/api/v1/whatsapp/embedded-signup/config").then((r) => r.json());
     if (config.app_id) loadFacebookSdk(config.app_id, config.graph_api_version || "v21.0");
   } catch (e) {}
+}
+
+async function reconnectWhatsApp() {
+  if (!(await bobConfirm("Reconnecter ou changer de numéro ?",
+    "Utile si la connexion a expiré ou si vous changez de numéro. Meta vous redemandera de vous connecter. Le numéro actuel reste en place tant que la nouvelle connexion n'est pas terminée.",
+    { confirmLabel: "Continuer" }))) return;
+  waReplace = true;
+  document.getElementById("wa-replace-note").classList.remove("hidden");
+  document.getElementById("wa-connect-choices").classList.remove("hidden");
+  document.getElementById("wa-connect-choices").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelReconnect() {
+  waReplace = false;
+  document.getElementById("wa-replace-note").classList.add("hidden");
+  document.getElementById("wa-connect-choices").classList.add("hidden");
+}
+
+function openWhatsAppCard() {
+  showTab("integrations");
+  setTimeout(() => { const c = document.getElementById("wa-card"); if (c) c.scrollIntoView({ behavior: "smooth", block: "start" }); }, 150);
 }
 
 // Lot 68 — modèles de message WhatsApp : statut chez Meta (seulement ceux que Bob utilise pour cette boutique).
@@ -7200,9 +7285,10 @@ async function finishEmbeddedSignup(code) {
         phone_number_id: waSessionInfo.phone_number_id || null,
         business_id: waSessionInfo.business_id || null,
         coexistence: waCoexistence,
+        replace: waReplace,
       }),
     });
-    toast("WhatsApp connecté avec succès !");
+    toast(waReplace ? "Connexion WhatsApp renouvelée." : "WhatsApp connecté avec succès !");
     loadWhatsAppStatus();
   } catch (e) {
     toast("Erreur lors de la connexion WhatsApp : " + e.message, "error");

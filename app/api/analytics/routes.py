@@ -121,7 +121,13 @@ async def get_home_summary(
         user = await db.get(User, current_user.user_id)
         first = (user.full_name or "").split()[0] if user and (user.full_name or "").strip() else None
         return preregistration.example_home(tenant.business_type, first, tenant.currency)
-    return await home_summary(db, current_user.tenant_id, user_id=current_user.user_id)
+    summary = await home_summary(db, current_user.tenant_id, user_id=current_user.user_id)
+    if not tenant.is_demo:  # lot 73 c : bandeau « Connectez votre WhatsApp » tant qu'aucun numéro n'est connecté
+        from app.models.whatsapp_account import WhatsAppAccount
+
+        summary["whatsapp_connected"] = (await db.execute(
+            select(WhatsAppAccount.id).where(WhatsAppAccount.tenant_id == tenant.id).limit(1))).first() is not None
+    return summary
 
 
 # Lot 28 — d'où viennent les clients : par canal, puis par lien ou publicité.

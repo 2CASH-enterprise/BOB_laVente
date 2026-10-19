@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.integrations.whatsapp.client import MetaOAuthClient
 from app.integrations.whatsapp.dependency import get_meta_oauth_client
-from app.models.whatsapp_account import WhatsAppAccount
+from app.models.whatsapp_account import DisplayNameStatus, WhatsAppAccount
 from app.services.audit import log_audit_event
 
 router = APIRouter(prefix="/api/v1/whatsapp", tags=["whatsapp"])
@@ -51,6 +51,8 @@ class EmbeddedSignupCallback(BaseModel):
     business_id: str | None = None
     # Lot 52 — numéro déjà utilisé dans l'application WhatsApp Business du téléphone (parcours coexistence).
     coexistence: bool = False
+    # Lot 73 c — « Reconnecter ou changer de numéro » : remplace le numéro déjà connecté (jamais sans ce choix explicite).
+    replace: bool = False
 
 
 class WhatsAppAccountResponse(BaseModel):
@@ -85,7 +87,7 @@ async def embedded_signup_callback(
 ) -> WhatsAppAccount:
     existing_stmt = select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id)
     existing = (await db.execute(existing_stmt)).scalar_one_or_none()
-    if existing is not None:
+    if existing is not None and not payload.replace:
         raise HTTPException(status_code=409, detail="Un numéro WhatsApp est déjà connecté à votre compte")
 
     # Échange réel code -> access_token, puis abonnement de l'app au WABA du client
@@ -111,27 +113,40 @@ async def embedded_signup_callback(
         raise HTTPException(status_code=400, detail=f"Connexion WhatsApp impossible : {reason}") from exc
 
     taken = (await db.execute(select(WhatsAppAccount).where(WhatsAppAccount.phone_number_id == phone_number_id))).scalar_one_or_none()
-    if taken is not None:
+    if taken is not None and (existing is None or taken.id != existing.id):
         raise HTTPException(status_code=409, detail="Ce numéro WhatsApp est déjà connecté à un autre compte Bob")
 
-    account = WhatsAppAccount(
-        tenant_id=current_user.tenant_id,
-        waba_id=payload.waba_id,
-        phone_number_id=phone_number_id,
-        business_id=payload.business_id,
-        system_user_token=access_token,
-        display_phone_number=display_phone_number,
-        coexistence_mode=payload.coexistence,
-    )
-    db.add(account)
+    details = {"waba_id": payload.waba_id, "phone_number_id": phone_number_id, "coexistence": payload.coexistence}
+    if existing is not None:
+        # Lot 73 c — même ligne mise à jour (même numéro : nouveau jeton ; autre numéro : tout est remplacé).
+        same = existing.phone_number_id == phone_number_id
+        details["previous_phone_number_id"] = existing.phone_number_id
+        account = existing
+        account.waba_id, account.phone_number_id, account.business_id = payload.waba_id, phone_number_id, payload.business_id
+        account.system_user_token = access_token
+        account.coexistence_mode = payload.coexistence
+        if not same:
+            account.display_phone_number = display_phone_number
+            account.display_name, account.display_name_status = None, DisplayNameStatus.PENDING
+            account.contacts_sync_requested_at = account.history_sync_requested_at = None
+            account.history_sync_status = account.history_progress = None
+        elif display_phone_number:
+            account.display_phone_number = display_phone_number
+        action = "WHATSAPP_RECONNECTED"
+    else:
+        account = WhatsAppAccount(
+            tenant_id=current_user.tenant_id,
+            waba_id=payload.waba_id,
+            phone_number_id=phone_number_id,
+            business_id=payload.business_id,
+            system_user_token=access_token,
+            display_phone_number=display_phone_number,
+            coexistence_mode=payload.coexistence,
+        )
+        db.add(account)
+        action = "WHATSAPP_CONNECTED"
 
-    await log_audit_event(
-        db,
-        actor=str(current_user.user_id),
-        action="WHATSAPP_CONNECTED",
-        tenant_id=current_user.tenant_id,
-        details={"waba_id": payload.waba_id, "phone_number_id": phone_number_id, "coexistence": payload.coexistence},
-    )
+    await log_audit_event(db, actor=str(current_user.user_id), action=action, tenant_id=current_user.tenant_id, details=details)
     await db.commit()
     await db.refresh(account)
     # Lot 68 — modèles de message créés chez Meta juste après la connexion (si le Super Admin les a allumés).
