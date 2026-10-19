@@ -150,6 +150,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.wa_templates.refresh_templates_task",
         "schedule": crontab(minute=25),
     },
+    # Lot 73 d — numéro et statut du nom de chaque compte WhatsApp, d'après Meta.
+    "wa-accounts-refresh": {
+        "task": "app.workers.wa_templates.refresh_accounts_task",
+        "schedule": crontab(hour=5, minute=10),
+    },
     # Lot 69 — plafonds des formules : alertes à 80 % et 100 % (Bob ne s'arrête pas, sauf mode « pause »).
     "plan-quota-alerts": {
         "task": "app.workers.plan_quota.check_quotas_task",

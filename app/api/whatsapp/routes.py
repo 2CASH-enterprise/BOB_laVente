@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.rate_limit import RateLimiter
+from app.core.rate_limit_dependency import get_rate_limiter
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.integrations.whatsapp.client import MetaOAuthClient
 from app.integrations.whatsapp.dependency import get_meta_oauth_client
@@ -61,6 +63,7 @@ class WhatsAppAccountResponse(BaseModel):
     phone_number_id: str
     display_name_status: str
     display_phone_number: str | None = None
+    display_name: str | None = None  # lot 73 d : nom vérifié par Meta
     # Lot 52 — numéro partagé avec le téléphone, et reprise de l'historique (REQUESTED, IN_PROGRESS, DONE, DECLINED).
     coexistence_mode: bool = False
     history_sync_status: str | None = None
@@ -149,6 +152,10 @@ async def embedded_signup_callback(
     await log_audit_event(db, actor=str(current_user.user_id), action=action, tenant_id=current_user.tenant_id, details=details)
     await db.commit()
     await db.refresh(account)
+    from app.services import wa_account_info  # lot 73 d : numéro, nom et statut du nom tout de suite, d'après Meta
+
+    await wa_account_info.refresh(db, account, oauth_client)
+    await db.refresh(account)
     # Lot 68 — modèles de message créés chez Meta juste après la connexion (si le Super Admin les a allumés).
     from app.models.tenant import Tenant
     from app.services import wa_templates
@@ -175,6 +182,29 @@ async def get_whatsapp_account(
     account = result.scalar_one_or_none()
     if account is None:
         raise HTTPException(status_code=404, detail="Aucun numéro WhatsApp n'est connecté à votre compte")
+    return account
+
+
+@router.post("/account/refresh", response_model=WhatsAppAccountResponse)
+async def refresh_whatsapp_account(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    oauth_client: MetaOAuthClient = Depends(get_meta_oauth_client),
+    rate_limiter: RateLimiter = Depends(get_rate_limiter),
+) -> WhatsAppAccount:
+    """Lot 73 d — numéro, nom et statut du nom redemandés à Meta (au plus toutes les 5 minutes par boutique)."""
+    from app.services import wa_account_info
+
+    account = (await db.execute(select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == current_user.tenant_id))).scalar_one_or_none()
+    if account is None:
+        raise HTTPException(status_code=404, detail="Aucun numéro WhatsApp n'est connecté à votre compte")
+    try:
+        allowed = await rate_limiter.is_allowed(f"wa-account-refresh:{current_user.tenant_id}", limit=1, window_seconds=300)
+    except Exception:  # noqa: BLE001 — limiteur indisponible : on n'appelle pas Meta
+        allowed = False
+    if allowed:
+        await wa_account_info.refresh(db, account, oauth_client)
+        await db.refresh(account)
     return account
 
 

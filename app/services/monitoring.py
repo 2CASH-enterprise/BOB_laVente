@@ -75,6 +75,7 @@ TASK_LABELS = {
     "app.workers.inbound_leads.read_leads_inbox_task": "Demandes des portails et des sites (agences)",
     "app.workers.inbound_leads.purge_leads_task": "Demandes par email : effacement après un an",
     "app.workers.demo_purge.purge_demos_task": "Démos non transformées : effacement après 30 jours",
+    "app.workers.wa_templates.refresh_accounts_task": "Numéros WhatsApp : nom et statut chez Meta",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).

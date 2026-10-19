@@ -17,3 +17,12 @@ async def refresh() -> dict:
 @celery_app.task(name="app.workers.wa_templates.refresh_templates_task")
 def refresh_templates_task() -> dict:
     return asyncio.run(refresh())
+
+
+@celery_app.task(name="app.workers.wa_templates.refresh_accounts_task")
+def refresh_accounts_task() -> dict:
+    """Lot 73 d — chaque nuit : numéro, nom vérifié et statut du nom de chaque compte WhatsApp, d'après Meta."""
+    from app.services import wa_account_info
+    from app.workers.monitoring import _with_session
+
+    return asyncio.run(_with_session(wa_account_info.refresh_all))

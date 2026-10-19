@@ -331,6 +331,8 @@
   .wa-connected { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel-2); margin-bottom: 14px; }
   .wa-number { font-size: 18px; font-weight: 700; letter-spacing: 0.3px; color: var(--text); }
+  .wa-number.muted-number { font-size: 14px; font-weight: 600; color: var(--muted); }
+  .wa-name { font-size: 13px; color: var(--muted); margin-top: 4px; }
   .wa-pill { display: inline-block; margin-top: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
   .wa-pill.success { background: var(--success-soft); color: var(--success); }
   .wa-pill.warning { background: var(--warning-soft); color: var(--warning); }
@@ -7136,14 +7138,14 @@ async function loadWhatsAppStatus() {
   try {
     const account = await api("/api/v1/whatsapp/account");
     statusEl.classList.add("hidden");
-    const digits = String(account.display_phone_number || "").replace(/\D/g, "");
-    document.getElementById("wa-number").textContent = digits ? prettyPhone(digits) : "Numéro connecté";
-    const [tone, label] = WA_NAME_STATUS[account.display_name_status] || ["warning", "Statut du nom inconnu"];
-    document.getElementById("wa-name-status").innerHTML = `<span class="wa-pill ${tone}">${esc(label)}</span>`;
+    renderWaAccount(account, true);
     connected.classList.remove("hidden");
     info.innerHTML = account.coexistence_mode ? coexistenceInfo(account) : "";
     info.classList.toggle("hidden", !account.coexistence_mode);
-    if (digits) document.getElementById("wa-display-number").value = "+" + digits;
+    // Lot 73 d : numéro ou nom pas encore connus → on les redemande à Meta, sans bloquer la page.
+    if (!account.display_phone_number || account.display_name_status !== "APPROVED") {
+      api("/api/v1/whatsapp/account/refresh", { method: "POST" }).then((fresh) => renderWaAccount(fresh, false)).catch(() => {});
+    }
   } catch (e) {
     if (e.status === 404) {
       statusEl.textContent = "Aucun numéro WhatsApp connecté : Bob ne peut pas encore répondre à vos clients. Choisissez comment connecter le vôtre.";
@@ -7158,6 +7160,18 @@ async function loadWhatsAppStatus() {
     const config = await fetch(API_BASE + "/api/v1/whatsapp/embedded-signup/config").then((r) => r.json());
     if (config.app_id) loadFacebookSdk(config.app_id, config.graph_api_version || "v21.0");
   } catch (e) {}
+}
+
+function renderWaAccount(account, waiting) {
+  const digits = String(account.display_phone_number || "").replace(/\D/g, "");
+  document.getElementById("wa-number").textContent = digits ? prettyPhone(digits)
+    : waiting ? "Numéro en cours de récupération auprès de Meta…" : "Numéro non communiqué par Meta : saisissez-le ci-dessous";
+  document.getElementById("wa-number").classList.toggle("muted-number", !digits);
+  const [tone, label] = WA_NAME_STATUS[account.display_name_status] || ["warning", "Statut du nom inconnu"];
+  const name = account.display_name ? `<div class="wa-name">Nom affiché aux clients : <b>${esc(account.display_name)}</b></div>` : "";
+  document.getElementById("wa-name-status").innerHTML = name + `<span class="wa-pill ${tone}">${esc(label)}</span>`;
+  const input = document.getElementById("wa-display-number");
+  if (digits && !input.value) input.value = "+" + digits;
 }
 
 async function reconnectWhatsApp() {

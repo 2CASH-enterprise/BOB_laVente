@@ -61,6 +61,15 @@ class MetaOAuthClient:
             _raise_for_meta(response)
             return response.json().get("data") or []
 
+    async def phone_number_info(self, phone_number_id: str, access_token: str) -> dict:
+        """Lot 73 d — numéro affiché, nom vérifié et statut du nom chez Meta (jeton dans l'en-tête)."""
+        url = f"{GRAPH_BASE_URL}/{self.api_version}/{phone_number_id}"
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(url, params={"fields": "display_phone_number,verified_name,name_status"},
+                                        headers={"Authorization": f"Bearer {access_token}"})
+            _raise_for_meta(response)
+            return response.json() or {}
+
     async def request_smb_sync(self, phone_number_id: str, sync_type: str, access_token: str) -> dict:
         """
         Lot 52 — coexistence : demande à Meta d'envoyer les contacts (`smb_app_state_sync`) ou l'historique
