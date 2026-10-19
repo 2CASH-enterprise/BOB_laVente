@@ -98,3 +98,9 @@ def test_dashboard_shows_the_picture():
     assert 'id="wa-photo"' in DASH and "function setTenantAvatar(url)" in DASH
     assert "if (t.logo_url) setTenantAvatar(t.logo_url);" in DASH
     assert "img.onerror" in DASH and "!account.profile_picture_url" in DASH
+
+
+def test_picture_address_keeps_the_bob_prefix():
+    """Lot 73 f — en production le tableau de bord est sous /bob : « /uploads/… » doit devenir « /bob/uploads/… »."""
+    assert 'return path && path.startsWith("/") ? API_BASE + path : path;' in DASH
+    assert "photo.src = siteUrl(account.profile_picture_url);" in DASH and "img.src = siteUrl(url);" in DASH

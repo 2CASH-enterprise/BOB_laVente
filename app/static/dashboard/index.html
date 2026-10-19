@@ -7183,15 +7183,20 @@ function renderWaAccount(account, waiting) {
   const photo = document.getElementById("wa-photo");
   photo.classList.toggle("hidden", !account.profile_picture_url);
   if (account.profile_picture_url) {
-    photo.src = account.profile_picture_url;
+    photo.src = siteUrl(account.profile_picture_url);
     setTenantAvatar(account.profile_picture_url);
   }
+}
+
+// Lot 73 f : Bob est servi sous un préfixe (/bob) ; une adresse « /uploads/… » doit le garder.
+function siteUrl(path) {
+  return path && path.startsWith("/") ? API_BASE + path : path;
 }
 
 function setTenantAvatar(url) {
   const box = document.getElementById("tenant-avatar");
   const img = document.createElement("img");
-  img.src = url;
+  img.src = siteUrl(url);
   img.alt = "";
   img.onerror = () => { box.textContent = box.dataset.initial || "B"; };
   box.replaceChildren(img);
