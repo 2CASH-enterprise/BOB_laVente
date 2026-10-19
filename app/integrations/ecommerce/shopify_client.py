@@ -20,7 +20,9 @@ def _parse_next_link(link_header: str | None) -> str | None:
 
 class ShopifyClient:
     def __init__(self, shop_domain: str, access_token: str, api_version: str = "2024-10"):
-        self.shop_domain = shop_domain.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+        from app.schemas.ecommerce import clean_shop_domain
+
+        self.shop_domain = clean_shop_domain(shop_domain)  # lot 73 : jamais une autre adresse que *.myshopify.com
         self.access_token = access_token
         self.api_version = api_version
 

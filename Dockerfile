@@ -13,6 +13,14 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
 
+# Lot 73 — les conteneurs ne tournent plus en « root » : un utilisateur sans droits (uid 1000).
+# Seul app/static/uploads doit lui appartenir sur le serveur (photos de produits) :
+#   chown -R 1000:1000 /opt/bob/app/static/uploads
+# Pas de fichiers .pyc écrits dans le dossier app monté depuis le serveur.
+ENV PYTHONDONTWRITEBYTECODE=1
+RUN groupadd --gid 1000 bob && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin bob
+USER bob
+
 EXPOSE 8000
 
 # Lot 70 — vraie adresse du visiteur (limites d'essais par adresse) : uvicorn lit X-Forwarded-For posé par nginx.

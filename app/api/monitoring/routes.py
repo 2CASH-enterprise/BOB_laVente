@@ -1,6 +1,7 @@
 """
 Lot 67 — monitoring technique.
 - Public : POST /api/v1/monitoring/client-error — erreurs JavaScript des pages (limité par adresse, masqué).
+- Public : POST /api/v1/monitoring/csp-report — signalements CSP des navigateurs (lot 73, limité, masqué).
 - Super Admin : liste des erreurs regroupées, détail, statut (Je m'en occupe / Corrigée), état du service, tests.
 """
 import asyncio
@@ -66,6 +67,31 @@ async def client_error(payload: ClientError, request: Request, rate_limiter: Rat
         return {"accepted": False}
     event = monitoring.capture_browser(payload.model_dump(), request.headers.get("user-agent", ""), _tenant_from_header(request))
     return {"accepted": event is not None}
+
+
+@public_router.post("/csp-report", status_code=status.HTTP_204_NO_CONTENT)
+async def csp_report(request: Request, rate_limiter: RateLimiter = Depends(get_rate_limiter)):
+    """Lot 73 : le navigateur envoie ici ce que la CSP bloquerait (application/csp-report ou reports+json)."""
+    from fastapi import Response
+    import json
+
+    body = await request.body()
+    ip = request.client.host if request.client else "unknown"
+    try:
+        allowed = len(body) <= 20000 and await rate_limiter.is_allowed(f"monitor-csp:ip:{ip}", limit=30, window_seconds=600) \
+            and await rate_limiter.is_allowed("monitor-csp:all", limit=300, window_seconds=600)
+        data = json.loads(body or b"null") if allowed else None
+    except Exception:  # noqa: BLE001 — corps illisible ou limiteur indisponible : ignoré
+        data = None
+    reports = []
+    if isinstance(data, dict) and isinstance(data.get("csp-report"), dict):
+        reports = [data["csp-report"]]
+    elif isinstance(data, list):
+        reports = [r.get("body") for r in data[:10] if isinstance(r, dict) and r.get("type") == "csp-violation"
+                   and isinstance(r.get("body"), dict)]
+    for report in reports:
+        monitoring.capture_csp(report, request.headers.get("user-agent", ""))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------- Super Admin

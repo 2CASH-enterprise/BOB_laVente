@@ -105,7 +105,7 @@ def test_token_travels_in_the_header_never_in_the_url(monkeypatch):
     transport = httpx.MockTransport(handler)
     real_client = httpx.AsyncClient
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw))
-    client = MetaCatalogClient("42", "SECRET-TOKEN")
+    client = MetaCatalogClient("4242424242", "SECRET-TOKEN")
 
     import asyncio
 

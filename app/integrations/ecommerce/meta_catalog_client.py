@@ -53,7 +53,9 @@ def _without_token(url: str) -> str:
 
 class MetaCatalogClient:
     def __init__(self, catalog_id: str, access_token: str, api_version: str | None = None):
-        self.catalog_id = catalog_id.strip()
+        from app.schemas.ecommerce import clean_catalog_id
+
+        self.catalog_id = clean_catalog_id(catalog_id)  # lot 73 : seulement des chiffres dans l'adresse de Meta
         self.access_token = access_token
         self.api_version = api_version or settings.whatsapp_graph_api_version
 

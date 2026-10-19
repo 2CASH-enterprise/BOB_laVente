@@ -74,6 +74,7 @@ TASK_LABELS = {
     "app.workers.pige.purge_listings_task": "Pige : effacement des annonces après 6 mois",
     "app.workers.inbound_leads.read_leads_inbox_task": "Demandes des portails et des sites (agences)",
     "app.workers.inbound_leads.purge_leads_task": "Demandes par email : effacement après un an",
+    "app.workers.demo_purge.purge_demos_task": "Démos non transformées : effacement après 30 jours",
 }
 
 # « Où » lisible, d'après le module d'où part l'opération (le plus extérieur dans la pile).
@@ -565,6 +566,43 @@ def capture_browser(payload: dict, user_agent: str = "", tenant_id=None) -> dict
                    sig_text=message.splitlines()[0])
 
 
+CSP_PAGES = {"dashboard": "Tableau de bord", "superadmin": "Super Admin", "demo": "Démo", "instant-demo": "Démo",
+             "legal": "Pages légales", "": "Présentation"}
+_EXTENSION = re.compile(r"(?i)^(chrome|moz|safari|ms-browser|webkit-masked)-extension|^about:|^chrome:")
+
+
+def _csp_page(document_uri: str) -> str:
+    path = re.sub(r"^https?://[^/]+", "", document_uri or "").lstrip("/")
+    first = path.split("/", 1)[0].split("?", 1)[0]
+    return CSP_PAGES.get(first, "Présentation" if not first or first.endswith(".html") else first[:40])
+
+
+def capture_csp(report: dict, user_agent: str = "") -> dict | None:
+    """Lot 73 : signalement CSP d'une page (« ce chargement serait bloqué »). Ignore les extensions du navigateur."""
+    def get(*keys):
+        for key in keys:
+            if report.get(key) not in (None, ""):
+                return str(report.get(key))
+        return ""
+
+    directive = get("effective-directive", "effectiveDirective", "violated-directive", "violatedDirective").split(" ")[0][:40]
+    blocked = get("blocked-uri", "blockedURL", "blockedURI")[:300]
+    source_file = get("source-file", "sourceFile")[:300]
+    document = get("document-uri", "documentURL", "documentURI")[:300]
+    if not directive or _EXTENSION.search(blocked) or _EXTENSION.search(source_file):
+        return None
+    host = re.sub(r"^(https?://[^/?#]+).*$", r"\1", blocked) if blocked.startswith("http") else (blocked or "inline")
+    page = _csp_page(document)
+    enforced = get("disposition") == "enforce"
+    verb = "a bloqué" if enforced else "bloquerait"
+    line = get("line-number", "lineNumber")
+    message = (f"La règle de sécurité des contenus (CSP) {verb} « {host} » ({directive}) sur la page {page}."
+               + (f"\nFichier : {source_file}" + (f", ligne {line}" if line else "") if source_file else ""))
+    return capture("BROWSER", title=f"CSP : {verb} {host} ({directive}) — {page}", message=message, exc_type="CSP",
+                   location=f"CSP · {directive}", context=page, browser=browser_name(user_agent),
+                   sig_text=f"csp {directive} {host} {page}")
+
+
 # ---------------------------------------------------------------- explication (Où / Conséquence / Piste)
 
 def explain(issue) -> dict:
@@ -605,6 +643,11 @@ def explain(issue) -> dict:
     elif source == "API":
         consequence = "Une action du tableau de bord affiche « Erreur interne »."
         hint = f"Refaire l'action ({issue.context}) ; la trace montre la ligne en cause."
+    elif source == "BROWSER" and issue.exc_type == "CSP":
+        consequence = ("Pendant la semaine d'essai (Report-Only), rien n'est bloqué. Une fois la règle appliquée "
+                       "(CSP_ENFORCE=true), ce chargement serait refusé et la page pourrait mal s'afficher.")
+        hint = ("Si l'adresse est légitime (service utilisé par Bob), l'ajouter à la règle (app/core/security_headers.py) "
+                "avant d'appliquer ; sinon, l'ignorer (extension ou script indésirable chez l'utilisateur).")
     elif source == "BROWSER":
         consequence = f"La page « {issue.context} » peut ne plus réagir pour l'utilisateur."
         browsers = ", ".join(issue.browsers or [])
@@ -782,6 +825,8 @@ async def send_alerts(db, now: datetime | None = None, send=None) -> dict:
             continue
         issue = await db.get(MonitorIssue, issue_id)
         if issue is None or (issue.spike_alerted_at and now - _utc(issue.spike_alerted_at) < SPIKE_REALERT):
+            continue
+        if issue.exc_type == "CSP":  # lot 73 : un signalement CSP revient à chaque page ouverte, pas un « pic »
             continue
         spikes.append((issue, n))
     if spikes:

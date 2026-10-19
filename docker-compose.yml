@@ -33,7 +33,8 @@ services:
   beat:
     build: .
     restart: unless-stopped
-    command: celery -A app.workers.celery_app beat --loglevel=info
+    # Lot 73 : le calendrier de beat est écrit dans /tmp (l'utilisateur sans droits ne peut pas écrire dans /code).
+    command: celery -A app.workers.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
     env_file:
       - .env
     depends_on:

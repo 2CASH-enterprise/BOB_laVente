@@ -36,6 +36,7 @@ TASK_MODULES = [
     "app.workers.property_alerts",  # lot 80
     "app.workers.pige",  # lot 81
     "app.workers.inbound_leads",  # lot 83
+    "app.workers.demo_purge",  # lot 73
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -107,6 +108,11 @@ celery_app.conf.beat_schedule = {
     "leads-purge": {
         "task": "app.workers.inbound_leads.purge_leads_task",
         "schedule": crontab(hour=4, minute=20),
+    },
+    # Lot 73 : démos non transformées en compte, effacées 30 jours après leur création.
+    "demo-purge": {
+        "task": "app.workers.demo_purge.purge_demos_task",
+        "schedule": crontab(hour=4, minute=40),
     },
     "pige-dvf": {
         "task": "app.workers.pige.refresh_dvf_task",

@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     leads_smtp_username: str = ""
     leads_smtp_password: str = ""
     debug: bool = False
+    # Lot 73 : politique de sécurité des contenus (CSP). False = « Report-Only » (signale sans bloquer, une semaine),
+    # True = appliquée (bloque). Les signalements arrivent dans le Monitoring.
+    csp_enforce: bool = False
 
     # Database
     database_url: str = "postgresql+asyncpg://bob:bob@localhost:5432/bob"

@@ -12,7 +12,7 @@ async def _setup_connection(db_session, email: str) -> tuple[Tenant, EcommerceCo
     await db_session.flush()
     connection = EcommerceConnection(
         tenant_id=tenant.id, platform=EcommercePlatform.META_CATALOG,
-        shop_domain="catalog_123", access_token="fake-token",
+        shop_domain="123456789012", access_token="fake-token",
     )
     db_session.add(connection)
     await db_session.commit()

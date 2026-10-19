@@ -16,7 +16,6 @@ from app.models.order import Order, OrderItem, OrderStatus
 from app.models.order_commission import OrderCommission
 from app.models.product import Product
 from app.models.tenant import Tenant
-from app.repositories.product_repository import ProductRepository
 
 
 class OrderCreationError(Exception):
@@ -44,7 +43,13 @@ async def create_order(
     if not items:
         raise OrderCreationError("Aucun article dans la commande")
 
-    product_repo = ProductRepository(db)
+    # Lot 73 : le client est un client de CETTE boutique (jamais une commande rattachée au client d'une autre).
+    from app.models.customer import Customer
+
+    customer = await db.get(Customer, customer_id) if customer_id else None
+    if customer is None or customer.tenant_id != tenant_id:
+        raise OrderCreationError("Client introuvable")
+
     order_items: list[OrderItem] = []
     total = 0.0
     currency = None
@@ -59,7 +64,12 @@ async def create_order(
         if quantity <= 0:
             raise OrderCreationError("La quantité doit être positive")
 
-        product: Product | None = await product_repo.get(tenant_id=tenant_id, record_id=product_id)
+        # Lot 73 : ligne verrouillée jusqu'à la fin de la commande (PostgreSQL) : deux commandes simultanées ne
+        # peuvent pas vendre le même dernier article.
+        from sqlalchemy import select
+
+        product: Product | None = (await db.execute(select(Product).where(
+            Product.id == product_id, Product.tenant_id == tenant_id).with_for_update())).scalar_one_or_none()
         if product is None or not product.active:
             raise OrderCreationError(f"Produit introuvable ou indisponible : {product_id}")
 

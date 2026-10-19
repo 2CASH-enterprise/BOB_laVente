@@ -35,11 +35,11 @@ async def test_connect_meta_catalog_success(client, db_session, unique_email):
     try:
         response = await client.post(
             "/api/v1/integrations/meta-catalog/connect",
-            json={"catalog_id": "catalog_123", "access_token": "tok"},
+            json={"catalog_id": "123456789012", "access_token": "tok"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 200
-        assert response.json()["shop_domain"] == "catalog_123"
+        assert response.json()["shop_domain"] == "123456789012"
     finally:
         del app.dependency_overrides[get_meta_catalog_client_factory]
 
@@ -55,7 +55,7 @@ async def test_connect_meta_catalog_invalid_token_rejected(client, db_session, u
     try:
         response = await client.post(
             "/api/v1/integrations/meta-catalog/connect",
-            json={"catalog_id": "catalog_123", "access_token": "bad"},
+            json={"catalog_id": "123456789012", "access_token": "bad"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 400
@@ -75,7 +75,7 @@ async def test_sync_meta_catalog_creates_products_via_api(client, db_session, un
     try:
         await client.post(
             "/api/v1/integrations/meta-catalog/connect",
-            json={"catalog_id": "catalog_123", "access_token": "tok"},
+            json={"catalog_id": "123456789012", "access_token": "tok"},
             headers=headers,
         )
         products = [make_meta_product("1", "Samsung A56", price="280000 XOF", retailer_id="SAM-A56")]
@@ -116,7 +116,7 @@ async def test_shopify_and_meta_catalog_connections_are_independent(client, db_s
         )
         r2 = await client.post(
             "/api/v1/integrations/meta-catalog/connect",
-            json={"catalog_id": "catalog_123", "access_token": "tok2"},
+            json={"catalog_id": "123456789012", "access_token": "tok2"},
             headers=headers,
         )
         assert r1.status_code == 200
@@ -125,7 +125,7 @@ async def test_shopify_and_meta_catalog_connections_are_independent(client, db_s
         status_shopify = await client.get("/api/v1/integrations/shopify/status", headers=headers)
         status_meta = await client.get("/api/v1/integrations/meta-catalog/status", headers=headers)
         assert status_shopify.json()["shop_domain"] == "test.myshopify.com"
-        assert status_meta.json()["shop_domain"] == "catalog_123"
+        assert status_meta.json()["shop_domain"] == "123456789012"
     finally:
         del app.dependency_overrides[get_shopify_client_factory]
         del app.dependency_overrides[get_meta_catalog_client_factory]
@@ -159,7 +159,7 @@ async def test_connection_error_never_shows_the_token(client, db_session, unique
     try:
         response = await client.post(
             "/api/v1/integrations/meta-catalog/connect",
-            json={"catalog_id": "cat", "access_token": "SECRET-TOKEN-123"},
+            json={"catalog_id": "987654321098", "access_token": "SECRET-TOKEN-123"},
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 400
@@ -179,7 +179,7 @@ async def test_sync_error_never_shows_the_token(client, db_session, unique_email
     )
     try:
         await client.post("/api/v1/integrations/meta-catalog/connect",
-                          json={"catalog_id": "cat", "access_token": "SECRET-TOKEN-123"}, headers=headers)
+                          json={"catalog_id": "987654321098", "access_token": "SECRET-TOKEN-123"}, headers=headers)
         app.dependency_overrides[get_meta_catalog_client_factory] = lambda: _LeakyMetaClient
         response = await client.post("/api/v1/integrations/meta-catalog/sync", headers=headers)
         assert "SECRET-TOKEN-123" not in response.text

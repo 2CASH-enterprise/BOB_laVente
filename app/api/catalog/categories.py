@@ -18,9 +18,23 @@ async def create_category(
     db: AsyncSession = Depends(get_db),
 ):
     repo = CategoryRepository(db)
-    category = await repo.get_or_create_by_name(current_user.tenant_id, payload.name)
+    parent = None
     if payload.parent_id is not None:
-        category.parent_id = payload.parent_id
+        # Lot 73 : la catégorie parente est une catégorie de LA MÊME boutique (jamais celle d'une autre).
+        parent = await repo.get(tenant_id=current_user.tenant_id, record_id=payload.parent_id)
+        if parent is None:
+            raise HTTPException(status_code=400, detail="Catégorie parente introuvable")
+    category = await repo.get_or_create_by_name(current_user.tenant_id, payload.name)
+    if parent is not None:
+        if parent.id == category.id:
+            raise HTTPException(status_code=400, detail="Une catégorie ne peut pas être sa propre parente")
+        ancestor, seen = parent, set()
+        while ancestor is not None and ancestor.parent_id is not None and ancestor.id not in seen:
+            seen.add(ancestor.id)
+            if ancestor.parent_id == category.id:
+                raise HTTPException(status_code=400, detail="Cette parente créerait une boucle de catégories")
+            ancestor = await repo.get(tenant_id=current_user.tenant_id, record_id=ancestor.parent_id)
+        category.parent_id = parent.id
     await db.commit()
     await db.refresh(category)
     return category

@@ -39,6 +39,7 @@ class AdLinkEvent(Base):
     link_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("ad_links.id", ondelete="CASCADE"),
                                                nullable=False, index=True)
     kind: Mapped[str] = mapped_column(String(8), nullable=False)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"),
-                                                 nullable=False, index=True)
+    # Lot 73 : une démo effacée après 30 jours garde son comptage (tenant_id devient vide).
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"),
+                                                        nullable=True, index=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
