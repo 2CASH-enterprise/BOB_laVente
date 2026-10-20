@@ -351,8 +351,8 @@ async def test_meta_sync_leaves_other_sectors_alone(db_session, unique_email):
 
 def test_dashboard_accepts_excel_and_offers_the_template():
     html = open("app/static/dashboard/index.html", encoding="utf-8").read()
-    assert 'accept=".xlsx,.csv' in html and "Importer un catalogue Excel ou CSV" in html
+    assert 'accept=".xlsx,.csv' in html and "Importer un catalogue Excel, CSV ou PDF" in html
     assert 'onclick="downloadTemplate()"' in html and 'id="template-category"' in html
-    assert "/api/v1/products/template/xlsx" in html and "\\.(csv|xlsx)$" in html
+    assert "/api/v1/products/template/xlsx" in html and "\\.(csv|xlsx|pdf)$" in html
     importer = html[html.index("async function importCsv() {"):html.index("async function loadCompanyProfile()")]
     assert "result.errors" in importer

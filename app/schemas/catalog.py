@@ -79,3 +79,4 @@ class CsvImportResponse(BaseModel):
     available: int
     unavailable: int
     errors: list[str] = []
+    issues: list[dict] = []  # lot 88 : {"row": index dans le tableau, "field": colonne, "level", "message"}

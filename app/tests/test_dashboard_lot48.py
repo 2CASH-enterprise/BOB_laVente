@@ -21,7 +21,7 @@ def test_no_tutoiement_left_in_the_dashboard():
 
 def test_every_file_field_has_the_bob_design():
     inputs = re.findall(r'<input type="file"[^>]*>', HTML)
-    assert len(inputs) == 5  # lot 55 : import du registre des contrats ; lot 59 : import des clients ; lot 65 : pré-inscription
+    assert len(inputs) == 6  # lot 55 : registre des contrats ; lot 59 : clients ; lot 65 : pré-inscription ; lot 88 : photo à l'ajout
     for match in re.finditer(r'<input type="file"', HTML):
         before = HTML[max(0, match.start() - 1500):match.start()]
         assert before.rfind('class="file-drop"') > before.rfind("</label>") or before.rfind('class="file-pick"') > before.rfind("</label>")
@@ -31,10 +31,10 @@ def test_every_file_field_has_the_bob_design():
 def test_csv_picker_shows_the_file_and_accepts_drops():
     zone = HTML[HTML.index('<label class="file-drop" id="csv-drop">'):]
     zone = zone[:zone.index("</label>")]
-    assert 'id="csv-file-input"' in zone and 'onchange="showChosenCsv()"' in zone and "Choisir un fichier Excel ou CSV" in zone
+    assert 'id="csv-file-input"' in zone and 'onchange="showChosenCsv()"' in zone and "Choisir un fichier Excel, CSV ou PDF" in zone
     js = HTML[HTML.index("function showChosenCsv() {"):HTML.index("async function importCsv() {")]
     assert "file.name" in js and "has-file" in js and "Ko" in js
-    assert 'addEventListener("drop"' in js and "\\.(csv|xlsx)$" in js and "Seuls les fichiers Excel (.xlsx) ou .csv" in js and "new DataTransfer()" in js
+    assert 'addEventListener("drop"' in js and "\\.(csv|xlsx|pdf)$" in js and "Seuls les fichiers Excel (.xlsx), .csv ou .pdf" in js and "new DataTransfer()" in js
     importer = HTML[HTML.index("async function importCsv() {"):HTML.index("async function loadCompanyProfile()")]
     assert 'fileInput.value = "";' in importer and "showChosenCsv();" in importer
     assert "initCsvDrop();" in HTML[HTML.index("async function loadProducts() {"):][:200]

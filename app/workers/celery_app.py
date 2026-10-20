@@ -38,6 +38,7 @@ TASK_MODULES = [
     "app.workers.inbound_leads",  # lot 83
     "app.workers.demo_purge",  # lot 73
     "app.workers.photo_studio",  # lot 87
+    "app.workers.catalog_pdf",  # lot 88
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)

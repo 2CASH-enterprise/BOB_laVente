@@ -77,6 +77,7 @@ TASK_LABELS = {
     "app.workers.demo_purge.purge_demos_task": "Démos non transformées : effacement après 30 jours",
     "app.workers.photo_studio.retouch_photos_task": "Photos : fond blanc studio",
     "app.workers.photo_studio.collect_worn_task": "Photos portées (habits) : résultats",
+    "app.workers.catalog_pdf.read_catalog_pdf_task": "Import de catalogue PDF (lecture par l'IA)",
     "app.workers.wa_templates.refresh_accounts_task": "Numéros WhatsApp : nom et statut chez Meta",
 }
 

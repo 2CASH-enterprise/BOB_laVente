@@ -72,8 +72,11 @@ def table_to_import_csv(header: list[str], rows: list[list[str]], keep_vehicle: 
 
 
 def _clean_price(value: str) -> str:
-    """« 1 250,50 € » → « 1250.50 » ; une valeur déjà propre ne change pas."""
-    text = re.sub(r"[\s\u00a0\u202f€$]|FCFA|XOF|EUR", "", str(value or ""), flags=re.I)
+    """« 1 250,50 € » → « 1250.50 » ; une valeur déjà propre ne change pas. Lot 88 : « 15.000 FCFA » ou « 15,000 »
+    (séparateur de milliers) → « 15000 »."""
+    text = re.sub(r"[\s\u00a0\u202f€$]|FCFA|F\.?\s?CFA|XOF|EUR", "", str(value or ""), flags=re.I)
+    if re.fullmatch(r"\d{1,3}([.,]\d{3})+", text) and len(set(re.findall(r"[.,]", text))) == 1:
+        return re.sub(r"[.,]", "", text)
     if "," in text and "." not in text:
         text = text.replace(",", ".")
     elif "," in text:  # « 1,250.50 »
@@ -98,11 +101,13 @@ def _parse_active(raw: str | None) -> bool:
 async def import_catalog_csv(
     db: AsyncSession, tenant_id, csv_content: str, max_new_products: int | None = None,
     with_vehicles: bool = True, without_prices: bool = False, with_properties: bool = False,
-    with_sheets: bool = False, default_category: str | None = None,
+    with_sheets: bool = False, default_category: str | None = None, dry_run: bool = False,
 ) -> CsvImportResponse:
     """
     max_new_products : plafond freemium (section produits) — n'empêche jamais la mise à
     jour d'un produit déjà existant, seulement l'ajout de nouveaux au-delà du plan.
+    Lot 88 — dry_run : rien n'est enregistré (l'appelant annule) ; sert à l'écran « Vérifiez avant d'importer ».
+    Chaque erreur est aussi rendue structurée (ligne du tableau, colonne, motif) dans `issues`.
     """
     reader = csv.DictReader(io.StringIO(csv_content))
 
@@ -125,6 +130,13 @@ async def import_catalog_csv(
 
     total = imported = updated = failed = available = unavailable = 0
     errors: list[str] = []
+    issues: list[dict] = []
+
+    def fail(row_number: int, field: str | None, text: str, sku: str | None = None) -> None:
+        nonlocal failed
+        failed += 1
+        errors.append(f"Ligne {row_number}{f' ({sku})' if sku else ''} : {text}")
+        issues.append({"row": row_number - 2, "field": field, "level": "error", "message": text[:1].upper() + text[1:]})
 
     for row_number, row in enumerate(reader, start=2):  # ligne 1 = en-têtes
         total += 1
@@ -134,6 +146,9 @@ async def import_catalog_csv(
         if not sku or not name:
             failed += 1
             errors.append(f"Ligne {row_number} : SKU et NAME sont obligatoires")
+            for field, value, label in (("SKU", sku, "Référence obligatoire"), ("NAME", name, "Nom obligatoire")):
+                if not value:
+                    issues.append({"row": row_number - 2, "field": field, "level": "error", "message": label})
             continue
 
         try:
@@ -141,21 +156,18 @@ async def import_catalog_csv(
             if price <= 0 and not without_prices:
                 raise InvalidOperation
         except (InvalidOperation, ValueError):
-            failed += 1
-            errors.append(f"Ligne {row_number} ({sku}) : prix invalide")
+            fail(row_number, "PRICE", "prix invalide" if str(row.get("PRICE") or "").strip() else "prix manquant", sku)
             continue
 
         try:
             stock = 0 if without_prices else int(str(row.get("STOCK", "0")).strip() or 0)
         except ValueError:
-            failed += 1
-            errors.append(f"Ligne {row_number} ({sku}) : stock invalide")
+            fail(row_number, "STOCK", "stock invalide (un nombre entier est attendu)", sku)
             continue
 
         currency = (row.get("CURRENCY") or "").strip().upper() or ("XOF" if without_prices else "")
         if len(currency) != 3:
-            failed += 1
-            errors.append(f"Ligne {row_number} ({sku}) : devise invalide (attendu code ISO 3 lettres)")
+            fail(row_number, "CURRENCY", "devise invalide (attendu code ISO 3 lettres)", sku)
             continue
 
         category_id = None
@@ -172,8 +184,7 @@ async def import_catalog_csv(
         vehicle_columns = vehicle_from_csv_row(row) if with_vehicles else {}
         vehicle, vehicle_errors = normalize_vehicle(vehicle_columns)
         if vehicle_errors:
-            failed += 1
-            errors.append(f"Ligne {row_number} ({sku}) : {' ; '.join(vehicle_errors)}")
+            fail(row_number, None, " ; ".join(vehicle_errors), sku)
             continue
 
         bob_category = sheet = None
@@ -193,8 +204,8 @@ async def import_catalog_csv(
             has_category_column = category_cell is not None
             sheet_category = product_sheets.category_from_value(category_cell)
             if category_cell and sheet_category is None:
-                failed += 1
-                errors.append(f"Ligne {row_number} ({sku}) : catégorie Bob inconnue « {str(category_cell)[:40]} »")
+                header = next((h for h, v in row.items() if h and product_sheets.is_category_header(h)), None)
+                fail(row_number, header, f"catégorie Bob inconnue « {str(category_cell)[:40]} »", sku)
                 continue
 
         existing = await product_repo.get_by_sku(tenant_id, sku)
@@ -235,8 +246,7 @@ async def import_catalog_csv(
             updated += 1
         else:
             if max_new_products is not None and imported >= max_new_products:
-                failed += 1
-                errors.append(f"Ligne {row_number} ({sku}) : limite du plan freemium atteinte, produit ignoré")
+                fail(row_number, None, "limite du plan freemium atteinte, produit ignoré", sku)
                 continue
             db.add(
                 Product(
@@ -262,7 +272,8 @@ async def import_catalog_csv(
         else:
             unavailable += 1
 
-    await db.commit()
+    if not dry_run:
+        await db.commit()
 
     return CsvImportResponse(
         total_rows=total,
@@ -272,6 +283,7 @@ async def import_catalog_csv(
         available=available,
         unavailable=unavailable,
         errors=errors,
+        issues=issues,
     )
 
 

@@ -12,3 +12,4 @@ build/
 .DS_Store
 *.tar.gz
 app/static/uploads/
+app/var/

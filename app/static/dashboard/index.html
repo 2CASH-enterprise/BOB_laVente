@@ -284,6 +284,32 @@
   .file-drop:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .file-drop.has-file { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
   .file-drop input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  #new-photo-drop { padding: 10px 12px; margin-bottom: 0; }
+  #new-photo-drop .file-icon { width: 32px; height: 32px; }
+  /* Lot 88 — « Vérifiez avant d'importer » */
+  .ir-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 10px; }
+  .ir-head h3 { margin: 0; font-size: 16px; }
+  .ir-summary { font-size: 13px; color: var(--muted); }
+  .ir-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .ir-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .ir-legend .is-error { background: var(--danger); } .ir-legend .is-warning { background: var(--warning); } .ir-legend .is-info { background: var(--info); }
+  .ir-wrap { overflow: auto; max-height: 560px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .ir-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 13px; }
+  .ir-table th { position: sticky; top: 0; z-index: 1; background: var(--panel-2); text-align: left; padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .ir-table td { padding: 4px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ir-table tr.is-error td { background: var(--danger-soft); }
+  .ir-table input { width: 100%; min-width: 90px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  .ir-table td.c-NAME input, .ir-table td.c-DESCRIPTION input { min-width: 200px; }
+  .ir-table td.is-error input { border-color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
+  .ir-table td.is-warning input { border-color: var(--warning); }
+  .ir-table td.is-info input { border-color: var(--info); }
+  .ir-note { display: block; font-size: 11px; line-height: 1.3; margin-top: 3px; max-width: 240px; white-space: normal; }
+  .ir-note.is-error { color: var(--danger); } .ir-note.is-warning { color: var(--warning); } .ir-note.is-info { color: var(--info); }
+  .ir-photo { display: flex; align-items: center; gap: 6px; }
+  .ir-photo img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+  .ir-del { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+  .ir-del:hover { color: var(--danger); background: var(--danger-soft); }
+  .ir-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
   .file-drop .file-icon { flex-shrink: 0; width: 38px; height: 38px; border-radius: var(--radius-sm); display: grid; place-items: center;
     background: var(--accent-soft); color: var(--accent); }
   .file-drop.has-file .file-icon { background: var(--accent-fill); color: var(--on-accent); }
@@ -650,6 +676,9 @@
     tr[id^="upsell-row-"] td, tr[id^="delivery-row-"] td, tr[id^="edit-row-"] td { display: block; padding: 8px 0; }
     tr[id^="upsell-row-"], tr[id^="delivery-row-"], tr[id^="edit-row-"] { background: var(--panel-2); border-radius: 14px; padding: 10px 12px; margin-top: -6px; margin-bottom: 10px; }
     button.action { min-height: 44px; }
+    .ir-table { width: 100%; min-width: 0; }
+    .ir-table td > .ir-cell { flex: 1; min-width: 0; max-width: 70%; }
+    .ir-wrap { border: none; max-height: none; overflow: visible; }
   }
 
   @media (max-width: 480px) {
@@ -984,6 +1013,14 @@
             <textarea id="new-product-description" class="input insurance-only" rows="3" style="grid-column: span 2; resize: vertical;"
               placeholder="Garanties et conditions, comme vous les présentez à vos clients (jamais de prix : Bob n'en donne pas)"></textarea>
           </div>
+          <div class="no-insurance" style="margin-top: 8px;"><label class="file-drop" id="new-photo-drop">
+            <span class="file-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 16-5-5-8 8"/></svg></span>
+            <span class="file-text">
+              <span class="file-title" id="new-photo-name">Ajouter une photo (facultatif)</span>
+              <span class="file-hint" id="new-photo-hint">ou glissez-la ici · jpg, png ou webp, 5 Mo au plus</span>
+            </span>
+            <input type="file" id="new-product-photo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" aria-label="Choisir la photo du produit" onchange="showChosenPhoto()">
+          </label></div>
           <div id="new-vehicle-fields" class="hidden" style="margin-top: 8px;"></div>
           <button class="action" style="margin-top: 10px;" onclick="createProduct()">Ajouter</button>
           <div id="new-product-msg" style="margin-top: 8px; font-size: 13px;"></div>
@@ -996,14 +1033,14 @@
           </div>
         </div>
         <div class="card" style="flex: 1; min-width: 280px;">
-          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue Excel ou CSV<button class="tip"></button><span class="tip-bubble" hidden>Le plus simple : téléchargez le modèle Excel, remplissez une ligne par produit, puis importez-le. Colonnes reconnues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE, ou leurs équivalents en français (Référence, Nom, Prix, Devise…). L'export Excel se réimporte tel quel : pratique pour corriger beaucoup de produits d'un coup. <span class="store-only"><br>CATEGORIE_BOB et les colonnes de fiche (Matière, Tailles ou pointures, Marque…) remplissent la fiche que Bob utilise pour répondre ; une case vide efface l'information.</span><span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span><span class="estate-only"><br>Biens (facultatif) : TYPE, TRANSACTION (vente ou location), VILLE, QUARTIER, SURFACE, PIECES, CHAMBRES, DPE, HONORAIRES, CHARGES. PRICE = prix de vente honoraires inclus, ou loyer mensuel charges comprises ; STOCK = 1 si le bien est disponible.</span></span></div>
+          <div class="label" style="margin-bottom: 12px; font-weight: 600;">Importer un catalogue Excel, CSV ou PDF<button class="tip"></button><span class="tip-bubble" hidden>Bob vous montre d'abord le tableau lu dans votre fichier : vous corrigez ce qui est signalé, puis vous importez. Un PDF avec un tableau est lu gratuitement ; une brochure ou un scan est lu par l'IA (50 pages au plus, selon votre formule). Le plus simple : téléchargez le modèle Excel, remplissez une ligne par produit, puis importez-le. Colonnes reconnues (SKU = référence du produit) : SKU, NAME, DESCRIPTION, CATEGORY, PRICE, CURRENCY, STOCK, IMAGE_URL, ACTIVE, ou leurs équivalents en français (Référence, Nom, Prix, Devise…). L'export Excel se réimporte tel quel : pratique pour corriger beaucoup de produits d'un coup. <span class="store-only"><br>CATEGORIE_BOB et les colonnes de fiche (Matière, Tailles ou pointures, Marque…) remplissent la fiche que Bob utilise pour répondre ; une case vide efface l'information.</span><span id="csv-vehicle-help" class="hidden"><br>Véhicules (facultatif) : MARQUE, MODELE, FINITION, CARROSSERIE, ANNEE, KILOMETRAGE, CARBURANT, BOITE, COULEUR</span><span class="estate-only"><br>Biens (facultatif) : TYPE, TRANSACTION (vente ou location), VILLE, QUARTIER, SURFACE, PIECES, CHAMBRES, DPE, HONORAIRES, CHARGES. PRICE = prix de vente honoraires inclus, ou loyer mensuel charges comprises ; STOCK = 1 si le bien est disponible.</span></span></div>
           <label class="file-drop" id="csv-drop">
             <span class="file-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
             <span class="file-text">
-              <span class="file-title" id="csv-file-name">Choisir un fichier Excel ou CSV</span>
-              <span class="file-hint" id="csv-file-hint">ou glissez-le ici · fichier .xlsx ou .csv</span>
+              <span class="file-title" id="csv-file-name">Choisir un fichier Excel, CSV ou PDF</span>
+              <span class="file-hint" id="csv-file-hint">ou glissez-le ici · fichier .xlsx, .csv ou .pdf</span>
             </span>
-            <input type="file" id="csv-file-input" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Choisir un fichier Excel ou CSV" onchange="showChosenCsv()">
+            <input type="file" id="csv-file-input" accept=".xlsx,.csv,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Choisir un fichier Excel, CSV ou PDF" onchange="showChosenCsv()">
           </label>
           <button class="action" onclick="importCsv()">Importer</button>
           <button class="action secondary" onclick="exportXlsx()">Exporter en Excel</button>
@@ -1012,8 +1049,10 @@
             <button class="action secondary" onclick="downloadTemplate()">Télécharger le modèle Excel</button>
           </div>
           <div id="csv-import-msg" style="margin-top: 8px; font-size: 13px;"></div>
+          <div id="pdf-quota-note" style="margin-top: 4px; font-size: 12px; color: var(--muted);"></div>
         </div>
       </div>
+      <div class="card hidden" id="import-review" style="margin-bottom: 20px;" aria-live="polite"></div>
       <div class="estate-only" style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
         <div class="card" style="flex: 1; min-width: 280px;" id="alerts-card">
           <div class="label" style="margin-bottom: 8px; font-weight: 600;">Alertes « nouveau bien »<button class="tip"></button><span class="tip-bubble" hidden>Quand vous ajoutez un bien (ou baissez son prix), Bob le compare aux projets d'achat et de location de vos contacts. Seuls ceux qui ont accepté d'être prévenus le reçoivent : par WhatsApp (gratuit) s'ils vous ont écrit il y a moins de 20 h, sinon par email. Jamais deux fois le même bien, deux alertes par semaine au plus.</span></div>
@@ -3988,6 +4027,8 @@ let allQrCodes = [];
 
 async function loadProducts() {
   initCsvDrop();  // lot 48
+  initPhotoDrop();  // lot 88
+  loadPdfQuota();  // lot 88
   const rows = document.getElementById("product-rows");
   rows.innerHTML = "<tr><td class='loading-text' colspan='7'>Chargement</td></tr>";
   allProducts = await api("/api/v1/products");
@@ -5614,10 +5655,30 @@ async function createProduct() {
     msg.textContent = "Référence, nom, prix et devise sont obligatoires.";
     return;
   }
+  const photoInput = document.getElementById("new-product-photo");
+  const photo = currentBusinessType !== "INSURANCE_BROKER" && photoInput && photoInput.files[0];
+  if (photo && photo.size > 5 * 1024 * 1024) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = "Photo trop lourde (5 Mo au plus).";
+    return;
+  }
   try {
-    await api("/api/v1/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const created = await api("/api/v1/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     msg.style.color = "var(--success)";
     msg.textContent = currentBusinessType === "REAL_ESTATE" ? "Bien ajouté : complétez sa fiche avec « Gérer »." : "Produit ajouté.";
+    if (photo) {  // lot 88 : la photo part juste après la création, puis passe au fond blanc studio
+      const formData = new FormData();
+      formData.append("file", photo);
+      try {
+        await api(`/api/v1/products/${created.id}/image`, { method: "POST", body: formData });
+        msg.textContent += " Photo envoyée : Bob la retouche dans la minute.";
+      } catch (e) {
+        msg.style.color = "var(--warning)";
+        msg.textContent += ` La photo n'a pas pu être envoyée (${e.message}) : ajoutez-la avec « Gérer ».`;
+      }
+      photoInput.value = "";
+      showChosenPhoto();
+    }
     ["sku", "name", "price", "currency", "stock", "description"].forEach((f) => (document.getElementById("new-product-" + f).value = ""));
     if (currentBusinessType === "CAR_DEALERSHIP") document.getElementById("new-vehicle-fields").innerHTML = vehicleFields("new", null);
     loadProducts();
@@ -5632,10 +5693,10 @@ function showChosenCsv() {
   const input = document.getElementById("csv-file-input");
   const file = input.files[0];
   document.getElementById("csv-drop").classList.toggle("has-file", !!file);
-  document.getElementById("csv-file-name").textContent = file ? file.name : "Choisir un fichier Excel ou CSV";
+  document.getElementById("csv-file-name").textContent = file ? file.name : "Choisir un fichier Excel, CSV ou PDF";
   document.getElementById("csv-file-hint").textContent = file
     ? `${file.size < 1024 ? file.size + " o" : Math.max(1, Math.round(file.size / 1024)) + " Ko"} · cliquez pour en choisir un autre`
-    : "ou glissez-le ici · fichier .xlsx ou .csv";
+    : "ou glissez-le ici · fichier .xlsx, .csv ou .pdf";
   document.getElementById("csv-import-msg").textContent = "";
 }
 
@@ -5650,10 +5711,10 @@ function initCsvDrop() {
     zone.classList.remove("dragging");
     const file = e.dataTransfer && e.dataTransfer.files[0];
     if (!file) return;
-    if (!/\.(csv|xlsx)$/i.test(file.name)) {
+    if (!/\.(csv|xlsx|pdf)$/i.test(file.name)) {
       const msg = document.getElementById("csv-import-msg");
       msg.style.color = "var(--danger)";
-      msg.textContent = "Seuls les fichiers Excel (.xlsx) ou .csv peuvent être importés.";
+      msg.textContent = "Seuls les fichiers Excel (.xlsx), .csv ou .pdf peuvent être importés.";
       return;
     }
     const data = new DataTransfer();
@@ -5663,31 +5724,222 @@ function initCsvDrop() {
   });
 }
 
+// --- Lot 88 : « Vérifiez avant d'importer » (Excel, CSV, PDF) -------------------------------------------------------
+let importDraft = null;  // { header, labels, rows, issues, notes: [{champ: message}], importId }
+let importPoll = null;
+
+async function loadPdfQuota() {
+  const note = document.getElementById("pdf-quota-note");
+  if (!note) return;
+  try {
+    const q = await api("/api/v1/catalog/pdf-quota");
+    note.textContent = !q.configured ? "" : q.quota === null ? "PDF mis en page (lecture par l'IA) : sans limite dans votre formule."
+      : q.quota === 0 ? "PDF mis en page (lecture par l'IA) : à partir de la formule Indépendant."
+      : `PDF mis en page (lecture par l'IA) : ${q.used} sur ${q.quota} ce mois-ci.`;
+  } catch (e) { note.textContent = ""; }
+}
+
 async function importCsv() {
   const msg = document.getElementById("csv-import-msg");
   const fileInput = document.getElementById("csv-file-input");
   msg.textContent = "";
   if (!fileInput.files.length) {
     msg.style.color = "var(--danger)";
-    msg.textContent = "Choisissez un fichier Excel ou CSV d'abord.";
+    msg.textContent = "Choisissez un fichier Excel, CSV ou PDF d'abord.";
     return;
   }
   const formData = new FormData();
   formData.append("file", fileInput.files[0]);
+  msg.style.color = "var(--muted)";
+  msg.textContent = "Lecture du fichier…";
   try {
-    const result = await api("/api/v1/catalog/import-csv", { method: "POST", body: formData });
+    const r = await api("/api/v1/catalog/import-preview", { method: "POST", body: formData });
     fileInput.value = "";  // lot 48 : prêt pour le fichier suivant
     showChosenCsv();
-    msg.style.color = result.failed ? "var(--danger)" : "var(--success)";
-    // Lot 78 B : les premières erreurs sont montrées (ligne, référence, motif) pour corriger le fichier.
+    if (r.status === "PROCESSING") {
+      msg.style.color = "var(--muted)";
+      msg.textContent = `Bob lit votre PDF (${r.pages} page${r.pages > 1 ? "s" : ""}) : une à deux minutes. Vous pouvez rester sur cette page.`;
+      waitForImport(r.id);
+      return;
+    }
+    msg.textContent = "";
+    openImportReview(r, null);
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+function waitForImport(id) {
+  clearTimeout(importPoll);
+  importPoll = setTimeout(async () => {
+    const msg = document.getElementById("csv-import-msg");
+    try {
+      const r = await api(`/api/v1/catalog/import-preview/${encodeURIComponent(id)}`);
+      if (r.status === "PROCESSING") return waitForImport(id);
+      if (r.status === "FAILED") { msg.style.color = "var(--danger)"; msg.textContent = r.error; loadPdfQuota(); return; }
+      if (r.status !== "READY") { msg.textContent = ""; return; }
+      msg.textContent = "";
+      openImportReview(r, id);
+      loadPdfQuota();
+    } catch (e) {
+      msg.style.color = "var(--danger)";
+      msg.textContent = e.message;
+    }
+  }, 4000);
+}
+
+function openImportReview(r, importId) {
+  const notes = r.rows.map(() => ({}));
+  (r.issues || []).filter((i) => i.level === "info" && i.row !== null && notes[i.row]).forEach((i) => { notes[i.row][i.field] = i.message; });
+  importDraft = { header: r.header, labels: r.labels, rows: r.rows, issues: (r.issues || []).filter((i) => i.level !== "info"),
+                  notes, importId, source: r.source, pages: r.pages };
+  renderImportReview();
+  document.getElementById("import-review").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function importIssuesAt(row) {
+  return importDraft.issues.filter((i) => i.row === row || i.row === null);
+}
+
+function renderImportReview() {
+  const box = document.getElementById("import-review");
+  const d = importDraft;
+  if (!d) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+  const live = d.rows.map((row, i) => ({ row, i })).filter(({ row }) => row.some((c) => String(c || "").trim()));
+  const blocked = new Set(d.issues.filter((i) => i.level === "error").map((i) => i.row));
+  const allBlocked = blocked.has(null);
+  const ready = allBlocked ? 0 : live.filter(({ i }) => !blocked.has(i)).length;
+  const toFix = live.length - ready;
+  const origin = d.source === "PDF_AI" ? `PDF lu par l'IA (${d.pages} page${d.pages > 1 ? "s" : ""}) : relisez les noms et les prix.`
+    : d.source === "PDF_TABLE" ? "Tableau lu dans votre PDF." : "";
+  const general = d.issues.filter((i) => i.row === null).map((i) => `<p class="tone-danger">${esc(i.message)}</p>`).join("");
+  const head = d.labels.map((l) => `<th>${esc(l)}</th>`).join("");
+  const body = live.map(({ row, i }) => {
+    const issues = importIssuesAt(i);
+    const rowError = issues.filter((x) => x.level === "error" && (!x.field || !d.header.includes(x.field)) && x.row !== null);
+    const cells = d.header.map((h, c) => {
+      const own = issues.filter((x) => x.field === h);
+      const note = d.notes[i] && d.notes[i][h];
+      const level = own.some((x) => x.level === "error") ? "error" : own.length ? "warning" : note ? "info" : "";
+      const text = own.map((x) => x.message).concat(note && !own.length ? [note] : []).join(" · ");
+      const value = row[c] == null ? "" : String(row[c]);
+      const field = h === "IMAGE_URL" && value
+        ? `<div class="ir-photo"><img src="${esc(value)}" alt="Photo lue dans le fichier" loading="lazy"><button class="ir-del" title="Retirer la photo" aria-label="Retirer la photo" data-row="${i}" data-col="${c}" data-clear="1" onclick="editImportCell(this)">×</button></div>`
+        : `<input value="${esc(value)}" aria-label="${esc(d.labels[c])}, ligne ${i + 1}" data-row="${i}" data-col="${c}" onchange="editImportCell(this)">`;
+      return `<td class="c-${esc(h)}${level ? " is-" + level : ""}" data-label="${esc(d.labels[c])}"><div class="ir-cell">${field}${text ? `<span class="ir-note is-${level}">${esc(text)}</span>` : ""}</div></td>`;
+    }).join("");
+    const rowNote = rowError.length ? `<span class="ir-note is-error">${esc(rowError.map((x) => x.message).join(" · "))}</span>` : "";
+    return `<tr class="${blocked.has(i) ? "is-error" : ""}"><td><button class="ir-del" title="Supprimer cette ligne" aria-label="Supprimer la ligne ${i + 1}" onclick="deleteImportRow(${i})">×</button>${rowNote}</td>${cells}</tr>`;
+  }).join("");
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <div class="ir-head"><h3>Vérifiez avant d'importer</h3>
+      <span class="ir-summary">${ready} produit${ready > 1 ? "s" : ""} prêt${ready > 1 ? "s" : ""} sur ${live.length}${toFix ? ` · ${toFix} à corriger (ces lignes ne seront pas importées)` : ""}${origin ? " · " + esc(origin) : ""}</span></div>
+    <div class="ir-legend"><span><i class="is-error"></i>À corriger : la ligne ne sera pas importée</span><span><i class="is-warning"></i>À vérifier</span><span><i class="is-info"></i>Proposé par Bob</span></div>
+    ${general}
+    <div class="ir-wrap"><table class="ir-table"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    <div class="ir-actions">
+      <button class="action" ${ready ? "" : "disabled"} onclick="confirmImport()">Importer ${ready} produit${ready > 1 ? "s" : ""}</button>
+      <button class="action secondary" onclick="recheckImport()">Revérifier</button>
+      <button class="action secondary" onclick="closeImportReview()">Annuler</button>
+      <span id="import-review-msg" style="font-size: 13px;"></span>
+    </div>`;
+}
+
+function editImportCell(el) {
+  const row = Number(el.dataset.row), col = Number(el.dataset.col);
+  importDraft.rows[row][col] = el.dataset.clear ? "" : el.value;
+  const field = importDraft.header[col];
+  importDraft.issues = importDraft.issues.filter((i) => !(i.row === row && i.field === field));  // à revérifier
+  if (importDraft.notes[row]) delete importDraft.notes[row][field];
+  if (field === "IMAGE_URL") renderImportReview();
+  else {
+    const msg = document.getElementById("import-review-msg");
+    msg.style.color = "var(--muted)";
+    msg.textContent = "Modifié : cliquez sur « Revérifier » pour mettre à jour les signalements.";
+  }
+}
+
+function deleteImportRow(row) {
+  importDraft.rows.splice(row, 1);
+  importDraft.notes.splice(row, 1);
+  importDraft.issues = importDraft.issues.filter((i) => i.row !== row).map((i) => (i.row !== null && i.row > row ? { ...i, row: i.row - 1 } : i));
+  renderImportReview();
+}
+
+async function recheckImport() {
+  const msg = document.getElementById("import-review-msg");
+  try {
+    const r = await api("/api/v1/catalog/import-check", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ header: importDraft.header, rows: importDraft.rows }) });
+    importDraft.issues = r.issues;
+    importDraft.rows = r.rows;
+    renderImportReview();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function confirmImport() {
+  const msg = document.getElementById("import-review-msg");
+  msg.style.color = "var(--muted)";
+  msg.textContent = "Import en cours…";
+  try {
+    const result = await api("/api/v1/catalog/import-rows", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ header: importDraft.header, rows: importDraft.rows, import_id: importDraft.importId }) });
+    closeImportReview();
+    const out = document.getElementById("csv-import-msg");
+    out.style.color = result.failed ? "var(--danger)" : "var(--success)";
     const shown = (result.errors || []).slice(0, 3).join(" · ");
-    msg.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour, ${result.failed} échecs.` +
-      (shown ? ` ${shown}${result.errors.length > 3 ? " …" : ""}` : "");
+    out.textContent = `${result.imported} ajoutés, ${result.updated} mis à jour, ${result.failed} non importés.` +
+      (shown ? ` ${shown}${result.errors.length > 3 ? " …" : ""}` : "") + (result.imported + result.updated ? " Les photos sont retouchées dans les minutes qui suivent." : "");
     loadProducts();
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
   }
+}
+
+function closeImportReview() {
+  importDraft = null;
+  renderImportReview();
+}
+
+// --- Lot 88 : photo dès l'ajout d'un produit ----------------------------------------------------------------------
+function showChosenPhoto() {
+  const input = document.getElementById("new-product-photo");
+  const file = input.files[0];
+  document.getElementById("new-photo-drop").classList.toggle("has-file", !!file);
+  document.getElementById("new-photo-name").textContent = file ? file.name : "Ajouter une photo (facultatif)";
+  document.getElementById("new-photo-hint").textContent = file
+    ? `${Math.max(1, Math.round(file.size / 1024))} Ko · cliquez pour en choisir une autre`
+    : "ou glissez-la ici · jpg, png ou webp, 5 Mo au plus";
+}
+
+function initPhotoDrop() {
+  const zone = document.getElementById("new-photo-drop");
+  if (!zone || zone.dataset.ready) return;
+  zone.dataset.ready = "1";
+  ["dragenter", "dragover"].forEach((type) => zone.addEventListener(type, (e) => { e.preventDefault(); zone.classList.add("dragging"); }));
+  ["dragleave", "dragend"].forEach((type) => zone.addEventListener(type, () => zone.classList.remove("dragging")));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragging");
+    const file = e.dataTransfer && e.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.(jpe?g|png|webp)$/i.test(file.name)) {
+      const msg = document.getElementById("new-product-msg");
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Photo au format jpg, png ou webp seulement.";
+      return;
+    }
+    const data = new DataTransfer();
+    data.items.add(file);
+    document.getElementById("new-product-photo").files = data.files;
+    showChosenPhoto();
+  });
 }
 
 async function loadCompanyProfile() {
