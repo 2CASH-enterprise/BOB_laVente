@@ -4424,6 +4424,8 @@ async function loadPhotoStudio(productId) {
       worn = `<p class="ps-note">Photo portée sur mannequin : disponible à partir de la formule Indépendant.</p>`;
     } else if (v.worn_status === "PENDING") {
       worn = `<div class="ps-wait">Photo portée en préparation (une à trois minutes)…</div>`;
+    } else if (v.worn_status === "FAILED") {
+      worn = `<p class="ps-note">La photo portée n'a pas pu être créée cette fois-ci. Rien n'a été décompté de votre formule : vous pouvez réessayer.</p>`;
     } else if (v.worn_status === "REVIEW" && v.worn_preview_url) {
       worn = `<div class="ps-row">${thumb(v.worn_preview_url, "Photo portée à valider")}
         <div class="ps-side"><p>Vérifiez que le vêtement est fidèle (couleur, motif, coupe) avant de l'accepter : rien n'est montré aux clients sans votre accord.</p>

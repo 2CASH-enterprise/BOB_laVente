@@ -14,7 +14,7 @@ import io
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -35,6 +35,7 @@ FASHN_COST = 0.15  # mode « balanced » : 2 crédits à 0,075 $
 PHOTOROOM_URL = "https://sdk.photoroom.com/v1/segment"
 FASHN_RUN_URL = "https://api.fashn.ai/v1/run"
 FASHN_STATUS_URL = "https://api.fashn.ai/v1/status/{id}"
+WORN_TIMEOUT = timedelta(minutes=30)  # lot 87 c : sans réponse de FASHN, la demande échoue et le quota est rendu
 
 AFRICA = {"CI", "SN", "BJ", "TG", "ML", "BF", "NE", "GN", "CM", "GA", "CG", "CD", "TD", "CF", "MR", "GW", "SL", "LR",
           "GH", "NG", "KE", "RW", "MG"}
@@ -337,6 +338,7 @@ async def process_white(db, product, tenant, now: datetime | None = None, photor
             except Exception as exc:  # noqa: BLE001 — Photoroom indisponible : notre serveur prend le relais
                 logger.warning("Photoroom indisponible (%s) : détourage par le serveur", type(exc).__name__)
                 job.engine, cut_png = "SERVER", None
+                job.error = f"Photoroom indisponible : {str(exc)[:200] or type(exc).__name__}"  # vu dans le monitoring
         if cut_png is None:
             cut_png = await (cutter or server_cutout)(data, settings.photo_model_path)
         url = save(studio(cut_png), "studio")
@@ -465,17 +467,32 @@ async def collect_worn(db, poller=None) -> dict:
     from app.models.product import Product
 
     settings = get_settings()
-    jobs = (await db.execute(select(ImageJob).where(ImageJob.kind == "WORN", ImageJob.status == "PENDING",
-                                                    ImageJob.external_id.is_not(None)).limit(20))).scalars().all()
-    report = {"ready": 0, "failed": 0, "waiting": 0}
+    now = datetime.now(timezone.utc)
+    jobs = (await db.execute(select(ImageJob).where(ImageJob.kind == "WORN", ImageJob.status == "PENDING")
+                             .order_by(ImageJob.created_at).limit(20))).scalars().all()
+    report = {"ready": 0, "failed": 0, "waiting": 0, "timed_out": 0}
     for job in jobs:
-        try:
-            status = await (poller or fashn_status)(job.external_id, settings.fashn_api_key)
-        except Exception:  # noqa: BLE001 — on réessaie au prochain passage
-            report["waiting"] += 1
-            continue
+        created = job.created_at.replace(tzinfo=timezone.utc) if job.created_at and job.created_at.tzinfo is None else job.created_at
+        too_old = created is not None and now - created > WORN_TIMEOUT
+        status = {}
+        if job.external_id:
+            try:
+                status = await (poller or fashn_status)(job.external_id, settings.fashn_api_key)
+            except Exception:  # noqa: BLE001 — on réessaie au prochain passage (sauf au-delà de 30 min)
+                status = {}
         product = await db.get(Product, job.product_id) if job.product_id else None
         state = status.get("status")
+        if state not in ("completed", "failed", "canceled") and too_old:
+            # Lot 87 c : FASHN n'a jamais répondu. Échec : la photo du quota est rendue, le commerçant peut relancer.
+            job.status, job.finished_at = "FAILED", now
+            job.error = "FASHN n'a pas répondu en 30 min"
+            if product is not None and product.worn_status == "PENDING":
+                product.worn_status = "FAILED"
+            report["timed_out"] += 1
+            continue
+        if not status:
+            report["waiting"] += 1
+            continue
         if state == "completed" and (image := _decode_output(status.get("output"))):
             job.status, job.cost_usd, job.finished_at = "DONE", FASHN_COST, datetime.now(timezone.utc)
             if product is not None:

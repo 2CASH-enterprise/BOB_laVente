@@ -1,6 +1,6 @@
 """
 Lot 67 — état du service (voyants du monitoring) : API, base de données, Redis, tâches automatiques (dernier
-passage de chacune), envoi d'emails (SMTP), Gmail de prospection, IA, jetons WhatsApp / Meta.
+passage de chacune), envoi d'emails (SMTP), Gmail de prospection, IA, jetons WhatsApp / Meta ; retouche des photos (Photoroom, serveur, FASHN — lot 87 c).
 Vert (ok), orange (warn), rouge (ko), gris (idle : rien à signaler encore). Aucun secret n'est lu ni renvoyé :
 seulement « configuré ou non », des heures et des comptes.
 """
@@ -200,7 +200,94 @@ async def checks(db, now: datetime | None = None) -> dict:
     else:
         out.append(_check("whatsapp", "Jetons WhatsApp / Meta", "idle", "Aucun numéro connecté"))
 
+    out.extend(await photo_checks(db, now, settings))
     return {"checks": out, "tasks": tasks, "checked_at": now.isoformat()}
+
+
+async def photo_checks(db, now: datetime, settings) -> list[dict]:
+    """Lot 87 c — retouche des photos : Photoroom (fond blanc), détourage sur notre serveur, FASHN (photo portée).
+    Lu dans image_jobs : heures, comptes, coûts et causes d'échec ; jamais les clés."""
+    from pathlib import Path
+
+    from app.models.image_job import ImageJob
+
+    month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    day_ago = now - timedelta(hours=24)
+
+    async def last(*conds):
+        return (await db.execute(select(ImageJob).where(*conds).order_by(ImageJob.created_at.desc()).limit(1))).scalars().first()
+
+    async def count(*conds) -> int:
+        return (await db.execute(select(func.count(ImageJob.id)).where(*conds))).scalar_one()
+
+    async def cost(*conds) -> float:
+        return float((await db.execute(select(func.coalesce(func.sum(ImageJob.cost_usd), 0)).where(*conds))).scalar_one() or 0)
+
+    def at(job) -> datetime | None:
+        return monitoring._utc(job.created_at) if job is not None else None
+
+    def why(job) -> str:
+        return monitoring.mask(job.error or "cause inconnue")[:90]
+
+    def plural(n: int, word: str) -> str:
+        return f"{n} {word}{'s' if n > 1 else ''}"
+
+    out = []
+
+    # Photoroom : un échec n'arrête rien (le serveur prend le relais), il est noté sur la retouche faite par le serveur.
+    name = "Photoroom (fond blanc)"
+    if not settings.photoroom_api_key:
+        out.append(_check("photoroom", name, "idle", "Non configuré : les fonds blancs sont faits sur le serveur"))
+    else:
+        ok = await last(ImageJob.engine == "PHOTOROOM", ImageJob.status == "DONE")
+        ko = await last(ImageJob.kind == "WHITE", ImageJob.error.like("Photoroom%"))
+        done = await count(ImageJob.engine == "PHOTOROOM", ImageJob.status == "DONE", ImageJob.created_at >= month)
+        spent = await cost(ImageJob.engine == "PHOTOROOM", ImageJob.created_at >= month)
+        if ko is not None and (ok is None or at(ko) > at(ok)):
+            out.append(_check("photoroom", name, "ko", f"Échec {_ago(at(ko), now)} : {why(ko)} · le serveur prend le relais"))
+        elif ok is not None:
+            out.append(_check("photoroom", name, "ok", f"Dernière photo {_ago(at(ok), now)} · {done} ce mois-ci · {spent:.2f} $"))
+        else:
+            out.append(_check("photoroom", name, "idle", "Configuré · aucune photo encore"))
+
+    # Détourage sur notre serveur (gratuit) : modèle présent, dernier résultat, échecs des dernières 24 h.
+    name = "Détourage sur le serveur"
+    if not Path(settings.photo_model_path).is_file():
+        out.append(_check("cutout", name, "ko", "Modèle de détourage absent : image Docker à reconstruire"))
+    else:
+        server = (ImageJob.kind == "WHITE", ImageJob.engine == "SERVER")
+        ok = await last(*server, ImageJob.status == "DONE")
+        ko = await last(*server, ImageJob.status == "FAILED")
+        failed = await count(*server, ImageJob.status == "FAILED", ImageJob.created_at >= day_ago)
+        done = await count(*server, ImageJob.status == "DONE", ImageJob.created_at >= month)
+        if ko is not None and (ok is None or at(ko) > at(ok)):
+            out.append(_check("cutout", name, "ko", f"Échec {_ago(at(ko), now)} : {why(ko)}"))
+        elif failed:
+            out.append(_check("cutout", name, "warn", f"{plural(failed, 'échec')} en 24 h · dernière réussite {_ago(at(ok), now)}"))
+        elif ok is not None:
+            out.append(_check("cutout", name, "ok", f"Dernière photo {_ago(at(ok), now)} · {done} ce mois-ci · gratuit"))
+        else:
+            out.append(_check("cutout", name, "idle", "Prêt · aucune photo encore"))
+
+    # FASHN : photo portée.
+    name = "FASHN (photo portée)"
+    if not settings.fashn_api_key:
+        out.append(_check("fashn", name, "idle", "Non configuré : photo portée désactivée"))
+    else:
+        worn = (ImageJob.kind == "WORN",)
+        ok = await last(*worn, ImageJob.status == "DONE")
+        ko = await last(*worn, ImageJob.status == "FAILED")
+        waiting = await count(*worn, ImageJob.status == "PENDING")
+        done = await count(*worn, ImageJob.status == "DONE", ImageJob.created_at >= month)
+        spent = await cost(*worn, ImageJob.created_at >= month)
+        extra = f" · {waiting} en cours" if waiting else ""
+        if ko is not None and (ok is None or at(ko) > at(ok)):
+            out.append(_check("fashn", name, "ko", f"Échec {_ago(at(ko), now)} : {why(ko)}{extra}"))
+        elif ok is not None:
+            out.append(_check("fashn", name, "ok", f"Dernière photo {_ago(at(ok), now)} · {done} ce mois-ci · {spent:.2f} ${extra}"))
+        else:
+            out.append(_check("fashn", name, "idle", f"Configuré · aucune photo encore{extra}"))
+    return out
 
 
 # ---------------------------------------------------------------- « Tester » (connexion seulement, aucun email envoyé)
