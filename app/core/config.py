@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # LEADS_SMTP_USERNAME avec « +code » de l'agence, réponses envoyées au nom de l'agence. Mot de passe d'application.
     leads_smtp_username: str = ""
     leads_smtp_password: str = ""
+    # Lot 87 — retouche des photos. Clés jamais affichées ni journalisées ; vides = fond blanc par notre serveur
+    # seulement, et pas de photo portée.
+    photoroom_api_key: str = ""
+    fashn_api_key: str = ""
+    photo_model_path: str = "/opt/models/isnet-general-use.onnx"
     debug: bool = False
     # Lot 73 : politique de sécurité des contenus (CSP). False = « Report-Only » (signale sans bloquer, une semaine),
     # True = appliquée (bloque). Les signalements arrivent dans le Monitoring.

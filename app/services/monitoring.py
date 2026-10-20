@@ -75,6 +75,8 @@ TASK_LABELS = {
     "app.workers.inbound_leads.read_leads_inbox_task": "Demandes des portails et des sites (agences)",
     "app.workers.inbound_leads.purge_leads_task": "Demandes par email : effacement après un an",
     "app.workers.demo_purge.purge_demos_task": "Démos non transformées : effacement après 30 jours",
+    "app.workers.photo_studio.retouch_photos_task": "Photos : fond blanc studio",
+    "app.workers.photo_studio.collect_worn_task": "Photos portées (habits) : résultats",
     "app.workers.wa_templates.refresh_accounts_task": "Numéros WhatsApp : nom et statut chez Meta",
 }
 

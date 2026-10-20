@@ -213,7 +213,9 @@ async def import_catalog_csv(
             existing.currency = currency
             existing.stock_quantity = stock
             existing.category_id = category_id
-            existing.image_url = (row.get("IMAGE_URL") or "").strip() or None
+            from app.services.photo_studio import reset_for_new_source
+
+            reset_for_new_source(existing, (row.get("IMAGE_URL") or "").strip() or None)  # lot 87
             existing.active = active
             if vehicle is not None:  # un fichier sans colonnes véhicule n'efface pas une fiche existante
                 existing.vehicle = vehicle
@@ -305,7 +307,8 @@ def export_cell(product, kind: str, key: str):
     if kind == "base":
         return {"SKU": product.sku, "NAME": product.name, "DESCRIPTION": product.description or "",
                 "PRICE": float(product.price or 0), "CURRENCY": product.currency, "STOCK": product.stock_quantity,
-                "IMAGE_URL": product.image_url or "", "ACTIVE": "oui" if product.active else "non"}[key]
+                "IMAGE_URL": getattr(product, "image_original_url", None) or product.image_url or "",  # lot 87 : la photo d'origine
+                "ACTIVE": "oui" if product.active else "non"}[key]
     if kind == "category":
         return product_sheets.label(product.bob_category) if product_sheets.is_category(product.bob_category) else ""
     if kind == "property" and key == "type":

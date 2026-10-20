@@ -37,6 +37,7 @@ TASK_MODULES = [
     "app.workers.pige",  # lot 81
     "app.workers.inbound_leads",  # lot 83
     "app.workers.demo_purge",  # lot 73
+    "app.workers.photo_studio",  # lot 87
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -108,6 +109,15 @@ celery_app.conf.beat_schedule = {
     "leads-purge": {
         "task": "app.workers.inbound_leads.purge_leads_task",
         "schedule": crontab(hour=4, minute=20),
+    },
+    # Lot 87 : retouche des photos (fond blanc studio) et photos portées terminées.
+    "photo-retouch": {
+        "task": "app.workers.photo_studio.retouch_photos_task",
+        "schedule": crontab(minute="*"),
+    },
+    "photo-worn": {
+        "task": "app.workers.photo_studio.collect_worn_task",
+        "schedule": crontab(minute="*"),
     },
     # Lot 73 : démos non transformées en compte, effacées 30 jours après leur création.
     "demo-purge": {

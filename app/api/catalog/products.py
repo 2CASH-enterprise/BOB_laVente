@@ -257,6 +257,10 @@ async def update_product(
     if is_insurance(tenant):
         for key in ("price", "cost_price", "stock_quantity"):  # lot 53 : jamais de prix chez un courtier
             changes.pop(key, None)
+    if "image_url" in changes:  # lot 87 : nouvelle photo → retouche refaite (même photo : retouche gardée)
+        from app.services.photo_studio import reset_for_new_source
+
+        reset_for_new_source(product, changes.pop("image_url"))
     for field, value in changes.items():
         setattr(product, field, value)
 
@@ -317,8 +321,115 @@ async def upload_product_image(
     (upload_dir / filename).write_bytes(content)
 
     settings = get_settings()
-    product.image_url = f"{settings.public_base_url}/uploads/products/{filename}"
+    from app.services.photo_studio import reset_for_new_source
+
+    # Lot 87 : la nouvelle photo part telle quelle tout de suite, puis passe au fond blanc studio (en arrière-plan).
+    reset_for_new_source(product, f"{settings.public_base_url}/uploads/products/{filename}")
+    product.image_status = "PENDING"
 
     await db.commit()
     await db.refresh(product)
     return product
+
+
+# --- Lot 87 : Bob retouche les photos (fond blanc studio, photo portée des habits, montage) -------------------------
+
+from pydantic import BaseModel  # noqa: E402
+
+
+class WornDecision(BaseModel):
+    accept: bool
+
+
+class CardStyle(BaseModel):
+    style: str
+
+
+async def _photo_context(db, current_user, product_id):
+    from app.models.tenant import Tenant
+
+    product = await ProductRepository(db).get(tenant_id=current_user.tenant_id, record_id=product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Produit introuvable")
+    return product, await db.get(Tenant, current_user.tenant_id)
+
+
+async def _photo_view(db, product, tenant) -> dict:
+    from app.services import photo_studio
+
+    return photo_studio.view(product, tenant, await photo_studio.quotas(db, tenant))
+
+
+@router.get("/{product_id}/photos")
+async def product_photos(product_id: UUID, current_user: CurrentUser = Depends(get_current_user),
+                         db: AsyncSession = Depends(get_db)) -> dict:
+    product, tenant = await _photo_context(db, current_user, product_id)
+    return await _photo_view(db, product, tenant)
+
+
+@router.post("/{product_id}/photos/original", dependencies=[Depends(require_role("MANAGER"))])
+async def product_photo_original(product_id: UUID, current_user: CurrentUser = Depends(get_current_user),
+                                 db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import photo_studio
+
+    product, tenant = await _photo_context(db, current_user, product_id)
+    photo_studio.use_original(product)
+    await db.commit()
+    return await _photo_view(db, product, tenant)
+
+
+@router.post("/{product_id}/photos/retouch", dependencies=[Depends(require_role("MANAGER"))])
+async def product_photo_retouch(product_id: UUID, current_user: CurrentUser = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import photo_studio
+
+    product, tenant = await _photo_context(db, current_user, product_id)
+    if not photo_studio.retouches(tenant):
+        raise HTTPException(status_code=400, detail="Les photos de ce type de compte ne sont pas retouchées.")
+    if not (product.image_original_url or product.image_url):
+        raise HTTPException(status_code=400, detail="Ajoutez d'abord une photo du produit.")
+    product.image_status = "PENDING"
+    await db.commit()
+    return await _photo_view(db, product, tenant)
+
+
+@router.post("/{product_id}/photos/worn", dependencies=[Depends(require_role("MANAGER"))])
+async def product_photo_worn(product_id: UUID, current_user: CurrentUser = Depends(get_current_user),
+                             db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import photo_studio
+
+    product, tenant = await _photo_context(db, current_user, product_id)
+    result = await photo_studio.request_worn(db, product, tenant)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
+    return await _photo_view(db, product, tenant)
+
+
+@router.post("/{product_id}/photos/worn/decision", dependencies=[Depends(require_role("MANAGER"))])
+async def product_photo_worn_decision(product_id: UUID, payload: WornDecision,
+                                      current_user: CurrentUser = Depends(get_current_user),
+                                      db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import photo_studio
+
+    product, tenant = await _photo_context(db, current_user, product_id)
+    try:
+        await photo_studio.decide_worn(db, product, payload.accept)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return await _photo_view(db, product, tenant)
+
+
+@router.post("/{product_id}/photos/card-style", dependencies=[Depends(require_role("MANAGER"))])
+async def product_photo_card_style(product_id: UUID, payload: CardStyle,
+                                   current_user: CurrentUser = Depends(get_current_user),
+                                   db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import photo_studio
+
+    product, tenant = await _photo_context(db, current_user, product_id)
+    if not product.worn_image_url:
+        raise HTTPException(status_code=400, detail="Acceptez d'abord une photo portée.")
+    try:
+        await photo_studio.set_card_style(db, product, payload.style)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return await _photo_view(db, product, tenant)

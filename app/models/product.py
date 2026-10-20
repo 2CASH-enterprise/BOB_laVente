@@ -45,6 +45,15 @@ class Product(Base):
     # trouve un produit par sa matière, sa marque ou sa taille. Tenu à jour automatiquement (voir plus bas).
     sheet_text: Mapped[str | None] = mapped_column(Text)
 
+    # Lot 87 — Bob retouche les photos : image_url est ce que les cartes envoient (studio, montage ou photo d'origine).
+    image_original_url: Mapped[str | None] = mapped_column(String(1000))  # la photo du commerçant, toujours gardée
+    image_studio_url: Mapped[str | None] = mapped_column(String(1000))    # fond blanc studio + signature
+    image_status: Mapped[str | None] = mapped_column(String(16))          # PENDING, DONE, FAILED, ORIGINAL
+    worn_status: Mapped[str | None] = mapped_column(String(16))           # PENDING, REVIEW, ACCEPTED, REFUSED, FAILED
+    worn_preview_url: Mapped[str | None] = mapped_column(String(1000))    # photo portée à valider
+    worn_image_url: Mapped[str | None] = mapped_column(String(1000))      # photo portée acceptée
+    card_style: Mapped[str | None] = mapped_column(String(16))            # MONTAGE (réelle | portée) ou WORN
+
     # Traçabilité d'origine (section 25) — NULL pour un produit saisi manuellement ou importé en CSV.
     external_source: Mapped[str | None] = mapped_column(String(32))  # ex. "SHOPIFY"
     external_id: Mapped[str | None] = mapped_column(String(128))

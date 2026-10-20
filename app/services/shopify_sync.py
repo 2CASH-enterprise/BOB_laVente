@@ -95,7 +95,9 @@ async def sync_shopify_catalog(
             existing.currency = currency
             existing.stock_quantity = mapped["stock_quantity"]
             existing.category_id = category_id
-            existing.image_url = mapped["image_url"]
+            from app.services.photo_studio import reset_for_new_source
+
+            reset_for_new_source(existing, mapped["image_url"])  # lot 87 : retouche gardée si même photo
             existing.active = mapped["active"]
             _apply_sheet(existing, mapped, store)
             updated += 1

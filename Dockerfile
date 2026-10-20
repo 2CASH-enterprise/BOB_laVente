@@ -4,10 +4,17 @@ WORKDIR /code
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Lot 87 — modèle de détourage (IS-Net « isnet-general-use », licence Apache 2.0) intégré à l'image, vérifié par son
+# empreinte : jamais téléchargé pendant que Bob sert les clients.
+RUN mkdir -p /opt/models \
+    && python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx', '/opt/models/isnet-general-use.onnx')" \
+    && echo "60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a  /opt/models/isnet-general-use.onnx" | sha256sum -c -
 
 COPY app ./app
 COPY alembic ./alembic

@@ -17,6 +17,9 @@ httpx==0.28.1
 anthropic==0.40.0
 mistralai==2.10.1
 pywebpush==2.0.3  # lot 37b — notifications sur l'appareil du commerçant
+pillow==11.3.0  # lot 87 : fond blanc studio, montage, signature
+numpy==2.2.6  # lot 87 : détourage sur le serveur
+onnxruntime==1.23.2  # lot 87 : détourage sur le serveur (modèle IS-Net, intégré à l'image Docker)
 
 # Dev / tests
 pytest==9.1.1

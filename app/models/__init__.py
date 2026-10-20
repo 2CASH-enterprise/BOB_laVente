@@ -75,3 +75,4 @@ from app.models.monitoring import MonitorIssue, MonitorOccurrence  # noqa: F401 
 from app.models.whatsapp_template import WhatsAppTemplate  # noqa: F401 — lot 68
 from app.models.property_alert import PropertyAlert  # noqa: F401 — lot 80
 from app.models.pige import DvfDepartment, DvfSale, PigeListing  # noqa: F401 — lot 81
+from app.models.image_job import ImageJob  # noqa: F401 — lot 87

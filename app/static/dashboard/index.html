@@ -327,6 +327,22 @@
   .msg.HUMAN { background: var(--accent-soft); margin-left: auto; border: 1px solid var(--accent-light); color: var(--text); border-bottom-right-radius: 4px; }
   .msg.SYSTEM { background: none; color: var(--muted); font-style: normal; font-size: 12px; text-align: center; max-width: 100%; }
   .wa-choice { margin-bottom: 14px; }
+  /* Lot 87 — photos retouchées par Bob */
+  .photo-studio { max-width: 760px; margin-bottom: 12px; }
+  .photo-studio:empty { display: none; }
+  .ps-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .ps-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 8px; }
+  .ps-thumb { margin: 0; width: 132px; }
+  .ps-thumb img { width: 132px; height: 132px; object-fit: contain; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); display: block; }
+  .ps-thumb figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .ps-thumb.is-sent img { border: 2px solid var(--accent); }
+  .ps-thumb.is-sent figcaption::after { content: " · envoyée"; color: var(--accent); font-weight: 600; }
+  .ps-wait { width: 132px; height: 132px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px; box-sizing: border-box; font-size: 12px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); }
+  .ps-side { flex: 1; min-width: 200px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .ps-side p { margin: 0; color: var(--muted); }
+  .ps-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .ps-note { font-size: 12px; color: var(--muted); }
+  .ps-msg { font-size: 13px; color: var(--danger); margin-top: 4px; }
   /* Lot 86 — fiche « Ce que Bob sait du client » */
   .profile-lines { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px; }
   .profile-lines li { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
@@ -4364,6 +4380,7 @@ function renderEditPanel(productId) {
       ${p.variants && p.variants.length ? `<p style="font-size: 12px; margin: 6px 0;">Variantes (Shopify) : ${esc(variantsSummary(p.variants))}</p>` : ""}
       <div id="edit-${p.id}-sheet-box" data-code="${esc(p.bob_category || "")}" style="margin-top: 6px;">${sheetFields(`edit-${p.id}`, p.bob_category, p.sheet)}</div>
     </div>` : ""}
+    <div class="photo-studio" id="photo-studio-${p.id}"></div>
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
       <label class="file-pick"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 16l5-5 4 4 3-3 4 4M15 9h.01"/></svg>
         <span id="edit-image-name-${p.id}">Choisir une photo</span>
@@ -4379,6 +4396,74 @@ function renderEditPanel(productId) {
     <button class="action secondary" onclick="deleteProduct(${jsArg(p.id)})">Supprimer le produit</button>
     <span id="edit-msg-${p.id}" style="margin-left: 10px; font-size: 13px;"></span>
   `;
+  loadPhotoStudio(p.id);  // lot 87
+}
+
+// ==== Lot 87 — Bob retouche les photos : fond blanc studio, photo portée (habits), montage ====
+const PHOTO_STATUS = {
+  PENDING: "Retouche en cours (une à deux minutes)…",
+  FAILED: "Retouche impossible pour cette photo : votre photo d'origine est utilisée.",
+  ORIGINAL: "Vos clients reçoivent votre photo d'origine.",
+};
+async function loadPhotoStudio(productId) {
+  const box = document.getElementById(`photo-studio-${productId}`);
+  if (!box) return;
+  let v;
+  try { v = await api(`/api/v1/products/${productId}/photos`); } catch (e) { box.innerHTML = ""; return; }
+  if (!v.retouched || !v.original_url) { box.innerHTML = ""; return; }
+  const thumb = (url, label, extra = "") => `<figure class="ps-thumb${extra}"><img src="${esc(url)}" alt="${esc(label)}" loading="lazy"><figcaption>${esc(label)}</figcaption></figure>`;
+  const studio = v.studio_url && v.status === "DONE"
+    ? thumb(v.studio_url, "Fond blanc studio", v.card_url === v.studio_url ? " is-sent" : "")
+    : `<div class="ps-wait">${esc(PHOTO_STATUS[v.status] || PHOTO_STATUS.PENDING)}</div>`;
+  const actions = v.status === "DONE" && v.card_url !== v.original_url
+    ? `<button class="action secondary" onclick="photoAction(${jsArg(productId)}, 'original')">Revenir à ma photo</button>`
+    : (v.status === "ORIGINAL" || v.status === "FAILED" ? `<button class="action secondary" onclick="photoAction(${jsArg(productId)}, 'retouch')">Retoucher la photo</button>` : "");
+  let worn = "";
+  if (v.garment) {
+    if (!v.worn_enabled) {
+      worn = `<p class="ps-note">Photo portée sur mannequin : disponible à partir de la formule Indépendant.</p>`;
+    } else if (v.worn_status === "PENDING") {
+      worn = `<div class="ps-wait">Photo portée en préparation (une à trois minutes)…</div>`;
+    } else if (v.worn_status === "REVIEW" && v.worn_preview_url) {
+      worn = `<div class="ps-row">${thumb(v.worn_preview_url, "Photo portée à valider")}
+        <div class="ps-side"><p>Vérifiez que le vêtement est fidèle (couleur, motif, coupe) avant de l'accepter : rien n'est montré aux clients sans votre accord.</p>
+        <button class="action" onclick="photoWornDecision(${jsArg(productId)}, true)">Accepter</button>
+        <button class="action secondary" onclick="photoWornDecision(${jsArg(productId)}, false)">Refuser</button></div></div>`;
+    } else if (v.worn_status === "ACCEPTED" && v.worn_url) {
+      worn = `<div class="ps-row">${thumb(v.worn_url, "Photo portée")}
+        <div class="ps-side"><p>Sur la carte WhatsApp :</p>
+        <label><input type="radio" name="ps-style-${esc(productId)}" ${v.card_style !== "WORN" ? "checked" : ""} onchange="photoCardStyle(${jsArg(productId)}, 'MONTAGE')"> Photo réelle et photo portée côte à côte</label>
+        <label><input type="radio" name="ps-style-${esc(productId)}" ${v.card_style === "WORN" ? "checked" : ""} onchange="photoCardStyle(${jsArg(productId)}, 'WORN')"> Photo portée seule</label></div></div>`;
+    }
+    if (v.worn_enabled && v.worn_status !== "PENDING" && v.worn_status !== "REVIEW") {
+      worn += `<button class="action secondary" ${v.worn_left > 0 ? "" : "disabled"} onclick="photoAction(${jsArg(productId)}, 'worn')">${v.worn_status === "ACCEPTED" ? "Refaire la photo portée" : "Créer la photo portée"}</button>
+        <span class="ps-note">${v.worn_left} sur ${v.worn_quota} restante${v.worn_left > 1 ? "s" : ""} ce mois-ci</span>`;
+    }
+  }
+  box.innerHTML = `
+    <div class="ps-title">Photos envoyées aux clients</div>
+    <div class="ps-row">${thumb(v.original_url, "Votre photo", v.card_url === v.original_url ? " is-sent" : "")}${studio}${v.card_url && v.card_url !== v.original_url && v.card_url !== v.studio_url ? thumb(v.card_url, "Carte WhatsApp", " is-sent") : ""}</div>
+    <div class="ps-actions">${actions}<span class="ps-note">Détourage premium : ${v.white_used} sur ${v.white_quota} ce mois-ci, au-delà retouche standard par Bob.</span></div>
+    ${worn ? `<div class="ps-title" style="margin-top: 10px;">Photo portée sur mannequin</div>${worn}` : ""}
+    <div class="ps-msg" id="ps-msg-${esc(productId)}"></div>`;
+  if (v.status === "PENDING" || v.worn_status === "PENDING") setTimeout(() => loadPhotoStudio(productId), 15000);
+}
+async function photoAction(productId, action) {
+  const path = { original: "original", retouch: "retouch", worn: "worn" }[action];
+  try { await api(`/api/v1/products/${productId}/photos/${path}`, { method: "POST" }); loadPhotoStudio(productId); loadProducts(); }
+  catch (e) { const m = document.getElementById(`ps-msg-${productId}`); if (m) m.textContent = e.message; }
+}
+async function photoWornDecision(productId, accept) {
+  try {
+    await api(`/api/v1/products/${productId}/photos/worn/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accept }) });
+    loadPhotoStudio(productId);
+  } catch (e) { const m = document.getElementById(`ps-msg-${productId}`); if (m) m.textContent = e.message; }
+}
+async function photoCardStyle(productId, style) {
+  try {
+    await api(`/api/v1/products/${productId}/photos/card-style`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style }) });
+    loadPhotoStudio(productId);
+  } catch (e) { const m = document.getElementById(`ps-msg-${productId}`); if (m) m.textContent = e.message; }
 }
 
 async function saveProductEdit(productId) {
