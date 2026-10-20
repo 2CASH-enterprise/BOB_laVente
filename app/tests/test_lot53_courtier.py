@@ -261,7 +261,7 @@ async def test_appointment_kinds_follow_the_sector(db_session):
     executor = ToolExecutor(db_session, tenant.id, conversation, business_type=INSURANCE_BROKER)
     refused = await executor.execute("request_appointment", {"kind": "ESSAI", "availability": "samedi 10 octobre"})
     assert refused["error"] == "Type de rendez-vous invalide : CABINET, APPEL"
-    ok = await executor.execute("request_appointment", {"kind": "APPEL", "availability": "lundi 12 octobre matin",
+    ok = await executor.execute("request_appointment", {"kind": "APPEL", "availability": _next_monday_text(),
                                                         "vehicle": "assurance auto"})
     assert ok["status"] == "appointment_requested"
     [appointment] = (await db_session.execute(select(AppointmentRequest))).scalars().all()
@@ -583,3 +583,13 @@ def test_outcome_words_of_the_cabinet():
 def test_migration_exists():
     text = (ROOT.parent / "alembic" / "versions" / "c53a8e2f4b61_lot_53_courtier_assurance.py").read_text(encoding="utf-8")
     assert "down_revision = 'a51c0e7b3d24'" in text and "create_table('quote_requests'" in text
+
+
+def _next_monday_text() -> str:
+    """Un lundi à venir, en toutes lettres (le test ne dépend plus de la date du jour)."""
+    from datetime import date, timedelta
+
+    months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+              "novembre", "décembre"]
+    d = date.today() + timedelta(days=7 - date.today().weekday() or 7)
+    return f"lundi {d.day} {months[d.month - 1]} matin"

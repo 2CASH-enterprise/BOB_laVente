@@ -379,7 +379,7 @@ async def test_an_appointment_is_consent_to_be_contacted(db_session):
     assert complete["needs_consent"] and not partial["needs_consent"]
     executor = ToolExecutor(db_session, cabinet.id, conversation, business_type=INSURANCE_BROKER)
 
-    r = await executor.execute("request_appointment", {"kind": "APPEL", "availability": "lundi 12 octobre matin"})
+    r = await executor.execute("request_appointment", {"kind": "APPEL", "availability": _next_monday_text()})
 
     assert r["status"] == "appointment_requested"
     assert complete["request"].status == "SUBMITTED" and complete["request"].consent_at is not None
@@ -400,7 +400,7 @@ async def test_consent_from_appointment_only_for_the_cabinet(db_session):
                                 details={"children_count": 1}, status="DRAFT"))
     await db_session.commit()
     executor = ToolExecutor(db_session, dealer.id, conversation, business_type=CAR_DEALERSHIP)
-    await executor.execute("request_appointment", {"kind": "ESSAI", "availability": "lundi 12 octobre matin"})
+    await executor.execute("request_appointment", {"kind": "ESSAI", "availability": _next_monday_text()})
     assert (await db_session.execute(select(QuoteRequest.status))).scalar_one() == "DRAFT"
 
 
@@ -785,3 +785,13 @@ async def test_a_request_sent_before_lot_54_never_asks_for_consent_again(db_sess
     result = await ToolExecutor(db_session, cabinet.id, conversation, business_type=INSURANCE_BROKER).execute(
         "update_insurance_request", {"branch": "SCOLAIRE", "ages": "6 et 9 ans"})
     assert result["status"] == "quote_request_updated" and legacy.consent_at is None
+
+
+def _next_monday_text() -> str:
+    """Un lundi à venir, en toutes lettres (le test ne dépend plus de la date du jour)."""
+    from datetime import date, timedelta
+
+    months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+              "novembre", "décembre"]
+    d = date.today() + timedelta(days=7 - date.today().weekday() or 7)
+    return f"lundi {d.day} {months[d.month - 1]} matin"

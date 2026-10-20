@@ -215,7 +215,8 @@ async def test_webhook_cleans_the_ai_text_and_bob_sees_the_catalog(client, db_se
         reply = (await client.post("/webhooks/whatsapp", json=_payload("phone_lot75_clean", "221700007501", "Photo ?"))).json()["ai_reply"]
     finally:
         del app.dependency_overrides[get_llm_client]
-    assert reply == "Voici la photo 😊 :\n\nElle vous plaît ?"
+    # Lot 73 h : ce produit n'a pas de photo, rien ne part → « Voici la photo » est retiré aussi.
+    assert reply == "Elle vous plaît ? 👍"
     assert "CATALOGUE EN BREF" in fake.received_systems[0] and "Moto InfinX" in fake.received_systems[0]
 
 

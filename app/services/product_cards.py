@@ -160,3 +160,42 @@ def without_unasked_prices(text: str, incoming: str | None) -> str:
             line = _PRICE_IN_ITEM.sub("", line).rstrip(" ,;–—-")
         lines.append(line)
     return "\n".join(lines)
+
+
+# --- Lot 73 h — retour réel du 20/10 (MS4 Africa) : « Voici la photo » sans photo, « pas encore de photo » juste après
+# l'avoir envoyée, « Souhaitez-vous une photo ? » alors que la carte part dans la même réponse. -------------------------
+
+_SENTENCE = re.compile(r"[^.!?\n]+[.!?]*[^\S\n]*|\n")
+OFFERS_PHOTO = re.compile(r"(envoie|envoyer|montre|montrer|partage|partager)\b[^.!?\n]{0,40}\b(photos?|images?|visuels?)"
+                          r"|\b(photos?|images?|visuels?)\b[^.!?\n]{0,20}\?", re.IGNORECASE)
+ANNOUNCES_PHOTO = re.compile(r"\bvoici\b[^.!?\n]{0,20}\b(photos?|images?|visuels?)\b"
+                             r"|\bje vous (envoie|transmets)\b[^.!?\n]{0,20}\b(photos?|images?)\b", re.IGNORECASE)
+DENIES_PHOTO = re.compile(r"(?:pas|aucune?|plus)\s+(?:encore\s+)?(?:de\s+|d['’])?(?:photos?|images?|visuels?)"
+                          r"|(?:ne\s+(?:peux|pourrai|suis\s+pas\s+en\s+mesure)|impossible)[^.!?\n]{0,40}(?:photos?|images?)"
+                          r"|\b(enverra|enverrons|transmettra)\b[^.!?\n]{0,40}\b(photos?|images?|visuels?)\b", re.IGNORECASE)
+
+
+def drop_sentences(text: str, pattern) -> str:
+    """Retire les phrases qui correspondent ; garde le reste tel quel (jamais une réponse vide : texte d'origine)."""
+    if not text or not pattern.search(text):
+        return text
+    kept = "".join(part for part in _SENTENCE.findall(text) if part == "\n" or not pattern.search(part))
+    # une ligne qui ne garde qu'un émoji ou une ponctuation (« 😊 ») ne veut plus rien dire seule
+    kept = "\n".join(line for line in kept.split("\n") if not line.strip() or re.search(r"\w", line))
+    kept = re.sub(r"[ \t]+\n", "\n", kept)
+    kept = re.sub(r"\n{3,}", "\n\n", kept).strip()
+    return kept if re.search(r"\w", kept) else text
+
+
+def photo_mentions_fixed(text: str, cards_going: bool, photo_known: bool) -> str:
+    """Accorde le texte de Bob avec ce qui part vraiment :
+    - des cartes partent → pas de « Souhaitez-vous une photo ? » ;
+    - rien ne part → pas de « Voici la photo » ;
+    - le produit a une photo (montrée ou qui part) → jamais « pas de photo », ni « un conseiller enverra les visuels »."""
+    if cards_going:
+        text = drop_sentences(text, OFFERS_PHOTO)
+    else:
+        text = drop_sentences(text, ANNOUNCES_PHOTO)
+    if cards_going or photo_known:
+        text = drop_sentences(text, DENIES_PHOTO)
+    return text

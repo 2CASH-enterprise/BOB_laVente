@@ -247,6 +247,17 @@ async def generate_ai_reply_detailed(
     if change_outbox is not None:
         executor.change_outbox = change_outbox  # lot 35 : rendez-vous déplacés ou annulés par le client
     tools = tools_for(business_type, TOOL_DEFINITIONS)
+    # Lot 73 h — retour réel du 20/10 : Bob ne voyait pas les cartes déjà envoyées (traces cachées depuis le lot 76)
+    # et disait « pas encore de photo » juste après. Il sait maintenant ce que le client a déjà vu.
+    shown_photos = await executor.shown_photo_names() if image_outbox is not None else []
+    if shown_photos:
+        system_prompt += (
+            "\n\nPHOTOS DÉJÀ MONTRÉES À CE CLIENT (cartes envoyées dans cette conversation) : "
+            + ", ".join(shown_photos[:10])
+            + ". Ces photos existent et le client les a vues : ne dis jamais qu'il n'y a pas de photo pour ces "
+            "produits, ne propose pas de les envoyer, n'écris pas « voici la photo ». Elles ne repartent que s'il "
+            "demande à les revoir."
+        )
     # Lot 13 : consigne des règles de transmission pour CE message, et verrou du transfert.
     if turn is not None:
         executor.turn = turn
@@ -357,11 +368,14 @@ async def generate_ai_reply_detailed(
                         text = without_unasked_prices(text, incoming_text)  # lot 76 : prix seulement sur demande
                     if image_outbox is not None:
                         await _cards_for_named_products(executor, text, insurance)  # lot 76
+                        from app.services.product_cards import photo_mentions_fixed, text_for_cards
+
                         if executor.pending_images:
                             # Lot 76 : les cartes montrent les produits — le texte n'en refait pas la liste (ni les prix).
-                            from app.services.product_cards import text_for_cards
-
                             text = text_for_cards(text, [i["name"] for i in executor.pending_images])
+                        # Lot 73 h : le texte dit ce qui part vraiment (ni « voici la photo » sans photo, ni « pas de photo »).
+                        text = photo_mentions_fixed(text, bool(executor.pending_images),
+                                                    bool(shown_photos) or bool(executor.products_with_photo))
                         image_outbox.extend(executor.pending_images)  # lot 26c : seulement si Bob a répondu
                     return text, None
                 # Lot 22 — réponse vide (cas réel du 27/09 : un client répond « 1 » à un choix,
