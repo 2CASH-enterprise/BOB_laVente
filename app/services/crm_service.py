@@ -134,6 +134,7 @@ async def get_customer_detail(db: AsyncSession, tenant_id, customer_id) -> dict 
         "total_spent": total_spent,
         "products_viewed_count": viewed_count,
         "detected_preferences": customer.detected_preferences or {},
+        "profile_lines": _profile_lines(customer),  # lot 86 : « Ce que Bob sait du client »
         "tags": customer.tags or [],
         "notes": customer.notes,
         "marketing_consent": customer.marketing_consent,
@@ -149,3 +150,9 @@ def _display_name(customer: Customer) -> str:
     if customer.first_name or customer.last_name:
         return f"{customer.first_name or ''} {customer.last_name or ''}".strip()
     return customer.whatsapp_number
+
+
+def _profile_lines(customer) -> list[list[str]]:
+    from app.services import customer_profile
+
+    return [[label, value] for label, value in customer_profile.lines(customer.detected_preferences, customer.address)]

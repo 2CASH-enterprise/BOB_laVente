@@ -77,4 +77,5 @@ async def test_detected_preferences_appear_in_customer_memory(db_session, unique
     memory = await build_customer_memory(db_session, tenant.id, customer.id)
     assert "smartphone" in memory
     assert "Samsung" in memory
-    assert "INFÉRENCE" in memory  # jamais présenté comme un fait vérifié
+    # Lot 86 : ce que le client a DIT (plus une « inférence ») ; Bob le vérifie d'un mot au lieu de le redemander.
+    assert "Ce que le client t'a déjà dit" in memory and "ne le redemande pas" in memory

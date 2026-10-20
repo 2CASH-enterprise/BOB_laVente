@@ -274,6 +274,16 @@ async def receive_webhook(
     from app.services.contact_capture import CONSENT_SOURCE_KEYWORD, is_offers_opt_in
 
     is_opt_in = not is_opt_out and is_offers_opt_in(incoming_text)
+    # Lot 86 — « oubliez-moi » : préférences, adresse et produits consultés effacés, réponse fixe (jamais l'IA).
+    from app.services import customer_profile
+
+    is_forget = not is_opt_out and not is_opt_in and customer_profile.is_forget_request(incoming_text)
+    if is_forget:
+        from app.services.audit import log_audit_event
+
+        await customer_profile.forget(db, customer)
+        await log_audit_event(db, actor="CUSTOMER", action="CUSTOMER_FORGET", tenant_id=tenant_id,
+                              details={"customer_id": str(customer.id)})
     if is_opt_in:
         from app.services.consent_service import grant_marketing_consent
 
@@ -390,6 +400,8 @@ async def receive_webhook(
         from app.services.contact_capture import opt_in_reply
 
         reply_text = opt_in_reply(bool(customer.email), tu=tu)
+    elif is_forget:
+        reply_text = customer_profile.FORGOTTEN_REPLY_TU if tu else customer_profile.FORGOTTEN_REPLY
     elif rate == usage_guard.NOTIFY:
         reply_text = usage_guard.RATE_LIMIT_MESSAGE_TU if tu else usage_guard.RATE_LIMIT_MESSAGE
         db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
@@ -544,8 +556,12 @@ async def receive_webhook(
         from app.services.business_type import is_insurance
         from app.services.insurance import privacy_notice
 
-        notice = privacy_notice(tenant) if is_insurance(tenant) else None
-        if notice:
+        # Lot 86 — tous les secteurs : une phrase, une seule fois (la collecte est naturelle, jamais cachée).
+        # Hors assurance : au moment où Bob retient pour la première fois quelque chose du client (taille, adresse…).
+        remembers = bool(customer.detected_preferences or customer.address)
+        notice = privacy_notice(tenant) if is_insurance(tenant) else (
+            customer_profile.privacy_line(tenant.name, tu) if remembers and not tenant.is_demo and not is_forget else None)
+        if notice and reply_text:
             reply_text = f"{reply_text}\n\n{notice}"
             customer.privacy_notice_at = datetime.now(timezone.utc)
 

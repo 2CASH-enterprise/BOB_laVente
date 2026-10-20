@@ -130,7 +130,7 @@ async def _cards_for_named_products(executor, text: str, insurance: bool) -> Non
     lowered = (text or "").lower()
     named = [pid for pid, name in candidates.items() if name and name.lower() in lowered]
     if named:
-        await executor.execute("send_product_images", {"product_ids": named[:3]})
+        await executor.execute("send_product_images", {"product_ids": named[:10]})  # lot 86 : 10 cartes
 
 
 def _history_to_anthropic_messages(history: list[Message]) -> list[dict]:

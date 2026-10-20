@@ -39,6 +39,7 @@ class CustomerDetail(BaseModel):
     total_spent: float
     products_viewed_count: int
     detected_preferences: dict
+    profile_lines: list[list[str]] = []  # lot 86
     tags: list[str]
     notes: str | None
     marketing_consent: bool

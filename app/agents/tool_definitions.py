@@ -18,6 +18,8 @@ TOOL_DEFINITIONS = [
                 "category": {"type": "string", "description": "Nom de catégorie, optionnel"},
                 "min_price": {"type": "number", "description": "Prix minimum, optionnel"},
                 "max_price": {"type": "number", "description": "Prix maximum (budget du client), optionnel"},
+                "size": {"type": "string", "description": "Taille ou pointure du client (ex. 'M', '42') : seuls les "
+                                                          "articles disponibles dans cette taille sont renvoyés"},
             },
             "required": ["query"],
         },
@@ -137,20 +139,29 @@ TOOL_DEFINITIONS = [
     {
         "name": "update_customer_profile",
         "description": (
-            "Enregistre une information concrète que le client vient de donner sur lui-même "
-            "ou son besoin (nom, ville, ce qu'il cherche, marque préférée, budget). Appelle "
-            "cet outil dès qu'une information nouvelle et concrète apparaît dans la conversation "
-            "— jamais à chaque message, jamais une supposition de ta part. Ne fournis que les "
-            "champs réellement mentionnés par le client, laisse les autres vides."
+            "Retient ce que le client vient de DIRE sur lui-même ou son besoin, pour mieux le servir la prochaine "
+            "fois (lot 86) : prénom, ville, quartier, adresse de livraison, rayon (homme, femme, enfant), taille, "
+            "pointure, couleurs ou matières aimées, occasion de l'achat, marque, budget, moyen de paiement. Appelle "
+            "cet outil dès qu'une information nouvelle et concrète apparaît — jamais à chaque message, jamais une "
+            "supposition (ne devine jamais le sexe ni la taille). Ne fournis que les champs dits par le client."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "first_name": {"type": "string", "description": "Prénom du client, si mentionné"},
-                "city": {"type": "string", "description": "Ville du client, si mentionnée"},
-                "need": {"type": "string", "description": "Ce que le client recherche (ex. 'smartphone', 'robe de soirée')"},
-                "brand": {"type": "string", "description": "Marque préférée mentionnée, si applicable"},
-                "budget_max": {"type": "number", "description": "Budget maximum mentionné par le client"},
+                "first_name": {"type": "string", "description": "Prénom du client"},
+                "city": {"type": "string", "description": "Ville du client"},
+                "district": {"type": "string", "description": "Quartier ou commune (ex. 'Cocody Riviera 3')"},
+                "delivery_address": {"type": "string", "description": "Adresse de livraison donnée par le client"},
+                "need": {"type": "string", "description": "Ce que le client recherche (ex. 'robe de soirée')"},
+                "section": {"type": "string", "description": "Rayon demandé : homme, femme, enfant, mixte"},
+                "clothing_size": {"type": "string", "description": "Taille de vêtement dite par le client (ex. 'M', '42')"},
+                "shoe_size": {"type": "string", "description": "Pointure dite par le client (ex. '39')"},
+                "colors": {"type": "string", "description": "Couleurs que le client aime ou demande"},
+                "materials": {"type": "string", "description": "Matières que le client aime (ex. 'coton, lin')"},
+                "occasions": {"type": "string", "description": "Occasion de l'achat (ex. 'mariage', 'travail')"},
+                "brand": {"type": "string", "description": "Marque préférée"},
+                "budget_max": {"type": "number", "description": "Budget maximum mentionné"},
+                "payment": {"type": "string", "description": "Moyen de paiement préféré (ex. 'Wave', 'espèces')"},
             },
             "required": [],
         },
@@ -437,7 +448,7 @@ TOOL_DEFINITIONS = [
         # Lot 26c — envoyer la vraie photo d'un produit (boutique en ligne et concession).
         "name": "send_product_images",
         "description": (
-            "Montre au client, sur WhatsApp, un à trois produits du catalogue en CARTES : la vraie photo, le nom, "
+            "Montre au client, sur WhatsApp, jusqu'à 10 produits du catalogue en CARTES : la vraie photo, le nom, "
             "un détail utile et un bouton « Ça m'intéresse » (lot 76). À utiliser dès que tu présentes des produits "
             "(« vous avez des robes ? ») ou quand le client demande une photo. Les cartes partent juste après ta "
             "réponse : ta réponse est alors une courte phrase d'introduction, sans lister les produits ni leurs prix. "
@@ -450,7 +461,7 @@ TOOL_DEFINITIONS = [
                 "product_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "UUID des produits (3 maximum), tels que renvoyés par search_products",
+                    "description": "UUID des produits (10 maximum), tels que renvoyés par search_products",
                 },
             },
             "required": ["product_ids"],

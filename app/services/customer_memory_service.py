@@ -78,7 +78,8 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
         sections.append("Produits déjà consultés sans achat :\n" + "\n".join(viewed_lines))
     if preferences_lines:
         sections.append(
-            "Préférences détectées lors d'échanges précédents (INFÉRENCE, pas un fait vérifié) :\n"
+            "Ce que le client t'a déjà dit (lot 86) — ne le redemande pas, vérifie-le d'un mot si utile "
+            "(« toujours en taille M ? », « je vous livre toujours à Cocody ? ») :\n"
             + preferences_lines
         )
     sections.append(
@@ -90,18 +91,14 @@ async def build_customer_memory(db: AsyncSession, tenant_id, customer_id) -> str
 
 
 async def _format_preferences(db: AsyncSession, tenant_id, customer_id) -> str:
+    """Lot 86 — ce que le client a dit (tailles, rayon, couleurs, quartier, adresse…), pour ne pas le redemander."""
+    from app.services import customer_profile
+
     customer = await db.get(Customer, customer_id)
-    if customer is None or not customer.detected_preferences:
+    if customer is None:
         return ""
-    prefs = customer.detected_preferences
-    lines = []
-    if prefs.get("need"):
-        lines.append(f"- Recherche : {prefs['need']}")
-    if prefs.get("brand"):
-        lines.append(f"- Marque préférée : {prefs['brand']}")
-    if prefs.get("budget_max"):
-        lines.append(f"- Budget maximum mentionné : {prefs['budget_max']}")
-    return "\n".join(lines)
+    return "\n".join(f"- {label} : {value}"
+                     for label, value in customer_profile.lines(customer.detected_preferences, customer.address))
 
 
 async def record_product_view(db: AsyncSession, tenant_id, customer_id, product_ids: list) -> None:

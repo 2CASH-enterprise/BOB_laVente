@@ -234,15 +234,16 @@ def test_bob_is_told_how_cards_work():
 
 def test_tutoiement_for_the_carousel_intro():
     assert product_cards.carousel_intro(True) == "Touche « Ça m'intéresse » sous le produit qui te plaît."
-    assert product_cards.MAX_CARDS == 3 and product_cards.BUTTON_TITLE == "Ça m'intéresse"
+    assert product_cards.MAX_CARDS == 10 and product_cards.BUTTON_TITLE == "Ça m'intéresse"
 
 
 @pytest.mark.asyncio
-async def test_never_more_than_three_cards():
+async def test_never_more_than_ten_cards():
+    """Lot 86 : jusqu'à 10 cartes (3 avant), la limite de WhatsApp pour un carrousel."""
     _Recorder.carousels, _Recorder.fail_cards = [], False
-    items = [{"product_id": str(i), "link": f"https://cdn/{i}.jpg", "name": f"P{i}", "card": f"P{i}"} for i in range(5)]
+    items = [{"product_id": str(i), "link": f"https://cdn/{i}.jpg", "name": f"P{i}", "card": f"P{i}"} for i in range(12)]
     mode, sent = await product_cards.send(_Recorder(), "336", items, tu=False)
-    assert mode == "cards" and len(sent) == 3 and len(_Recorder.carousels[0]["cards"]) == 3
+    assert mode == "cards" and len(sent) == 10 and len(_Recorder.carousels[0]["cards"]) == 10
 
 
 # --- Test réel du 16/10 (21:18) : « Vous avez des sacs ? » → liste en texte, aucune carte ------------------------

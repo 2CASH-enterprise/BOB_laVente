@@ -15,7 +15,7 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
-MAX_CARDS = 3
+MAX_CARDS = 10  # lot 86 (3 avant) ; limite de WhatsApp pour un carrousel
 BUTTON_TITLE = "Ça m'intéresse"
 INTEREST_PREFIX = "interest:"
 CARD_BODY_MAX = 160

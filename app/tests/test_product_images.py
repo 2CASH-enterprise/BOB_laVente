@@ -76,9 +76,10 @@ async def test_only_real_https_photos_of_this_shop_are_queued(db_session, unique
 
 
 @pytest.mark.asyncio
-async def test_at_most_three_photos_and_no_duplicates(db_session, unique_email):
+async def test_at_most_ten_photos_and_no_duplicates(db_session, unique_email):
+    """Lot 86 : plafond de 10 cartes par réponse (3 avant)."""
     tenant, conversation = await _shop(db_session, unique_email)
-    products = [_product(tenant, f"P{i}", image_url=f"https://cdn.example.com/{i}.jpg") for i in range(5)]
+    products = [_product(tenant, f"P{i}", image_url=f"https://cdn.example.com/{i}.jpg") for i in range(12)]
     db_session.add_all(products)
     await db_session.commit()
     executor = ToolExecutor(db_session, tenant.id, conversation)
@@ -86,8 +87,8 @@ async def test_at_most_three_photos_and_no_duplicates(db_session, unique_email):
     await executor.execute("send_product_images", {"product_ids": [str(products[0].id), str(products[0].id), str(products[1].id)]})
     await executor.execute("send_product_images", {"product_ids": [str(p.id) for p in products[2:]]})
 
-    assert len(executor.pending_images) == 3  # plafond par réponse, même sur plusieurs appels
-    assert len({img["product_id"] for img in executor.pending_images}) == 3
+    assert len(executor.pending_images) == 10  # plafond par réponse, même sur plusieurs appels
+    assert len({img["product_id"] for img in executor.pending_images}) == 10
 
 
 @pytest.mark.asyncio

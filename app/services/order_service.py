@@ -50,6 +50,7 @@ async def create_order(
     if customer is None or customer.tenant_id != tenant_id:
         raise OrderCreationError("Client introuvable")
 
+
     order_items: list[OrderItem] = []
     total = 0.0
     currency = None
@@ -117,6 +118,9 @@ async def create_order(
     # Section 40 — chaque commande a un suivi de livraison, même sans adresse renseignée
     # (le commerce pourra la compléter depuis le dashboard).
     db.add(Delivery(tenant_id=tenant_id, order_id=order.id, address=delivery_address))
+    if delivery_address and str(delivery_address).strip():
+        # Lot 86 : l'adresse de la dernière commande devient l'adresse de livraison habituelle du client.
+        customer.address = " ".join(str(delivery_address).split())[:500]
 
     # Section 13 — la commission n'est PLUS calculée ici : elle ne doit être due que sur un
     # paiement réellement confirmé par le commerçant (voir mark_order_as_paid ci-dessous),

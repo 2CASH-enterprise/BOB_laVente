@@ -456,3 +456,46 @@ def flatten(sheet: dict | None, variants: list | None = None) -> str | None:
         parts += [str(v) for v in (variant.get("options") or {}).values() if v]
     text = " | ".join(dict.fromkeys(p.strip() for p in parts if p.strip()))
     return text[:4000] or None
+
+
+# --- Lot 86 : « en stock dans sa taille » — filtre de taille ou de pointure pour search_products -------------------
+
+_LETTER_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL"]
+_SIZE_KEYS = re.compile(r"(?i)taille|size|pointure|tour")
+_RANGE = re.compile(r"(?i)\b([0-9]{1,3}|xxs|xs|s|m|l|xl|xxl|[345]xl)\s*(?:à|a|-|–|au)\s*([0-9]{1,3}|xxs|xs|s|m|l|xl|xxl|[345]xl)\b")
+
+
+def _size_token(value) -> str:
+    text = str(value or "").strip().upper().replace(",", ".")
+    return {"2XL": "XXL", "XXXL": "3XL"}.get(text, text)
+
+
+def _in_range(size: str, low: str, high: str) -> bool:
+    low, high = _size_token(low), _size_token(high)
+    try:
+        return float(low) <= float(size) <= float(high)
+    except ValueError:
+        pass
+    if size in _LETTER_SIZES and low in _LETTER_SIZES and high in _LETTER_SIZES:
+        return _LETTER_SIZES.index(low) <= _LETTER_SIZES.index(size) <= _LETTER_SIZES.index(high)
+    return False
+
+
+def fits_size(product, size) -> bool | None:
+    """True : disponible dans cette taille ; False : la fiche dit le contraire ; None : la fiche ne le dit pas."""
+    wanted = _size_token(size)
+    if not wanted:
+        return None
+    variants = [v for v in (getattr(product, "variants", None) or []) if isinstance(v, dict)]
+    sized = [v for v in variants if any(_SIZE_KEYS.search(str(k)) for k in (v.get("options") or {}))]
+    if sized:
+        return any((v.get("stock") or 0) > 0 and any(_SIZE_KEYS.search(str(k)) and _size_token(val) == wanted
+                                                     for k, val in (v.get("options") or {}).items()) for v in sized)
+    text = str((getattr(product, "sheet", None) or {}).get("sizes") or "").strip()
+    if not text:
+        return None
+    for low, high in _RANGE.findall(text):
+        if _in_range(wanted, low, high):
+            return True
+    tokens = {_size_token(t) for t in re.split(r"[\s,;/]+|\bet\b", text) if t.strip()}
+    return wanted in tokens

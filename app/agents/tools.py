@@ -29,7 +29,7 @@ from app.services.customer_memory_service import record_product_view
 PRODUCT_DESCRIPTION_MAX_CHARS = 300
 # Lot 44 — outils qui enregistrent ou consultent réellement un rendez-vous.
 APPOINTMENT_TOOLS = frozenset({"request_appointment", "reschedule_my_appointment", "cancel_my_appointment", "get_my_appointments"})
-MAX_IMAGES_PER_REPLY = 3
+MAX_IMAGES_PER_REPLY = 10  # lot 86 : carrousel jusqu'à 10 cartes (3 avant)
 # Lot 73 g — une photo déjà montrée ne repart pas avant 24 h, sauf si le client demande à la voir.
 RESEND_AFTER_HOURS = 24
 YES = re.compile(r"\s*(oui|ouais|yes|ok(ay)?|d'?accord|dac|volontiers|je veux bien|avec plaisir|bien s[uû]r|vas-y|allez-y|"
@@ -189,19 +189,28 @@ class ToolExecutor:
                 if criteria.get(key) is None:
                     criteria[key] = value
         filtering = dealership and any(v is not None for v in criteria.values())
+        size = (tool_input.get("size") or "").strip()
         products = await self.product_repo.search(
             tenant_id=self.tenant_id,
             query=query,
             min_price=tool_input.get("min_price"),
             max_price=tool_input.get("max_price"),
             # Lot 26 : les critères véhicule se vérifient après la requête, sur un lot plus large.
-            limit=500 if filtering else 10,
+            limit=500 if filtering else (60 if size and not dealership else 10),
         )
         if filtering:
             try:
                 products = [p for p in products if matches(getattr(p, "vehicle", None), **criteria)][:10]
             except (TypeError, ValueError):
                 return {"error": "Critères de recherche invalides (année et kilométrage : nombres entiers)."}
+        if size and not dealership:
+            # Lot 86 : « en stock dans sa taille » — un article dont la fiche dit qu'il n'existe pas dans cette taille
+            # est écarté ; une fiche muette sur les tailles le laisse passer (Bob vérifie alors avec la fiche).
+            from app.services.product_sheets import fits_size
+
+            products = [p for p in products if fits_size(p, size) is not False][:10]
+            if not products:
+                return {"results": [], "message": f"Aucun article de cette recherche n'est disponible en taille {size}."}
         if not products:
             return {"results": [], "message": "Aucun produit trouvé pour cette recherche."}
         await record_product_view(self.db, self.tenant_id, self.customer_id, [p.id for p in products])
@@ -1026,14 +1035,11 @@ class ToolExecutor:
         if tool_input.get("city"):
             customer.city = tool_input["city"]
 
-        preferences = dict(customer.detected_preferences or {})
-        if tool_input.get("need"):
-            preferences["need"] = tool_input["need"]
-        if tool_input.get("brand"):
-            preferences["brand"] = tool_input["brand"]
-        if tool_input.get("budget_max") is not None:
-            preferences["budget_max"] = tool_input["budget_max"]
-        customer.detected_preferences = preferences
+        from app.services import customer_profile  # lot 86 : tailles, rayon, couleurs, occasion, quartier…
+
+        customer.detected_preferences = customer_profile.merge(customer.detected_preferences, tool_input)
+        if tool_input.get("delivery_address"):
+            customer.address = " ".join(str(tool_input["delivery_address"]).split())[:500] or customer.address
 
         await self.db.flush()
         return {"status": "saved"}
