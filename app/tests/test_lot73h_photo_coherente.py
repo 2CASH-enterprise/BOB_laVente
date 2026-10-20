@@ -87,3 +87,56 @@ async def test_first_presentation_sends_the_card_without_offering_a_photo(db_ses
     assert [i["name"] for i in outbox] == ["InfinX Fatbike"]
     assert "photo" not in reply.lower() and "Elle est disponible en stock." in reply
     assert "PHOTOS DÉJÀ MONTRÉES" not in llm.received_systems[0]
+
+
+# --- Deuxième exemple réel du 20/10 : « Souhaitez-vous que je vous envoie les photos ? » → « Oui je veux bien » → « Désolé,
+# je n'ai pas pu envoyer les photos » ; et « l’*InfinX Fatbike* » affiché avec ses étoiles. ----------------------------
+
+@pytest.mark.asyncio
+async def test_yes_to_a_photo_offer_sends_the_photo_even_if_already_shown(db_session, unique_email):
+    from app.agents.orchestrator import generate_ai_reply_detailed
+
+    tenant, conversation, moto = await _with_card_shown(db_session, unique_email)
+    offer = Message(tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.AI,
+                    content="Souhaitez-vous que je vous envoie les photos et les détails de l’*InfinX Fatbike* ? 😊")
+    db_session.add(offer)
+    await db_session.commit()
+    outbox: list = []
+    llm = FakeLLMClient([text_response("Désolé, je n’ai pas pu envoyer les photos de l’*InfinX Fatbike*. Souhaitez-vous "
+                                       "que je vous donne plus de détails sur ce modèle ? 😊")])
+    reply, _ = await generate_ai_reply_detailed(db=db_session, tenant=tenant, conversation=conversation, history=[offer],
+                                                incoming_text="Oui je veux bien", llm_client=llm, image_outbox=outbox)
+    assert [i["product_id"] for i in outbox] == [str(moto.id)]
+    assert reply == "Souhaitez-vous que je vous donne plus de détails sur ce modèle ? 😊"
+
+
+@pytest.mark.parametrize("incoming, previous, wants", [
+    ("Oui je veux bien", "Souhaitez-vous que je vous envoie les photos ?", True),
+    ("ok", "Je vous montre une image ?", True),
+    ("Oui", "Quand seriez-vous disponible pour un essai ?", False),
+    ("Oui je veux bien", None, False),
+    ("C'est combien ?", "Souhaitez-vous la photo ?", False),
+])
+def test_yes_counts_as_asking_only_after_a_photo_offer(incoming, previous, wants):
+    from app.agents.tools import ToolExecutor
+
+    executor = ToolExecutor.__new__(ToolExecutor)
+    executor.incoming_text, executor.previous_reply = incoming, previous
+    assert executor.asks_to_see() is wants
+
+
+@pytest.mark.parametrize("raw, clean", [
+    ("Nous avons l’*InfinX Fatbike*, en stock.", "Nous avons *l’InfinX Fatbike*, en stock."),
+    ("Voici l'**InfinX EV125** !", "Voici **l'InfinX EV125** !"),
+    ("Le *Sac* est là", "Le *Sac* est là"),
+    ("De *Abidjan* à *Bouaké*", "De *Abidjan* à *Bouaké*"),
+])
+def test_bold_glued_to_an_apostrophe_becomes_visible_bold(raw, clean):
+    from app.services.reply_cleanup import clean_ai_reply
+
+    assert clean_ai_reply(raw) == clean
+
+
+def test_could_not_send_is_never_said_of_a_photo_that_exists():
+    text = "Désolé, je n’ai pas pu envoyer les photos de l’*InfinX Fatbike*. Autre chose ?"
+    assert photo_mentions_fixed(text, cards_going=False, photo_known=True) == "Autre chose ?"

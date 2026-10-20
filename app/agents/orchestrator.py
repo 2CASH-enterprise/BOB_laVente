@@ -244,6 +244,10 @@ async def generate_ai_reply_detailed(
         executor.message_outbox = message_outbox  # lot 34b : messages fixes après la réponse
     # Lot 35c : le dernier message du client, pour les verrous qui en dépendent (annulation explicite).
     executor.incoming_text = incoming_text
+    # Lot 73 h : la dernière réponse de la boutique (« Souhaitez-vous les photos ? » → « Oui » = demande de photo).
+    executor.previous_reply = next((m.content for m in reversed(history)
+                                    if m.sender in (MessageSender.AI, MessageSender.HUMAN)
+                                    and getattr(m, "message_type", None) not in ("product_cards", "image")), None)
     if change_outbox is not None:
         executor.change_outbox = change_outbox  # lot 35 : rendez-vous déplacés ou annulés par le client
     tools = tools_for(business_type, TOOL_DEFINITIONS)

@@ -3,6 +3,8 @@ Lot 75 — dernier nettoyage d'une réponse ÉCRITE PAR L'IA, juste avant l'envo
 
 - les indications techniques entre crochets (« 📸 *[Photo envoyée séparément]* ») : test réel du 16/10 ;
 - un seul emoji par message (consigne souvent ignorée : 😊 dans presque chaque message).
+- lot 73 h : « l’*InfinX Fatbike* » — WhatsApp n'affiche pas le gras collé à une lettre ou une apostrophe (les étoiles
+  restent visibles). Le mot qui précède entre dans le gras : « *l’InfinX Fatbike* ».
 """
 import re
 
@@ -19,6 +21,16 @@ _EMOJI = re.compile(
 )
 _SPACES = re.compile(r"(?<=\S)[ \t]{2,}")
 _TRIPLE_BLANK = re.compile(r"\n{3,}")
+
+
+# Gras WhatsApp (*…*) ou Markdown (**…**) collé à un mot qui finit par une apostrophe ou une lettre.
+_GLUED_BOLD = re.compile(r"(?<![\w*])([\w]+['’])(\*{1,2})(?=\S)([^*\n]+?)(?<=\S)\2(?![\w*])")
+_GLUED_LETTER_BOLD = re.compile(r"(?<=[^\W\d_])(\*{1,2})(?=\S)([^*\n]+?)(?<=\S)\1(?![\w*])")
+
+
+def unglue_bold(text: str) -> str:
+    text = _GLUED_BOLD.sub(lambda m: f"{m.group(2)}{m.group(1)}{m.group(3)}{m.group(2)}", text)
+    return _GLUED_LETTER_BOLD.sub(lambda m: m.group(2), text)  # « du*mot* » : rien à sauver, le gras est retiré
 
 
 _TRACE_LINE = re.compile(r"^[^\w\n]*(cartes envoy[ée]es|photo envoy[ée]e)\s*:[^\n]*$", re.IGNORECASE | re.MULTILINE)
@@ -46,6 +58,6 @@ def keep_one_emoji(text: str) -> str:
 def clean_ai_reply(text: str | None) -> str:
     if not text:
         return text or ""
-    text = keep_one_emoji(remove_placeholders(text))
+    text = unglue_bold(keep_one_emoji(remove_placeholders(text)))
     lines = [_SPACES.sub(" ", line).rstrip() for line in text.split("\n")]
     return _TRIPLE_BLANK.sub("\n\n", "\n".join(lines)).strip()

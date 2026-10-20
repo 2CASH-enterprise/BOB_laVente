@@ -171,7 +171,7 @@ OFFERS_PHOTO = re.compile(r"(envoie|envoyer|montre|montrer|partage|partager)\b[^
 ANNOUNCES_PHOTO = re.compile(r"\bvoici\b[^.!?\n]{0,20}\b(photos?|images?|visuels?)\b"
                              r"|\bje vous (envoie|transmets)\b[^.!?\n]{0,20}\b(photos?|images?)\b", re.IGNORECASE)
 DENIES_PHOTO = re.compile(r"(?:pas|aucune?|plus)\s+(?:encore\s+)?(?:de\s+|d['’])?(?:photos?|images?|visuels?)"
-                          r"|(?:ne\s+(?:peux|pourrai|suis\s+pas\s+en\s+mesure)|impossible)[^.!?\n]{0,40}(?:photos?|images?)"
+                          r"|(?:ne\s+(?:peux|pourrai|suis\s+pas\s+en\s+mesure)|impossible|pas\s+pu)[^.!?\n]{0,40}(?:photos?|images?)"
                           r"|\b(enverra|enverrons|transmettra)\b[^.!?\n]{0,40}\b(photos?|images?|visuels?)\b", re.IGNORECASE)
 
 

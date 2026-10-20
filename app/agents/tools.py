@@ -32,6 +32,8 @@ APPOINTMENT_TOOLS = frozenset({"request_appointment", "reschedule_my_appointment
 MAX_IMAGES_PER_REPLY = 3
 # Lot 73 g — une photo déjà montrée ne repart pas avant 24 h, sauf si le client demande à la voir.
 RESEND_AFTER_HOURS = 24
+YES = re.compile(r"\s*(oui|ouais|yes|ok(ay)?|d'?accord|dac|volontiers|je veux bien|avec plaisir|bien s[uû]r|vas-y|allez-y|"
+                 r"envoyez|envoie|s'il vous pla[iî]t|svp|stp|go)\b", re.IGNORECASE)
 ASKS_TO_SEE = re.compile(r"photo|image|\bpics?\b|vid[ée]o|\bvoir\b|montr|ressembl|à quoi (il|elle|ça|ca) ressemble",
                          re.IGNORECASE)
 
@@ -422,8 +424,15 @@ class ToolExecutor:
         return sorted(n for n in names if n)
 
     def asks_to_see(self) -> bool:
-        """Le client demande à voir (photo, image, voir, montrer…) : une carte déjà montrée peut repartir."""
-        return bool(ASKS_TO_SEE.search(self.incoming_text or ""))
+        """Le client demande à voir (photo, image, voir, montrer…) : une carte déjà montrée peut repartir.
+        Lot 73 h (retour réel du 20/10) : « Oui je veux bien » juste après « Souhaitez-vous que je vous envoie les
+        photos ? » est aussi une demande de photo."""
+        incoming = self.incoming_text or ""
+        if ASKS_TO_SEE.search(incoming):
+            return True
+        from app.services.product_cards import OFFERS_PHOTO
+
+        return bool(YES.match(incoming) and OFFERS_PHOTO.search(getattr(self, "previous_reply", None) or ""))
 
     def is_acknowledgement(self) -> bool:
         """« Okay », « merci », « d'accord », « oui », « super »… : rien à montrer de nouveau (incident du 16/10, 13:49)."""
