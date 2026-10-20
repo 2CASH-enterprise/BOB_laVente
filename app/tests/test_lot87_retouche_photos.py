@@ -355,3 +355,43 @@ def test_dashboard_photo_block_and_schedule():
         assert celery_app.conf.beat_schedule[key]["task"] in TASK_LABELS
     docker = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(encoding="utf-8")
     assert "fonts-dejavu-core" in docker and "isnet-general-use.onnx" in docker and "sha256sum -c" in docker
+
+
+# --- Lot 87 b : retour du serveur (« détourage impossible » sans message) -------------------------------------------
+
+@pytest.mark.asyncio
+async def test_server_cutout_says_why_it_failed(monkeypatch):
+    import asyncio
+
+    class Done:
+        def __init__(self, code, err=b""):
+            self.returncode, self._err = code, err
+
+        async def communicate(self):
+            return b"", self._err
+
+    for code, err, expected in ((-9, b"", "mémoire du serveur insuffisante"),
+                                (1, b"Traceback...\nImportError: libgomp.so.1", "code 1) : Traceback...\nImportError: libgomp"),
+                                (2, b"", "code 2) : aucun message")):
+        async def fake_exec(*args, **kwargs):
+            return Done(code, err)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        with pytest.raises(RuntimeError, match=expected[:30].replace("(", r"\(").replace(")", r"\)")):
+            await ps.server_cutout(b"x", "/modele")
+
+
+def test_only_one_retouch_at_a_time(monkeypatch, tmp_path):
+    import fcntl
+
+    from app.workers import photo_studio as worker
+
+    monkeypatch.setattr(worker, "LOCK_FILE", str(tmp_path / "lock"))
+    with open(worker.LOCK_FILE, "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert worker.retouch_photos_task.run() == {"skipped": "retouche déjà en cours"}
+
+
+def test_cutout_uses_little_memory():
+    source = (Path(__file__).resolve().parents[1] / "services" / "photo_cutout.py").read_text(encoding="utf-8")
+    assert "enable_cpu_mem_arena = False" in source and "enable_mem_pattern = False" in source

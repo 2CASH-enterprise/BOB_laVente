@@ -160,7 +160,10 @@ async def server_cutout(data: bytes, model_path: str) -> bytes:
             process.kill()
             raise RuntimeError("détourage trop long") from None
         if process.returncode != 0 or not target.is_file():
-            raise RuntimeError("détourage impossible : " + (err or b"").decode("utf-8", "replace")[-200:])
+            if process.returncode in (-9, 137):  # arrêté par le système : mémoire du serveur insuffisante
+                raise RuntimeError("détourage impossible : mémoire du serveur insuffisante (processus arrêté)")
+            detail = (err or b"").decode("utf-8", "replace").strip()[-160:] or "aucun message"
+            raise RuntimeError(f"détourage impossible (code {process.returncode}) : {detail}")
         return target.read_bytes()
 
 

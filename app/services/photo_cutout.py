@@ -25,6 +25,10 @@ def cutout(source_path: str, target_path: str, model_path: str) -> None:
     options = ort.SessionOptions()
     options.intra_op_num_threads = 2
     options.inter_op_num_threads = 1
+    # Mémoire au plus juste (serveur partagé de 4 Go) : pas de réserve de mémoire ni de plan mémoire anticipé.
+    options.enable_cpu_mem_arena = False
+    options.enable_mem_pattern = False
+    options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
     session = ort.InferenceSession(model_path, sess_options=options, providers=["CPUExecutionProvider"])
     prediction = session.run(None, {session.get_inputs()[0].name: normalized})[0][:, 0, :, :]
     low, high = float(prediction.min()), float(prediction.max())
