@@ -208,8 +208,15 @@ async def test_a_product_already_shown_in_cards_is_not_shown_again(db_session, u
     await executor.execute("send_product_images", {"product_ids": [str(robe.id)]})
     assert executor.pending_images == []
 
-    # Test réel du 16/10 (22:19) : « Je veux un sac » après un carrousel → liste avec prix, plus de cartes.
-    for message in ("Je veux un sac", "Et les robes ?", "Je prends laquelle ?"):
+    # Lot 73 g (retour réel du 19/10, MS4 Africa : la photo repartait à chaque réponse) : une carte déjà montrée
+    # ne repart pas dans les 24 h, quelle que soit la question…
+    for message in ("C'est combien ?", "Vous livrez à Cocody ?", "Je prends laquelle ?", "Et en rouge ?"):
+        again = ToolExecutor(db_session, tenant.id, conversation)
+        again.incoming_text = message
+        await again.execute("send_product_images", {"product_ids": [str(robe.id)]})
+        assert again.pending_images == [], message
+    # … sauf si le client demande à la voir.
+    for message in ("Je peux voir la robe ?", "Envoyez la photo svp", "Montrez-moi", "Elle ressemble à quoi ?"):
         again = ToolExecutor(db_session, tenant.id, conversation)
         again.incoming_text = message
         await again.execute("send_product_images", {"product_ids": [str(robe.id)]})

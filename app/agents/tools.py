@@ -30,6 +30,10 @@ PRODUCT_DESCRIPTION_MAX_CHARS = 300
 # Lot 44 — outils qui enregistrent ou consultent réellement un rendez-vous.
 APPOINTMENT_TOOLS = frozenset({"request_appointment", "reschedule_my_appointment", "cancel_my_appointment", "get_my_appointments"})
 MAX_IMAGES_PER_REPLY = 3
+# Lot 73 g — une photo déjà montrée ne repart pas avant 24 h, sauf si le client demande à la voir.
+RESEND_AFTER_HOURS = 24
+ASKS_TO_SEE = re.compile(r"photo|image|\bpics?\b|vid[ée]o|\bvoir\b|montr|ressembl|à quoi (il|elle|ça|ca) ressemble",
+                         re.IGNORECASE)
 
 
 def has_sendable_photo(product) -> bool:
@@ -363,28 +367,32 @@ class ToolExecutor:
         return result
 
     async def _photos_sent_recently(self) -> set[str]:
-        """Produits dont la photo est partie dans cette conversation depuis moins d'une heure (lot 75)."""
+        """Produits dont la photo ou la carte est déjà partie dans cette conversation depuis moins de 24 h.
+
+        Lot 73 g — retour réel du 19/10 (MS4 Africa) : la photo repartait à chaque réponse. Une carte déjà montrée
+        n'est renvoyée que si le client demande à la voir (« photo », « voir », « montrez »…)."""
         from datetime import datetime, timedelta, timezone
 
         from sqlalchemy import select
 
         if getattr(self, "_recent_photos", None) is None:
-            since = datetime.now(timezone.utc) - timedelta(hours=1)
-            rows = (await self.db.execute(select(Message.message_metadata).where(
-                Message.conversation_id == self.conversation.id, Message.message_type.in_(("image", "product_cards")),
-                Message.created_at >= since,
-            ))).scalars().all()
             self._recent_photos = set()
-            for meta in rows:
-                meta = meta or {}
-                if meta.get("product_id"):
-                    self._recent_photos.add(str(meta["product_id"]))
-                self._recent_photos.update(str(pid) for pid in meta.get("product_ids") or [])  # lot 76 : cartes
-            if not self.is_acknowledgement():
-                # Lot 76 (test réel du 16/10, 22:19 : « Je veux un sac » → liste sans carrousel) : on ne retient une
-                # carte déjà montrée QUE si le client répond par un simple « ok », « merci », « d'accord »…
-                self._recent_photos = set()
+            if not self.asks_to_see():
+                since = datetime.now(timezone.utc) - timedelta(hours=RESEND_AFTER_HOURS)
+                rows = (await self.db.execute(select(Message.message_metadata).where(
+                    Message.conversation_id == self.conversation.id, Message.message_type.in_(("image", "product_cards")),
+                    Message.created_at >= since,
+                ))).scalars().all()
+                for meta in rows:
+                    meta = meta or {}
+                    if meta.get("product_id"):
+                        self._recent_photos.add(str(meta["product_id"]))
+                    self._recent_photos.update(str(pid) for pid in meta.get("product_ids") or [])  # lot 76 : cartes
         return self._recent_photos
+
+    def asks_to_see(self) -> bool:
+        """Le client demande à voir (photo, image, voir, montrer…) : une carte déjà montrée peut repartir."""
+        return bool(ASKS_TO_SEE.search(self.incoming_text or ""))
 
     def is_acknowledgement(self) -> bool:
         """« Okay », « merci », « d'accord », « oui », « super »… : rien à montrer de nouveau (incident du 16/10, 13:49)."""
