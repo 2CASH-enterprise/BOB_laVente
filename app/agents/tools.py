@@ -373,14 +373,13 @@ class ToolExecutor:
 
         Lot 73 g — retour réel du 19/10 (MS4 Africa) : la photo repartait à chaque réponse. Une carte déjà montrée
         n'est renvoyée que si le client demande à la voir (« photo », « voir », « montrez »…)."""
-        from datetime import datetime, timedelta, timezone
 
         from sqlalchemy import select
 
         if getattr(self, "_recent_photos", None) is None:
             self._recent_photos = set()
             if not self.asks_to_see():
-                since = datetime.now(timezone.utc) - timedelta(hours=RESEND_AFTER_HOURS)
+                since = self._visit_since()
                 rows = (await self.db.execute(select(Message.message_metadata).where(
                     Message.conversation_id == self.conversation.id, Message.message_type.in_(("image", "product_cards")),
                     Message.created_at >= since,
@@ -394,13 +393,12 @@ class ToolExecutor:
 
     async def shown_photo_names(self) -> list[str]:
         """Lot 73 h — noms des produits dont la photo ou la carte est partie dans cette conversation depuis 24 h."""
-        from datetime import datetime, timedelta, timezone
 
         from sqlalchemy import select
 
         from app.models.product import Product
 
-        since = datetime.now(timezone.utc) - timedelta(hours=RESEND_AFTER_HOURS)
+        since = self._visit_since()
         rows = (await self.db.execute(select(Message.message_metadata).where(
             Message.conversation_id == self.conversation.id, Message.message_type.in_(("image", "product_cards")),
             Message.created_at >= since,
@@ -422,6 +420,13 @@ class ToolExecutor:
         names = (await self.db.execute(select(Product.name).where(Product.tenant_id == self.tenant_id,
                                                                   Product.id.in_(valid)))).scalars().all()
         return sorted(n for n in names if n)
+
+    def _visit_since(self):
+        """Lot 73 i : début de la visite en cours (posé par l'orchestrateur) ; à défaut, 24 h."""
+        from datetime import datetime, timedelta, timezone
+
+        start = getattr(self, "visit_start", None)
+        return start or datetime.now(timezone.utc) - timedelta(hours=RESEND_AFTER_HOURS)
 
     def asks_to_see(self) -> bool:
         """Le client demande à voir (photo, image, voir, montrer…) : une carte déjà montrée peut repartir.

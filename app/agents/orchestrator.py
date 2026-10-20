@@ -253,6 +253,11 @@ async def generate_ai_reply_detailed(
     tools = tools_for(business_type, TOOL_DEFINITIONS)
     # Lot 73 h — retour réel du 20/10 : Bob ne voyait pas les cartes déjà envoyées (traces cachées depuis le lot 76)
     # et disait « pas encore de photo » juste après. Il sait maintenant ce que le client a déjà vu.
+    from app.services import visits
+
+    new_visit, since_last, executor.visit_start = visits.visit_info(history)  # lot 73 i
+    if new_visit:
+        system_prompt += visits.new_visit_instruction(since_last)
     shown_photos = await executor.shown_photo_names() if image_outbox is not None else []
     if shown_photos:
         system_prompt += (
