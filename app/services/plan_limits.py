@@ -91,6 +91,7 @@ async def count_contact_points(db: AsyncSession, tenant_id) -> int:
     stmt = select(func.count(ContactPoint.id)).where(
         ContactPoint.tenant_id == tenant_id, ContactPoint.archived_at.is_(None),
         ~ContactPoint.code.startswith(KIT_CODE_PREFIX),  # lot 59 : le lien du kit de lancement ne compte pas
+        ContactPoint.created_by.is_(None),  # lot 89 : les liens de Naomy ne comptent pas dans la limite du commerçant
     )
     return (await db.execute(stmt)).scalar_one()
 

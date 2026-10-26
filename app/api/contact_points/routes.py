@@ -60,7 +60,8 @@ async def _customer_counts(db: AsyncSession, tenant_id) -> dict:
 
 async def _get_owned(db: AsyncSession, tenant_id, contact_point_id: UUID) -> ContactPoint:
     stmt = select(ContactPoint).where(
-        ContactPoint.tenant_id == tenant_id, ContactPoint.id == contact_point_id, ContactPoint.archived_at.is_(None)
+        ContactPoint.tenant_id == tenant_id, ContactPoint.id == contact_point_id, ContactPoint.archived_at.is_(None),
+        ContactPoint.created_by.is_(None),  # lot 89 : les liens de Naomy sont gérés par Naomy
     )
     cp = (await db.execute(stmt)).scalar_one_or_none()
     if cp is None:
@@ -79,7 +80,8 @@ async def list_contact_points(
 ):
     stmt = (
         select(ContactPoint)
-        .where(ContactPoint.tenant_id == current_user.tenant_id, ContactPoint.archived_at.is_(None))
+        .where(ContactPoint.tenant_id == current_user.tenant_id, ContactPoint.archived_at.is_(None),
+               ContactPoint.created_by.is_(None))  # lot 89 : les liens de Naomy n'apparaissent pas ici
         .order_by(ContactPoint.created_at)
     )
     points = (await db.execute(stmt)).scalars().all()

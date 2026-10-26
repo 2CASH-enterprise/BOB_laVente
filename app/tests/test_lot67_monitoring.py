@@ -471,7 +471,7 @@ async def test_service_status(client, db_session):
     try:
         d = (await client.get("/api/v1/superadmin/monitoring/status", headers=headers)).json()
         checks = {c["key"]: c for c in d["checks"]}
-        assert list(checks) == ["api", "db", "redis", "tasks", "smtp", "gmail", "ai", "whatsapp", "photoroom", "cutout", "fashn"]
+        assert list(checks) == ["api", "db", "redis", "tasks", "smtp", "gmail", "ai", "whatsapp", "photoroom", "cutout", "fashn", "naomy"]
         assert checks["db"]["status"] == "ok" and checks["smtp"]["status"] == "ko" and checks["redis"]["status"] == "idle"
         assert checks["tasks"]["status"] == "idle" and len(d["tasks"]) >= 15
         s.smtp_host = "smtp.test"

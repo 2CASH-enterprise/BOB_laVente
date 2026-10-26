@@ -233,7 +233,8 @@ async def receive_webhook(
             cp_stmt = select(ContactPoint).where(ContactPoint.tenant_id == tenant_id, ContactPoint.code == code)
             contact_point = (await db.execute(cp_stmt)).scalar_one_or_none()
             if contact_point is not None and is_new_customer and referral is None:  # la pub Meta prime
-                customer.acquisition_source = "LINK"
+                # Lot 89 : un lien créé par Naomy donne la source « NaomyIA » (compteurs du contrat Naomy).
+                customer.acquisition_source = "NAOMY" if contact_point.created_by == "NAOMY" else "LINK"
                 customer.acquisition_detail = contact_point.name
                 customer.acquisition_contact_point_id = contact_point.id
             # Lot 27 — lien d'un commercial : le client lui est rattaché, même s'il était déjà connu

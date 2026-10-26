@@ -226,6 +226,10 @@
     transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   }
   button.action:hover { background: var(--accent-fill-hover); }
+  a.action { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 16px;
+    background: var(--accent-fill); color: var(--on-accent); border-radius: var(--radius-sm); font-size: 13px; font-weight: 700;
+    text-decoration: none; margin-right: 6px; }  /* lot 89 : lien qui ressemble à un bouton (« Ouvrir Naomy ») */
+  a.action:hover { background: var(--accent-fill-hover); }
   button.action:active { transform: scale(0.97); }
   button.action.secondary { background: var(--panel); color: var(--text); border-color: var(--border-strong); }
   button.action.secondary:hover { background: var(--accent-soft); border-color: var(--accent-soft-hover); }
@@ -1373,6 +1377,13 @@
             </div>
           </details>
         </div>
+      </div>
+
+      <div class="card" id="naomy-card" style="max-width: 640px; margin-top: 20px;">
+        <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;"><span class="app-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></span>Naomy, votre agent marketing</div>
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 12px;">Naomy prépare vos publications à partir de votre catalogue, et vous les validez sur WhatsApp. Elle lit vos produits, votre stock et les ventes obtenues par ses publications, jamais le nom ni le numéro de vos clients.</p>
+        <div id="naomy-body" style="font-size: 13px;">Vérification…</div>
+        <div id="naomy-msg" style="margin-top: 8px; font-size: 13px;"></div>
       </div>
     </section>
 
@@ -6517,6 +6528,7 @@ async function saveStrategySettings() {
 
 // ---- Intégrations e-commerce (Shopify / Meta Commerce Catalog) ----
 async function loadIntegrationsStatus() {
+  loadNaomyCard();  // lot 89
   try {
     const s = await api("/api/v1/integrations/shopify/status");
     document.getElementById("shopify-status").textContent = `Connecté — ${s.shop_domain} (dernière sync : ${s.last_synced_at ? new Date(s.last_synced_at).toLocaleString() : "jamais"})`;
@@ -6552,6 +6564,68 @@ async function loadIntegrationsStatus() {
 }
 
 let metaLoginConfig = null;
+
+// --- Lot 89 : carte « Naomy » (liaison avec l'agent marketing) -------------------------------------------------------
+async function loadNaomyCard() {
+  const body = document.getElementById("naomy-body");
+  if (!body) return;
+  let s;
+  try { s = await api("/api/v1/naomy-connection"); } catch (e) { body.textContent = e.message; return; }
+  if (!s.connected) {
+    body.innerHTML = `${s.refusal ? `<p style="margin: 0 0 10px; color: var(--muted);">${esc(s.refusal)}</p>` : ""}
+      <button class="action" id="naomy-connect-btn" ${s.available ? "" : "disabled"} onclick="startNaomyPairing()">Connecter Naomy</button>
+      <div id="naomy-pairing" style="margin-top: 10px;"></div>`;
+    return;
+  }
+  const since = s.connected_at ? new Date(s.connected_at).toLocaleDateString("fr-FR") : "";
+  body.innerHTML = `
+    <p style="margin: 0 0 8px;"><b>Reliée</b> au ${esc(s.number)}${since ? ` depuis le ${esc(since)}` : ""}. Ce n'est pas vous ? Déconnectez-la.</p>
+    ${s.suspended ? `<p class="tone-warning" style="margin: 0 0 8px; padding: 8px 10px; border-radius: 8px;">Votre formule ne comprend plus Naomy : ses publications sont suspendues jusqu'au retour à la formule Indépendant ou plus.</p>` : ""}
+    <label style="display: flex; gap: 8px; align-items: center; margin: 0 0 12px;"><input type="checkbox" id="naomy-reminders" ${s.reminders_enabled ? "checked" : ""} onchange="saveNaomyReminders(this)"> Me prévenir par e-mail des propositions de Naomy</label>
+    <button class="action secondary" onclick="disconnectNaomy()">Déconnecter Naomy</button>`;
+}
+
+async function startNaomyPairing() {
+  const box = document.getElementById("naomy-pairing");
+  const msg = document.getElementById("naomy-msg");
+  msg.textContent = "";
+  try {
+    const r = await api("/api/v1/naomy-connection/pairing", { method: "POST" });
+    box.innerHTML = `<p style="margin: 0 0 8px;">Dernière étape chez Naomy : confirmez depuis votre WhatsApp. Ce lien est valable 15 minutes.</p>
+      <a class="action" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ouvrir Naomy pour confirmer</a>
+      <button class="action secondary" onclick="loadNaomyCard()">J'ai confirmé</button>`;
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function saveNaomyReminders(input) {
+  const msg = document.getElementById("naomy-msg");
+  try {
+    await api("/api/v1/naomy-connection/reminders", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: input.checked }) });
+    msg.style.color = "var(--success)";
+    msg.textContent = input.checked ? "Naomy pourra vous prévenir par e-mail." : "Plus d'e-mails de rappel de Naomy.";
+  } catch (e) {
+    input.checked = !input.checked;
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function disconnectNaomy() {
+  if (!(await bobConfirm("Déconnecter Naomy ?", "Naomy ne pourra plus lire votre catalogue ni publier pour vous. Vous pourrez la reconnecter à tout moment.", { confirmLabel: "Déconnecter", danger: true }))) return;
+  const msg = document.getElementById("naomy-msg");
+  try {
+    await api("/api/v1/naomy-connection", { method: "DELETE" });
+    toast("Naomy est déconnectée.");
+    loadNaomyCard();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
 
 async function disconnectMetaCatalog() {
   if (!(await bobConfirm("Déconnecter le catalogue Facebook ?", "Vos produits restent dans Bob, mais ils ne seront plus mis à jour depuis Facebook.", { confirmLabel: "Déconnecter", danger: true }))) return;

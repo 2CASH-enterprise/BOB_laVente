@@ -44,6 +44,8 @@ from app.api.monitoring.routes import public_router as monitoring_public_router,
 from app.api.superadmin.wa_templates import router as superadmin_wa_templates_router  # lot 68
 from app.api.pay.routes import router as pay_router  # lot 68
 from app.api.superadmin.plans import router as superadmin_plans_router, tenant_router as plan_usage_router  # lot 69
+from app.api.naomy.routes import naomy_error_response, router as naomy_router  # lot 89
+from app.services.naomy_bridge import NaomyError  # lot 89
 from app.api.preregistration.routes import public_router as prereg_public_router, router as prereg_router  # lot 65
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from app.api.whatsapp.routes import router as whatsapp_router
@@ -68,6 +70,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 from app.services import monitoring as _monitoring  # noqa: E402
 
 _monitoring.install()
+
+
+app.add_exception_handler(NaomyError, naomy_error_response)  # lot 89 : erreurs au format du contrat Naomy
 
 
 @app.exception_handler(Exception)
@@ -123,6 +128,7 @@ app.include_router(superadmin_wa_templates_router)
 app.include_router(pay_router)
 app.include_router(superadmin_plans_router)
 app.include_router(plan_usage_router)
+app.include_router(naomy_router)  # lot 89
 
 class FreshPages(StaticFiles):
     """

@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     photoroom_api_key: str = ""
     fashn_api_key: str = ""
     photo_model_path: str = "/opt/models/isnet-general-use.onnx"
+    # Lot 89 — connecteur Naomy. Secret de plateforme partagé avec Naomy (même valeur dans /opt/naomy/.env) : il signe
+    # seulement l'appairage. Vide = connexion à Naomy « bientôt disponible ». Adresse des événements contrôlée
+    # (domaine ET chemin : Bob et Naomy partagent agenc-ai.com). Numéro central de Naomy pour les rappels par e-mail.
+    naomy_platform_secret: str = ""
+    naomy_allowed_host: str = "agenc-ai.com"
+    naomy_allowed_path: str = "/naomy/api/bob/"
+    naomy_base_url: str = "https://agenc-ai.com/naomy"
+    naomy_whatsapp_number: str = ""
     debug: bool = False
     # Lot 73 : politique de sécurité des contenus (CSP). False = « Report-Only » (signale sans bloquer, une semaine),
     # True = appliquée (bloque). Les signalements arrivent dans le Monitoring.

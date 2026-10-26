@@ -201,7 +201,28 @@ async def checks(db, now: datetime | None = None) -> dict:
         out.append(_check("whatsapp", "Jetons WhatsApp / Meta", "idle", "Aucun numéro connecté"))
 
     out.extend(await photo_checks(db, now, settings))
+    out.append(await naomy_check(db, now, settings))
     return {"checks": out, "tasks": tasks, "checked_at": now.isoformat()}
+
+
+async def naomy_check(db, now: datetime, settings) -> dict:
+    """Lot 89 — connecteur Naomy : liaisons actives, événements abandonnés (24 h) ou en retard."""
+    from app.models.naomy import NaomyConnection, NaomyEvent
+
+    name = "Naomy (passerelle)"
+    if not settings.naomy_platform_secret:
+        return _check("naomy", name, "idle", "Non configuré : secret de plateforme absent (« bientôt disponible »)")
+    linked = (await db.execute(select(func.count(NaomyConnection.id)).where(NaomyConnection.status == "ACTIVE"))).scalar_one()
+    failed = (await db.execute(select(func.count(NaomyEvent.id)).where(
+        NaomyEvent.status == "FAILED", NaomyEvent.created_at >= now - timedelta(hours=24)))).scalar_one()
+    late = (await db.execute(select(func.count(NaomyEvent.id)).where(
+        NaomyEvent.status == "PENDING", NaomyEvent.attempts > 0, NaomyEvent.created_at < now - timedelta(minutes=30)))).scalar_one()
+    boutiques = f"{linked} boutique{'s' if linked > 1 else ''} reliée{'s' if linked > 1 else ''}"
+    if failed:
+        return _check("naomy", name, "ko", f"{failed} événement{'s' if failed > 1 else ''} abandonné{'s' if failed > 1 else ''} en 24 h · {boutiques}")
+    if late:
+        return _check("naomy", name, "warn", f"{late} événement{'s' if late > 1 else ''} en attente de renvoi · {boutiques}")
+    return _check("naomy", name, "ok" if linked else "idle", f"Configuré · {boutiques}")
 
 
 async def photo_checks(db, now: datetime, settings) -> list[dict]:

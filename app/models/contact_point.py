@@ -41,6 +41,10 @@ class ContactPoint(Base):
     owner_email: Mapped[str | None] = mapped_column(String(255))  # reçoit les alertes de SES clients
     # Lot 28 — canal où le lien est publié (Google, YouTube, TikTok…) : voir services/acquisition.py.
     channel: Mapped[str | None] = mapped_column(String(16))
+    # Lot 89 — lien créé par Naomy (source « NaomyIA ») : géré par Naomy, sa référence rend la création idempotente.
+    created_by: Mapped[str | None] = mapped_column(String(16))  # None (commerçant) ou "NAOMY"
+    naomy_reference: Mapped[str | None] = mapped_column(String(64))
+    product_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"))
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     click_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
