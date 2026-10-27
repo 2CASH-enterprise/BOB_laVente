@@ -42,6 +42,9 @@ class User(Base):
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Lot 90 — mode du tableau de bord : SIMPLE (4 grands boutons) ou FULL (tableau de bord complet). Vide = selon
+    # l'activité de la boutique (commerce : SIMPLE). Les comptes d'avant le lot 90 ont reçu FULL à la migration.
+    ui_mode: Mapped[str | None] = mapped_column(String(8))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
