@@ -50,7 +50,8 @@ class NaomyConnection(Base):
     assistant_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     summary_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=sa_true())
     last_summary_on: Mapped[date | None] = mapped_column(Date)
-    awaiting: Mapped[str | None] = mapped_column(String(80))  # réponse attendue, ex. « stock:<produit> »
+    # Réponse attendue : « stock:<produit> », « photo:<fichier>|<nom> », « draft:<prix>:<nom> » (lot 92b : 400)
+    awaiting: Mapped[str | None] = mapped_column(String(400))
     awaiting_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

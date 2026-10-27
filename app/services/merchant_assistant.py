@@ -17,6 +17,10 @@ Règles :
 - 30 messages par boutique et par jour au plus ; une alerte qui ne peut pas partir sur WhatsApp (plafond, fenêtre
   de 24 h fermée, Naomy injoignable) part par e-mail ;
 - le texte reçu est effacé dès qu'il est traité ; une image n'est gardée que si elle devient la photo d'un produit.
+
+Lot 92b (pilote du 27/10) : un produit peut s'ajouter en deux messages. Photo seule (ou sans prix) : Bob la garde et
+demande « le nom et le prix » ; texte seul avec un nom et un prix : Bob demande la photo. Le produit n'est créé qu'avec
+sa photo ET son prix. Une photo jamais complétée est effacée au bout de 2 heures.
 """
 import base64
 import binascii
@@ -49,6 +53,7 @@ WAITING_REPEAT = timedelta(hours=12)       # une seule alerte « vous attend » 
 SUMMARY_HOUR = 20                          # bilan du soir par e-mail, heure du pays de la boutique
 LIST_LINES = 5
 STORE = Path(__file__).resolve().parents[1] / "var" / "assistant"
+STORE_MAX_AGE = timedelta(hours=2)        # lot 92b : photo gardée en attendant son nom et son prix
 PRODUCT_UPLOADS = Path(__file__).resolve().parents[1] / "static" / "uploads" / "products"
 
 # Commandes connues (liste x-commandes-bob du contrat 1.3.1), comparées sans accents ni majuscules, sur le message
@@ -67,9 +72,9 @@ MENU = ("Je suis Bob, votre vendeur. Écrivez par exemple :\n"
         "• qui attend : les clients qui vous attendent\n"
         "• stock : les produits épuisés (ou « stock robe » pour un produit)\n"
         "• ajouter : ajouter un produit en photo\n\n"
-        "Pour ajouter un produit, envoyez sa photo avec « Bob, » devant la légende, par exemple : Bob, Sac cabas 12000")
-ADD_HELP = ("Pour ajouter un produit, envoyez sa photo avec « Bob, » devant la légende : le nom, puis le prix.\n"
-            "Par exemple : Bob, Sac cabas en raphia 12000")
+        "Pour ajouter un produit : envoyez sa photo, puis son nom et son prix (par exemple : Sac cabas 12000).")
+ADD_HELP = ("Pour ajouter un produit : envoyez sa photo, puis son nom et son prix, par exemple : Sac cabas 12000.\n"
+            "Vous pouvez aussi tout envoyer d'un coup, en légende de la photo.")
 VOICE_REPLY = "Je ne sais pas encore écouter les notes vocales : écrivez-moi pour l'instant (par exemple « mes ventes »)."
 RETURN_REPLY = "C'est noté, rien n'a changé."
 
@@ -251,7 +256,7 @@ def queue(db, connection, text: str, buttons: list[tuple[str, str]] | None = Non
         payload["boutons"] = [{"id": bid[:256], "titre": short(title, 20)} for bid, title in buttons[:3]]
     if awaiting:
         payload["attend_reponse"] = True
-        connection.awaiting, connection.awaiting_until = awaiting[:80], now + timedelta(minutes=AWAIT_MINUTES)
+        connection.awaiting, connection.awaiting_until = awaiting[:400], now + timedelta(minutes=AWAIT_MINUTES)
     item = AssistantOutbox(id=uuid.uuid4(), tenant_id=connection.tenant_id, connection_id=connection.id,
                            message_id=message_id, kind=kind, ref=ref, payload=payload, fallback_subject=fallback_subject,
                            status="PENDING", attempts=0, created_at=now)
@@ -587,28 +592,53 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
 
 # --- Photo avec légende : nouveau produit, sans IA ---------------------------------------------------------------------
 
-async def add_product_from_photo(db, connection, tenant, message, now) -> None:
+PHOTO_ASK = "J'ai votre photo. Quel est le nom et le prix ? Par exemple : Sac cabas 12000"
+PRICE_MISSING = "Il me manque le prix : écrivez le nom puis le prix, par exemple : Sac cabas 12000"
+
+
+def _awaiting(connection, now) -> str | None:
+    until = connection.awaiting_until
+    if until is not None and until.tzinfo is None:
+        until = until.replace(tzinfo=timezone.utc)
+    return connection.awaiting if connection.awaiting and until is not None and until >= now else None
+
+
+def _kept_photo(awaiting: str | None) -> tuple[str | None, str | None]:
+    """« photo:<fichier>|<nom> » → (fichier, nom)."""
+    if not awaiting or not awaiting.startswith("photo:"):
+        return None, None
+    name_part = awaiting[6:].split("|", 1)
+    return Path(name_part[0]).name or None, (name_part[1] if len(name_part) > 1 and name_part[1] else None)
+
+
+def _draft(awaiting: str | None) -> tuple[str | None, Decimal | None]:
+    """« draft:<prix>:<nom> » → (nom, prix)."""
+    if not awaiting or not awaiting.startswith("draft:"):
+        return None, None
+    price, _, name = awaiting[6:].partition(":")
+    try:
+        return (name or None), Decimal(price)
+    except InvalidOperation:
+        return None, None
+
+
+async def create_product(db, connection, tenant, name: str, price: Decimal, photo: str | None, now) -> None:
+    """Crée le produit avec sa photo (gardée hors du site), puis demande le stock."""
     from app.core.config import get_settings
     from app.models.product import Product
-    from app.services.business_type import is_insurance
     from app.services.photo_studio import reset_for_new_source
     from app.services.plan_limits import FREEMIUM_MAX_PRODUCTS, remaining_product_slots
 
-    name, price = parse_caption(message.text)
-    if is_insurance(tenant):
-        queue(db, connection, "L'ajout d'un produit en photo est réservé aux boutiques.", now=now)
-        return
-    if not message.text or not name or price is None:
-        queue(db, connection, ADD_HELP, now=now)
-        return
+    connection.awaiting = connection.awaiting_until = None
     remaining = await remaining_product_slots(db, tenant.id, tenant.is_paid)
     if remaining is not None and remaining <= 0:
+        _remove(photo)
         queue(db, connection, f"La formule gratuite est limitée à {FREEMIUM_MAX_PRODUCTS} produits : passez à une "
                               f"formule payante pour en ajouter. {dashboard_link('?tab=settings')}", now=now)
         return
-    source = STORE / Path(message.media_path or "").name
-    if not message.media_path or not source.is_file():
-        queue(db, connection, "La photo n'est pas arrivée : renvoyez-la avec sa légende, s'il vous plaît.", now=now)
+    source = STORE / Path(photo or "").name
+    if not photo or not source.is_file():
+        queue(db, connection, "La photo n'est plus là : renvoyez-la, s'il vous plaît.", now=now)
         return
     base = re.sub(r"[^A-Z0-9]+", "-", normalize(name).upper()).strip("-")[:40] or "PRODUIT"
     sku = f"{base}-{secrets.token_hex(2).upper()}"
@@ -617,6 +647,7 @@ async def add_product_from_photo(db, connection, tenant, message, now) -> None:
     PRODUCT_UPLOADS.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex}{source.suffix}"
     (PRODUCT_UPLOADS / filename).write_bytes(source.read_bytes())
+    _remove(photo)
     reset_for_new_source(product, f"{get_settings().public_base_url}/uploads/products/{filename}")
     product.image_status = "PENDING"  # lot 87 : fond blanc studio en arrière-plan
     db.add(product)
@@ -626,14 +657,40 @@ async def add_product_from_photo(db, connection, tenant, message, now) -> None:
           awaiting=f"stock:{product.id}", now=now)
 
 
+async def add_product_from_photo(db, connection, tenant, message, now) -> None:
+    from app.services.business_type import is_insurance
+
+    if is_insurance(tenant):
+        queue(db, connection, "L'ajout d'un produit en photo est réservé aux boutiques.", now=now)
+        return
+    photo = message.media_path
+    message.media_path = None  # la photo suit le produit, ou reste gardée en attendant son nom et son prix
+    awaiting = _awaiting(connection, now)
+    name, price = parse_caption(message.text)
+    if not (name and price is not None):
+        draft_name, draft_price = _draft(awaiting)
+        if draft_name and draft_price is not None:  # lot 92b : le nom et le prix sont arrivés avant la photo
+            name, price = draft_name, draft_price
+    if name and price is not None:
+        old, _ = _kept_photo(awaiting)
+        if old and old != photo:
+            _remove(old)
+        await create_product(db, connection, tenant, name, price, photo, now)
+        return
+    old, _ = _kept_photo(awaiting)  # une nouvelle photo remplace celle qui attendait
+    if old and old != photo:
+        _remove(old)
+    keep = f"photo:{photo}|{name[:200]}" if name else f"photo:{photo}"
+    queue(db, connection, f"J'ai la photo de « {short(name, 60)} ». Quel est son prix ? Par exemple : 12000" if name
+          else PHOTO_ASK, awaiting=keep, now=now)
+
+
 async def handle_awaited(db, connection, tenant, text: str | None, now) -> bool:
-    """Réponse attendue (30 minutes) : le stock d'un produit qui vient d'être ajouté."""
+    """Réponse attendue (30 minutes) : stock d'un produit ajouté, ou nom et prix d'une photo gardée."""
     from app.models.product import Product
 
-    awaiting, until = connection.awaiting, connection.awaiting_until
-    if until is not None and until.tzinfo is None:
-        until = until.replace(tzinfo=timezone.utc)
-    if not awaiting or until is None or until < now:
+    awaiting = _awaiting(connection, now)
+    if not awaiting:
         return False
     norm = without_bob(normalize(text))
     number = re.fullmatch(r"(\d{1,6})( .*)?", norm)
@@ -649,7 +706,51 @@ async def handle_awaited(db, connection, tenant, text: str | None, now) -> bool:
         product.stock_quantity = int(number.group(1))
         queue(db, connection, f"C'est noté : {product.stock_quantity} en stock pour {short(product.name, 60)}.", now=now)
         return True
+    if awaiting.startswith("photo:"):
+        if match_command(text)[0]:
+            return False  # une commande passe toujours avant ; la photo reste gardée
+        photo, kept_name = _kept_photo(awaiting)
+        name, price = parse_caption(text)
+        name = name or kept_name
+        if name and price is not None:
+            await create_product(db, connection, tenant, name, price, photo, now)
+        elif price is None:
+            keep = f"photo:{photo}|{name[:200]}" if name else f"photo:{photo}"
+            queue(db, connection, PRICE_MISSING, awaiting=keep, now=now)
+        else:
+            queue(db, connection, PHOTO_ASK, awaiting=awaiting, now=now)
+        return True
     return False
+
+
+async def offer_draft(db, connection, tenant, text: str | None, now) -> bool:
+    """Lot 92b : texte seul avec un nom et un prix → Bob demande la photo (rien n'est créé sans elle)."""
+    from app.services.business_type import is_insurance
+
+    if is_insurance(tenant):
+        return False
+    name, price = parse_caption(text)
+    if not name or price is None or not re.search(r"[a-zA-Z]{2}", normalize(name)):
+        return False
+    queue(db, connection, f"Ajouter « {short(name, 60)} » à {amount(price)} {tenant.currency or 'XOF'} ? "
+                          "Envoyez sa photo.", awaiting=f"draft:{price}:{name[:300]}", now=now)
+    return True
+
+
+def clean_store(now: datetime | None = None) -> int:
+    """Photos gardées et jamais complétées : effacées au bout de 2 heures."""
+    now = now or datetime.now(timezone.utc)
+    removed = 0
+    if not STORE.is_dir():
+        return 0
+    for path in STORE.iterdir():
+        try:
+            if path.is_file() and datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) < now - STORE_MAX_AGE:
+                path.unlink()
+                removed += 1
+        except OSError:
+            pass
+    return removed
 
 
 async def handle_button(db, connection, tenant, button: str, now) -> None:
@@ -705,7 +806,8 @@ async def process(db, message_id, now: datetime | None = None) -> str:
             await add_product_from_photo(db, connection, tenant, message, now)
         elif not await handle_awaited(db, connection, tenant, message.text, now):
             key, rest = match_command(message.text)
-            await handle_command(db, connection, tenant, key or "help", rest, now)
+            if key or not await offer_draft(db, connection, tenant, message.text, now):
+                await handle_command(db, connection, tenant, key or "help", rest, now)
         await db.commit()
     except Exception:  # noqa: BLE001 — un message en échec ne bloque jamais les suivants
         await db.rollback()
@@ -892,6 +994,7 @@ async def tick(db, now: datetime | None = None, sender=None, mailer=None) -> dic
         report["alerts"] = await scan_alerts(db, now)
     report["outbox"] = await send_outbox(db, now, sender=sender, mailer=mailer)
     report["summaries"] = await send_summaries(db, now, mailer=mailer)
+    report["photos_removed"] = clean_store(now)  # lot 92b
     return report
 
 

@@ -439,14 +439,102 @@ async def test_photo_with_caption_creates_the_product_then_asks_the_stock(client
     assert (await _replies(db_session, tenant))[-1].payload["texte"] == "C'est noté : 5 en stock pour Sac cabas en raphia."
 
 
+def _photo(text=None):
+    return _msg(text, kind="image", media={"mime": "image/png", "base64": base64.b64encode(PNG).decode()})
+
+
+async def _products(db, tenant):
+    return (await db.execute(select(Product).where(Product.tenant_id == tenant.id)
+                             .execution_options(populate_existing=True))).scalars().all()
+
+
 @pytest.mark.asyncio
-async def test_photo_without_price_gets_help_and_is_not_kept(client, db_session, assistant_env):
+async def test_photo_alone_then_name_and_price(client, db_session, assistant_env):
+    """Lot 92b : photo seule, Bob la garde et demande le nom et le prix."""
     tenant, _, headers, _ = await _linked(client, db_session)
-    media = {"mime": "image/png", "base64": base64.b64encode(PNG).decode()}
-    await _say(client, db_session, headers, _msg("Bob, joli sac", kind="image", media=media))
-    assert (await db_session.execute(select(Product))).first() is None
-    assert (await _replies(db_session, tenant))[0].payload["texte"] == ma.ADD_HELP
-    assert not list(ma.STORE.iterdir())
+    await _say(client, db_session, headers, _photo())
+    assert await _products(db_session, tenant) == []
+    [ask] = await _replies(db_session, tenant)
+    assert ask.payload["texte"] == ma.PHOTO_ASK and ask.payload["attend_reponse"] is True
+    assert len(list(ma.STORE.iterdir())) == 1  # gardée en attendant
+    await _say(client, db_session, headers, _msg("Sac cabas 12 000"))
+    [product] = await _products(db_session, tenant)
+    assert product.name == "Sac cabas" and int(product.price) == 12000 and product.image_url
+    assert not list(ma.STORE.iterdir()) and len(list(ma.PRODUCT_UPLOADS.iterdir())) == 1
+    assert "combien en avez-vous" in (await _replies(db_session, tenant))[-1].payload["texte"]
+
+
+@pytest.mark.asyncio
+async def test_photo_with_a_name_only_asks_the_price(client, db_session, assistant_env):
+    tenant, _, headers, _ = await _linked(client, db_session)
+    await _say(client, db_session, headers, _photo("Bob, joli sac"))
+    assert (await _replies(db_session, tenant))[-1].payload["texte"] == "J'ai la photo de « joli sac ». Quel est son prix ? Par exemple : 12000"
+    await _say(client, db_session, headers, _msg("un très joli sac"))  # toujours pas de prix
+    assert (await _replies(db_session, tenant))[-1].payload["texte"] == ma.PRICE_MISSING
+    await _say(client, db_session, headers, _msg("8000"))
+    [product] = await _products(db_session, tenant)
+    assert product.name == "un très joli sac" and int(product.price) == 8000
+
+
+@pytest.mark.asyncio
+async def test_a_command_still_works_while_a_photo_waits(client, db_session, assistant_env):
+    tenant, _, headers, _ = await _linked(client, db_session)
+    await _say(client, db_session, headers, _photo())
+    await _say(client, db_session, headers, _msg("mes ventes"))
+    assert (await _replies(db_session, tenant))[-1].payload["texte"].startswith("Vos ventes confirmées")
+    assert await _products(db_session, tenant) == [] and len(list(ma.STORE.iterdir())) == 1
+    await _say(client, db_session, headers, _msg("Robe wax 15000"))
+    assert [p.name for p in await _products(db_session, tenant)] == ["Robe wax"]
+
+
+@pytest.mark.asyncio
+async def test_name_and_price_first_then_the_photo(client, db_session, assistant_env):
+    tenant, _, headers, connection = await _linked(client, db_session)
+    await _say(client, db_session, headers, _msg("Sac cabas 12000"))
+    [ask] = await _replies(db_session, tenant)
+    assert ask.payload["texte"] == "Ajouter « Sac cabas » à 12 000 XOF ? Envoyez sa photo." and ask.payload["attend_reponse"]
+    assert await _products(db_session, tenant) == []  # rien sans la photo
+    await _say(client, db_session, headers, _photo())
+    [product] = await _products(db_session, tenant)
+    assert product.name == "Sac cabas" and int(product.price) == 12000 and product.image_url
+    await db_session.refresh(connection)
+    assert connection.awaiting.startswith("stock:")
+
+
+@pytest.mark.asyncio
+async def test_commands_and_plain_words_are_never_products(client, db_session, assistant_env):
+    tenant, _, headers, _ = await _linked(client, db_session)
+    await _say(client, db_session, headers, _msg("vendu 30000"))
+    await _say(client, db_session, headers, _msg("Bonjour"))
+    await _say(client, db_session, headers, _msg("15000"))
+    texts = [r.payload["texte"] for r in await _replies(db_session, tenant)]
+    assert texts == ["Aucune vente à confirmer pour l'instant.", ma.MENU, ma.MENU]
+    assert all("attend_reponse" not in r.payload for r in await _replies(db_session, tenant))
+
+
+@pytest.mark.asyncio
+async def test_a_new_photo_replaces_the_waiting_one_and_old_photos_are_cleaned(client, db_session, assistant_env):
+    tenant, _, headers, _ = await _linked(client, db_session)
+    await _say(client, db_session, headers, _photo())
+    first = {p.name for p in ma.STORE.iterdir()}
+    await _say(client, db_session, headers, _photo())
+    second = {p.name for p in ma.STORE.iterdir()}
+    assert len(second) == 1 and second != first
+    assert ma.clean_store(datetime.now(timezone.utc)) == 0
+    report = await ma.tick(db_session, datetime.now(timezone.utc) + timedelta(hours=3), sender=Sent(), mailer=Mails())
+    assert report["photos_removed"] == 1 and not list(ma.STORE.iterdir())  # la tâche de chaque minute fait le ménage
+
+
+@pytest.mark.asyncio
+async def test_waiting_ends_after_30_minutes(client, db_session, assistant_env):
+    tenant, _, headers, connection = await _linked(client, db_session)
+    await _say(client, db_session, headers, _photo())
+    await db_session.refresh(connection)
+    connection.awaiting_until = NOW - timedelta(minutes=1)
+    await db_session.commit()
+    await _say(client, db_session, headers, _msg("12000"))
+    assert await _products(db_session, tenant) == []
+    assert (await _replies(db_session, tenant))[-1].payload["texte"] == ma.MENU
 
 
 @pytest.mark.asyncio
