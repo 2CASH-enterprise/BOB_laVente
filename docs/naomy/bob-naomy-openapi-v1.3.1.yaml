@@ -1,0 +1,1131 @@
+openapi: 3.1.0
+info:
+  title: Bob → Naomy, API v1
+  version: "1.3.1"
+  summary: Contrat entre Bob (agent commercial) et Naomy (agent marketing).
+  description: |
+    Fichier compagnon du document « Passerelle Bob ↔ Naomy — cahier des charges » (version 1.3.1, 27/10/2026).
+
+    Nouveautés 1.3.1 (relecture de la session Naomy, 27/10) :
+    - `POST /appairage/demande` : Naomy signale qu'un de ses commerçants veut relier Bob. Réponse toujours 202.
+      La confirmation se fait dans Bob (carte du tableau de bord + e-mail), jamais par WhatsApp : avant l'appairage,
+      aucun canal sûr ne relie Bob au commerçant. S'il accepte, Bob lui donne le lien WhatsApp « Relier Bob CODE ».
+    - Portée : décidée par Bob (choix du commerçant à la création du code). Naomy ne l'envoie pas ; si elle l'envoie,
+      Bob l'ignore. Bob la renvoie toujours dans `ReponseAppairage.portee`.
+    - Aiguilleur : le nom en tête de message (« Naomy, … » / « Bob, … ») l'emporte sur la conversation en cours,
+      y compris quand Bob attend une réponse (`attend_reponse`). Un salut seul sans conversation en cours reçoit le
+      menu de Naomy, avec un bouton « Bob (vos ventes) » en plus. Les commandes connues de Bob (liste
+      `x-commandes-bob`) vont à Bob sans question ; celles de Naomy vont à Naomy sans question.
+    - Taille : le serveur web de Bob accepte 25 Mo sur `POST /assistant/messages` (note vocale de 16 Mo en base64).
+
+    Nouveautés 1.3 (numéro unique AgenC'AI, décisions du 27/10, rédigées avec la session Naomy) :
+    - `POST /assistant/messages` : Naomy transmet à Bob les messages du commerçant qui sont pour Bob (aiguilleur).
+    - `webhooks.assistantEnvoi` : Bob demande à Naomy d'envoyer un message au commerçant sur le numéro AgenC'AI.
+    - Appairage : champ `portee` (`complete` ou `assistant`). La portée `assistant` (ni posts, ni formule Naomy) est
+      ouverte à toutes les formules de Bob, Gratuite comprise.
+    - Bob n'envoie sur WhatsApp que des alertes (vente à confirmer, client qui attend) et ses réponses au commerçant ;
+      le bilan du soir part par e-mail.
+
+    Nouveautés 1.2 (décisions de Thérèse du 26/10) :
+    - `POST /rappels` : Bob prévient le commerçant par e-mail que Naomy a des propositions en attente (lot 5b-2 de
+      Naomy). Naomy envoie des faits, jamais de texte : Bob compose l'e-mail lui-même.
+    - Naomy est incluse à partir de la formule Indépendant : l'appairage d'une boutique en formule FREE est refusé
+      (403 `formule_insuffisante`) ; une boutique reliée qui repasse en FREE garde la liaison, Naomy suspend ses posts.
+    - Événement `boutique.formule_changee`.
+    - Un commerçant relié depuis Bob entre dans Naomy d'office (hors liste bêta), pour son plan initial (publication).
+
+    Principes :
+    - Bob est la source de vérité du catalogue, du stock, des prix et des ventes. Naomy lit, elle ne recopie pas.
+    - Naomy n'écrit jamais dans Bob, sauf pour créer ou désactiver ses propres liens suivis.
+    - Aucune donnée personnelle des clients de Bob n'est exposée : seulement des produits et des chiffres agrégés.
+    - Le contrat ne fait qu'ajouter : un champ nouveau peut apparaître, jamais un champ retiré ou renommé sans passer
+      à `v2`. Naomy ignore les champs qu'elle ne connaît pas.
+
+    Conventions :
+    - Dates en ISO 8601, heure universelle (`2026-10-25T14:03:00Z`).
+    - Montants : chaîne décimale + devise ISO 4217 (`{"montant": "15000", "devise": "XOF"}`), jamais de flottant.
+    - Listes paginées par curseur (`limite` ≤ 200, `curseur` opaque, `curseur_suivant` null à la fin).
+    - Limite : 120 requêtes par minute et par boutique (429 + `Retry-After`).
+    - La clé de la boutique suffit à dire de quelle boutique il s'agit : aucune route ne prend un identifiant de
+      boutique.
+
+    Les événements que Bob envoie à Naomy sont décrits dans la section `webhooks`.
+servers:
+  - url: https://agenc-ai.com/bob/api/v1/naomy
+    description: Production
+  - url: http://localhost:8799/api/v1/naomy
+    description: Faux Bob ou Bob local (tests)
+
+x-commandes-bob:
+  description: |
+    Messages du commerçant envoyés à Bob sans question (comparaison sans accents ni majuscules, message entier ou
+    premier mot suivi d'un espace). Les boutons préfixés `bob:` vont toujours à Bob.
+  mots:
+    - vendu
+    - annuler
+    - ventes
+    - mes ventes
+    - ventes a confirmer
+    - stock
+    - mon stock
+    - commandes
+    - mes commandes
+    - clients
+    - qui attend
+    - ajouter
+    - nouveau produit
+    - pause
+    - reprendre
+    - aide bob
+
+security:
+  - cleBoutique: []
+
+tags:
+  - name: Connexion
+  - name: Boutique
+  - name: Catalogue
+  - name: Liens
+  - name: Résultats
+  - name: Rappels
+  - name: Assistant
+
+paths:
+  /appairage:
+    post:
+      tags: [Connexion]
+      operationId: appairer
+      summary: Échange le code d'appairage contre la clé de la boutique (une seule fois).
+      description: |
+        Appelé par Naomy, de serveur à serveur, après que le commerçant a confirmé sur WhatsApp (« Relier Bob
+        K7P2QX »). Signé par le secret de plateforme (`NAOMY_PLATFORM_SECRET`), pas par une clé de boutique :
+        `X-Platform-Signature: sha256=hex(HMAC-SHA256(secret, X-Platform-Timestamp + "." + corps brut))`.
+        Un horodatage écarté de plus de 5 minutes est refusé. Le code d'appairage vaut 15 minutes et ne sert qu'une
+        fois : un deuxième appel reçoit 409. Un nouvel appairage de la même boutique remplace l'ancien (un seul compte
+        Naomy par boutique en phase 1) ; l'ancien reçoit `connexion.fermee`. Version 1.3.1 : la portée est décidée
+        par Bob d'après le choix du commerçant à la création du code, et renvoyée dans `ReponseAppairage.portee` :
+        `complete` (Naomy et l'assistant, à partir de la formule Indépendant) ou `assistant` (seulement « Bob, votre
+        assistant » sur le numéro AgenC'AI, toutes formules). Le champ `portee` de la demande est ignoré.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/PlatformTimestamp"
+        - $ref: "#/components/parameters/PlatformSignature"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DemandeAppairage" }
+            example:
+              code: "f3K9wQ2mZp7Lx4Rt8Vb1Nc6Hd5Jy0Ae2"
+              compte_naomy: "nao_7b1e2c"
+              numero_confirmation: "+2250701020312"
+              url_evenements: "https://agenc-ai.com/naomy/api/bob/evenements"
+      responses:
+        "200":
+          description: Appairage réussi. `cle_api` et `secret_evenements` ne sont donnés qu'ici, une seule fois.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReponseAppairage" }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401":
+          description: Signature de plateforme fausse ou horodatage trop vieux.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              example: { erreur: "signature_invalide", message: "Signature de plateforme invalide." }
+        "403":
+          description: Portée `complete` demandée pour une boutique en formule FREE (Naomy est incluse à partir de la formule Indépendant ; la portée `assistant` reste possible).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              example: { erreur: "formule_insuffisante", message: "Naomy est incluse à partir de la formule Indépendant." }
+        "404":
+          description: Code d'appairage inconnu ou expiré.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              example: { erreur: "code_inconnu", message: "Code d'appairage inconnu ou expiré : relancez la connexion depuis Bob." }
+        "409":
+          description: Code déjà utilisé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              example: { erreur: "code_deja_utilise", message: "Ce code d'appairage a déjà servi." }
+        "422":
+          description: Adresse des événements refusée (domaine, chemin, HTTPS).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              example: { erreur: "url_evenements_refusee", message: "L'adresse doit commencer par https://agenc-ai.com/naomy/api/bob/." }
+
+  /connexion:
+    delete:
+      tags: [Connexion]
+      operationId: deconnecter
+      summary: Coupe la connexion depuis Naomy.
+      description: La clé et le secret sont révoqués tout de suite ; Bob envoie `connexion.fermee` (par = NAOMY).
+      responses:
+        "204": { description: "Connexion coupée." }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+
+  /boutique:
+    get:
+      tags: [Boutique]
+      operationId: lireBoutique
+      summary: La boutique reliée à cette clé.
+      responses:
+        "200":
+          description: La boutique.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Boutique" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+  /produits:
+    get:
+      tags: [Catalogue]
+      operationId: listerProduits
+      summary: Produits et biens actifs, paginés.
+      description: |
+        Seuls les produits actifs sont listés. Pour relire seulement ce qui a changé, passer `modifies_depuis` (les
+        produits désactivés depuis cette date sont alors aussi renvoyés, avec `actif: false`).
+      parameters:
+        - $ref: "#/components/parameters/Limite"
+        - $ref: "#/components/parameters/Curseur"
+        - name: modifies_depuis
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Une page de produits.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [elements, curseur_suivant]
+                properties:
+                  elements:
+                    type: array
+                    items: { $ref: "#/components/schemas/Produit" }
+                  curseur_suivant: { type: [string, "null"] }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+  /produits/{produit_id}:
+    get:
+      tags: [Catalogue]
+      operationId: lireProduit
+      summary: Un produit complet (actif ou non).
+      parameters:
+        - $ref: "#/components/parameters/ProduitId"
+      responses:
+        "200":
+          description: Le produit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Produit" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "404": { $ref: "#/components/responses/Introuvable" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+  /stock:
+    get:
+      tags: [Catalogue]
+      operationId: lireStock
+      summary: Stock et statut de 50 produits au plus, juste avant une publication.
+      description: "Un identifiant inconnu de cette boutique est renvoyé avec `existe: false`, sans erreur."
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: Identifiants séparés par des virgules (50 au plus).
+          schema: { type: string }
+          example: "3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90,0b8e4b52-1c3d-4f8a-a9e2-6c1d2e3f4a5b"
+      responses:
+        "200":
+          description: Le stock de chaque produit demandé.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [elements]
+                properties:
+                  elements:
+                    type: array
+                    items: { $ref: "#/components/schemas/Stock" }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+  /liens:
+    post:
+      tags: [Liens]
+      operationId: creerLien
+      summary: Crée un lien suivi vers le WhatsApp de la boutique (idempotent).
+      description: |
+        La même `reference_naomy` rend le même lien (200), jamais un doublon. Les clients arrivés par ce lien ont la
+        source « NaomyIA » dans Bob. Le numéro du commerçant n'apparaît jamais dans le lien : le clic passe par Bob,
+        qui compte puis redirige vers WhatsApp avec le message pré-rempli.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DemandeLien" }
+            example:
+              nom: "Post robe Awa 25/10"
+              message: "Bonjour, je veux la robe Awa"
+              produit_id: "3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90"
+              reference_naomy: "post_8f2a"
+      responses:
+        "200":
+          description: Lien déjà créé avec cette référence (rendu tel quel).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lien" }
+        "201":
+          description: Lien créé.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lien" }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "404": { $ref: "#/components/responses/Introuvable" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+    get:
+      tags: [Liens]
+      operationId: listerLiens
+      summary: Les liens créés par Naomy pour cette boutique, avec leurs clics.
+      parameters:
+        - $ref: "#/components/parameters/Limite"
+        - $ref: "#/components/parameters/Curseur"
+      responses:
+        "200":
+          description: Une page de liens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [elements, curseur_suivant]
+                properties:
+                  elements:
+                    type: array
+                    items: { $ref: "#/components/schemas/Lien" }
+                  curseur_suivant: { type: [string, "null"] }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+  /liens/{code}:
+    patch:
+      tags: [Liens]
+      operationId: modifierLien
+      summary: Active ou désactive un lien créé par Naomy.
+      description: Un lien désactivé mène à une page « Ce lien n'est plus actif » avec le WhatsApp de la boutique.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[A-Z0-9]{4,16}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actif]
+              additionalProperties: false
+              properties:
+                actif: { type: boolean }
+      responses:
+        "200":
+          description: Le lien modifié.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lien" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "404":
+          description: Lien inconnu, ou lien qui n'a pas été créé par Naomy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+
+  /resultats:
+    get:
+      tags: [Résultats]
+      operationId: lireResultats
+      summary: Conversations, nouveaux clients, commandes et ventes payées, par lien et par publicité.
+      description: |
+        Une commande compte pour la source du PREMIER contact du client (jamais réécrite). Seules les commandes
+        payées, confirmées par le commerçant, comptent dans `ventes_payees`. `publicites` (phase 3) liste les
+        publicités « clic vers WhatsApp » dont Bob a vu l'identifiant dans un premier message ; Naomy les rapproche
+        de ses propres publicités. Période de 92 jours au plus.
+      parameters:
+        - $ref: "#/components/parameters/Du"
+        - $ref: "#/components/parameters/Au"
+      responses:
+        "200":
+          description: Les résultats sur la période.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [du, au, liens, publicites]
+                properties:
+                  du: { type: string, format: date }
+                  au: { type: string, format: date }
+                  liens:
+                    type: array
+                    items: { $ref: "#/components/schemas/ResultatLien" }
+                  publicites:
+                    type: array
+                    items: { $ref: "#/components/schemas/ResultatPublicite" }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+  /ventes:
+    get:
+      tags: [Résultats]
+      operationId: lireVentes
+      summary: Ventes payées par produit sur une période (phase 2).
+      parameters:
+        - $ref: "#/components/parameters/Du"
+        - $ref: "#/components/parameters/Au"
+        - name: produit_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Les ventes par produit, les plus vendus d'abord.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [du, au, elements]
+                properties:
+                  du: { type: string, format: date }
+                  au: { type: string, format: date }
+                  elements:
+                    type: array
+                    items: { $ref: "#/components/schemas/VentesProduit" }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+  /rappels:
+    post:
+      tags: [Rappels]
+      operationId: envoyerRappel
+      summary: Bob prévient le commerçant par e-mail que des propositions de Naomy l'attendent.
+      description: |
+        Utilisé quand la fenêtre WhatsApp entre Naomy et le commerçant est fermée (lot 5b-2 de Naomy). Naomy envoie
+        seulement des faits : Bob compose l'e-mail à partir d'un modèle fixe, avec le nom des produits lu dans SON
+        catalogue, et un lien wa.me vers le numéro central de Naomy pris dans son propre réglage
+        (`NAOMY_WHATSAPP_NUMBER`), jamais dans la requête. L'e-mail ne contient ni prix, ni lien de connexion, ni texte
+        venu de Naomy ; il porte un lien de désinscription en un clic.
+
+        Exemple d'e-mail : « Naomy a préparé 3 propositions pour vos produits Robe wax Awa et Sac cabas. Pour les voir,
+        écrivez « posts » à Naomy sur WhatsApp. »
+
+        Règles :
+        - au plus 1 e-mail par boutique et par jour (heure de la boutique) ; au-delà, 429 ;
+        - `reference_naomy` rend l'appel idempotent : la même référence rend 202 sans second e-mail ;
+        - Naomy ne reçoit ni ne garde jamais l'adresse e-mail du commerçant ;
+        - 409 si la boutique n'a pas d'adresse vérifiée, si le commerçant a décoché « Me prévenir par e-mail des
+          propositions de Naomy » dans Bob, ou s'il s'est désinscrit par le lien de l'e-mail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DemandeRappel" }
+            example:
+              reference_naomy: "rappel_2026-10-26"
+              nombre_propositions: 3
+              produit_ids: ["3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90", "0b8e4b52-1c3d-4f8a-a9e2-6c1d2e3f4a5b"]
+      responses:
+        "202":
+          description: E-mail accepté (ou déjà envoyé avec cette référence).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reference_naomy, statut]
+                properties:
+                  reference_naomy: { type: string }
+                  statut: { type: string, enum: [accepte, deja_envoye] }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "409":
+          description: "Pas d'e-mail possible : pas d'adresse vérifiée, rappels désactivés ou commerçant désinscrit."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              examples:
+                sansEmail: { value: { erreur: "sans_email", message: "Cette boutique n'a pas d'adresse e-mail vérifiée." } }
+                desactives: { value: { erreur: "rappels_desactives", message: "Le commerçant a désactivé ces e-mails." } }
+                desinscrit: { value: { erreur: "desinscrit", message: "Le commerçant s'est désinscrit de ces e-mails." } }
+        "429":
+          description: Un e-mail a déjà été envoyé aujourd'hui pour cette boutique (ou limite de 120 requêtes par minute).
+          headers:
+            Retry-After:
+              description: Secondes à attendre (jusqu'au lendemain pour la limite d'un e-mail par jour).
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              example: { erreur: "rappel_deja_envoye_aujourd_hui", message: "Un e-mail a déjà été envoyé aujourd'hui." }
+
+  /appairage/demande:
+    post:
+      tags: [Connexion]
+      operationId: demanderAppairage
+      summary: Naomy signale qu'un de ses commerçants veut relier Bob (confirmation dans Bob).
+      description: |
+        Version 1.3.1. Signé par le secret de plateforme, comme `POST /appairage` (`X-Platform-Timestamp`,
+        `X-Platform-Signature`). Réponse toujours 202, que le numéro soit connu de Bob ou non : la réponse ne révèle
+        jamais si une boutique existe. Si le numéro correspond au WhatsApp d'une boutique Bob, Bob affiche une carte
+        dans son tableau de bord et envoie un e-mail au commerçant : « Naomy demande à relier votre boutique » avec
+        « Accepter » et « Refuser ». S'il accepte, Bob crée un code d'appairage (portée choisie par le commerçant) et lui
+        donne le lien WhatsApp avec « Relier Bob CODE » prérempli ; la suite est `POST /appairage`. Sinon, rien.
+        Une demande par numéro et par 24 h au plus (les suivantes sont ignorées, toujours 202). Aucun message WhatsApp
+        n'est envoyé par Bob à ce stade.
+      security: []
+      parameters:
+        - { in: header, name: X-Platform-Timestamp, required: true, schema: { type: string } }
+        - { in: header, name: X-Platform-Signature, required: true, schema: { type: string, pattern: "^sha256=[0-9a-f]{64}$" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [numero_whatsapp, compte_naomy]
+              additionalProperties: false
+              properties:
+                numero_whatsapp:
+                  type: string
+                  pattern: "^\\+[1-9][0-9]{7,14}$"
+                  description: Numéro qui a écrit à Naomy (format E.164), comparé aux numéros WhatsApp des boutiques Bob.
+                compte_naomy: { type: string, maxLength: 64 }
+                nom_boutique: { type: [string, "null"], maxLength: 120, description: "Nom donné à Naomy, affiché dans la carte." }
+            example: { numero_whatsapp: "+2250701020304", compte_naomy: "nao_8f2c", nom_boutique: "Wax & Co" }
+      responses:
+        "202":
+          description: Demande reçue (toujours, connue ou non).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [statut]
+                properties:
+                  statut: { type: string, enum: [recue] }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401":
+          description: Signature de plateforme absente, fausse ou horodatage écarté de plus de 5 minutes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+
+  /assistant/messages:
+    post:
+      tags: [Assistant]
+      operationId: transmettreMessageCommercant
+      summary: Naomy transmet à Bob un message du commerçant que l'aiguilleur a attribué à Bob.
+      description: |
+        Envoyé par l'aiguilleur de Naomy (règles du contrat 1.3, section 4 ter) pour une boutique reliée dont
+        l'assistant est allumé. Idempotent par `id_message` (l'identifiant WhatsApp) : un deuxième envoi rend 202 sans
+        second traitement. Bob répond 202 et traite en arrière-plan ; ses réponses repartent par `webhooks.assistantEnvoi`.
+        Les médias (image 5 Mo, note vocale 16 Mo) sont téléchargés chez Meta par Naomy et transmis en base64 : Bob ne
+        touche jamais au jeton Meta de Naomy. Naomy renvoie après 1, 5 et 30 minutes si Bob ne répond pas, puis prévient
+        le commerçant. Les documents, positions, autocollants et réactions ne sont pas transmis.
+        Le serveur web de Bob accepte des corps de 25 Mo sur cette route (16 Mo en base64 ≈ 22 Mo de JSON).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MessageCommercant" }
+            example:
+              id_message: "wamid.HBgLMjI1MDcwMTAyMDMxMhUCABIYFjNFQjA"
+              recu_le: "2026-10-27T09:15:00Z"
+              type: bouton
+              bouton_id: "bob:vendu:3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90"
+              reponse_a: "bob_alerte_7c1d"
+      responses:
+        "202":
+          description: Message reçu (ou déjà reçu).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id_message, statut]
+                properties:
+                  id_message: { type: string }
+                  statut: { type: string, enum: [recu, deja_recu] }
+        "400": { $ref: "#/components/responses/RequeteInvalide" }
+        "401": { $ref: "#/components/responses/NonAutorise" }
+        "409":
+          description: "L'assistant n'est pas allumé pour cette boutique (interrupteur de la boutique ou interrupteur général)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+              example: { erreur: "assistant_eteint", message: "L'assistant de Bob n'est pas activé pour cette boutique." }
+        "413":
+          description: Média trop lourd (image 5 Mo, note vocale 16 Mo).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Erreur" }
+        "429": { $ref: "#/components/responses/TropDeRequetes" }
+
+webhooks:
+  assistantEnvoi:
+    post:
+      summary: "Bob demande à Naomy d'envoyer un message au commerçant (POST https://agenc-ai.com/naomy/api/bob/assistant/envoyer)."
+      description: |
+        Signé comme les événements (`X-Bob-Timestamp`, `X-Bob-Signature` avec le `secret_evenements` de la boutique).
+        Naomy ajoute « Bob · » devant le texte et envoie par le numéro AgenC'AI. Idempotent par `id_message_bob`.
+        Bob n'envoie que : les alertes (vente à confirmer, client qui attend la boutique) et ses réponses aux messages du
+        commerçant ; jamais le bilan du soir (e-mail). Plafond : 30 messages par boutique et par jour (429 au-delà).
+        Hors de la fenêtre de 24 h : seulement un `modele` de la liste fermée, en catégorie « utilité », pour une boutique
+        en formule payante ; sinon 409 `fenetre_fermee` et Bob passe par l'e-mail et les notifications du tableau de bord.
+        `attend_reponse: true` : pendant 30 minutes, le texte libre du commerçant va à Bob (sauf étape de Naomy en cours).
+        Naomy ne journalise aucun contenu (le type seulement), ne garde rien après l'envoi sauf la correspondance
+        identifiant WhatsApp → agent (30 jours), et n'envoie rien à son IA.
+      parameters:
+        - name: X-Bob-Timestamp
+          in: header
+          required: true
+          schema: { type: string, pattern: "^[0-9]{10}$" }
+        - name: X-Bob-Signature
+          in: header
+          required: true
+          schema: { type: string, pattern: "^sha256=[0-9a-f]{64}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnvoiAssistant" }
+            example:
+              boutique_id: "b0b5e1a2-7c3d-4e9f-8a1b-2c3d4e5f6a7b"
+              id_message_bob: "bob_alerte_7c1d"
+              texte: "Aïcha a envoyé sa preuve pour 30 000 FCFA : vente confirmée ?"
+              boutons:
+                - { id: "bob:vendu:3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90", titre: "Vendu" }
+                - { id: "bob:annuler:3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90", titre: "Annuler" }
+      responses:
+        "200":
+          description: Envoyé (ou déjà envoyé avec cet `id_message_bob`).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id_whatsapp]
+                properties:
+                  id_whatsapp: { type: string }
+        "400": { description: "Requête invalide (bouton sans préfixe bob:, titre trop long, image hors de /bob/uploads/, modèle inconnu)." }
+        "401": { description: "Signature ou horodatage refusé." }
+        "409": { description: "`fenetre_fermee` (et pas de modèle possible) ou `assistant_eteint`." }
+        "429": { description: "Plus de 30 messages de Bob aujourd'hui pour cette boutique." }
+  evenement:
+    post:
+      summary: Événement envoyé par Bob à `url_evenements`.
+      description: |
+        En-têtes `X-Bob-Timestamp` (secondes) et `X-Bob-Signature: sha256=<hex>`, où
+        `hex = HMAC-SHA256(secret_evenements, horodatage + "." + corps brut)`.
+        Naomy recalcule la signature sur le corps brut et la compare en temps constant (401 si elle diffère), refuse
+        un horodatage écarté de plus de 5 minutes, garde les `id` reçus 7 jours et répond 200 à un doublon, répond 2xx
+        en moins de 10 secondes puis traite en tâche de fond. Sans 2xx, Bob renvoie après 1 min, 5 min, 30 min,
+        2 h et 12 h, puis abandonne (visible dans le monitoring de Bob). L'ordre d'arrivée n'est pas garanti.
+        L'événement dit ce qui a changé ; Naomy relit l'API pour le détail à jour.
+      parameters:
+        - name: X-Bob-Timestamp
+          in: header
+          required: true
+          schema: { type: string, pattern: "^[0-9]{10}$" }
+        - name: X-Bob-Signature
+          in: header
+          required: true
+          schema: { type: string, pattern: "^sha256=[0-9a-f]{64}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Evenement" }
+            examples:
+              prixBaisse:
+                value:
+                  id: "9d1c6b6e-0f2a-4c55-9b3e-2a7f4d8c1e00"
+                  type: "produit.prix_baisse"
+                  boutique_id: "b0b5e1a2-7c3d-4e9f-8a1b-2c3d4e5f6a7b"
+                  date: "2026-10-25T14:03:00Z"
+                  donnees:
+                    produit_id: "3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90"
+                    ancien_prix: { montant: "18000", devise: "XOF" }
+                    nouveau_prix: { montant: "15000", devise: "XOF" }
+              rupture:
+                value:
+                  id: "5a0e2d11-3b4c-4d5e-9f60-718293a4b5c6"
+                  type: "produit.rupture"
+                  boutique_id: "b0b5e1a2-7c3d-4e9f-8a1b-2c3d4e5f6a7b"
+                  date: "2026-10-25T15:20:00Z"
+                  donnees: { produit_id: "3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90" }
+      responses:
+        "200": { description: "Reçu (ou doublon déjà reçu)." }
+        "202": { description: "Reçu, traité plus tard." }
+        "401": { description: "Signature ou horodatage refusé (Bob ne renvoie pas)." }
+
+components:
+  securitySchemes:
+    cleBoutique:
+      type: http
+      scheme: bearer
+      description: Clé de la boutique, donnée une seule fois à l'appairage. Révocable d'un clic des deux côtés.
+
+  parameters:
+    PlatformTimestamp:
+      name: X-Platform-Timestamp
+      in: header
+      required: true
+      schema: { type: string, pattern: "^[0-9]{10}$" }
+    PlatformSignature:
+      name: X-Platform-Signature
+      in: header
+      required: true
+      schema: { type: string, pattern: "^sha256=[0-9a-f]{64}$" }
+    Limite:
+      name: limite
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+    Curseur:
+      name: curseur
+      in: query
+      required: false
+      schema: { type: string }
+    ProduitId:
+      name: produit_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Du:
+      name: du
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      example: "2026-10-01"
+    Au:
+      name: au
+      in: query
+      required: true
+      description: Inclus. Au plus 92 jours après `du`.
+      schema: { type: string, format: date }
+      example: "2026-10-25"
+
+  responses:
+    RequeteInvalide:
+      description: Requête invalide.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erreur" }
+          example: { erreur: "requete_invalide", message: "Période de 92 jours au plus." }
+    NonAutorise:
+      description: Clé inconnue ou révoquée. Naomy coupe la connexion de son côté et efface clé et secret.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erreur" }
+          example: { erreur: "cle_revoquee", message: "Cette connexion a été coupée." }
+    Introuvable:
+      description: Introuvable dans cette boutique.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erreur" }
+          example: { erreur: "introuvable", message: "Produit introuvable dans cette boutique." }
+    TropDeRequetes:
+      description: Plus de 120 requêtes par minute pour cette boutique.
+      headers:
+        Retry-After:
+          description: Secondes à attendre.
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Erreur" }
+          example: { erreur: "trop_de_requetes", message: "Réessayez dans quelques secondes." }
+
+  schemas:
+    Erreur:
+      type: object
+      required: [erreur, message]
+      properties:
+        erreur: { type: string, description: "Code court, stable." }
+        message: { type: string, description: "Phrase en français, pour le journal ou le commerçant." }
+
+    Montant:
+      type: object
+      required: [montant, devise]
+      properties:
+        montant: { type: string, pattern: "^[0-9]+(\\.[0-9]{1,2})?$", examples: ["15000"] }
+        devise: { type: string, pattern: "^[A-Z]{3}$", examples: ["XOF"] }
+
+    Secteur:
+      type: string
+      enum: [ONLINE_STORE, REAL_ESTATE, CAR_DEALERSHIP, INSURANCE_BROKER]
+      description: |
+        Correspondance faite chez Naomy : ONLINE_STORE = commerce, REAL_ESTATE = immobilier,
+        CAR_DEALERSHIP = automobile, INSURANCE_BROKER = assurance.
+
+    DemandeAppairage:
+      type: object
+      required: [code, compte_naomy, numero_confirmation, url_evenements]
+      additionalProperties: false
+      properties:
+        portee:
+          type: string
+          enum: [complete, assistant]
+          deprecated: true
+          description: "Ignoré depuis la 1.3.1 : Bob décide la portée (choix du commerçant) et la renvoie dans la réponse. Naomy ne l'envoie pas."
+        code: { type: string, minLength: 32, maxLength: 32 }
+        compte_naomy: { type: string, maxLength: 64, description: "Identifiant du compte du commerçant chez Naomy." }
+        numero_confirmation:
+          type: string
+          pattern: "^\\+[1-9][0-9]{7,14}$"
+          description: Numéro qui a envoyé « Relier Bob … » à Naomy (format E.164). Bob l'affiche masqué au commerçant.
+        url_evenements:
+          type: string
+          format: uri
+          pattern: "^https://agenc-ai\\.com/naomy/api/bob/"
+          description: HTTPS, domaine `NAOMY_ALLOWED_HOST`, chemin commençant par `NAOMY_ALLOWED_PATH`, sans `..`, port ni identifiant.
+
+    ReponseAppairage:
+      type: object
+      required: [portee, boutique_id, cle_api, secret_evenements, boutique]
+      properties:
+        portee: { type: string, enum: [complete, assistant] }
+        boutique_id: { type: string, format: uuid }
+        cle_api: { type: string, description: "Donnée une seule fois. À chiffrer en base. Préfixe `bnk_`." }
+        secret_evenements: { type: string, description: "Donné une seule fois. À chiffrer en base. Préfixe `bns_`." }
+        boutique: { $ref: "#/components/schemas/Boutique" }
+
+    Boutique:
+      type: object
+      required: [id, nom, secteur, pays, devise, tutoiement, formule]
+      properties:
+        id: { type: string, format: uuid }
+        nom: { type: string, examples: ["MS4 Africa"] }
+        secteur: { $ref: "#/components/schemas/Secteur" }
+        pays: { type: string, pattern: "^[A-Z]{2}$", examples: ["CI"] }
+        devise: { type: string, pattern: "^[A-Z]{3}$", examples: ["XOF"] }
+        tutoiement: { type: boolean, description: "true si la boutique tutoie ses clients (sinon vouvoiement)." }
+        logo: { type: [string, "null"], format: uri }
+        formule: { type: string, enum: [FREE, INDEPENDANT, STARTER, PRO, ENTERPRISE] }
+        whatsapp_affiche:
+          type: [string, "null"]
+          description: Numéro WhatsApp Business connecté à Bob, pour affichage seulement (les appels à l'action passent par POST /liens).
+          examples: ["+225 07 01 02 03 12"]
+
+    Photos:
+      type: object
+      description: |
+        Adresses publiques et stables, sous `https://agenc-ai.com/bob/uploads/` ; seule exception : `originale` (et
+        `carte` tant que la photo n'est pas retouchée) d'un produit venu de Shopify ou du catalogue Meta, qui reste à
+        l'adresse de leur service d'images. `studio` n'existe qu'une fois le fond blanc fait ; `portee` seulement si le commerçant a ACCEPTÉ la photo portée (garder la mention « présentation
+        portée ») ; `carte` est l'image que Bob envoie sur WhatsApp.
+      properties:
+        originale: { type: [string, "null"], format: uri }
+        studio: { type: [string, "null"], format: uri }
+        portee: { type: [string, "null"], format: uri }
+        carte: { type: [string, "null"], format: uri }
+
+    Produit:
+      type: object
+      required: [id, reference, nom, actif, photos, modifie_le]
+      properties:
+        id: { type: string, format: uuid }
+        reference: { type: string, examples: ["R1"] }
+        nom: { type: string, examples: ["Robe wax Awa"] }
+        description: { type: [string, "null"] }
+        categorie_bob: { type: [string, "null"], description: "Catégorie de fiche de Bob (FASHION, ELECTRONICS…, ou type de bien)." }
+        rayon: { type: [string, "null"], description: "Catégorie libre du commerçant." }
+        prix:
+          description: Absent chez un courtier (jamais de prix).
+          oneOf:
+            - $ref: "#/components/schemas/Montant"
+            - type: "null"
+        prix_barre:
+          description: Prix avant remise ; absent ou null hors promotion.
+          oneOf:
+            - $ref: "#/components/schemas/Montant"
+            - type: "null"
+        stock: { type: [integer, "null"], minimum: 0, description: "Absent chez un courtier." }
+        actif: { type: boolean }
+        fiche:
+          type: object
+          additionalProperties: true
+          description: |
+            Champs de la fiche selon la catégorie (ex. `sizes`, `colors`, `material` ; bien immobilier : `surface`,
+            `rooms`, `city` ; véhicule : `brand`, `model`, `year`, `mileage_km`). Clés stables, valeurs textuelles ou
+            numériques.
+        photos: { $ref: "#/components/schemas/Photos" }
+        modifie_le: { type: string, format: date-time }
+      example:
+        id: "3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90"
+        reference: "R1"
+        nom: "Robe wax Awa"
+        description: "Robe longue en wax, coupe évasée."
+        categorie_bob: "FASHION"
+        rayon: "Robes"
+        prix: { montant: "15000", devise: "XOF" }
+        prix_barre: { montant: "18000", devise: "XOF" }
+        stock: 4
+        actif: true
+        fiche: { sizes: "S à XL", colors: "rouge, or" }
+        photos:
+          originale: "https://agenc-ai.com/bob/uploads/products/a1.jpg"
+          studio: "https://agenc-ai.com/bob/uploads/products/a1-studio.jpg"
+          portee: null
+          carte: "https://agenc-ai.com/bob/uploads/products/a1-studio.jpg"
+        modifie_le: "2026-10-25T14:03:00Z"
+
+    Stock:
+      type: object
+      required: [produit_id, existe]
+      properties:
+        produit_id: { type: string, format: uuid }
+        existe: { type: boolean }
+        actif: { type: boolean }
+        stock: { type: [integer, "null"], minimum: 0 }
+        prix:
+          oneOf:
+            - $ref: "#/components/schemas/Montant"
+            - type: "null"
+
+    MessageCommercant:
+      type: object
+      required: [id_message, recu_le, type]
+      additionalProperties: false
+      properties:
+        id_message: { type: string, minLength: 1, maxLength: 128, description: "Identifiant WhatsApp du message (idempotence)." }
+        recu_le: { type: string, format: date-time }
+        type: { type: string, enum: [texte, image, audio, bouton] }
+        texte: { type: [string, "null"], maxLength: 4096, description: "Texte, ou légende d'une image." }
+        bouton_id: { type: [string, "null"], pattern: "^bob:", maxLength: 256 }
+        reponse_a: { type: [string, "null"], maxLength: 128, description: "`id_message_bob` du message de Bob cité, s'il y en a un." }
+        media:
+          type: [object, "null"]
+          required: [mime, base64]
+          properties:
+            mime: { type: string, enum: [image/jpeg, image/png, image/webp, audio/ogg, audio/mpeg, audio/mp4, audio/aac, audio/amr] }
+            base64: { type: string, description: "Image : 5 Mo au plus ; note vocale : 16 Mo au plus (avant encodage)." }
+
+    EnvoiAssistant:
+      type: object
+      required: [boutique_id, id_message_bob, texte]
+      additionalProperties: false
+      properties:
+        boutique_id: { type: string, format: uuid }
+        id_message_bob: { type: string, minLength: 1, maxLength: 64 }
+        texte: { type: string, minLength: 1, maxLength: 1024, description: "Sans « Bob · » : Naomy l'ajoute." }
+        boutons:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            required: [id, titre]
+            additionalProperties: false
+            properties:
+              id: { type: string, pattern: "^bob:", maxLength: 256 }
+              titre: { type: string, minLength: 1, maxLength: 20 }
+        image_url: { type: [string, "null"], format: uri, pattern: "^https://agenc-ai\\.com/bob/uploads/" }
+        modele:
+          type: [string, "null"]
+          enum: [bob_vente_a_confirmer, bob_client_attend, null]
+          description: Seulement hors de la fenêtre de 24 h, formules payantes ; catégorie Meta « utilité ».
+        parametres:
+          type: array
+          maxItems: 5
+          items: { type: string, maxLength: 60 }
+          description: Valeurs du modèle (prénom du client, montant…), jamais de texte libre.
+        attend_reponse: { type: boolean, default: false }
+
+    DemandeRappel:
+      type: object
+      required: [reference_naomy, nombre_propositions]
+      additionalProperties: false
+      properties:
+        reference_naomy: { type: string, minLength: 1, maxLength: 64 }
+        nombre_propositions: { type: integer, minimum: 1, maximum: 50 }
+        produit_ids:
+          type: array
+          maxItems: 3
+          description: "Produits cités par leur nom dans l'e-mail (3 au plus). Un produit inconnu ou inactif est ignoré."
+          items: { type: string, format: uuid }
+
+    DemandeLien:
+      type: object
+      required: [nom, message, reference_naomy]
+      additionalProperties: false
+      properties:
+        nom: { type: string, minLength: 1, maxLength: 80, description: "Nom visible par le commerçant dans Bob." }
+        message: { type: string, minLength: 1, maxLength: 300, description: "Message pré-rempli dans WhatsApp." }
+        produit_id: { type: [string, "null"], format: uuid }
+        reference_naomy: { type: string, minLength: 1, maxLength: 64, description: "Identifiant du post dans Naomy (rend l'appel idempotent)." }
+
+    Lien:
+      type: object
+      required: [code, url, actif, clics, reference_naomy, cree_le]
+      properties:
+        code: { type: string, examples: ["N7K2PQ"] }
+        url: { type: string, format: uri, examples: ["https://agenc-ai.com/bob/w/N7K2PQ"] }
+        actif: { type: boolean }
+        clics: { type: integer, minimum: 0 }
+        nom: { type: string }
+        produit_id: { type: [string, "null"], format: uuid }
+        reference_naomy: { type: string }
+        cree_le: { type: string, format: date-time }
+
+    Compteurs:
+      type: object
+      required: [conversations, nouveaux_clients, commandes, commandes_payees, ventes_payees]
+      properties:
+        conversations: { type: integer, minimum: 0 }
+        nouveaux_clients: { type: integer, minimum: 0 }
+        commandes: { type: integer, minimum: 0 }
+        commandes_payees: { type: integer, minimum: 0 }
+        ventes_payees: { $ref: "#/components/schemas/Montant" }
+
+    ResultatLien:
+      allOf:
+        - $ref: "#/components/schemas/Compteurs"
+        - type: object
+          required: [code, reference_naomy, clics]
+          properties:
+            code: { type: string }
+            reference_naomy: { type: string }
+            clics: { type: integer, minimum: 0 }
+
+    ResultatPublicite:
+      allOf:
+        - $ref: "#/components/schemas/Compteurs"
+        - type: object
+          required: [id_publicite_meta]
+          properties:
+            id_publicite_meta: { type: string, description: "Identifiant joint par Meta au premier message (« clic vers WhatsApp »)." }
+
+    VentesProduit:
+      type: object
+      required: [produit_id, commandes_payees, quantite, ventes_payees]
+      properties:
+        produit_id: { type: string, format: uuid }
+        commandes_payees: { type: integer, minimum: 0 }
+        quantite: { type: integer, minimum: 0 }
+        ventes_payees: { $ref: "#/components/schemas/Montant" }
+
+    Evenement:
+      type: object
+      required: [id, type, boutique_id, date, donnees]
+      properties:
+        id: { type: string, format: uuid, description: "Unique ; sert à ignorer les doublons." }
+        type:
+          type: string
+          enum:
+            - connexion.ouverte
+            - connexion.fermee
+            - boutique.formule_changee
+            - produit.cree
+            - produit.photo_prete
+            - produit.prix_baisse
+            - produit.prix_barre_ajoute
+            - produit.rupture
+            - produit.reapprovisionne
+            - produit.dormant
+            - produit.meilleure_vente
+          description: |
+            Phase 1 : connexion.*, boutique.formule_changee, produit.cree, produit.photo_prete, produit.prix_baisse, produit.prix_barre_ajoute,
+            produit.rupture, produit.reapprovisionne. Phase 2 : produit.dormant, produit.meilleure_vente (chaque
+            lundi). Un type inconnu doit être accepté (200) et ignoré.
+        boutique_id: { type: string, format: uuid }
+        date: { type: string, format: date-time }
+        donnees:
+          description: Dépend de `type` (voir les schémas Donnees*).
+          oneOf:
+            - $ref: "#/components/schemas/DonneesVide"
+            - $ref: "#/components/schemas/DonneesConnexionFermee"
+            - $ref: "#/components/schemas/DonneesFormuleChangee"
+            - $ref: "#/components/schemas/DonneesProduit"
+            - $ref: "#/components/schemas/DonneesPhotoPrete"
+            - $ref: "#/components/schemas/DonneesPrixBaisse"
+            - $ref: "#/components/schemas/DonneesPrixBarre"
+            - $ref: "#/components/schemas/DonneesReapprovisionne"
+            - $ref: "#/components/schemas/DonneesDormant"
+            - $ref: "#/components/schemas/DonneesMeilleureVente"
+
+    DonneesVide:
+      type: object
+      description: connexion.ouverte
+      additionalProperties: false
+    DonneesConnexionFermee:
+      type: object
+      description: connexion.fermee
+      required: [par]
+      properties:
+        par: { type: string, enum: [BOB, NAOMY] }
+    DonneesFormuleChangee:
+      type: object
+      description: "boutique.formule_changee — en FREE, la liaison reste mais Naomy suspend les posts de la boutique."
+      required: [ancienne, nouvelle]
+      properties:
+        ancienne: { type: string, enum: [FREE, INDEPENDANT, STARTER, PRO, ENTERPRISE] }
+        nouvelle: { type: string, enum: [FREE, INDEPENDANT, STARTER, PRO, ENTERPRISE] }
+    DonneesProduit:
+      type: object
+      description: produit.cree, produit.rupture
+      required: [produit_id]
+      additionalProperties: false
+      properties:
+        produit_id: { type: string, format: uuid }
+    DonneesPhotoPrete:
+      type: object
+      description: produit.photo_prete
+      required: [produit_id, type]
+      properties:
+        produit_id: { type: string, format: uuid }
+        type: { type: string, enum: [studio, portee] }
+    DonneesPrixBaisse:
+      type: object
+      description: produit.prix_baisse
+      required: [produit_id, ancien_prix, nouveau_prix]
+      properties:
+        produit_id: { type: string, format: uuid }
+        ancien_prix: { $ref: "#/components/schemas/Montant" }
+        nouveau_prix: { $ref: "#/components/schemas/Montant" }
+    DonneesPrixBarre:
+      type: object
+      description: produit.prix_barre_ajoute
+      required: [produit_id, prix_barre]
+      properties:
+        produit_id: { type: string, format: uuid }
+        prix_barre: { $ref: "#/components/schemas/Montant" }
+    DonneesReapprovisionne:
+      type: object
+      description: produit.reapprovisionne
+      required: [produit_id, stock]
+      properties:
+        produit_id: { type: string, format: uuid }
+        stock: { type: integer, minimum: 1 }
+    DonneesDormant:
+      type: object
+      description: produit.dormant — en stock, aucune vente payée depuis 30 jours
+      required: [produit_ids]
+      properties:
+        produit_ids:
+          type: array
+          maxItems: 20
+          items: { type: string, format: uuid }
+    DonneesMeilleureVente:
+      type: object
+      description: produit.meilleure_vente — produit le plus vendu des 7 derniers jours
+      required: [produit_id, ventes_payees]
+      properties:
+        produit_id: { type: string, format: uuid }
+        ventes_payees: { $ref: "#/components/schemas/Montant" }

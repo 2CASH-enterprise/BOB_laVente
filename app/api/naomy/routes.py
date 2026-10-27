@@ -5,6 +5,10 @@ Lot 89 — connecteur Naomy.
                                (docs/naomy/bob-naomy-openapi-v1.2.yaml) ; erreurs {"erreur", "message"}.
 - /api/v1/naomy-connection*  : la carte « Naomy » du tableau de bord (connecter, déconnecter, rappels par e-mail).
 - /api/v1/naomy-rappels/desinscription : lien de désinscription en un clic des rappels par e-mail.
+
+Lot 92 (contrat 1.3.1) : POST /api/v1/naomy/appairage/demande (signée par la plateforme, toujours 202),
+POST /api/v1/naomy/assistant/messages (« Bob, votre assistant »), et dans la carte : portée, interrupteur de
+l'assistant, bilan du soir, demande de Naomy à accepter ou refuser.
 """
 import json
 import uuid
@@ -83,6 +87,32 @@ async def naomy_pair(request: Request, db: AsyncSession = Depends(get_db)):
                                     request.headers.get("x-platform-signature"), body):
         raise NaomyError(401, "signature_invalide", "Signature de plateforme invalide.")
     return await nb.pair(db, await _json(request))
+
+
+@router.post(f"{API}/appairage/demande", status_code=202)
+async def naomy_pairing_request(request: Request, db: AsyncSession = Depends(get_db),
+                                limiter: RateLimiter = Depends(get_rate_limiter)):
+    from app.core.config import get_settings
+
+    secret = get_settings().naomy_platform_secret
+    if not secret:
+        raise NaomyError(503, "indisponible", "La connexion à Naomy n'est pas encore activée sur Bob.")
+    body = await request.body()
+    if not nb.platform_signature_ok(secret, request.headers.get("x-platform-timestamp"),
+                                    request.headers.get("x-platform-signature"), body):
+        raise NaomyError(401, "signature_invalide", "Signature de plateforme invalide.")
+    await nb.receive_request(db, await _json(request), limiter)
+    return JSONResponse({"statut": "recue"}, status_code=202)  # toujours : ne dit jamais si la boutique existe
+
+
+@router.post(f"{API}/assistant/messages", status_code=202)
+async def naomy_assistant_message(request: Request, ctx: NaomyContext = Depends(naomy_context),
+                                  db: AsyncSession = Depends(get_db)):
+    from app.services import merchant_assistant
+
+    connection = await db.get(type(ctx.connection), ctx.connection.id)
+    result = await merchant_assistant.receive(db, connection, ctx.tenant, await _json(request))
+    return JSONResponse(result, status_code=202)
 
 
 @router.delete(f"{API}/connexion", status_code=204)
@@ -283,6 +313,15 @@ class RemindersSetting(BaseModel):
     enabled: bool
 
 
+class PairingChoice(BaseModel):  # lot 92 : portée choisie par le commerçant
+    scope: str = "complete"
+
+
+class RequestDecision(BaseModel):
+    accept: bool
+    scope: str = "complete"
+
+
 async def _tenant(db, current_user):
     from app.models.tenant import Tenant
 
@@ -295,12 +334,57 @@ async def naomy_connection_status(current_user: CurrentUser = Depends(get_curren
 
 
 @router.post("/api/v1/naomy-connection/pairing", dependencies=[Depends(require_role("ADMIN"))])
-async def naomy_connection_pairing(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def naomy_connection_pairing(payload: PairingChoice | None = None, current_user: CurrentUser = Depends(get_current_user),
+                                   db: AsyncSession = Depends(get_db)):
     tenant = await _tenant(db, current_user)
-    refusal = nb.pairing_refusal(tenant)
+    scope = (payload or PairingChoice()).scope
+    refusal = nb.pairing_refusal(tenant, scope)
     if refusal:
         raise HTTPException(status_code=403, detail=refusal)
-    return {"url": await nb.create_pairing(db, tenant)}
+    return {"url": await nb.create_pairing(db, tenant, scope=scope)}
+
+
+@router.post("/api/v1/naomy-connection/request/{request_id}", dependencies=[Depends(require_role("ADMIN"))])
+async def naomy_connection_request(request_id: str, payload: RequestDecision,
+                                   current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Lot 92 — demande venue de Naomy : accepter (lien de connexion habituel, portée choisie) ou refuser."""
+    tenant = await _tenant(db, current_user)
+    if payload.accept:
+        refusal = nb.pairing_refusal(tenant, payload.scope)
+        if refusal:
+            raise HTTPException(status_code=403, detail=refusal)
+    try:
+        url = await nb.decide_request(db, tenant, request_id, payload.accept, payload.scope)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"url": url, "status": await nb.dashboard_view(db, tenant)}
+
+
+class AssistantSetting(BaseModel):
+    enabled: bool | None = None
+    summary: bool | None = None
+
+
+@router.put("/api/v1/naomy-connection/assistant", dependencies=[Depends(require_role("ADMIN"))])
+async def naomy_connection_assistant(payload: AssistantSetting, current_user: CurrentUser = Depends(get_current_user),
+                                     db: AsyncSession = Depends(get_db)):
+    """Lot 92 — interrupteur de « Bob, votre assistant » pour la boutique, et bilan du soir par e-mail."""
+    from app.core.config import get_settings
+
+    tenant = await _tenant(db, current_user)
+    connection = await nb.active_connection(db, tenant.id)
+    if connection is None:
+        raise HTTPException(status_code=404, detail="Naomy n'est pas reliée à votre boutique.")
+    if payload.enabled is not None:
+        if payload.enabled and not get_settings().assistant_enabled:
+            raise HTTPException(status_code=403, detail="L'assistant sur WhatsApp arrive bientôt.")
+        if payload.enabled and not connection.assistant_enabled:
+            connection.assistant_enabled_at = datetime.now(timezone.utc)  # aucune alerte sur ce qui précède
+        connection.assistant_enabled = payload.enabled
+    if payload.summary is not None:
+        connection.summary_enabled = payload.summary
+    await db.commit()
+    return await nb.dashboard_view(db, tenant)
 
 
 @router.delete("/api/v1/naomy-connection", dependencies=[Depends(require_role("ADMIN"))])

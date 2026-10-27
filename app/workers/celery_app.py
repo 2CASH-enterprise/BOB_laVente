@@ -40,6 +40,7 @@ TASK_MODULES = [
     "app.workers.photo_studio",  # lot 87
     "app.workers.catalog_pdf",  # lot 88
     "app.workers.naomy",  # lot 89
+    "app.workers.assistant",  # lot 92
 ]
 
 celery_app = Celery("bob", broker=settings.redis_url, backend=settings.redis_url, include=TASK_MODULES)
@@ -129,6 +130,11 @@ celery_app.conf.beat_schedule = {
     "naomy-purge": {
         "task": "app.workers.naomy.purge_naomy_task",
         "schedule": crontab(hour=4, minute=40),
+    },
+    # Lot 92 — « Bob, votre assistant » : messages en retard, alertes, envois par Naomy, bilan du soir (20 h).
+    "assistant-tick": {
+        "task": "app.workers.assistant.assistant_tick_task",
+        "schedule": crontab(minute="*"),
     },
     # Lot 73 : démos non transformées en compte, effacées 30 jours après leur création.
     "demo-purge": {

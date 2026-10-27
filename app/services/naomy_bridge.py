@@ -5,6 +5,10 @@ docs/naomy/bob-naomy-openapi-v1.2.yaml).
 Principes (contrat, section 1) : Bob reste la source de vérité ; Naomy lit, et n'écrit que ses liens suivis et ses
 demandes de rappel ; aucune donnée personnelle d'un client ne sort (seulement des produits et des chiffres agrégés) ;
 rien ne change pour une boutique qui ne relie pas Naomy.
+
+Lot 92 (contrat 1.3.1) : portée de la liaison choisie par le commerçant dans Bob (`complete` : Naomy et l'assistant,
+à partir d'Indépendant ; `assistant` : seulement « Bob, votre assistant », toutes formules), demande d'appairage
+venue de Naomy (confirmée dans Bob). L'assistant lui-même est dans services/merchant_assistant.py.
 """
 import base64
 import hashlib
@@ -34,6 +38,8 @@ RATE_LIMIT_PER_MINUTE = 120
 MAX_PAGE = 200
 MAX_PERIOD_DAYS = 92
 PLANS_WITH_NAOMY = {"INDEPENDANT", "STARTER", "PRO", "ENTERPRISE"}  # décision du 26/10 : à partir d'Indépendant
+SCOPES = ("complete", "assistant")  # lot 92 : l'assistant seul est ouvert à toutes les formules (décision du 27/10)
+REQUEST_TTL = timedelta(days=7)
 EVENT_TYPES = {"connexion.ouverte", "connexion.fermee", "boutique.formule_changee", "produit.cree",
                "produit.photo_prete", "produit.prix_baisse", "produit.prix_barre_ajoute", "produit.rupture",
                "produit.reapprovisionne", "produit.dormant", "produit.meilleure_vente"}
@@ -208,25 +214,27 @@ def add_event(session, tenant_id, kind: str, data: dict | None = None, product_i
                            created_at=datetime.now(timezone.utc)))
 
 
-def pairing_refusal(tenant) -> str | None:
+def pairing_refusal(tenant, scope: str = "complete") -> str | None:
     from app.core.config import get_settings
 
     if not get_settings().naomy_platform_secret:
         return "La connexion à Naomy sera bientôt disponible."
     if tenant.is_demo:
         return "La connexion à Naomy n'est pas disponible pour une démonstration."
-    if plan_code(tenant) not in PLANS_WITH_NAOMY:
+    if scope not in SCOPES:
+        return "Choix inconnu."
+    if scope == "complete" and plan_code(tenant) not in PLANS_WITH_NAOMY:
         return "Naomy est incluse à partir de la formule Indépendant."
     return None
 
 
-async def create_pairing(db, tenant, now: datetime | None = None) -> str:
+async def create_pairing(db, tenant, now: datetime | None = None, scope: str = "complete") -> str:
     from app.core.config import get_settings
     from app.models.naomy import NaomyPairingCode
 
     now = now or datetime.now(timezone.utc)
     code = new_code()
-    db.add(NaomyPairingCode(tenant_id=tenant.id, code_hash=digest(code), expires_at=now + CODE_TTL))
+    db.add(NaomyPairingCode(tenant_id=tenant.id, code_hash=digest(code), expires_at=now + CODE_TTL, scope=scope))
     await db.commit()
     return f"{get_settings().naomy_base_url.rstrip('/')}/connexion/bob?code={code}"
 
@@ -262,7 +270,8 @@ async def pair(db, payload: dict, now: datetime | None = None) -> dict:
     tenant = await db.get(Tenant, record.tenant_id)
     if tenant is None or tenant.is_demo:
         raise NaomyError(404, "code_inconnu", "Code d'appairage inconnu ou expiré : relancez la connexion depuis Bob.")
-    if plan_code(tenant) not in PLANS_WITH_NAOMY:
+    scope = record.scope if record.scope in SCOPES else "complete"  # lot 92 : décidée par Bob, jamais par Naomy
+    if scope == "complete" and plan_code(tenant) not in PLANS_WITH_NAOMY:
         raise NaomyError(403, "formule_insuffisante", "Naomy est incluse à partir de la formule Indépendant.")
     if not events_url_ok(url, settings.naomy_allowed_host, settings.naomy_allowed_path):
         raise NaomyError(422, "url_evenements_refusee",
@@ -274,11 +283,12 @@ async def pair(db, payload: dict, now: datetime | None = None) -> dict:
     key, secret = KEY_PREFIX + secrets.token_urlsafe(32), SECRET_PREFIX + secrets.token_urlsafe(32)
     connection = NaomyConnection(id=uuid.uuid4(), tenant_id=tenant.id, status="ACTIVE", naomy_account=account,
                                  confirmation_number=number, events_url=url, api_key_hash=digest(key),
-                                 events_secret=secret, connected_at=now)
+                                 events_secret=secret, connected_at=now, scope=scope)
     db.add(connection)
     add_event(db, tenant.id, "connexion.ouverte", {}, connection_id=connection.id)
     await db.commit()
-    return {"boutique_id": str(tenant.id), "cle_api": key, "secret_evenements": secret, "boutique": await shop_view(db, tenant)}
+    return {"portee": scope, "boutique_id": str(tenant.id), "cle_api": key, "secret_evenements": secret,
+            "boutique": await shop_view(db, tenant)}
 
 
 async def connection_for_key(db, key: str | None):
@@ -415,8 +425,8 @@ async def dispatch(db, now: datetime | None = None, sender=None) -> dict:
             connection = connections[evt.tenant_id]
             if connection is not None and _aware(evt.created_at) < _aware(connection.connected_at):
                 connection = None  # antérieur à la liaison : Naomy relit le catalogue de toute façon
-        if connection is None:
-            evt.status = "SKIPPED"
+        if connection is None or (connection.scope == "assistant" and not evt.type.startswith("connexion.")):
+            evt.status = "SKIPPED"  # lot 92 : l'assistant seul ne publie rien, Naomy n'a pas besoin du catalogue
             report["skipped"] += 1
             continue
         if evt.type == "produit.cree" and evt.product_id is not None:
@@ -464,8 +474,15 @@ async def purge(db, now: datetime | None = None) -> dict:
         and_(NaomyEvent.status == "SKIPPED", NaomyEvent.created_at < now - timedelta(days=2)),
         and_(NaomyEvent.status.in_(("SENT", "FAILED")), NaomyEvent.created_at < now - timedelta(days=30)))))
     codes = await db.execute(delete(NaomyPairingCode).where(NaomyPairingCode.expires_at < now - timedelta(days=1)))
+    # Lot 92 : messages de l'assistant (texte déjà effacé) 7 jours, envois 30 jours, demandes 30 jours.
+    from app.models.naomy import AssistantMessage, AssistantOutbox, NaomyPairingRequest
+
+    messages = await db.execute(delete(AssistantMessage).where(AssistantMessage.received_at < now - timedelta(days=7)))
+    outbox = await db.execute(delete(AssistantOutbox).where(AssistantOutbox.created_at < now - timedelta(days=30)))
+    requests = await db.execute(delete(NaomyPairingRequest).where(NaomyPairingRequest.created_at < now - timedelta(days=30)))
     await db.commit()
-    return {"events": done.rowcount or 0, "codes": codes.rowcount or 0}
+    return {"events": done.rowcount or 0, "codes": codes.rowcount or 0, "assistant_messages": messages.rowcount or 0,
+            "assistant_outbox": outbox.rowcount or 0, "requests": requests.rowcount or 0}
 
 
 # --- Résultats et ventes (chiffres agrégés seulement) ----------------------------------------------------------------
@@ -670,13 +687,107 @@ async def unsubscribe(db, connection_id: str, token: str) -> bool:
 
 # --- Ce que le tableau de bord de Bob montre ---------------------------------------------------------------------------
 
-async def dashboard_view(db, tenant) -> dict:
+async def dashboard_view(db, tenant, now: datetime | None = None) -> dict:
+    from app.core.config import get_settings
+
     connection = await active_connection(db, tenant.id)
     refusal = pairing_refusal(tenant)
-    return {"available": refusal is None or connection is not None, "refusal": refusal if connection is None else None,
-            "connected": connection is not None,
+    assistant_refusal = pairing_refusal(tenant, "assistant")
+    scope = connection.scope if connection else None
+    request = await pending_request(db, tenant, now) if connection is None else None
+    return {"available": refusal is None or assistant_refusal is None or connection is not None,
+            "refusal": refusal if connection is None else None,
+            "assistant_refusal": assistant_refusal if connection is None else None,  # lot 92 : l'assistant seul
+            "connected": connection is not None, "scope": scope,
             "number": mask_number(connection.confirmation_number) if connection else None,
             "connected_at": iso(connection.connected_at) if connection else None,
             "reminders_enabled": bool(connection.reminders_enabled and connection.reminders_unsubscribed_at is None)
-            if connection else None,
-            "suspended": connection is not None and plan_code(tenant) not in PLANS_WITH_NAOMY}
+            if connection and scope == "complete" else None,
+            "suspended": connection is not None and scope == "complete" and plan_code(tenant) not in PLANS_WITH_NAOMY,
+            # Lot 92 — l'assistant sur WhatsApp : visible seulement quand l'interrupteur général est allumé.
+            "assistant_available": bool(get_settings().assistant_enabled),
+            "assistant_enabled": bool(connection.assistant_enabled) if connection else None,
+            "summary_enabled": bool(connection.summary_enabled) if connection else None,
+            "request": {"id": str(request.id), "shop_name": request.shop_name, "created_at": iso(request.created_at)}
+            if request is not None else None}
+
+
+# --- Lot 92 : demande d'appairage venue de Naomy (confirmée dans Bob) -------------------------------------------------
+
+async def pending_request(db, tenant, now: datetime | None = None):
+    from app.models.naomy import NaomyPairingRequest
+
+    now = now or datetime.now(timezone.utc)
+    return (await db.execute(select(NaomyPairingRequest).where(
+        NaomyPairingRequest.tenant_id == tenant.id, NaomyPairingRequest.status == "PENDING",
+        NaomyPairingRequest.created_at >= now - REQUEST_TTL).order_by(NaomyPairingRequest.created_at.desc()))).scalars().first()
+
+
+def request_email(tenant, shop_name: str | None) -> tuple[str, str]:
+    from app.core.config import get_settings
+
+    link = f"{get_settings().public_base_url.rstrip('/')}/dashboard/?tab=integrations"
+    about = f" (« {shop_name} » chez Naomy)" if shop_name else ""
+    return ("Naomy demande à relier votre boutique",
+            f"Bonjour,\n\nNaomy, l'agent marketing d'AgenC'AI, demande à relier votre boutique {tenant.name}{about} à Bob.\n\n"
+            f"Pour accepter ou refuser, ouvrez Bob, onglet Intégrations, carte « Naomy » : {link}\n\n"
+            "Si vous n'êtes pas à l'origine de cette demande, refusez-la : rien ne sera relié.")
+
+
+async def receive_request(db, payload: dict, limiter=None, now: datetime | None = None, mailer=None) -> None:
+    """
+    POST /appairage/demande (corps déjà authentifié par la signature de plateforme). Ne révèle jamais si une boutique
+    existe : l'appelant répond toujours 202. Au plus une demande par numéro et par 24 h.
+    """
+    import asyncio
+
+    from app.models.naomy import NaomyPairingRequest
+    from app.models.tenant import Tenant
+    from app.models.whatsapp_account import WhatsAppAccount
+
+    now = now or datetime.now(timezone.utc)
+    number, account, name = payload.get("numero_whatsapp"), payload.get("compte_naomy"), payload.get("nom_boutique")
+    if not (isinstance(number, str) and re.fullmatch(r"\+[1-9][0-9]{7,14}", number) and isinstance(account, str)
+            and 0 < len(account) <= 64 and (name is None or (isinstance(name, str) and len(name) <= 120))
+            and set(payload) <= {"numero_whatsapp", "compte_naomy", "nom_boutique"}):
+        raise NaomyError(400, "requete_invalide", "Champs attendus : numero_whatsapp (+…), compte_naomy (64), nom_boutique (120).")
+    digits = number[1:]
+    if limiter is not None and not await limiter.is_allowed(f"naomy-demande:{digest(digits)}", 1, 86400):
+        return
+    rows = (await db.execute(select(WhatsAppAccount.tenant_id, WhatsAppAccount.display_phone_number))).all()
+    tenant_id = next((t for t, shown in rows if re.sub(r"\D", "", shown or "") == digits), None)
+    tenant = await db.get(Tenant, tenant_id) if tenant_id is not None else None
+    if tenant is None or tenant.is_demo or not tenant.active or await active_connection(db, tenant.id) is not None:
+        return
+    shop_name = " ".join(name.split())[:120] if isinstance(name, str) and name.strip() else None
+    db.add(NaomyPairingRequest(tenant_id=tenant.id, naomy_account=account, shop_name=shop_name, status="PENDING",
+                               created_at=now))
+    await db.commit()
+    if (tenant.email or "").strip():
+        if mailer is None:
+            from app.services.email_service import send_email as mailer
+        subject, body = request_email(tenant, shop_name)
+        try:
+            await asyncio.to_thread(mailer, to=tenant.email, subject=subject, body=body)
+        except Exception:  # noqa: BLE001 — la carte du tableau de bord reste
+            logger.warning("E-mail de demande d'appairage Naomy non envoyé (boutique %s)", tenant.id)
+
+
+async def decide_request(db, tenant, request_id: str, accept: bool, scope: str = "complete",
+                         now: datetime | None = None) -> str | None:
+    """Accepter : renvoie le lien de connexion habituel (code d'appairage avec la portée choisie). Refuser : None."""
+    from app.models.naomy import NaomyPairingRequest
+
+    now = now or datetime.now(timezone.utc)
+    try:
+        rid = uuid.UUID(str(request_id))
+    except ValueError:
+        rid = None
+    request = await db.get(NaomyPairingRequest, rid) if rid else None
+    if request is None or request.tenant_id != tenant.id or request.status != "PENDING":
+        raise LookupError("Demande introuvable ou déjà traitée.")
+    request.status, request.decided_at = ("ACCEPTED" if accept else "REFUSED"), now
+    if not accept:
+        await db.commit()
+        return None
+    return await create_pairing(db, tenant, now, scope)

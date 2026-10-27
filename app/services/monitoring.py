@@ -80,6 +80,7 @@ TASK_LABELS = {
     "app.workers.catalog_pdf.read_catalog_pdf_task": "Import de catalogue PDF (lecture par l'IA)",
     "app.workers.naomy.send_naomy_events_task": "Naomy : envoi des événements",
     "app.workers.naomy.purge_naomy_task": "Naomy : ménage des événements (nuit)",
+    "app.workers.assistant.assistant_tick_task": "Assistant de Bob : alertes, envois et bilan du soir",
     "app.workers.wa_templates.refresh_accounts_task": "Numéros WhatsApp : nom et statut chez Meta",
 }
 

@@ -92,7 +92,7 @@ def _product(tenant, sku="R1", name="Robe wax Awa", price=15000, stock=4, image=
 
 def _contract():
     yaml = pytest.importorskip("yaml")
-    return yaml.safe_load((ROOT / "docs" / "naomy" / "bob-naomy-openapi-v1.2.yaml").read_text(encoding="utf-8"))
+    return yaml.safe_load((ROOT / "docs" / "naomy" / "bob-naomy-openapi-v1.3.1.yaml").read_text(encoding="utf-8"))
 
 
 def conforms(instance, schema_name: str):
@@ -108,9 +108,10 @@ def conforms(instance, schema_name: str):
 
 def test_contract_file_is_valid_openapi_and_lists_every_route():
     doc = _contract()
-    assert doc["openapi"] == "3.1.0" and doc["info"]["version"] == "1.2.0"
+    assert doc["openapi"] == "3.1.0" and doc["info"]["version"] == "1.3.1"
     assert set(doc["paths"]) == {"/appairage", "/connexion", "/boutique", "/produits", "/produits/{produit_id}", "/stock",
-                                 "/liens", "/liens/{code}", "/resultats", "/ventes", "/rappels"}
+                                 "/liens", "/liens/{code}", "/resultats", "/ventes", "/rappels",
+                                 "/appairage/demande", "/assistant/messages"}  # lot 92
     events = set(doc["components"]["schemas"]["Evenement"]["properties"]["type"]["enum"])
     assert events == nb.EVENT_TYPES
     from app.api.naomy.routes import router
@@ -127,7 +128,9 @@ async def test_dashboard_pairing_rules(client, db_session, naomy_env, monkeypatc
     r = await client.post("/api/v1/naomy-connection/pairing", headers=await _login(client, free_email))
     assert r.status_code == 403 and r.json()["detail"] == "Naomy est incluse à partir de la formule Indépendant."
     view = (await client.get("/api/v1/naomy-connection", headers=await _login(client, free_email))).json()
-    assert view["available"] is False and view["connected"] is False and "Indépendant" in view["refusal"]
+    assert view["connected"] is False and "Indépendant" in view["refusal"]
+    # Lot 92 : l'assistant seul reste possible en formule Gratuite (décision du 27/10).
+    assert view["available"] is True and view["assistant_refusal"] is None
 
     shop, email = await _shop(db_session, plan=TenantPlan.INDEPENDANT)
     headers = await _login(client, email)

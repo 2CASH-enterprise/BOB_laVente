@@ -6968,31 +6968,94 @@ async function loadNaomyCard() {
   let s;
   try { s = await api("/api/v1/naomy-connection"); } catch (e) { body.textContent = e.message; return; }
   if (!s.connected) {
-    body.innerHTML = `${s.refusal ? `<p style="margin: 0 0 10px; color: var(--muted);">${esc(s.refusal)}</p>` : ""}
-      <button class="action" id="naomy-connect-btn" ${s.available ? "" : "disabled"} onclick="startNaomyPairing()">Connecter Naomy</button>
+    // Lot 92 — portée choisie ici : Naomy et l'assistant, ou l'assistant seul (toutes formules).
+    const scopes = s.assistant_available ? `<fieldset style="border: 0; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 8px;">
+        <legend style="font-weight: 600; margin-bottom: 6px;">Ce que vous reliez</legend>
+        <label style="display: flex; gap: 8px; align-items: flex-start;"><input type="radio" name="naomy-scope" value="complete" ${s.refusal ? "disabled" : "checked"}>
+          <span><b>Naomy et l'assistant</b> : vos publications, et Bob qui vous prévient sur WhatsApp.${s.refusal ? `<br><span style="color: var(--muted);">${esc(s.refusal)}</span>` : ""}</span></label>
+        <label style="display: flex; gap: 8px; align-items: flex-start;"><input type="radio" name="naomy-scope" value="assistant" ${s.refusal ? "checked" : ""} ${s.assistant_refusal ? "disabled" : ""}>
+          <span><b>L'assistant seul</b> : Bob vous prévient sur WhatsApp (vente à confirmer, client qui attend) et répond à vos questions. Toutes formules.</span></label>
+      </fieldset>` : (s.refusal ? `<p style="margin: 0 0 10px; color: var(--muted);">${esc(s.refusal)}</p>` : "");
+    const canConnect = s.assistant_available ? !(s.refusal && s.assistant_refusal) : !s.refusal;
+    const request = s.request ? `<div class="tone-warning" style="margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;">
+        <p style="margin: 0 0 8px;"><b>Naomy demande à relier votre boutique</b>${s.request.shop_name ? ` (« ${esc(s.request.shop_name)} » chez Naomy)` : ""}. Si vous n'êtes pas à l'origine de cette demande, refusez-la.</p>
+        <button class="action" ${canConnect ? "" : "disabled"} onclick="decideNaomyRequest(${jsArg(s.request.id)}, true)">Accepter</button>
+        <button class="action secondary" onclick="decideNaomyRequest(${jsArg(s.request.id)}, false)">Refuser</button></div>` : "";
+    body.innerHTML = `${request}${scopes}
+      <button class="action" id="naomy-connect-btn" ${canConnect ? "" : "disabled"} onclick="startNaomyPairing()">Connecter Naomy</button>
       <div id="naomy-pairing" style="margin-top: 10px;"></div>`;
     return;
   }
   const since = s.connected_at ? new Date(s.connected_at).toLocaleDateString("fr-FR") : "";
+  const assistant = s.assistant_available ? `
+    <label style="display: flex; gap: 8px; align-items: flex-start; margin: 0 0 8px;"><input type="checkbox" id="naomy-assistant" ${s.assistant_enabled ? "checked" : ""} onchange="saveNaomyAssistant({ enabled: this.checked })">
+      <span><b>Bob, votre assistant sur WhatsApp</b> : il vous prévient quand une vente est à confirmer ou qu'un client vous attend, et répond à « mes ventes », « stock », « vendu »…</span></label>
+    <label style="display: flex; gap: 8px; align-items: center; margin: 0 0 12px;"><input type="checkbox" id="naomy-summary" ${s.summary_enabled ? "checked" : ""} ${s.assistant_enabled ? "" : "disabled"} onchange="saveNaomyAssistant({ summary: this.checked })"> Bilan du soir par e-mail (20 h)</label>` : "";
   body.innerHTML = `
-    <p style="margin: 0 0 8px;"><b>Reliée</b> au ${esc(s.number)}${since ? ` depuis le ${esc(since)}` : ""}. Ce n'est pas vous ? Déconnectez-la.</p>
+    <p style="margin: 0 0 8px;"><b>Reliée</b> au ${esc(s.number)}${since ? ` depuis le ${esc(since)}` : ""}${s.scope === "assistant" ? " (assistant seul, sans publications)" : ""}. Ce n'est pas vous ? Déconnectez-la.</p>
     ${s.suspended ? `<p class="tone-warning" style="margin: 0 0 8px; padding: 8px 10px; border-radius: 8px;">Votre formule ne comprend plus Naomy : ses publications sont suspendues jusqu'au retour à la formule Indépendant ou plus.</p>` : ""}
-    <label style="display: flex; gap: 8px; align-items: center; margin: 0 0 12px;"><input type="checkbox" id="naomy-reminders" ${s.reminders_enabled ? "checked" : ""} onchange="saveNaomyReminders(this)"> Me prévenir par e-mail des propositions de Naomy</label>
+    ${assistant}
+    ${s.scope === "complete" ? `<label style="display: flex; gap: 8px; align-items: center; margin: 0 0 12px;"><input type="checkbox" id="naomy-reminders" ${s.reminders_enabled ? "checked" : ""} onchange="saveNaomyReminders(this)"> Me prévenir par e-mail des propositions de Naomy</label>` : ""}
     <button class="action secondary" onclick="disconnectNaomy()">Déconnecter Naomy</button>`;
 }
 
+function chosenNaomyScope() {
+  const picked = document.querySelector('input[name="naomy-scope"]:checked');
+  return picked ? picked.value : "complete";
+}
+
+function showNaomyPairingLink(url) {
+  document.getElementById("naomy-pairing").innerHTML = `<p style="margin: 0 0 8px;">Dernière étape chez Naomy : confirmez depuis votre WhatsApp. Ce lien est valable 15 minutes.</p>
+      <a class="action" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Ouvrir Naomy pour confirmer</a>
+      <button class="action secondary" onclick="loadNaomyCard()">J'ai confirmé</button>`;
+}
+
 async function startNaomyPairing() {
-  const box = document.getElementById("naomy-pairing");
   const msg = document.getElementById("naomy-msg");
   msg.textContent = "";
   try {
-    const r = await api("/api/v1/naomy-connection/pairing", { method: "POST" });
-    box.innerHTML = `<p style="margin: 0 0 8px;">Dernière étape chez Naomy : confirmez depuis votre WhatsApp. Ce lien est valable 15 minutes.</p>
-      <a class="action" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Ouvrir Naomy pour confirmer</a>
-      <button class="action secondary" onclick="loadNaomyCard()">J'ai confirmé</button>`;
+    const r = await api("/api/v1/naomy-connection/pairing", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: chosenNaomyScope() }) });
+    showNaomyPairingLink(r.url);
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
+  }
+}
+
+// Lot 92 — demande venue de Naomy : accepter donne le lien de connexion habituel, refuser ne relie rien.
+async function decideNaomyRequest(id, accept) {
+  const msg = document.getElementById("naomy-msg");
+  msg.textContent = "";
+  try {
+    const r = await api(`/api/v1/naomy-connection/request/${id}`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accept, scope: chosenNaomyScope() }) });
+    if (accept && r.url) {
+      await loadNaomyCard();
+      showNaomyPairingLink(r.url);
+    } else {
+      toast("Demande refusée : rien n'est relié.");
+      loadNaomyCard();
+    }
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function saveNaomyAssistant(change) {
+  const msg = document.getElementById("naomy-msg");
+  try {
+    await api("/api/v1/naomy-connection/assistant", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(change) });
+    msg.style.color = "var(--success)";
+    msg.textContent = change.enabled === true ? "L'assistant est allumé : Bob vous écrira sur WhatsApp, depuis le numéro AgenC'AI."
+      : change.enabled === false ? "L'assistant est éteint." : change.summary ? "Bilan du soir par e-mail activé." : "Plus de bilan du soir.";
+    loadNaomyCard();
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+    loadNaomyCard();
   }
 }
 

@@ -77,5 +77,6 @@ from app.models.property_alert import PropertyAlert  # noqa: F401 — lot 80
 from app.models.pige import DvfDepartment, DvfSale, PigeListing  # noqa: F401 — lot 81
 from app.models.image_job import ImageJob  # noqa: F401 — lot 87
 from app.models.catalog_import import CatalogImport  # noqa: F401 — lot 88
-from app.models.naomy import NaomyConnection, NaomyEvent, NaomyPairingCode, NaomyReminder  # noqa: F401 — lot 89
+from app.models.naomy import (AssistantMessage, AssistantOutbox, NaomyConnection, NaomyEvent, NaomyPairingCode,  # noqa: F401 — lots 89, 92
+                              NaomyPairingRequest, NaomyReminder)
 from app.services import naomy_bridge as _naomy_bridge  # noqa: F401,E402 — lot 89 : événements Naomy détectés à chaque enregistrement
