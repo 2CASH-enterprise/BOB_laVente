@@ -300,12 +300,12 @@ async def test_monthly_report_line(db_session):
     await db_session.commit()
     start, end = NOW - timedelta(days=30), NOW
     data = await monthly_report.build(db_session, tenant, start, end)
-    line = dict(data["bob"]["savings"])["Commandes relancées par Bob → payées ensuite"]
+    line = dict(data["bob"]["savings"])["Commandes relancées par Bob → vendues ensuite"]
     assert line.startswith("3 → 1 (20") and "XOF" in line
     assert rem.summary([paid, before, still], start, end)[1:] == (1, 20000.0)
     assert rem.summary([paid, before, still], NOW - timedelta(hours=95), end) == (1, 0, 0.0)  # relancées avant la période
     other = await _shop(db_session)
-    assert "Commandes relancées par Bob → payées ensuite" not in dict(
+    assert "Commandes relancées par Bob → vendues ensuite" not in dict(
         (await monthly_report.build(db_session, other, start, end))["bob"]["savings"])
 
 
@@ -343,7 +343,7 @@ async def test_setting_api_and_order_fields(client, db_session):
 def test_dashboard_has_the_setting():
     html = Path("app/static/dashboard/index.html").read_text(encoding="utf-8")
     assert 'id="order-reminders"' in html and "function orderReminderNotice(" in html and "loadOrderReminders();" in html
-    assert "Payée après la relance de Bob" in html and "appelez-le" in html
+    assert "Vendue après la relance de Bob" in html and "appelez-le" in html
 
 
 # --- Prospection : démo du secteur, aperçu du lien, visuels ------------------------------------------------------

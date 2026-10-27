@@ -170,7 +170,7 @@ async def test_build_for_a_shop(db_session):
     assert d["headline"] == "4 conversations, dont 3 réponses hors heures" and d["subject"] == "Votre mois avec Bob : " + d["headline"]
     assert d["period"] == "10 septembre au 9 octobre 2026"
     assert d["tiles"] == [("Conversations", "4", "+2", False), ("Nouveaux clients", "3", "+1", False),  # l'import n'est pas compté
-                          ("Encaissé (XOF)", "25\u202f000", "+150 %", True), ("Commandes payées", "1", "+0", True)]
+                          ("Ventes confirmées (XOF)", "25\u202f000", "+150 %", True), ("Nombre de ventes", "1", "+0", True)]
     night = d["night"]
     assert night["replies"] == 3  # 21 h, et deux samedis (tout le week-end est hors heures)
     assert night["stats"] == [(3, "clients ont écrit hors heures"), (3, "nouveaux clients arrivés hors heures"),
@@ -182,11 +182,11 @@ async def test_build_for_a_shop(db_session):
     # Lot 72 : 5 min par message de Bob (au lieu de 2).
     assert bob["savings"] == [("Messages auxquels Bob a répondu seul", "3"), ("Temps libéré (5 min par message)", "15 min")]
     assert bob["value"] == "15 min" and bob["compare"] == "pour la même présence 24 h / 24, il faudrait 4 personnes en relais"
-    assert d["to_validate"]["items"] == [("1 commande", "en attente : si vous avez été payé, cliquez « Paiement reçu »"),
-                                         ("1 commande", "en attente depuis plus de 7 jours : payées ou à annuler ?")]
+    assert d["to_validate"]["items"] == [("1 commande", "à confirmer : si la preuve de vente est arrivée, cliquez « Vendu »"),
+                                         ("1 commande", "à confirmer depuis plus de 7 jours : vendues ou à annuler ?")]
     assert d["to_validate"]["url"].endswith("/dashboard/?tab=orders")
     assert d["funnel_title"] == "Vos ventes"
-    assert d["funnel"][2:] == [("Commandes", 2, ""), ("Payées", 1, "25\u202f000\u00a0XOF déclarés · 1 en attente (8\u202f000\u00a0XOF)")]
+    assert d["funnel"][2:] == [("Commandes", 2, ""), ("Vendues", 1, "25\u202f000\u00a0XOF déclarés · 1 à confirmer (8\u202f000\u00a0XOF)")]
     assert sum(d["daily"]) == 4 and len(d["daily"]) == 30 and d["daily_dates"][0] == 10 and d["daily_dates"][-1] == 9
     assert d["best_day"] == "samedi 26 septembre"
     assert d["weekend_days"] == {i for i in range(30) if (START + timedelta(days=i)).weekday() >= 5}

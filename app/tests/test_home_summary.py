@@ -157,7 +157,7 @@ async def test_orders_unpaid_for_seven_days_or_more(db_session):
     [item] = (await summary(shop))["todo"]
 
     assert item["kind"] == "ORDER"
-    assert item["reason"] == "Non payée depuis 8 jours"
+    assert item["reason"] == "Vente à confirmer depuis 8 jours"
     assert item["detail"] == "Commande de 450 000 XOF"
 
 
@@ -252,7 +252,7 @@ async def test_recent_activity(db_session):
     activity = (await summary(shop))["activity"]
 
     assert [(a["kind"], a["title"]) for a in activity] == [
-        ("PAYMENT", "Paiement reçu"),
+        ("PAYMENT", "Vente confirmée"),
         ("TRANSFER", "Transmis à un humain"),
         ("ORDER", "Commande créée par Bob"),
         ("CUSTOMER", "Nouveau client"),

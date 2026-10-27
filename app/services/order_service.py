@@ -141,7 +141,7 @@ async def mark_order_as_paid(db: AsyncSession, tenant_id: uuid.UUID, order_id: u
     if order is None or order.tenant_id != tenant_id:
         raise OrderCreationError("Commande introuvable")
     if order.status != OrderStatus.PENDING:
-        raise OrderCreationError(f"Cette commande est déjà au statut {order.status.value}, impossible de la marquer payée")
+        raise OrderCreationError(f"Cette commande est déjà au statut {order.status.value}, impossible de confirmer la vente")
 
     order.status = OrderStatus.PAID
     order.paid_at = datetime.now(timezone.utc)
@@ -184,7 +184,7 @@ async def cancel_order(db: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UU
     if order is None or order.tenant_id != tenant_id:
         raise OrderCreationError("Commande introuvable")
     if order.status == OrderStatus.PAID:
-        raise OrderCreationError("Cette commande est payée : elle ne peut pas être annulée (un remboursement n'est pas géré ici)")
+        raise OrderCreationError("Cette vente est confirmée : elle ne peut pas être annulée (un remboursement n'est pas géré ici)")
     if order.status != OrderStatus.PENDING:
         raise OrderCreationError(f"Cette commande est déjà au statut {order.status.value}")
 

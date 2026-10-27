@@ -102,7 +102,7 @@ def build_handoff_alert(customer: Customer, conversation: Conversation, reason: 
             f"Client : {name}\n"
             f"Demande : {reason}\n\n"
             "Vous pouvez lui répondre directement depuis la conversation, puis la rendre à Bob "
-            "(bouton « Rendre à l'IA »).\n\n"
+            "(bouton « Bob continue »).\n\n"
             f"{block}Ouvrir la conversation : {conversation_link(conversation)}",
         )
     subject = f"Un client attend votre réponse : {name}"
@@ -112,7 +112,7 @@ def build_handoff_alert(customer: Customer, conversation: Conversation, reason: 
         f"Client : {name}\n"
         f"Raison : {reason or 'Non précisée'}\n\n"
         "Bob ne répondra plus à ce client tant que vous ne lui aurez pas rendu la conversation "
-        "(bouton « Rendre à l'IA »).\n\n"
+        "(bouton « Bob continue »).\n\n"
         f"{block}Ouvrir la conversation : {conversation_link(conversation)}"
     )
     return subject, body

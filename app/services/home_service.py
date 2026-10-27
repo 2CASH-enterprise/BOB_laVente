@@ -247,7 +247,7 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
             days_waiting = (now - _aware(o.created_at)).days
             todo.append({
                 "kind": "ORDER", "order_id": str(o.id), "customer": _name(customers.get(o.customer_id)),
-                "reason": f"Non payée depuis {days_waiting} jours", "tone": "warning",
+                "reason": f"Vente à confirmer depuis {days_waiting} jours", "tone": "warning",
                 "detail": f"Commande de {float(o.total_amount):,.0f} {o.currency}".replace(",", " "),
                 "since": _aware(o.created_at), "action": "Voir la commande",
             })
@@ -331,7 +331,7 @@ async def home_summary(db: AsyncSession, tenant_id, user_id=None, days: int = 30
         {"key": "conversations", "label": "Conversations", "value": len(current_convs)},
         {"key": "opportunities", "label": "Opportunités de vente", "value": sales["total"]},
         {"key": "orders", "label": "Commandes", "value": sales["with_order"]},
-        {"key": "paid", "label": "Payées", "value": sales["paid"]},
+        {"key": "paid", "label": "Vendues", "value": sales["paid"]},
     ]
 
     # --- Par jour --------------------------------------------------------------------------
@@ -415,7 +415,7 @@ async def _activity(db, tenant_id, now, customers, messages, orders, business_ty
     for o in orders:
         name = _name(customers.get(o.customer_id))
         if o.status == OrderStatus.PAID and o.paid_at and _aware(o.paid_at) >= since:
-            events.append({"kind": "PAYMENT", "title": "Paiement reçu", "detail": f"{name} · {money(o)}", "at": _aware(o.paid_at)})
+            events.append({"kind": "PAYMENT", "title": "Vente confirmée", "detail": f"{name} · {money(o)}", "at": _aware(o.paid_at)})
         if _aware(o.created_at) >= since:
             title = "Commande créée par Bob" if o.created_by == "IA" else "Commande saisie"
             events.append({"kind": "ORDER", "title": title, "detail": f"{name} · {money(o)}", "at": _aware(o.created_at)})

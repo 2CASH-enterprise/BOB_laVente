@@ -1018,7 +1018,7 @@
         </div>
         <div id="reply-hint" class="hidden" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Bob répond à ce client. Prenez le contrôle pour lui écrire vous-même.</div>
         <button class="action" id="btn-takeover" onclick="takeover()">Prendre le contrôle</button>
-        <button class="action secondary hidden" id="btn-release" onclick="release()">Rendre à l'IA</button>
+        <button class="action secondary hidden" id="btn-release" onclick="release()">Bob continue</button>
       </div>
     </section>
 
@@ -1297,11 +1297,11 @@
     <section id="tab-orders" class="hidden">
       <label class="contracts-setting" style="margin: 0 0 12px;">
         <input type="checkbox" id="order-reminders" onchange="saveOrderReminders()">
-        <span>Bob relance les commandes non payées : 3 h après la commande, puis le lendemain (sur WhatsApp si le client a écrit récemment, sinon par email). Il s'arrête dès que la commande est payée ou annulée, ou que le client répond.</span>
+        <span>Bob relance les ventes à confirmer : 3 h après la commande, puis le lendemain (sur WhatsApp si le client a écrit récemment, sinon par email). Il s'arrête dès que la vente est confirmée ou annulée, ou que le client répond.</span>
       </label>
       <p id="order-reminders-hint" class="hidden" style="font-size: 13px; color: var(--muted); margin: -6px 0 12px 26px;">Ajoutez votre lien de paiement dans la <a href="#" onclick="showTab('knowledge'); return false;">Base de connaissances</a> : il figurera dans la relance.</p>
       <table>
-        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Paiement</th><th>Livraison</th></tr></thead>
+        <thead><tr><th>Commande</th><th>Statut</th><th>Total</th><th>Créée par</th><th>Vente</th><th>Livraison</th></tr></thead>
         <tbody id="order-rows"></tbody>
       </table>
     </section>
@@ -3168,12 +3168,12 @@ function renderHome(h) {
       k.conversations.delta_pct !== null ? deltaNote(k.conversations.delta_pct, "%", "")
         : `dont ${k.conversations.bob_only} gérée${k.conversations.bob_only > 1 ? "s" : ""} par Bob seul`),
   ].join("") : [
-    kpi("wallet", "tone-success", "Encaissé", frMoney(k.paid.value, h.currency), deltaNote(k.paid.delta_pct, "%", "Pas de comparaison possible")),
-    kpi("clock", "tone-warning", "En attente de paiement", frMoney(k.pending.value, h.currency),
-      `${k.pending.count} commande${k.pending.count > 1 ? "s" : ""} non payée${k.pending.count > 1 ? "s" : ""}`),
+    kpi("wallet", "tone-success", "Ventes confirmées", frMoney(k.paid.value, h.currency), deltaNote(k.paid.delta_pct, "%", "Pas de comparaison possible")),
+    kpi("clock", "tone-warning", "Ventes à confirmer", frMoney(k.pending.value, h.currency),
+      `${k.pending.count} vente${k.pending.count > 1 ? "s" : ""} à confirmer`),
     kpi("target", "tone-info", "Taux de conversion", conv.value === null ? "—" : `${frNumber(conv.value)} <small>%</small>`,
       conv.delta_points !== null ? deltaNote(conv.delta_points, "pts", "")
-        : `${conv.paid} payée${conv.paid > 1 ? "s" : ""} sur ${conv.terminated} terminée${conv.terminated > 1 ? "s" : ""}`),
+        : `${conv.paid} vendue${conv.paid > 1 ? "s" : ""} sur ${conv.terminated} terminée${conv.terminated > 1 ? "s" : ""}`),
     kpi("chat", "tone-accent", "Conversations", `${k.conversations.value}`,
       k.conversations.delta_pct !== null ? deltaNote(k.conversations.delta_pct, "%", "")
         : `dont ${k.conversations.bob_only} gérée${k.conversations.bob_only > 1 ? "s" : ""} par Bob seul`),
@@ -3209,7 +3209,7 @@ function renderHome(h) {
   const dayLabel = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
   const marked = (d) => dealer ? d.appointment : d.sale;
   const bars = h.daily.map((d) => `<div class="${marked(d) ? "sale" : ""}" style="height: ${d.conversations / maxDay * 100}%;"
-      title="${dayLabel(d.date)} : ${d.conversations} conversation${d.conversations > 1 ? "s" : ""}${marked(d) ? (dealer ? " · rendez-vous demandé" : " · vente payée") : ""}"></div>`).join("");
+      title="${dayLabel(d.date)} : ${d.conversations} conversation${d.conversations > 1 ? "s" : ""}${marked(d) ? (dealer ? " · rendez-vous demandé" : " · vente confirmée") : ""}"></div>`).join("");
   const axis = [0, Math.floor(h.daily.length / 2), h.daily.length - 1].map((i) => `<span>${dayLabel(h.daily[i].date)}</span>`).join("");
 
   const activity = h.activity.length
@@ -3251,7 +3251,7 @@ function renderHome(h) {
     <div class="home-row">
       <div class="card span-2 chart-card">
         <div class="card-head" style="align-items: flex-start;">
-          <div><h2>Conversations par jour</h2><p class="card-sub">${insurer ? "Les jours avec au moins une cotation transmise ou un rendez-vous demandé sont mis en évidence" : dealer ? "Les jours avec au moins une demande de rendez-vous sont mis en évidence" : "Les jours avec au moins une vente payée sont mis en évidence"}</p></div>
+          <div><h2>Conversations par jour</h2><p class="card-sub">${insurer ? "Les jours avec au moins une cotation transmise ou un rendez-vous demandé sont mis en évidence" : dealer ? "Les jours avec au moins une demande de rendez-vous sont mis en évidence" : "Les jours avec au moins une vente confirmée sont mis en évidence"}</p></div>
           <div class="legend"><span><i style="background: var(--bar-soft);"></i>Conversations</span><span><i style="background: var(--accent-fill);"></i>${insurer ? "Jour avec cotation ou rendez-vous" : dealer ? "Jour avec rendez-vous" : "Jour avec vente"}</span></div>
         </div>
         <div class="bars" role="img" aria-label="Conversations par jour sur ${h.period_days} jours">${bars}</div>
@@ -3837,12 +3837,12 @@ async function loadStrategies() {
       return;
     }
     card.innerHTML = `${title}
-      <table style="margin-top: 10px;"><thead><tr><th>Objection</th><th>Stratégie</th><th>Utilisations</th><th>Opportunités payées</th><th>Conversion</th></tr></thead><tbody>
+      <table style="margin-top: 10px;"><thead><tr><th>Objection</th><th>Stratégie</th><th>Utilisations</th><th>Opportunités vendues</th><th>Conversion</th></tr></thead><tbody>
         ${s.strategies.map((r) => `<tr>
           <td data-label="Objection">${esc(r.objection_label)}</td>
           <td data-label="Stratégie">${esc(r.label)}</td>
           <td data-label="Utilisations">${r.uses}</td>
-          <td data-label="Payées">${r.paid} / ${r.terminated} terminée${r.terminated > 1 ? "s" : ""}</td>
+          <td data-label="Vendues">${r.paid} / ${r.terminated} terminée${r.terminated > 1 ? "s" : ""}</td>
           <td data-label="Conversion">${r.enough_data ? r.conversion_rate_pct + " %" : "<span style='color: var(--muted); font-size: 12px;'>Pas encore assez de données</span>"}</td>
         </tr>`).join("")}
       </tbody></table>
@@ -3858,13 +3858,13 @@ async function loadStrategies() {
 
 // Libellés affichés des statuts (la valeur technique reste la classe CSS du badge).
 const STATUS_LABELS = {
-  ACTIVE: "Bob répond", WAITING_HUMAN: "Attend un humain", WAITING_CUSTOMER: "Attend le client", CLOSED: "Terminée",
-  PENDING: "En attente de paiement", PAID: "Payée", CANCELLED: "Annulée",
+  ACTIVE: "Bob répond", WAITING_HUMAN: "Vous attend", WAITING_CUSTOMER: "Attend le client", CLOSED: "Terminée",
+  PENDING: "Vente à confirmer", PAID: "Vendu", CANCELLED: "Annulée",
 };
 
 const OUTCOME_LABELS = [
-  ["PAID", "Payées", "var(--success)"],
-  ["ORDER_UNPAID", "Commande non payée", "var(--warning)"],
+  ["PAID", "Vendues", "var(--success)"],
+  ["ORDER_UNPAID", "Vente non confirmée", "var(--warning)"],
   ["CANCELLED", "Annulées", "var(--muted)"],
   ["TRANSFERRED", "Transférées à un humain", "var(--violet)"],
   ["ABANDONED", "Abandonnées", "var(--danger)"],
@@ -3913,9 +3913,9 @@ async function loadSignals() {
           ${s.objections.map((o) => `<tr><td data-label="Objection">${esc(o.label)}</td><td data-label="Conversations">${o.conversations}</td>
             <td data-label="Rendez-vous">${o.appointments}</td><td data-label="Taux">${o.enough_data ? o.appointment_rate_pct + " %" : "<span style='color: var(--muted); font-size: 12px;'>Pas encore assez de données</span>"}</td></tr>`).join("")}
          </tbody></table>`
-      : `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Opportunités</th><th>Payées</th><th>Conversion</th></tr></thead><tbody>
+      : `<table style="margin-top: 8px;"><thead><tr><th>Objection</th><th>Opportunités</th><th>Vendues</th><th>Conversion</th></tr></thead><tbody>
           ${s.objections.map((o) => `<tr><td data-label="Objection">${esc(o.label)}</td><td data-label="Opportunités">${o.opportunities}</td>
-            <td data-label="Payées">${o.paid}</td><td data-label="Conversion">${o.conversion_rate_pct === null ? "—" : o.conversion_rate_pct + " %"}</td></tr>`).join("")}
+            <td data-label="Vendues">${o.paid}</td><td data-label="Conversion">${o.conversion_rate_pct === null ? "—" : o.conversion_rate_pct + " %"}</td></tr>`).join("")}
          </tbody></table>`;
     card.innerHTML = `
       <div class="label" style="font-weight: 600;">Ce que demandent vos clients — ${s.period_days} derniers jours</div>
@@ -3928,7 +3928,7 @@ async function loadSignals() {
         Vous pouvez les vérifier sous chaque message client, dans l'onglet Conversations.
         ${byAppointments
           ? `${esc(obtained)} = conversations où ${insuranceMeasure(s) ? "une demande de cotation a été transmise ou un rendez-vous demandé" : "une demande de rendez-vous a été faite"} après l'apparition de ce frein. Le taux n'est affiché qu'à partir de ${s.min_conversations_for_rate} conversations.`
-          : "Conversion = opportunités payées ÷ opportunités terminées où ce frein est apparu."}
+          : "Conversion = opportunités vendues ÷ opportunités terminées où ce frein est apparu."}
       </p>`;
   } catch (e) {
     card.innerHTML = `<p style="color: var(--danger); font-size: 13px;">Impossible de charger l'analyse des messages : ${esc(e.message)}</p>`;
@@ -3961,9 +3961,9 @@ async function loadSales(forceRefresh = false) {
       </div>`).join("");
 
     const sources = s.by_source.length
-      ? `<table style="margin-top: 8px;"><thead><tr><th>Source</th><th>Opportunités</th><th>Payées</th><th>Conversion</th></tr></thead><tbody>
+      ? `<table style="margin-top: 8px;"><thead><tr><th>Source</th><th>Opportunités</th><th>Vendues</th><th>Conversion</th></tr></thead><tbody>
           ${s.by_source.map((b) => `<tr><td data-label="Source">${esc(b.label)}</td><td data-label="Opportunités">${b.opportunities}</td>
-            <td data-label="Payées">${b.paid}</td><td data-label="Conversion">${b.conversion_rate_pct === null ? "—" : b.conversion_rate_pct + " %"}</td></tr>`).join("")}
+            <td data-label="Vendues">${b.paid}</td><td data-label="Conversion">${b.conversion_rate_pct === null ? "—" : b.conversion_rate_pct + " %"}</td></tr>`).join("")}
          </tbody></table>`
       : "<p style='font-size: 13px; color: var(--muted);'>Aucune opportunité sur la période.</p>";
 
@@ -3976,12 +3976,12 @@ async function loadSales(forceRefresh = false) {
       <div class="grid" style="margin: 14px 0;">
         <div class="card"><div class="value">${s.total}</div><div class="label">Opportunités</div></div>
         <div class="card"><div class="value">${s.with_order}</div><div class="label">Avec commande</div></div>
-        <div class="card"><div class="value">${s.paid}</div><div class="label">Payées</div></div>
+        <div class="card"><div class="value">${s.paid}</div><div class="label">Vendues</div></div>
         <div class="card"><div class="value">${rate}</div><div class="label">Conversion réelle</div></div>
-        <div class="card"><div class="value">${money(s.revenue_paid, s.currency)}</div><div class="label">Encaissé</div></div>
-        <div class="card"><div class="value">${money(s.revenue_pending, s.currency)}</div><div class="label">En attente de paiement</div>
+        <div class="card"><div class="value">${money(s.revenue_paid, s.currency)}</div><div class="label">Ventes confirmées</div></div>
+        <div class="card"><div class="value">${money(s.revenue_pending, s.currency)}</div><div class="label">Ventes à confirmer</div>
           ${s.revenue_pending_in_paid_opportunities > 0
-            ? `<div style="font-size: 11px; color: var(--muted); margin-top: 4px;">dont ${money(s.revenue_pending_in_paid_opportunities, s.currency)} dans des opportunités déjà payées</div>`
+            ? `<div style="font-size: 11px; color: var(--muted); margin-top: 4px;">dont ${money(s.revenue_pending_in_paid_opportunities, s.currency)} dans des opportunités déjà vendues</div>`
             : ""}</div>
       </div>
       <div class="label" style="font-weight: 600; margin-bottom: 8px;">Comment se terminent vos opportunités</div>
@@ -3991,13 +3991,13 @@ async function loadSales(forceRefresh = false) {
       ${s.outside_conversation_orders > 0
         ? `<p style="font-size: 13px; margin: 10px 0 0;"><strong>Ventes hors conversation</strong> (saisies à la main) :
              ${s.outside_conversation_orders} commande${s.outside_conversation_orders > 1 ? "s" : ""},
-             ${money(s.outside_conversation_paid, s.currency)} encaissés.</p>`
+             ${money(s.outside_conversation_paid, s.currency)} de ventes confirmées.</p>`
         : ""}
       <p style="font-size: 11px; color: var(--muted); margin: 12px 0 0;">
         Une opportunité commence quand un client écrit après au moins 7 jours de silence.
-        Conversion réelle = opportunités payées ÷ opportunités terminées (les opportunités en cours ne comptent pas).
-        « Payée » = paiement confirmé par vous (bouton « Paiement reçu »).
-        Encaissé et en attente incluent toutes les commandes de la période, y compris celles saisies à la main.
+        Conversion réelle = opportunités vendues ÷ opportunités terminées (les opportunités en cours ne comptent pas).
+        « Vendue » = vente confirmée par vous (bouton « Vendu »).
+        Ventes confirmées et ventes à confirmer incluent toutes les commandes de la période, y compris celles saisies à la main.
       </p>`;
   } catch (e) {
     card.innerHTML = `<p style="color: var(--danger); font-size: 13px;">Impossible de charger les ventes : ${esc(e.message)}</p>`;
@@ -4079,13 +4079,13 @@ async function loadSources(period) {
     const dealership = isRdvSector();
     const head = dealership
       ? `<tr><th>Source</th><th>Clients</th><th>Rendez-vous</th><th>Venus</th><th>Vendus</th></tr>`
-      : `<tr><th>Source</th><th>Clients</th><th>Ventes payées</th></tr>`;
+      : `<tr><th>Source</th><th>Clients</th><th>Ventes confirmées</th></tr>`;
     const money = (v) => v ? ` · ${Number(v).toLocaleString("fr-FR")} ${esc(data.currency || "")}` : "";
     const row = (r, label) => dealership
       ? `<tr><td data-label="Source">${label}</td><td data-label="Clients">${r.customers}</td><td data-label="Rendez-vous">${r.appointments}</td>
           <td data-label="Venus">${r.visits}</td><td data-label="Vendus">${r.vehicles_sold}</td></tr>`
       : `<tr><td data-label="Source">${label}</td><td data-label="Clients">${r.customers}</td>
-          <td data-label="Ventes payées">${r.paid_orders}${money(r.revenue)}</td></tr>`;
+          <td data-label="Ventes confirmées">${r.paid_orders}${money(r.revenue)}</td></tr>`;
     const details = data.details.filter((d) => d.label !== d.channel_label);
     box.innerHTML = `
       <table><thead>${head}</thead><tbody>${data.channels.map((r) => row(r, `<strong>${esc(r.label)}</strong>`)).join("")}</tbody></table>
@@ -7288,7 +7288,7 @@ function orderReminderNotice(order) {
   const day = (v) => new Date(v).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) + " à " + new Date(v).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
   const by = { WHATSAPP: "sur WhatsApp", EMAIL: "par email" }[order.last_reminder_channel] || "";
   if (order.status === "PAID" && order.paid_at && new Date(order.paid_at) >= new Date(order.first_reminder_at)) {
-    return `<div style="${style} color: var(--success); font-weight: 600;">Payée après la relance de Bob</div>`;
+    return `<div style="${style} color: var(--success); font-weight: 600;">Vendue après la relance de Bob</div>`;
   }
   if (order.status !== "PENDING") return "";
   const twice = order.reminders_sent > 1 && order.last_reminder_channel !== "NONE";
@@ -7308,7 +7308,7 @@ async function saveOrderReminders() {
   try {
     const data = await api("/api/v1/tenants/me/order-reminders", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: box.checked }) });
     document.getElementById("order-reminders-hint").classList.toggle("hidden", !data.enabled || data.payment_link);
-    toast(box.checked ? "Bob relancera les commandes non payées." : "Bob ne relancera plus les commandes non payées.");
+    toast(box.checked ? "Bob relancera les ventes à confirmer." : "Bob ne relancera plus les ventes à confirmer.");
   } catch (e) {
     box.checked = !box.checked;
     toast(e.message.startsWith("Rôle insuffisant") ? "Seul un administrateur peut changer ce réglage." : e.message, "error");
@@ -7327,11 +7327,11 @@ async function loadOrders() {
         <td data-label="Statut"><span class="badge ${o.status}">${STATUS_LABELS[o.status] || o.status}</span>${staleOrderNotice(o)}${orderReminderNotice(o)}</td>
         <td data-label="Total">${Number(o.total_amount).toLocaleString()} ${o.currency}</td>
         <td data-label="Créée par">${o.created_by === "IA" ? "Bob (IA)" : o.created_by.slice(0, 8) + "…"}</td>
-        <td data-label="Paiement">${
+        <td data-label="Vente">${
           o.status === "PENDING"
-            ? `<button class="action" onclick="markOrderPaid(${jsArg(o.id)})">Paiement reçu</button>
+            ? `<button class="action" onclick="markOrderPaid(${jsArg(o.id)})">Vendu</button>
                <button class="action secondary" style="margin-left: 6px;" onclick="cancelOrder(${jsArg(o.id)})">Annuler</button>`
-            : o.status === "PAID" ? '<span class="badge PAID">Confirmé</span>' : "—"
+            : "—"
         }</td>
         <td data-label="Livraison"><button class="action secondary" onclick="toggleDeliveryPanel(${jsArg(o.id)})">Gérer</button></td>
       </tr>
@@ -7341,10 +7341,10 @@ async function loadOrders() {
 }
 
 async function markOrderPaid(orderId) {
-  if (!(await bobConfirm("Confirmer le paiement ?", "Vous avez vérifié la preuve de paiement de ce client. Le reçu lui est envoyé, et cette action ne peut pas être annulée.", { confirmLabel: "Paiement reçu" }))) return;
+  if ((await bobDialog({ title: "Confirmer la vente ?", message: "Vous avez bien reçu la preuve de vente. Bob envoie le reçu au client, et cette action ne peut pas être annulée.", confirmLabel: "Vendu", cancelLabel: "Retour" })) === null) return;
   try {
     await api(`/api/v1/orders/${orderId}/mark-paid`, { method: "PUT" });
-    toast("Paiement confirmé. Le reçu a été envoyé au client.");
+    toast("Vente confirmée. Le reçu a été envoyé au client.");
     loadOrders();
   } catch (e) {
     toast(e.message, "error");
@@ -7354,9 +7354,9 @@ async function markOrderPaid(orderId) {
 async function cancelOrder(orderId) {
   // Lot 39 : une seule fenêtre (avant : confirmation, puis motif, puis « prévenir le client ? »).
   const answer = await bobDialog({
-    title: "Annuler cette commande ?",
+    title: "Annuler cette vente ?",
     message: "Les articles seront remis en stock. Cette action est définitive.",
-    confirmLabel: "Annuler la commande", cancelLabel: "Retour", danger: true,
+    confirmLabel: "Oui, annuler la vente", cancelLabel: "Retour", danger: true,
     fields: [
       { name: "reason", label: "Motif (facultatif, visible dans le journal)", maxlength: 300 },
       { name: "notify", type: "checkbox", value: false,

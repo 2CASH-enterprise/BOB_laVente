@@ -132,7 +132,7 @@ def test_no_hardcoded_colors_in_templates():
 
 def test_status_badges_show_french_labels():
     assert "STATUS_LABELS[c.status] || c.status" in HTML and "STATUS_LABELS[o.status] || o.status" in HTML
-    assert 'WAITING_HUMAN: "Attend un humain"' in HTML
+    assert 'WAITING_HUMAN: "Vous attend"' in HTML
 
 
 # --- Lot 19 : accueil -------------------------------------------------------------------

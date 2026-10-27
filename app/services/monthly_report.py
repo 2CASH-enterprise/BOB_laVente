@@ -176,7 +176,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
 
     tiles = [tile("Conversations", len(conversations), conv_prev), tile("Nouveaux clients", len(new_now), new_prev)]
     funnel = [(f["label"], f["value"], "") for f in home["funnel"]]
-    obtained_label = "Ventes payées"
+    obtained_label = "Ventes confirmées"
     relance = None  # lot 63 : commandes relancées par Bob (boutique en ligne)
     if insurance:
         from app.models.quote_request import QuoteRequest
@@ -233,18 +233,18 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
         paid_now, paid_prev = paid_between(start, end), paid_between(prev_start, start)
         amount = float(sum(float(o.total_amount) for o in paid_now))
         amount_prev = float(sum(float(o.total_amount) for o in paid_prev))
-        tiles += [tile("Encaissé" + (f" ({tenant.currency})" if tenant.currency else ""), amount, amount_prev, declared=True),
-                  tile("Commandes payées", len(paid_now), len(paid_prev), declared=True)]
+        tiles += [tile("Ventes confirmées" + (f" ({tenant.currency})" if tenant.currency else ""), amount, amount_prev, declared=True),
+                  tile("Nombre de ventes", len(paid_now), len(paid_prev), declared=True)]
         # Parcours : commandes et paiements comptés comme les tuiles (paiement déclaré sur la période).
         pending = [o for o in orders if o.status == OrderStatus.PENDING and start <= as_utc(o.created_at) < end]
         detail = f"{money(amount, tenant.currency)} déclarés"
         if pending:
-            detail += f" · {len(pending)} en attente ({money(sum(float(o.total_amount) for o in pending), tenant.currency)})"
+            detail += f" · {len(pending)} à confirmer ({money(sum(float(o.total_amount) for o in pending), tenant.currency)})"
         opportunities = next((f["value"] for f in home["funnel"] if f["key"] == "opportunities"), 0)
         funnel = [("Conversations", len(conversations), ""), ("Opportunités de vente", opportunities, ""),
                   ("Commandes", sum(1 for o in orders if start <= as_utc(o.created_at) < end), ""),
-                  ("Payées", len(paid_now), detail)]
-        funnel_title, funnel_sub = "Vos ventes", "Du premier message au paiement"
+                  ("Vendues", len(paid_now), detail)]
+        funnel_title, funnel_sub = "Vos ventes", "Du premier message à la vente"
         from app.services.order_reminders import summary as relance_summary
 
         relance = relance_summary(orders, start, end)
@@ -312,7 +312,7 @@ async def build(db, tenant, start: datetime, end: datetime, renewal: bool = Fals
             savings.append(("Rendez-vous obtenus sans déplacement", _plural(count, "rendez-vous", "rendez-vous")))
     if relance and relance[0]:
         relanced, paid_after, paid_amount = relance
-        savings.append(("Commandes relancées par Bob → payées ensuite",
+        savings.append(("Commandes relancées par Bob → vendues ensuite",
                         f"{number(relanced)} → {number(paid_after)}"
                         + (f" ({money(paid_amount, tenant.currency)})" if paid_amount else "")))
     work_days = round(saved / 60 / 7)
@@ -420,10 +420,10 @@ async def _to_validate(db, tenant, end, rdv: bool, insurance: bool, base: str) -
         pending = (await db.execute(select(Order).where(Order.tenant_id == tenant.id, Order.status == OrderStatus.PENDING))).scalars().all()
         if pending:
             items.append((_plural(len(pending), "commande", "commandes"),
-                          "en attente : si vous avez été payé, cliquez « Paiement reçu »"))
+                          "à confirmer : si la preuve de vente est arrivée, cliquez « Vendu »"))
             old = [o for o in pending if as_utc(o.created_at) < end - timedelta(days=7)]
             if old:
-                items.append((_plural(len(old), "commande", "commandes"), "en attente depuis plus de 7 jours : payées ou à annuler ?"))
+                items.append((_plural(len(old), "commande", "commandes"), "à confirmer depuis plus de 7 jours : vendues ou à annuler ?"))
         url = base + "?tab=orders"
     return {"items": items, "url": url}
 

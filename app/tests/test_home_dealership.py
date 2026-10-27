@@ -179,7 +179,7 @@ async def test_store_home_is_unchanged(db_session):
 
     assert s["business_type"] == "ONLINE_STORE"
     assert set(s["kpis"]) == {"paid", "pending", "conversion", "conversations"}
-    assert [f["label"] for f in s["funnel"]] == ["Conversations", "Opportunités de vente", "Commandes", "Payées"]
+    assert [f["label"] for f in s["funnel"]] == ["Conversations", "Opportunités de vente", "Commandes", "Vendues"]
     assert all(d["appointment"] is False for d in s["daily"])
 
 

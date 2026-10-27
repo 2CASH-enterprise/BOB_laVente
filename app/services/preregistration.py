@@ -113,7 +113,7 @@ CONTENT = {
     ONLINE_STORE: {
         "does": ["Il répond à vos clients sur WhatsApp, tout de suite, de jour comme de nuit.",
                  "Il présente vos produits avec leurs prix et leur stock, et conseille le bon article.",
-                 "Il prend la commande, envoie le lien de paiement et relance les commandes non payées.",
+                 "Il prend la commande, envoie le lien de paiement et relance les ventes à confirmer.",
                  "Il vous passe la main dès qu'un client a besoin de vous."],
         "products": "Le fichier de vos produits (Excel ou CSV) : nom, prix, stock, description, et une photo si possible.",
     },
@@ -200,13 +200,13 @@ def example_home(sector: str | None, first_name: str | None, currency: str | Non
                 "funnel": [{"key": "conversations", "label": "Conversations", "value": 386},
                            {"key": "opportunities", "label": "Opportunités de vente", "value": 162},
                            {"key": "orders", "label": "Commandes", "value": 71},
-                           {"key": "paid", "label": "Payées", "value": 48}],
+                           {"key": "paid", "label": "Vendues", "value": 48}],
                 "daily": _days(now, _COUNTS, {2, 5, 9, 12, 15, 18, 20, 23, 25, 27, 29}, set()),
                 "activity": [
                     {"kind": "PAYMENT", "title": "Paiement confirmé", "detail": "Fatou Diallo · 45 000", "at": ago(minutes=38)},
                     {"kind": "ORDER", "title": "Nouvelle commande", "detail": "Yao Kouassi · 2 articles · 28 500", "at": ago(hours=2)},
                     {"kind": "CUSTOMER", "title": "Nouveau client", "detail": "Mariam Traoré · venue d'une publicité Facebook", "at": ago(hours=3)},
-                    {"kind": "ORDER", "title": "Commande relancée par Bob, puis payée", "detail": "Koffi N'Guessan · 19 000", "at": ago(hours=6)},
+                    {"kind": "ORDER", "title": "Commande relancée par Bob, puis vendue", "detail": "Koffi N'Guessan · 19 000", "at": ago(hours=6)},
                 ]}
     if sector == CAR_DEALERSHIP:
         return {**base,

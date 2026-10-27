@@ -534,7 +534,7 @@ def test_dashboard_objection_table_for_a_dealership():
     body = html[start:html.index("Impossible de charger l'analyse des messages", start)]
     assert 's.measure === "APPOINTMENTS"' in body and "Rendez-vous obtenus" in body
     assert "o.appointment_rate_pct" in body and "o.enough_data" in body and "s.min_conversations_for_rate" in body
-    assert "<th>Payées</th>" in body  # la boutique garde son tableau
+    assert "<th>Vendues</th>" in body  # la boutique garde son tableau
 
 
 @pytest.mark.asyncio

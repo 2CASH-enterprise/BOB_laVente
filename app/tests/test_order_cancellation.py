@@ -136,7 +136,7 @@ async def test_paid_order_cannot_be_cancelled(client, db_session, unique_email, 
     r = await client.put(f"/api/v1/orders/{order.id}/cancel", headers=headers)
 
     assert r.status_code == 400
-    assert "payée" in r.json()["detail"]
+    assert "confirmée" in r.json()["detail"]
     assert (await _reload(db_session, Product, phone.id)).stock_quantity == 9  # stock inchangé
 
 
