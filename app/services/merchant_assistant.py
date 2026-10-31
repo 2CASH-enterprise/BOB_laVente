@@ -33,7 +33,7 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 
 from app.services.naomy_bridge import NaomyError, iso, sign
 
@@ -892,7 +892,7 @@ async def scan_alerts(db, now: datetime | None = None) -> dict:
     from app.services.simple_mode import customer_label
 
     now = now or datetime.now(timezone.utc)
-    report = {"sales": 0, "waiting": 0}
+    report = {"sales": 0, "waiting": 0, "orders": 0, "appointments": 0, "booked": 0, "complaints": 0, "quotes": 0}
     from app.core.config import get_settings
 
     if not get_settings().assistant_enabled:
@@ -928,14 +928,24 @@ async def scan_alerts(db, now: datetime | None = None) -> dict:
                   [(f"bob:vendu:{order.id}", "Vendu"), (f"bob:annuler:{order.id}", "Annuler")], kind="ALERT",
                   ref=f"vente:{order.id}", fallback_subject=f"Vente à confirmer : {name}", now=now)
             report["sales"] += 1
-        # Client qui vous attend : Bob a passé la main.
+        # Lot 92d — les urgences dans le fil WhatsApp (validé le 31/10) : nouvelle commande, rendez-vous à confirmer
+        # (avec ses détails) ou réservé par Bob, réclamation et devis transmis (courtier).
+        await _new_order_alerts(db, connection, tenant, since, now, report)
+        detailed = await _appointment_alerts(db, connection, tenant, since, now, report)
+        await _insurance_alerts(db, connection, tenant, since, now, report)
+        # Client qui vous attend : Bob a passé la main. Lot 92d : dès le transfert, même si le dernier message du
+        # client date de plus de 30 minutes ; un rendez-vous à confirmer déjà annoncé avec ses détails suffit.
         account = (await db.execute(select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == tenant.id))).scalars().first()
+        handed_over = select(Message.conversation_id).where(
+            Message.tenant_id == tenant.id, Message.sender == MessageSender.SYSTEM,
+            Message.message_type.in_(TRANSFER_TYPES), Message.created_at >= since)
         waiting = (await db.execute(select(Conversation).where(
             Conversation.tenant_id == tenant.id, Conversation.status == ConversationStatus.WAITING_HUMAN,
-            func.coalesce(Conversation.last_message_at, Conversation.updated_at) >= since))).scalars().all()
+            or_(func.coalesce(Conversation.last_message_at, Conversation.updated_at) >= since,
+                Conversation.id.in_(handed_over))))).scalars().all()
         for conversation in waiting:
             ref = f"attente:{conversation.id}"
-            if await _alert_exists(db, tenant.id, ref, now - WAITING_REPEAT):
+            if conversation.id in detailed or await _alert_exists(db, tenant.id, ref, now - WAITING_REPEAT):
                 continue
             customer = await db.get(Customer, conversation.customer_id)
             last = (await db.execute(select(Message.content).where(
@@ -952,6 +962,125 @@ async def scan_alerts(db, now: datetime | None = None) -> dict:
             report["waiting"] += 1
     await db.commit()
     return report
+
+
+TRANSFER_TYPES = ("handoff", "negotiation_escalated")  # transferts de Bob (pas une reprise par un humain)
+
+
+async def _new_order_alerts(db, connection, tenant, since, now, report) -> None:
+    """Nouvelle commande (panier ou Bob) = vente à confirmer, tout de suite, avec Vendu / Annuler."""
+    from app.models.conversation import Conversation
+    from app.models.customer import Customer
+    from app.models.order import Order, OrderItem, OrderStatus
+    from app.models.product import Product
+    from app.services.handoff_service import conversation_link
+    from app.services.simple_mode import customer_label
+
+    orders = (await db.execute(select(Order).where(Order.tenant_id == tenant.id, Order.status == OrderStatus.PENDING,
+                                                   Order.created_at >= since).order_by(Order.created_at))).scalars().all()
+    for order in orders:
+        ref = f"commande:{order.id}"
+        if await _alert_exists(db, tenant.id, ref):
+            continue
+        customer = await db.get(Customer, order.customer_id)
+        conversation = await db.get(Conversation, order.conversation_id) if order.conversation_id else None
+        items = (await db.execute(select(OrderItem.quantity, Product.name, OrderItem.variant_label)
+                                  .join(Product, Product.id == OrderItem.product_id)
+                                  .where(OrderItem.order_id == order.id))).all()
+        what = ", ".join(f"{q} × {short(n, 30)}{f' ({v})' if v else ''}" for q, n, v in items[:3])
+        mode = {"PICKUP": "retrait en boutique", "DELIVERY": "livraison"}.get(order.fulfillment or "")
+        name = customer_label(customer)
+        link = f"\nVoir : {conversation_link(conversation)}" if conversation is not None else ""
+        queue(db, connection,
+              f"🛒 Nouvelle commande de {name} : {amount(order.total_amount)} {order.currency}"
+              f"{f' ({what})' if what else ''}{f', {mode}' if mode else ''}.{link}\n\n"
+              "Quand le paiement est reçu, touchez « Vendu ».",
+              [(f"bob:vendu:{order.id}", "Vendu"), (f"bob:annuler:{order.id}", "Annuler")], kind="ALERT", ref=ref,
+              fallback_subject=f"Nouvelle commande : {name}", now=now)
+        report["orders"] += 1
+
+
+async def _appointment_alerts(db, connection, tenant, since, now, report) -> set:
+    """Rendez-vous à confirmer (demande transmise) avec ses détails ; rendez-vous réservé par Bob, pour information."""
+    from app.models.appointment_request import APPOINTMENT_KINDS, STATUS_CONFIRMED, STATUS_REQUESTED, AppointmentRequest
+    from app.models.conversation import Conversation
+    from app.models.customer import Customer
+    from app.services.handoff_service import conversation_link
+    from app.services.local_time import format_local, tenant_zone
+    from app.services.simple_mode import customer_label
+
+    detailed = set()
+    rows = (await db.execute(select(AppointmentRequest).where(
+        AppointmentRequest.tenant_id == tenant.id,
+        or_(and_(AppointmentRequest.status == STATUS_REQUESTED, AppointmentRequest.created_at >= since),
+            and_(AppointmentRequest.status == STATUS_CONFIRMED, AppointmentRequest.confirmed_by == "BOB",
+                 AppointmentRequest.confirmed_at >= since))).order_by(AppointmentRequest.created_at))).scalars().all()
+    for appointment in rows:
+        booked = appointment.status == STATUS_CONFIRMED
+        ref = f"{'rdvok' if booked else 'rdv'}:{appointment.id}"
+        if await _alert_exists(db, tenant.id, ref):
+            if not booked:
+                detailed.add(appointment.conversation_id)
+            continue
+        customer = await db.get(Customer, appointment.customer_id)
+        conversation = await db.get(Conversation, appointment.conversation_id)
+        name = customer_label(customer)
+        what = " — ".join(p for p in (APPOINTMENT_KINDS.get(appointment.kind, appointment.kind), appointment.vehicle_label) if p)
+        link = f"\nVoir : {conversation_link(conversation)}" if conversation is not None else ""
+        if booked:
+            queue(db, connection, f"📅 Rendez-vous réservé par Bob : {what}, avec {name}, le "
+                                  f"{format_local(appointment.scheduled_at, tenant_zone(tenant))}.{link}",
+                  kind="ALERT", ref=ref, fallback_subject=f"Rendez-vous réservé : {name}", now=now)
+            report["booked"] += 1
+        else:
+            queue(db, connection, f"📅 Rendez-vous à confirmer : {what}, demandé par {name} — disponibilités : "
+                                  f"{short(appointment.availability, 120)}.{link}\nConfirmez-lui l'heure, ou laissez Bob continuer.",
+                  [(f"bob:continue:{appointment.conversation_id}", "Bob continue")], kind="ALERT", ref=ref,
+                  fallback_subject=f"Rendez-vous à confirmer : {name}", now=now)
+            detailed.add(appointment.conversation_id)
+            report["appointments"] += 1
+    return detailed
+
+
+async def _insurance_alerts(db, connection, tenant, since, now, report) -> None:
+    """Courtier : réclamation reçue (délai légal) et demande de devis transmise au cabinet."""
+    from app.models.conversation import Conversation
+    from app.models.customer import Customer
+    from app.models.insurance_complaint import InsuranceComplaint
+    from app.models.quote_request import QuoteRequest
+    from app.services import insurance
+    from app.services.business_type import is_insurance
+    from app.services.handoff_service import conversation_link
+    from app.services.simple_mode import customer_label
+
+    if not is_insurance(tenant):
+        return
+    for complaint in (await db.execute(select(InsuranceComplaint).where(
+            InsuranceComplaint.tenant_id == tenant.id, InsuranceComplaint.received_at >= since))).scalars().all():
+        ref = f"reclamation:{complaint.id}"
+        if await _alert_exists(db, tenant.id, ref):
+            continue
+        customer = await db.get(Customer, complaint.customer_id) if complaint.customer_id else None
+        conversation = await db.get(Conversation, complaint.conversation_id) if complaint.conversation_id else None
+        name = customer_label(customer) if customer is not None else "Un client"
+        due = f" Réponse attendue avant le {complaint.due_on.strftime('%d/%m/%Y')}." if complaint.due_on else ""
+        link = f"\nVoir : {conversation_link(conversation)}" if conversation is not None else ""
+        queue(db, connection, f"⚠️ Réclamation {complaint.reference} de {name} : « {short(complaint.subject, 150)} ».{due}{link}",
+              kind="ALERT", ref=ref, fallback_subject=f"Réclamation {complaint.reference} : {name}", now=now)
+        report["complaints"] += 1
+    for request in (await db.execute(select(QuoteRequest).where(
+            QuoteRequest.tenant_id == tenant.id, QuoteRequest.status == insurance.STATUS_SUBMITTED,
+            QuoteRequest.submitted_at >= since))).scalars().all():
+        ref = f"devis:{request.id}"
+        if await _alert_exists(db, tenant.id, ref):
+            continue
+        customer = await db.get(Customer, request.customer_id)
+        conversation = await db.get(Conversation, request.conversation_id) if request.conversation_id else None
+        name = customer_label(customer)
+        link = f"\nVoir : {conversation_link(conversation)}" if conversation is not None else ""
+        queue(db, connection, f"📝 Demande de devis transmise : {insurance.branch_label(request.branch)}, pour {name}.{link}",
+              kind="ALERT", ref=ref, fallback_subject=f"Demande de devis : {name}", now=now)
+        report["quotes"] += 1
 
 
 # --- Bilan du soir, par e-mail -----------------------------------------------------------------------------------------

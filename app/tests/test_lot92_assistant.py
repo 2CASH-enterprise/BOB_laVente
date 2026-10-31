@@ -656,11 +656,11 @@ async def test_no_alert_when_switched_off(client, db_session, assistant_env, mon
     db_session.add(Message(tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.CUSTOMER,
                            message_type="image", content="[image]", created_at=NOW))
     await db_session.commit()
-    assert await ma.scan_alerts(db_session, NOW) == {"sales": 0, "waiting": 0}
+    assert not any((await ma.scan_alerts(db_session, NOW)).values())
     connection.assistant_enabled = True
     await db_session.commit()
     monkeypatch.setattr(assistant_env.settings, "assistant_enabled", False)
-    assert await ma.scan_alerts(db_session, NOW) == {"sales": 0, "waiting": 0}
+    assert not any((await ma.scan_alerts(db_session, NOW)).values())
 
 
 # --- Bilan du soir par e-mail ---------------------------------------------------------------------------------------
