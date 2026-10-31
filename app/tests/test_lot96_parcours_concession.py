@@ -360,8 +360,8 @@ async def test_dealer_can_switch_it_off_and_card_is_shown(client, db_session, un
     tenant = await db_session.get(Tenant, tenant.id)
     await db_session.refresh(tenant)
     assert not gf.applies(tenant)
-    assert 'class="card guided-card"' in DASH and "body.insurance .guided-card, body.real-estate .guided-card" in DASH
-    assert 'if (currentBusinessType === "CAR_DEALERSHIP") loadGuidedFlow();' in DASH
+    assert 'class="card guided-card"' in DASH and "body.insurance .guided-card {" in DASH
+    assert 'if (currentBusinessType === "CAR_DEALERSHIP" || currentBusinessType === "REAL_ESTATE") loadGuidedFlow();' in DASH
 
 
 def test_amounts_filters_and_titles_fit_whatsapp():

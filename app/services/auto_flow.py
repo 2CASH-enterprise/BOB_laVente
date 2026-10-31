@@ -24,7 +24,7 @@ from app.services import vehicle as vehicle_service
 PREFIX = "g:"
 PAGE = 10
 HUMAN = (f"{PREFIX}human", "Un conseiller")
-KINDS = {"E": "ESSAI", "R": "ESTIMATION_REPRISE"}
+KINDS = {"E": "ESSAI", "R": "ESTIMATION_REPRISE", "V": "VISITE", "S": "ESTIMATION"}  # V, S : agence (lot 97)
 YEARS = ["Avant 2010", "2010 à 2014", "2015 à 2018", "2019 à 2021", "2022 ou plus récent"]
 MILEAGES = ["Moins de 50 000 km", "50 000 à 100 000 km", "100 000 à 150 000 km", "Plus de 150 000 km"]
 CONDITION_PROFILE = {"N": "NEUF", "O": "OCCASION", "A": "INDIFFERENT"}
@@ -293,8 +293,7 @@ async def slots(db, tenant, tu, customer, kind: str, product=None, note: str | N
     settings = await booking.load_settings(db, tenant.id)
     zone = tenant_zone(tenant)
     ref = str(product.id) if product is not None else "-"
-    what = (f"Essai du *{_name(product)}*." if product is not None else "Essai d'un véhicule.") if kind == "E" \
-        else _you(tu, "Estimation de votre voiture.", "Estimation de ta voiture.")
+    what = _what(tu, kind, product)
     free = await booking.free_slots(db, tenant, settings, zone, datetime.now(timezone.utc)) if booking.booking_enabled(settings) else []
     if not free:
         return await ask_time(db, tenant, tu, customer, kind, ref, f"{note + chr(10) if note else ''}{what} ")
@@ -303,6 +302,17 @@ async def slots(db, tenant, tu, customer, kind: str, product=None, note: str | N
     rows.append((f"{PREFIX}sl:{kind}:{ref}:x", "Autre moment", _you(tu, "Écrivez-moi le jour et l'heure", "Écris-moi le jour et l'heure")))
     body = (f"{note}\n" if note else "") + what + " " + _you(tu, "Quand êtes-vous disponible ?", "Quand es-tu disponible ?")
     return _turn([{"type": "list", "body": body, "button": "Choisir un créneau", "rows": rows}])
+
+
+def _what(tu, kind, product) -> str:
+    if kind == "E":
+        return f"Essai du *{_name(product)}*." if product is not None else "Essai d'un véhicule."
+    if kind == "V":  # lot 97 : visite d'un bien
+        return f"Visite : *{product.name}*." if product is not None else "Visite d'un bien."
+    if kind == "S":  # lot 97 : un conseiller vient voir le bien du propriétaire
+        return _you(tu, "Pour une estimation juste, un conseiller vient voir votre bien.",
+                    "Pour une estimation juste, un conseiller vient voir ton bien.")
+    return _you(tu, "Estimation de votre voiture.", "Estimation de ta voiture.")
 
 
 async def ask_time(db, tenant, tu, customer, kind, ref, lead=""):
@@ -315,7 +325,7 @@ async def ask_time(db, tenant, tu, customer, kind, ref, lead=""):
 
 
 async def book(db, tenant, tu, customer, conversation, kind: str, product, slot: str | None = None,
-               availability: str | None = None):
+               availability: str | None = None, notes: str | None = None):
     """Le même outil que Bob : créneau revérifié et confirmé, ou demande transmise au conseiller."""
     from app.agents.tools import ToolExecutor
     from app.services import appointment_service, prospect, shop_cart
@@ -330,6 +340,10 @@ async def book(db, tenant, tu, customer, conversation, kind: str, product, slot:
         request["slot"] = slot
     if availability:
         request["availability"] = availability
+    if notes:
+        request["notes"] = notes[:300]
+    if kind == "S" and not notes:  # lot 97 : le bien décrit par le propriétaire accompagne la demande
+        request["notes"] = await _owner_notes(db, tenant, customer)
     if kind == "R":
         profile = await prospect.load(db, tenant.id, customer.id)
         if profile is not None and profile.trade_in:
@@ -346,8 +360,9 @@ async def book(db, tenant, tu, customer, conversation, kind: str, product, slot:
     if result.get("status") == "appointment_requested":
         if cart is not None:
             shop_cart._touch(cart, awaiting=None)
-        what = (f"Demande d'essai envoyée{f' : {_name(product)}' if product is not None else ''}" if kind == "E"
-                else "Demande d'estimation envoyée")
+        what = {"E": f"Demande d'essai envoyée{f' : {_name(product)}' if product is not None else ''}",
+                "V": f"Demande de visite envoyée{f' : {product.name}' if product is not None else ''}"}.get(
+            kind, "Demande d'estimation envoyée")
         return _turn(handoff=True, handoff_done=True,
                      handoff_text=f"{what}, {availability}. " + _you(tu, "Un conseiller vous confirme l'heure ici.",
                                                                     "Un conseiller te confirme l'heure ici."))
@@ -360,8 +375,16 @@ async def book(db, tenant, tu, customer, conversation, kind: str, product, slot:
     return _turn([_buttons(result.get("error") or "Je n'ai pas pu enregistrer la demande.", [HUMAN, (f"{PREFIX}menu", "Menu")])])
 
 
+async def _owner_notes(db, tenant, customer) -> str | None:
+    from app.services import immo_flow
+
+    return await immo_flow.owner_summary(db, tenant, customer)
+
+
 def after(tu, kind) -> dict:
     """« Autre chose ? » après un rendez-vous confirmé."""
+    if kind in ("V", "S"):  # lot 97 : agence
+        return _buttons("Autre chose ?", [(f"{PREFIX}ib", "Voir d'autres biens"), HUMAN])
     if kind == "R":
         buttons = [(f"{PREFIX}veh", "Voir les véhicules"), (f"{PREFIX}e:-", "Réserver un essai"), (f"{PREFIX}fi", "Financement")]
     else:
@@ -504,7 +527,7 @@ async def expects_text(db, tenant, customer, text) -> bool:
     from app.services import shop_cart
 
     wanted = shop_cart.awaiting(await shop_cart.get_cart(db, tenant, customer))
-    return bool(wanted and wanted.startswith("auto:") and _plausible(text))
+    return bool(wanted and wanted.startswith(("auto:", "immo:")) and _plausible(text))
 
 
 async def handle_text(db, tenant, tu, customer, conversation, text):
@@ -522,7 +545,7 @@ async def handle_text(db, tenant, tu, customer, conversation, text):
         shop_cart._touch(cart, awaiting=None)
         await _profile(db, tenant, customer, trade_in=clean[:120])
         return await trade_in_year(db, tenant, tu)
-    match = re.fullmatch(r"auto:avail:([ER]):(.+)", wanted)
+    match = re.fullmatch(r"auto:avail:([ERVS]):(.+)", wanted)
     if match and conversation is not None:
         product = await _vehicle(db, tenant, match.group(2)) if match.group(2) != "-" else None
         return await book(db, tenant, tu, customer, conversation, match.group(1), product, availability=clean[:300])

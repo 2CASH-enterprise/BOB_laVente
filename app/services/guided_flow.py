@@ -53,20 +53,21 @@ class GuidedTurn:
 
 def applies(tenant) -> bool:
     from app.core.config import get_settings
-    from app.services.business_type import is_dealership, is_store
+    from app.services.business_type import is_dealership, is_real_estate, is_store
 
-    return bool(get_settings().guided_flow_enabled and tenant is not None and (is_store(tenant) or is_dealership(tenant))
-                and getattr(tenant, "guided_flow_enabled", True))  # lot 96 : concessions aussi
+    return bool(get_settings().guided_flow_enabled and tenant is not None
+                and (is_store(tenant) or is_dealership(tenant) or is_real_estate(tenant))
+                and getattr(tenant, "guided_flow_enabled", True))  # lots 96 et 97 : concessions et agences aussi
 
 
 async def expects_text(db, tenant, customer, text) -> bool:
     """Ce message écrit est-il attendu par le parcours (panier, quantité, adresse, reprise, disponibilité) ?"""
     from app.services import auto_flow, shop_cart
-    from app.services.business_type import is_dealership
+    from app.services.business_type import is_dealership, is_real_estate
 
     if not applies(tenant) or customer is None:
         return False
-    if is_dealership(tenant):
+    if is_dealership(tenant) or is_real_estate(tenant):
         return await auto_flow.expects_text(db, tenant, customer, text)
     return await shop_cart.expects_text(db, tenant, customer, text)
 
@@ -308,12 +309,16 @@ async def handle(db, tenant, text: str | None, reply_id: str | None, referral=No
 
     if not applies(tenant):
         return None
-    from app.services.business_type import is_dealership
+    from app.services.business_type import is_dealership, is_real_estate
 
     if is_dealership(tenant):  # lot 96 : essai, reprise, financement (pas de panier)
         from app.services import auto_flow
 
         return await auto_flow.handle(db, tenant, text, reply_id, referral, tu, customer, conversation)
+    if is_real_estate(tenant):  # lot 97 : visite, estimation (jamais de chiffre)
+        from app.services import immo_flow
+
+        return await immo_flow.handle(db, tenant, text, reply_id, referral, tu, customer, conversation)
     if reply_id and reply_id.startswith(PREFIX):
         parts = reply_id[len(PREFIX):].split(":")
         action = parts[0]
