@@ -411,8 +411,8 @@ async def test_stock_menu_and_voice_notes(client, db_session, assistant_env):
     texts = [r.payload["texte"] for r in await _replies(db_session, tenant)]
     assert "Épuisés (Bob ne les propose plus) :\n• Écharpe soie" in texts[0] and "• Sac cabas : 2" in texts[0]
     assert texts[1] == "• Écharpe soie : 0 en stock"  # recherche sans accents
-    assert texts[2] == ma.MENU
-    assert texts[3] == ma.VOICE_REPLY
+    assert texts[2:4] == [ma.MENU_1[0], ma.MENU_2[0]]  # lot 92c : le menu en 2 messages de 3 boutons
+    assert texts[4] == ma.VOICE_REPLY
 
 
 @pytest.mark.asyncio
@@ -508,7 +508,7 @@ async def test_commands_and_plain_words_are_never_products(client, db_session, a
     await _say(client, db_session, headers, _msg("Bonjour"))
     await _say(client, db_session, headers, _msg("15000"))
     texts = [r.payload["texte"] for r in await _replies(db_session, tenant)]
-    assert texts == ["Aucune vente à confirmer pour l'instant.", ma.MENU, ma.MENU]
+    assert texts == ["Aucune vente à confirmer pour l'instant.", ma.MENU_1[0], ma.MENU_2[0], ma.MENU_1[0], ma.MENU_2[0]]
     assert all("attend_reponse" not in r.payload for r in await _replies(db_session, tenant))
 
 
@@ -534,7 +534,7 @@ async def test_waiting_ends_after_30_minutes(client, db_session, assistant_env):
     await db_session.commit()
     await _say(client, db_session, headers, _msg("12000"))
     assert await _products(db_session, tenant) == []
-    assert (await _replies(db_session, tenant))[-1].payload["texte"] == ma.MENU
+    assert (await _replies(db_session, tenant))[-1].payload["texte"] == ma.MENU_2[0]
 
 
 @pytest.mark.asyncio

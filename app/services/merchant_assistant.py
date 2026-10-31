@@ -65,14 +65,17 @@ COMMANDS = {
     "pause": "pause", "aide": "help", "menu": "help",
 }
 
-MENU = ("Je suis Bob, votre vendeur. Écrivez par exemple :\n"
-        "• mes ventes : vos ventes du jour, de la semaine et du mois\n"
-        "• ventes à confirmer : les ventes qui attendent votre « Vendu »\n"
-        "• vendu : confirmer une vente\n"
-        "• qui attend : les clients qui vous attendent\n"
-        "• stock : les produits épuisés (ou « stock robe » pour un produit)\n"
-        "• ajouter : ajouter un produit en photo\n\n"
-        "Pour ajouter un produit : envoyez sa photo, puis son nom et son prix (par exemple : Sac cabas 12000).")
+# Lot 92c — menu en boutons (choix de Thérèse du 31/10, voie a) : contrat 1.3.1 inchangé). « menu », « aide »,
+# « aide bob » (et tout message non compris) envoient 2 messages de 3 boutons ; le 2e part seulement après la réponse
+# 200 de Naomy au 1er (statut WAITING, ref « after:<id_message_bob du 1er> »). Les commandes écrites restent valables.
+MENU_1 = ("Je suis Bob, votre vendeur.",
+          [("bob:menu:ventes", "📈 Mes ventes"), ("bob:menu:a-confirmer", "⏳ Ventes à confirmer"), ("bob:menu:vendu", "✅ Vendu")])
+MENU_2 = ("Vos clients et vos produits. Pour ajouter un produit : envoyez sa photo, puis son nom et son prix "
+          "(par exemple : Sac cabas 12000).",
+          [("bob:menu:qui-attend", "👥 Qui attend"), ("bob:menu:stock", "📦 Stock"), ("bob:menu:ajouter", "📸 Ajouter")])
+MENU_COMMANDS = {"ventes": "sales", "a-confirmer": "to_confirm", "vendu": "sold", "qui-attend": "waiting",
+                 "stock": "stock", "ajouter": "add"}
+WAITING = "WAITING"
 ADD_HELP = ("Pour ajouter un produit : envoyez sa photo, puis son nom et son prix, par exemple : Sac cabas 12000.\n"
             "Vous pouvez aussi tout envoyer d'un coup, en légende de la photo.")
 VOICE_REPLY = "Je ne sais pas encore écouter les notes vocales : écrivez-moi pour l'instant (par exemple « mes ventes »)."
@@ -357,8 +360,33 @@ async def send_outbox(db, now: datetime | None = None, sender=None, mailer=None,
         else:
             item.next_attempt_at, item.last_error = now + timedelta(minutes=RETRY_MINUTES[item.attempts - 1]), error
             report["retry"] += 1
+    released = await _release_waiting(db, due)
     await db.commit()
+    if released:  # lot 92c : 2e message du menu, envoyé dès que le 1er est accepté
+        more = await send_outbox(db, now, sender=sender, mailer=mailer, tenant_id=tenant_id)
+        for key, value in more.items():
+            report[key] = report.get(key, 0) + value
     return report
+
+
+async def _release_waiting(db, items) -> int:
+    """Message en attente d'un autre : libéré si le 1er est parti (SENT), abandonné s'il n'est jamais parti."""
+    from app.models.naomy import AssistantOutbox
+
+    released = 0
+    for item in items:
+        if item.status == "PENDING":
+            continue  # renvoi prévu : la suite attend encore
+        waiting = (await db.execute(select(AssistantOutbox).where(
+            AssistantOutbox.status == WAITING, AssistantOutbox.ref == f"after:{item.message_id}"))).scalars().all()
+        for follower in waiting:
+            if item.status == "SENT":
+                follower.status, follower.next_attempt_at = "PENDING", None
+                released += 1
+            else:
+                follower.status, follower.last_error = "SKIPPED", "Message précédent du menu non envoyé"
+    await db.flush()
+    return released
 
 
 # --- Actions du commerçant (mêmes fonctions que le tableau de bord) ------------------------------------------------
@@ -587,7 +615,15 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
         queue(db, connection, "Pour arrêter Bob avec un client, répondez-lui vous-même : Bob s'arrête sur cette "
                               "conversation. Écrivez « reprendre » pour lui rendre la main.", now=now)
     else:
-        queue(db, connection, MENU, now=now)
+        send_menu(db, connection, now)
+
+
+def send_menu(db, connection, now) -> None:
+    """Lot 92c : les 2 messages du menu ; le 2e attend que le 1er soit accepté par Naomy (200)."""
+    first = queue(db, connection, MENU_1[0], MENU_1[1], now=now)
+    second = queue(db, connection, MENU_2[0], MENU_2[1], now=now)
+    second.status, second.ref = WAITING, f"after:{first.message_id}"
+    second.created_at = first.created_at + timedelta(microseconds=1)  # ordre garanti dans la file
 
 
 # --- Photo avec légende : nouveau produit, sans IA ---------------------------------------------------------------------
@@ -774,8 +810,10 @@ async def handle_button(db, connection, tenant, button: str, now) -> None:
         queue(db, connection, await bob_continues(db, tenant, ref), now=now)
     elif action == "retour":
         queue(db, connection, RETURN_REPLY, now=now)
+    elif action == "menu" and ref in MENU_COMMANDS:  # lot 92c : les 6 boutons du menu = les commandes écrites
+        await handle_command(db, connection, tenant, MENU_COMMANDS[ref], "", now)
     else:
-        queue(db, connection, MENU, now=now)
+        send_menu(db, connection, now)
 
 
 async def process(db, message_id, now: datetime | None = None) -> str:
