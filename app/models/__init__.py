@@ -79,4 +79,5 @@ from app.models.image_job import ImageJob  # noqa: F401 — lot 87
 from app.models.catalog_import import CatalogImport  # noqa: F401 — lot 88
 from app.models.naomy import (AssistantMessage, AssistantOutbox, NaomyConnection, NaomyEvent, NaomyPairingCode,  # noqa: F401 — lots 89, 92
                               NaomyPairingRequest, NaomyReminder)
+from app.models.cart import Cart  # noqa: F401 — lot 95
 from app.services import naomy_bridge as _naomy_bridge  # noqa: F401,E402 — lot 89 : événements Naomy détectés à chaque enregistrement

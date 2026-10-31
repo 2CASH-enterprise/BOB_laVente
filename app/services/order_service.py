@@ -39,7 +39,15 @@ async def create_order(
     payment_method: str | None,
     created_by: str,
     conversation_id: uuid.UUID | None = None,
+    delivery_fee: float | None = None,
+    fulfillment: str | None = None,
 ) -> Order:
+    """
+    Lot 95 : une ligne peut porter « variant » (position dans les variantes du produit) et « label » (« Taille 42 ») :
+    le prix et le stock sont alors ceux de la variante, relus ici ; un libellé qui ne correspond plus (catalogue
+    modifié entre-temps) refuse la ligne plutôt que de vendre une autre taille. Les frais de livraison s'ajoutent au
+    total sur une ligne à part (Order.delivery_fee).
+    """
     if not items:
         raise OrderCreationError("Aucun article dans la commande")
 
@@ -74,30 +82,42 @@ async def create_order(
         if product is None or not product.active:
             raise OrderCreationError(f"Produit introuvable ou indisponible : {product_id}")
 
+        variant_index, chosen_label, variant = _variant(product, item)
         # Vérification stock RÉELLE au moment de la commande (section 18.1, 33) — jamais celle
         # que l'IA a pu voir plus tôt dans la conversation, qui peut être obsolète.
-        if product.stock_quantity < quantity:
-            raise OrderCreationError(
-                f"Stock insuffisant pour {product.name} : demandé {quantity}, disponible {product.stock_quantity}"
-            )
+        available = int(variant.get("stock") or 0) if variant is not None else product.stock_quantity
+        if available < quantity:
+            name = f"{product.name} ({chosen_label})" if chosen_label else product.name
+            raise OrderCreationError(f"Stock insuffisant pour {name} : demandé {quantity}, disponible {available}")
 
         if currency is None:
             currency = product.currency
         elif currency != product.currency:
             raise OrderCreationError("Impossible de mélanger plusieurs devises dans une même commande")
 
-        unit_price = float(product.price)
+        unit_price = _variant_price(product, variant)
         subtotal = unit_price * quantity
         total += subtotal
 
-        order_items.append(
-            OrderItem(product_id=product.id, quantity=quantity, unit_price=unit_price, subtotal=subtotal)
-        )
+        order_items.append(OrderItem(product_id=product.id, quantity=quantity, unit_price=unit_price, subtotal=subtotal,
+                                     variant_index=variant_index, variant_label=chosen_label))
         # Décrément immédiat du stock (réservation) — cohérent avec section 18 : la commande
         # engage réellement le stock dès sa création, pas seulement à la livraison.
-        product.stock_quantity -= quantity
+        if variant is not None:
+            _move_variant_stock(product, variant_index, -quantity)
+            product.stock_quantity = max(0, (product.stock_quantity or 0) - quantity)
+        else:
+            product.stock_quantity -= quantity
+
+    fee = round(float(delivery_fee), 2) if delivery_fee is not None else None
+    if fee is not None and fee < 0:
+        raise OrderCreationError("Frais de livraison invalides")
+    if fee:
+        total += fee
 
     order = Order(
+        delivery_fee=fee,
+        fulfillment=fulfillment,
         tenant_id=tenant_id,
         customer_id=customer_id,
         conversation_id=conversation_id,
@@ -128,6 +148,48 @@ async def create_order(
 
     await db.flush()
     return order
+
+
+def variant_label(variant: dict, index: int) -> str:
+    """« Taille 42 », « Couleur Rouge · Taille M » : le même libellé que le parcours à boutons (lot 94)."""
+    options = variant.get("options") or {}
+    return " · ".join(f"{k} {val}" for k, val in options.items() if val not in (None, "")) or (variant.get("sku") or f"Modèle {index + 1}")
+
+
+def _variant(product: Product, item: dict) -> tuple[int | None, str | None, dict | None]:
+    raw = item.get("variant")
+    if raw in (None, ""):
+        return None, None, None
+    try:
+        index = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise OrderCreationError("Taille ou modèle invalide") from exc
+    variants = product.variants or []
+    variant = variants[index] if 0 <= index < len(variants) and isinstance(variants[index], dict) else None
+    label = variant_label(variant, index) if variant is not None else None
+    if variant is None or (item.get("label") and str(item["label"]) != label):
+        raise OrderCreationError(f"La taille ou le modèle choisi pour {product.name} n'est plus disponible")
+    return index, label, variant
+
+
+def _variant_price(product: Product, variant: dict | None) -> float:
+    if variant is not None and variant.get("price") not in (None, ""):
+        try:
+            return float(variant["price"])
+        except (TypeError, ValueError):
+            pass
+    return float(product.price)
+
+
+def _move_variant_stock(product: Product, index: int, delta: int, label: str | None = None) -> None:
+    """Le JSON des variantes est recopié (sinon SQLAlchemy ne voit pas le changement)."""
+    variants = [dict(v) if isinstance(v, dict) else v for v in (product.variants or [])]
+    if not (0 <= index < len(variants)) or not isinstance(variants[index], dict):
+        return
+    if label is not None and variant_label(variants[index], index) != label:
+        return  # catalogue réorganisé depuis la vente : on ne touche pas une autre taille
+    variants[index]["stock"] = max(0, int(variants[index].get("stock") or 0) + delta)
+    product.variants = variants
 
 
 async def mark_order_as_paid(db: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UUID) -> Order:
@@ -199,6 +261,8 @@ async def cancel_order(db: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UU
         product = await db.get(Product, item.product_id)
         if product is not None and product.tenant_id == tenant_id:
             product.stock_quantity += item.quantity  # même produit désactivé : le stock reste juste
+            if item.variant_index is not None:  # lot 95 : la taille vendue retrouve aussi son stock
+                _move_variant_stock(product, item.variant_index, item.quantity, item.variant_label)
 
     for delivery in deliveries:
         if delivery.status not in (DeliveryStatus.CANCELLED, DeliveryStatus.FAILED):

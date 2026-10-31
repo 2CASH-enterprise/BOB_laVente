@@ -12,7 +12,23 @@ async def get_order_item_lines(db: AsyncSession, order_id, currency: str) -> lis
     """Partagé entre confirmation de commande et reçu — jamais dupliqué, jamais désynchronisé."""
     stmt = select(OrderItem, Product.name).join(Product, Product.id == OrderItem.product_id).where(OrderItem.order_id == order_id)
     rows = (await db.execute(stmt)).all()
-    return [f"{name} x{item.quantity} — {float(item.subtotal):,.0f} {currency}".replace(",", " ") for item, name in rows]
+    lines = [f"{name}{f' ({item.variant_label})' if item.variant_label else ''} x{item.quantity} — "
+             f"{float(item.subtotal):,.0f} {currency}".replace(",", " ") for item, name in rows]
+    # Lot 95 : la taille vendue et les frais de livraison apparaissent partout (confirmation, reçu, page de paiement,
+    # emails, relances), sur la même ligne que les articles.
+    order = await db.get(Order, order_id)
+    fee_line = delivery_line(order, currency) if order is not None else None
+    return lines + ([fee_line] if fee_line else [])
+
+
+def delivery_line(order: Order, currency: str) -> str | None:
+    if order.delivery_fee is not None and float(order.delivery_fee) > 0:
+        return f"Livraison — {float(order.delivery_fee):,.0f} {currency}".replace(",", " ")
+    if order.fulfillment == "DELIVERY" and order.delivery_fee is not None:
+        return "Livraison — offerte"
+    if order.fulfillment == "PICKUP":
+        return "Retrait en boutique"
+    return None
 
 
 def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant_name: str, payment_link: str | None,

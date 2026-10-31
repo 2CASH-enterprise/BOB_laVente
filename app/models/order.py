@@ -56,6 +56,10 @@ class Order(Base):
     last_reminder_channel: Mapped[str | None] = mapped_column(String(16))
     # Lot 68 — code de la page « Payer ma commande » (…/c/CODE), impossible à deviner, créé au premier besoin.
     pay_code: Mapped[str | None] = mapped_column(String(16), unique=True)
+    # Lot 95 — panier WhatsApp : frais de livraison inclus dans le total (None = aucun ou non précisés) et mode de
+    # remise choisi par le client (DELIVERY, PICKUP ; None pour les commandes prises autrement).
+    delivery_fee: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    fulfillment: Mapped[str | None] = mapped_column(String(16))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -75,3 +79,7 @@ class OrderItem(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)  # prix au moment de la commande
     subtotal: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    # Lot 95 — taille ou modèle vendu (position dans les variantes du produit et libellé « Taille 42 ») : son prix et
+    # son stock sont ceux de la variante, pas ceux du produit.
+    variant_index: Mapped[int | None] = mapped_column(Integer)
+    variant_label: Mapped[str | None] = mapped_column(String(120))

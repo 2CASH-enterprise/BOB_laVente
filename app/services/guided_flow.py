@@ -10,11 +10,13 @@ Décisions du 31/10 :
   une vraie question va à l'IA ;
 - actif par défaut pour les boutiques, interrupteur « Parcours à boutons » dans Réglages de Bob ;
 - « Voir plus » au-delà de 10 produits ;
-- jusqu'au lot 95 (panier), le deuxième bouton des cartes reste « Ça m'intéresse » : Bob prend la commande comme avant.
+- lot 95 : le deuxième bouton des cartes devient « Ajouter au panier » ; panier, livraison ou retrait, confirmation et
+  suivi sont dans shop_cart.py.
 Concessions, agences et courtiers : inchangés (lots 96 à 98).
 
 Identifiants des boutons (préfixe « g: ») : g:menu, g:cat, g:all:<page>, g:off:<page>, g:r:<rayon>:<page>,
-g:d:<produit>, g:t:<produit>, g:v:<produit>:<variante>, g:human. « interest:<produit> » reste celui du lot 76.
+g:d:<produit>, g:t:<produit>, g:human ; panier (lot 95) : g:a, g:v, g:q, g:k, g:clr, g:ok, g:m, g:ad, g:val, g:s.
+« interest:<produit> » reste celui du lot 76 (cartes envoyées par l'IA).
 """
 import logging
 import re
@@ -127,12 +129,19 @@ async def _categories(db, tenant, products) -> list[tuple]:
 
 # --- Les écrans ------------------------------------------------------------------------------------------------------
 
-async def welcome(db, tenant, tu: bool) -> GuidedTurn:
+CART_BUTTON = (f"{PREFIX}k", "Voir mon panier")
+# Lot 95 : « Parler à un conseiller » faisait 22 caractères (20 au plus sur WhatsApp, coupé en « Parler à un conseill »).
+HUMAN_BUTTON = (f"{PREFIX}human", "Parler à la boutique")
+
+
+async def welcome(db, tenant, tu: bool, basket: bool = False) -> GuidedTurn:
     products = await _products(db, tenant)
     buttons = [(f"{PREFIX}cat", "Voir le catalogue")]
-    if any(_offer(p) for p in products):
+    if basket:
+        buttons.append(CART_BUTTON)
+    elif any(_offer(p) for p in products):
         buttons.append((f"{PREFIX}off:0", "Voir les offres"))
-    buttons.append((f"{PREFIX}human", "Parler à un conseiller"))
+    buttons.append(HUMAN_BUTTON)
     body = (f"Bonjour et bienvenue chez *{tenant.name}* ! Je suis Bob, le vendeur de la boutique. "
             + _you(tu, "Que souhaitez-vous faire ?", "Que veux-tu faire ?"))
     return GuidedTurn([{"type": "buttons", "body": body, "buttons": buttons}])
@@ -163,7 +172,7 @@ async def catalogue(db, tenant, tu: bool) -> GuidedTurn:
     return GuidedTurn([{"type": "list", "body": body, "button": "Choisir un rayon", "rows": rows}])
 
 
-async def page(db, tenant, tu: bool, kind: str, ref, number: int) -> GuidedTurn:
+async def page(db, tenant, tu: bool, kind: str, ref, number: int, basket: bool = False) -> GuidedTurn:
     """Une page de 10 produits : carrousel pour ceux qui ont une photo, liste pour les autres, puis « Voir plus »."""
     from app.agents.tools import has_sendable_photo
     from app.services.product_cards import card_body, money_text
@@ -181,7 +190,7 @@ async def page(db, tenant, tu: bool, kind: str, ref, number: int) -> GuidedTurn:
     if not products:
         return GuidedTurn([{"type": "buttons", "body": _you(tu, "Pas d'offre en ce moment. Voulez-vous voir le catalogue ?",
                                                            "Pas d'offre en ce moment. Tu veux voir le catalogue ?"),
-                            "buttons": [(f"{PREFIX}cat", "Voir le catalogue"), (f"{PREFIX}human", "Parler à un conseiller")]}])
+                            "buttons": [(f"{PREFIX}cat", "Voir le catalogue"), HUMAN_BUTTON]}])
     start = max(0, number) * PAGE
     chunk = products[start:start + PAGE]
     if not chunk:
@@ -190,13 +199,13 @@ async def page(db, tenant, tu: bool, kind: str, ref, number: int) -> GuidedTurn:
     with_photo = [p for p in chunk if has_sendable_photo(p)]
     without = [p for p in chunk if not has_sendable_photo(p)]
     if len(with_photo) == 1 and not without:
-        return await details(db, tenant, tu, with_photo[0])
+        return await details(db, tenant, tu, with_photo[0], basket)
     if len(with_photo) >= 2:
-        intro = _you(tu, f"Voici {title}. Touchez « Voir détails » ou « Ça m'intéresse » sous celui qui vous plaît.",
-                     f"Voici {title}. Touche « Voir détails » ou « Ça m'intéresse » sous celui qui te plaît.")
+        intro = _you(tu, f"Voici {title}. Touchez « Voir détails » ou « Ajouter au panier » sous celui qui vous plaît.",
+                     f"Voici {title}. Touche « Voir détails » ou « Ajouter au panier » sous celui qui te plaît.")
         actions.append({"type": "carousel", "body": intro, "cards": [
             {"link": p.image_url.strip(), "body": card_body(p, with_price=True), "product_id": str(p.id), "name": p.name,
-             "buttons": [(f"{PREFIX}d:{p.id}", "Voir détails"), (f"interest:{p.id}", "Ça m'intéresse")]}
+             "buttons": [(f"{PREFIX}d:{p.id}", "Voir détails"), (f"{PREFIX}a:{p.id}", "Ajouter au panier")]}
             for p in with_photo]})
     else:
         without = with_photo + without
@@ -208,6 +217,8 @@ async def page(db, tenant, tu: bool, kind: str, ref, number: int) -> GuidedTurn:
     more = len(products) > start + PAGE
     nav = [(f"{PREFIX}{kind}:{ref}:{number + 1}" if kind == "r" else f"{PREFIX}{kind}:{number + 1}", "Voir plus")] if more else []
     nav.append((f"{PREFIX}cat", "Retour au catalogue"))
+    if basket:
+        nav.append(CART_BUTTON)
     left = len(products) - start - len(chunk)
     actions.append({"type": "buttons", "body": (f"Il reste {left} produit{'s' if left > 1 else ''}." if more else
                                                 _you(tu, "Vous pouvez aussi m'écrire ce que vous cherchez.",
@@ -216,7 +227,7 @@ async def page(db, tenant, tu: bool, kind: str, ref, number: int) -> GuidedTurn:
     return GuidedTurn(actions)
 
 
-async def details(db, tenant, tu: bool, product) -> GuidedTurn:
+async def details(db, tenant, tu: bool, product, basket: bool = False) -> GuidedTurn:
     from app.agents.tools import has_sendable_photo
     from app.services.product_cards import price_line
 
@@ -231,8 +242,10 @@ async def details(db, tenant, tu: bool, product) -> GuidedTurn:
     if variants:
         lines.append("En stock : " + ", ".join(label for _, label, _, _ in variants[:12]))
     buttons = ([(f"{PREFIX}t:{product.id}", "Choisir la taille" if any("taille" in label.lower() for _, label, _, _ in variants)
-                 else "Choisir le modèle")] if variants else [(f"interest:{product.id}", "Ça m'intéresse")])
+                 else "Choisir le modèle")] if variants else [(f"{PREFIX}a:{product.id}", "Ajouter au panier")])
     buttons.append((f"{PREFIX}cat", "Retour au catalogue"))
+    if basket:
+        buttons.append(CART_BUTTON)
     image = product.image_url.strip() if has_sendable_photo(product) else None
     return GuidedTurn([{"type": "buttons", "body": "\n".join(lines), "buttons": buttons, "image": image,
                         "product_id": str(product.id), "name": product.name}])
@@ -251,8 +264,12 @@ async def sizes(db, tenant, tu: bool, product) -> GuidedTurn:
 
 
 async def variant_text(db, tenant_id, reply_id: str | None) -> str | None:
-    """« g:v:<produit>:<i> » → « Ça m'intéresse : Robe wax Awa (Taille 38) » pour Bob (jusqu'au panier du lot 95)."""
+    """
+    « g:v:<produit>:<i> » → ce que le client a choisi, noté dans la conversation : « Robe wax Awa (Taille 38) ».
+    Si le parcours est coupé entre-temps, Bob reçoit « Ça m'intéresse : Robe wax Awa (Taille 38) » et prend la commande.
+    """
     from app.models.product import Product
+    from app.models.tenant import Tenant
     from app.services.product_cards import BUTTON_TITLE
 
     if not reply_id or not reply_id.startswith(f"{PREFIX}v:"):
@@ -262,38 +279,49 @@ async def variant_text(db, tenant_id, reply_id: str | None) -> str | None:
     if product is None or product.tenant_id != tenant_id or not parts[3].isdigit():
         return None
     label = next((label for i, label, _, _ in _variants(product) if i == int(parts[3])), None)
-    return f"{BUTTON_TITLE} : {product.name}" + (f" ({label})" if label else "")
+    chosen = product.name + (f" ({label})" if label else "")
+    return chosen if applies(await db.get(Tenant, tenant_id)) else f"{BUTTON_TITLE} : {chosen}"
 
 
-async def handle(db, tenant, text: str | None, reply_id: str | None, referral=None, tu: bool = False) -> GuidedTurn | None:
-    """Réponse du parcours, ou None : l'IA répond (question libre, variante choisie, « Ça m'intéresse »)."""
+async def handle(db, tenant, text: str | None, reply_id: str | None, referral=None, tu: bool = False,
+                 customer=None, conversation=None) -> GuidedTurn | None:
+    """Réponse du parcours, ou None : l'IA répond (question libre, « Ça m'intéresse » d'une carte de l'IA)."""
     from app.models.product import Product
+    from app.services import shop_cart
 
     if not applies(tenant):
         return None
-    if reply_id and reply_id.startswith(PREFIX) and not reply_id.startswith(f"{PREFIX}v:"):
+    if reply_id and reply_id.startswith(PREFIX):
         parts = reply_id[len(PREFIX):].split(":")
         action = parts[0]
+        cart_turn = await shop_cart.handle_tap(db, tenant, tu, customer, conversation, action, parts)
+        if cart_turn is not None:
+            return cart_turn
+        basket = await shop_cart.has_items(db, tenant, customer)
         if action == "menu":
-            return await welcome(db, tenant, tu)
+            return await welcome(db, tenant, tu, basket)
         if action == "cat":
             return await catalogue(db, tenant, tu)
         if action in ("all", "off") and len(parts) == 2 and parts[1].isdigit():
-            return await page(db, tenant, tu, action, None, int(parts[1]))
+            return await page(db, tenant, tu, action, None, int(parts[1]), basket)
         if action == "r" and len(parts) == 3 and _uuid(parts[1]) and parts[2].isdigit():
-            return await page(db, tenant, tu, "r", _uuid(parts[1]), int(parts[2]))
+            return await page(db, tenant, tu, "r", _uuid(parts[1]), int(parts[2]), basket)
         if action in ("d", "t") and len(parts) == 2 and _uuid(parts[1]):
             product = await db.get(Product, _uuid(parts[1]))
             if product is None or product.tenant_id != tenant.id or not product.active:
                 return await catalogue(db, tenant, tu)
-            return await (details if action == "d" else sizes)(db, tenant, tu, product)
+            if action == "d":
+                return await details(db, tenant, tu, product, basket)
+            return await sizes(db, tenant, tu, product)
         if action == "human":
             return GuidedTurn(handoff=True, handoff_text=_you(
                 tu, "Je préviens un conseiller : il vous répond ici dès que possible.",
                 "Je préviens un conseiller : il te répond ici dès que possible."))
-        return await welcome(db, tenant, tu)  # bouton inconnu (ancien message) : on repart de l'accueil
+        return await welcome(db, tenant, tu, basket)  # bouton inconnu (ancien message) : on repart de l'accueil
     if not reply_id and wants_welcome(text, referral):
-        return await welcome(db, tenant, tu)
+        return await welcome(db, tenant, tu, await shop_cart.has_items(db, tenant, customer))
+    if not reply_id and customer is not None:
+        return await shop_cart.handle_text(db, tenant, tu, customer, text)  # « panier », quantité ou adresse attendue
     return None
 
 
@@ -327,7 +355,7 @@ async def deliver(db, tenant, conversation, wa_client, to: str, turn: GuidedTurn
 
     sent = 0
     for action in turn.actions:
-        kind = "guided"
+        kind = action.get("message_type") or "guided"
         metadata = {"guided": action["type"]}
         try:
             if action["type"] == "buttons":

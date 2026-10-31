@@ -1496,6 +1496,31 @@
           </label>
           <div id="guided-flow-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
+        <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="fulfillment-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Livraison et retrait<button class="tip"></button><span class="tip-bubble" hidden>Quand un client valide son panier sur WhatsApp, Bob lui propose les modes que vous cochez ici. Si un seul mode est coché, la question n'est pas posée. Les frais s'ajoutent au total de la commande, sur une ligne à part. Laissez les frais vides si vous les annoncez vous-même au client.</span></div>
+          <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 8px;">
+            <input type="checkbox" id="ff-delivery"> Livraison
+          </label>
+          <div id="ff-delivery-fields" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 8px 0 4px 24px;">
+            <div><label for="ff-fee" style="font-size: 12px; color: var(--muted);">Frais de livraison (<span class="ff-cur">XOF</span>)</label>
+              <input id="ff-fee" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="Ex. 1500 ; 0 = offerte"></div>
+            <div><label for="ff-zone" style="font-size: 12px; color: var(--muted);">Zone livrée</label>
+              <input id="ff-zone" class="input" maxlength="200" placeholder="Ex. Abidjan"></div>
+            <div><label for="ff-min" style="font-size: 12px; color: var(--muted);">Minimum de commande (facultatif)</label>
+              <input id="ff-min" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="Ex. 10000"></div>
+            <div><label for="ff-free" style="font-size: 12px; color: var(--muted);">Livraison offerte dès (facultatif)</label>
+              <input id="ff-free" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="Ex. 50000"></div>
+          </div>
+          <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 10px;">
+            <input type="checkbox" id="ff-pickup"> Retrait en boutique
+          </label>
+          <div style="margin: 8px 0 4px 24px;">
+            <label for="ff-address" style="font-size: 12px; color: var(--muted);">Adresse de la boutique</label>
+            <input id="ff-address" class="input" maxlength="300" placeholder="Ex. Cocody, rue des Jardins, face à la pharmacie">
+          </div>
+          <button class="action" style="margin-top: 10px;" onclick="saveFulfillment()">Enregistrer</button>
+          <div id="fulfillment-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
         <div class="card insurance-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="insurance-profile-card">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Vous êtes<button class="tip"></button><span class="tip-bubble" hidden>Le règlement CIMA demande que le client sache clairement qui lui parle. Bob se présente avec votre statut, et donne votre numéro d'agrément, votre compagnie et votre contact réclamations quand un client les demande. Il n'invente jamais ce que vous n'avez pas indiqué.</span></div>
           <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px;" id="insurance-structure-options"></div>
@@ -3033,7 +3058,7 @@ function showTab(name) {
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "pige") loadPige();  // lot 81
   if (name === "leads") loadLeads();  // lot 83
-  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
@@ -3715,6 +3740,49 @@ async function saveGuidedFlow() {
     msg.textContent = box.checked ? "Bob proposera votre catalogue en boutons." : "Bob répondra seulement par écrit.";
   } catch (e) {
     box.checked = !box.checked;
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function loadFulfillment() {
+  const card = document.getElementById("fulfillment-card");
+  if (!card) return;
+  try {
+    const f = await api("/api/v1/tenants/me/fulfillment");
+    document.getElementById("ff-delivery").checked = !!f.delivery_enabled;
+    document.getElementById("ff-pickup").checked = !!f.pickup_enabled;
+    document.getElementById("ff-fee").value = f.delivery_fee ?? "";
+    document.getElementById("ff-zone").value = f.delivery_zone || "";
+    document.getElementById("ff-min").value = f.delivery_min_order ?? "";
+    document.getElementById("ff-free").value = f.delivery_free_from ?? "";
+    document.getElementById("ff-address").value = f.pickup_address || "";
+    card.querySelectorAll(".ff-cur").forEach((el) => { el.textContent = f.currency || "XOF"; });
+  } catch (e) { /* carte réservée aux boutiques */ }
+}
+
+function fulfillmentNumber(id) {
+  const raw = document.getElementById(id).value.trim();
+  return raw === "" ? null : Number(raw);
+}
+
+async function saveFulfillment() {
+  const msg = document.getElementById("fulfillment-msg");
+  const payload = {
+    delivery_enabled: document.getElementById("ff-delivery").checked,
+    delivery_fee: fulfillmentNumber("ff-fee"),
+    delivery_zone: document.getElementById("ff-zone").value.trim() || null,
+    delivery_min_order: fulfillmentNumber("ff-min"),
+    delivery_free_from: fulfillmentNumber("ff-free"),
+    pickup_enabled: document.getElementById("ff-pickup").checked,
+    pickup_address: document.getElementById("ff-address").value.trim() || null,
+  };
+  try {
+    await api("/api/v1/tenants/me/fulfillment", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload) });
+    msg.style.color = "var(--success)";
+    msg.textContent = "Enregistré. Bob proposera ces choix à la fin du panier.";
+  } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
   }
@@ -7494,7 +7562,14 @@ async function renderDeliveryPanel(orderId) {
     (s) => `<option value="${s}" ${s === order.delivery_status ? "selected" : ""}>${DELIVERY_LABELS[s]}</option>`
   ).join("");
 
-  panel.innerHTML = `
+  const variants = (order.items || []).filter((i) => i.variant_label).map((i) => `${esc(i.variant_label)} × ${i.quantity}`);
+  const fee = order.delivery_fee !== null && order.delivery_fee !== undefined && Number(order.delivery_fee) > 0
+    ? ` · frais ${Number(order.delivery_fee).toLocaleString()} ${esc(order.currency)}` : "";
+  const mode = order.fulfillment === "PICKUP" ? "Retrait en boutique"
+    : order.delivery_address ? `Livraison : ${esc(order.delivery_address)}${fee}` : "";
+  const summary = mode || variants.length
+    ? `<div style="font-size: 13px; margin-bottom: 8px;">${mode}${variants.length ? `<div style="color: var(--muted);">Tailles : ${variants.join(", ")}</div>` : ""}</div>` : "";
+  panel.innerHTML = `${summary}
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; max-width: 760px; margin-bottom: 8px;">
       <select id="delivery-status-${orderId}" class="input" aria-label="Étape de la livraison">${options}</select>
       <input id="delivery-tracking-${orderId}" class="input" placeholder="N° de suivi" value="${esc(order.tracking_number || "")}">

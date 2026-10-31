@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -850,6 +851,61 @@ async def update_guided_flow(payload: GuidedFlowReq, current_user: CurrentUser =
                           tenant_id=tenant.id, details={"enabled": payload.enabled})
     await db.commit()
     return {"enabled": tenant.guided_flow_enabled}
+
+
+class FulfillmentReq(BaseModel):
+    delivery_enabled: bool
+    delivery_fee: Decimal | None = Field(default=None, ge=0, le=100_000_000)
+    delivery_zone: str | None = Field(default=None, max_length=200)
+    delivery_min_order: Decimal | None = Field(default=None, ge=0, le=100_000_000)
+    delivery_free_from: Decimal | None = Field(default=None, ge=0, le=100_000_000)
+    pickup_enabled: bool
+    pickup_address: str | None = Field(default=None, max_length=300)
+
+
+def _fulfillment_response(tenant: Tenant) -> dict:
+    def number(value):
+        return float(value) if value is not None else None
+
+    return {"delivery_enabled": tenant.delivery_enabled, "delivery_fee": number(tenant.delivery_fee),
+            "delivery_zone": tenant.delivery_zone, "delivery_min_order": number(tenant.delivery_min_order),
+            "delivery_free_from": number(tenant.delivery_free_from), "pickup_enabled": tenant.pickup_enabled,
+            "pickup_address": tenant.pickup_address, "currency": tenant.currency or "XOF"}
+
+
+@router.get("/me/fulfillment", dependencies=[Depends(only_online_store())])
+async def get_fulfillment(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    """Lot 95 — livraison et retrait proposés au client à la fin du panier WhatsApp."""
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
+    return _fulfillment_response(tenant)
+
+
+@router.put("/me/fulfillment", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])
+async def update_fulfillment(payload: FulfillmentReq, current_user: CurrentUser = Depends(get_current_user),
+                             db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services.audit import log_audit_event
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
+    if not payload.delivery_enabled and not payload.pickup_enabled:
+        raise HTTPException(status_code=422, detail="Choisissez au moins la livraison ou le retrait en boutique.")
+    address = " ".join((payload.pickup_address or "").split()) or None
+    if payload.pickup_enabled and not address:
+        raise HTTPException(status_code=422, detail="Indiquez l'adresse de la boutique pour le retrait.")
+    tenant.delivery_enabled = payload.delivery_enabled
+    tenant.delivery_fee = payload.delivery_fee
+    tenant.delivery_zone = " ".join((payload.delivery_zone or "").split()) or None
+    tenant.delivery_min_order = payload.delivery_min_order or None
+    tenant.delivery_free_from = payload.delivery_free_from or None
+    tenant.pickup_enabled = payload.pickup_enabled
+    tenant.pickup_address = address
+    await log_audit_event(db, actor=str(current_user.user_id), action="FULFILLMENT_UPDATED", tenant_id=tenant.id,
+                          details={"delivery": payload.delivery_enabled, "pickup": payload.pickup_enabled})
+    await db.commit()
+    return _fulfillment_response(tenant)
 
 
 @router.put("/me/order-reminders", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])

@@ -107,3 +107,6 @@ async def forget(db, customer) -> None:
     customer.address = None
     await db.execute(delete(CustomerProductView).where(CustomerProductView.tenant_id == customer.tenant_id,
                                                        CustomerProductView.customer_id == customer.id))
+    from app.models.cart import Cart  # lot 95 : le panier en cours (adresse comprise) part aussi
+
+    await db.execute(delete(Cart).where(Cart.tenant_id == customer.tenant_id, Cart.customer_id == customer.id))

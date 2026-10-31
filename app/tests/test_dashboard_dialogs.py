@@ -97,5 +97,5 @@ def test_page_explanations_open_from_the_page_title():
 def test_every_infobulle_button_has_its_bubble():
     markup = HTML[:HTML.index("<script>", HTML.index("<body"))]
     assert len(re.findall(r'<button class="tip(?: hidden page-tip-btn)?"></button><span class="tip-bubble', markup)) \
-        == len(re.findall(r'<button class="tip', markup)) == 27  # lot 94 : parcours à boutons ; lot 80 : alertes et DPE ; lot 79 : « Votre agence » (immobilier) ; lot 68 : messages WhatsApp après 20 h ; lot 59 : kit de lancement et import Excel ; lot 54 : « Vous êtes » (courtier) ; lot 56 : son des nouvelles tâches ; lot 58 : liens tarifs et confidentialité
+        == len(re.findall(r'<button class="tip', markup)) == 28  # lot 95 : livraison et retrait ; lot 94 : parcours à boutons ; lot 80 : alertes et DPE ; lot 79 : « Votre agence » (immobilier) ; lot 68 : messages WhatsApp après 20 h ; lot 59 : kit de lancement et import Excel ; lot 54 : « Vous êtes » (courtier) ; lot 56 : son des nouvelles tâches ; lot 58 : liens tarifs et confidentialité
     assert "initTips();" in SCRIPT

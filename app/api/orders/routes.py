@@ -43,6 +43,8 @@ async def _build_order_detail(db: AsyncSession, order) -> OrderDetailResponse:
         delivery_address=order.delivery_address,
         payment_method=order.payment_method,
         created_by=order.created_by,
+        delivery_fee=order.delivery_fee,
+        fulfillment=order.fulfillment,
         items=items,
         delivery_status=delivery.status.value if delivery else None,
         tracking_number=delivery.tracking_number if delivery else None,

@@ -22,6 +22,7 @@ class OrderItemResponse(BaseModel):
     quantity: int
     unit_price: Decimal
     subtotal: Decimal
+    variant_label: str | None = None  # lot 95 : taille ou modèle vendu
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,6 +43,9 @@ class OrderResponse(BaseModel):
     first_reminder_at: datetime | None = None
     last_reminder_at: datetime | None = None
     last_reminder_channel: str | None = None
+    # Lot 95 — panier WhatsApp : frais de livraison inclus dans le total, livraison (DELIVERY) ou retrait (PICKUP).
+    delivery_fee: Decimal | None = None
+    fulfillment: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -116,13 +116,13 @@ async def test_greeting_gets_the_menu_without_ai(client, db_session, unique_emai
     assert r.json() == {"status": "processed", "guided": True}
     [menu] = _WA.sent
     assert menu["kind"] == "buttons" and "bienvenue chez *Boutique*" in menu["body"]
-    assert menu["buttons"] == [("g:cat", "Voir le catalogue"), ("g:off:0", "Voir les offres"), ("g:human", "Parler à un conseiller")]
+    assert menu["buttons"] == [("g:cat", "Voir le catalogue"), ("g:off:0", "Voir les offres"), ("g:human", "Parler à la boutique")]
     assert state["llm"].call_count == 0
     from app.models.message_signal import MessageSignal
 
     assert (await db_session.execute(select(MessageSignal))).first() is None  # ni réponse ni analyse par l'IA
     trace = (await db_session.execute(select(Message).where(Message.sender == MessageSender.AI))).scalar_one()
-    assert trace.message_type == "guided" and "[Boutons : Voir le catalogue · Voir les offres · Parler à un conseiller]" in trace.content
+    assert trace.message_type == "guided" and "[Boutons : Voir le catalogue · Voir les offres · Parler à la boutique]" in trace.content
 
 
 @pytest.mark.asyncio
@@ -175,7 +175,8 @@ async def test_products_carry_the_exact_price_and_two_buttons(db_session, unique
         [c["name"] for c in carousel["cards"]] == ["Robe Kente", "Robe wax Awa"]
     wax = next(c for c in carousel["cards"] if c["name"] == "Robe wax Awa")
     assert wax["body"].startswith("Robe wax Awa\nÀ partir de *15 000 XOF*")
-    assert wax["buttons"] == [(f"g:d:{items[0].id}", "Voir détails"), (f"interest:{items[0].id}", "Ça m'intéresse")]
+    # Lot 95 : « Ça m'intéresse » est devenu « Ajouter au panier ».
+    assert wax["buttons"] == [(f"g:d:{items[0].id}", "Voir détails"), (f"g:a:{items[0].id}", "Ajouter au panier")]
     assert turn.actions[-1]["buttons"] == [("g:cat", "Retour au catalogue")]
 
 
@@ -202,7 +203,7 @@ async def test_offers_are_the_products_with_a_crossed_price(db_session, unique_e
     nothing = await gf.page(db_session, tenant, False, "off", None, 0)
     assert "Pas d'offre en ce moment" in nothing.actions[0]["body"]
     assert [b[1] for b in (await gf.welcome(db_session, tenant, False)).actions[0]["buttons"]] == \
-        ["Voir le catalogue", "Parler à un conseiller"]  # pas de bouton « offres » sans offre
+        ["Voir le catalogue", "Parler à la boutique"]  # pas de bouton « offres » sans offre
 
 
 @pytest.mark.asyncio
@@ -216,10 +217,11 @@ async def test_details_and_sizes_in_stock_with_their_price(db_session, unique_em
     [sizes] = (await gf.sizes(db_session, tenant, False, items[0])).actions
     assert sizes["rows"] == [(f"g:v:{items[0].id}:0", "Taille 38", "15 000 XOF · 3 en stock"),
                              (f"g:v:{items[0].id}:2", "Taille 42", "16 500 XOF · 2 en stock")]
+    # Parcours coupé (réglage global des tests) : Bob reçoit « Ça m'intéresse » et prend la commande.
     assert await gf.variant_text(db_session, tenant.id, f"g:v:{items[0].id}:2") == "Ça m'intéresse : Robe wax Awa (Taille 42)"
     assert await gf.variant_text(db_session, uuid.uuid4(), f"g:v:{items[0].id}:2") is None  # autre boutique
     [plain] = (await gf.details(db_session, tenant, True, items[1])).actions
-    assert plain["buttons"][0] == (f"interest:{items[1].id}", "Ça m'intéresse")
+    assert plain["buttons"][0] == (f"g:a:{items[1].id}", "Ajouter au panier")
 
 
 # --- Boutons touchés, de bout en bout --------------------------------------------------------------------------------
@@ -242,14 +244,16 @@ async def test_taps_walk_the_journey_and_skip_the_ai(client, db_session, unique_
 
 
 @pytest.mark.asyncio
-async def test_a_size_chosen_goes_to_bob_with_the_product(client, db_session, unique_email, guided_on):
+async def test_a_size_chosen_leads_to_the_quantities(client, db_session, unique_email, guided_on):
+    # Lot 95 : la taille choisie ne part plus à Bob ; le code propose les quantités (panier).
     tenant, _, items = await _shop(db_session, unique_email, "pn-l94-11")
-    guided_on({"intents": [], "objections": []}, [text_response("Très bon choix ! Je prépare votre commande.")])
+    guided_on({"intents": [], "objections": []}, [])
     r = await client.post("/webhooks/whatsapp", json=_tap("pn-l94-11", "2250700000011", f"g:v:{items[0].id}:2",
                                                            "Taille 42", "list_reply"))
-    assert r.json()["ai_reply"] == "Très bon choix ! Je prépare votre commande."
+    assert r.json()["guided"] is True
+    assert _WA.sent[-1]["kind"] == "list" and _WA.sent[-1]["rows"][0][1:] == ("1", "16 500 XOF")
     incoming = (await db_session.execute(select(Message).where(Message.sender == MessageSender.CUSTOMER))).scalar_one()
-    assert incoming.content == "Ça m'intéresse : Robe wax Awa (Taille 42)"
+    assert incoming.content == "Robe wax Awa (Taille 42)"
 
 
 @pytest.mark.asyncio

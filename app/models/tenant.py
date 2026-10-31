@@ -79,6 +79,16 @@ class Tenant(Base):
     order_reminders_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 94 — commerce : parcours à boutons sur WhatsApp (accueil, catalogue, produits), actif par défaut, désactivable.
     guided_flow_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
+    # Lot 95 — commerce : remise des commandes du panier WhatsApp. Livraison (active par défaut) : frais uniques
+    # (vide = « précisés par la boutique », 0 = offerte), zone en texte libre, minimum de commande et livraison
+    # offerte à partir d'un montant (facultatifs). Retrait en boutique (inactif par défaut) : adresse de la boutique.
+    delivery_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
+    delivery_fee: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    delivery_zone: Mapped[str | None] = mapped_column(String(200))
+    delivery_min_order: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    delivery_free_from: Mapped[float | None] = mapped_column(Numeric(14, 2))
+    pickup_enabled: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
+    pickup_address: Mapped[str | None] = mapped_column(String(300))
     # Lot 68 — modèles WhatsApp autorisés pour cette boutique (le Super Admin peut les couper, ex. compte d'examen Meta).
     wa_templates_allowed: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 69 — alerte de plafond de conversations déjà envoyée ce mois-là (« 2026-10 ») et à quel seuil (80 puis 100).
