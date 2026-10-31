@@ -55,7 +55,11 @@ def test_memory_never_shows_the_mention_to_bob():
 
 @pytest.mark.asyncio
 async def test_free_plan_reply_has_the_mention_once_even_if_bob_copies_it(client, db_session, unique_email):
-    await _setup(db_session, unique_email, "phone_lot74_free", is_paid=False)
+    tenant = await _setup(db_session, unique_email, "phone_lot74_free", is_paid=False)
+    from app.models.product import Product
+
+    db_session.add(Product(tenant_id=tenant.id, sku="P93", name="Pagne", price=5000, currency="XOF", stock_quantity=1))  # lot 93 : un prix annoncé par Bob existe dans le catalogue
+    await db_session.commit()
     fake = RecordingLLM([text_response("Voici notre produit."),
                          text_response("Il coûte 5 000 F.\n\n_Propulsé par Bob 🤖_")])
     app.dependency_overrides[get_llm_client] = lambda: fake

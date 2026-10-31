@@ -3,6 +3,8 @@ Lot 76 — cartes produits sur WhatsApp (choix du 16/10 : 1A 2A 3A 4A).
 
 - Un produit : une carte (photo, texte court, bouton « Ça m'intéresse ») ; 2 ou 3 produits : un carrousel.
 - PAS de prix sur la carte (1A) : il arrive quand le client touche « Ça m'intéresse » (règle « prix sur demande »).
+  Lot 93 (décision du 31/10) : le prix est maintenant SUR la carte des boutiques et des concessions, écrit par le code
+  depuis la fiche (jamais par l'IA) ; prix barré et « à partir de » pour des variantes à prix différents.
 - 3 cartes au plus (2A), un seul bouton (3A). Bob les envoie quand il présente des produits ou qu'on lui demande
   une photo (4A). WhatsApp exige une photo par carte : un produit sans photo reste dans le texte de Bob.
 - Si WhatsApp refuse la carte, les photos partent comme avant (photo + légende).
@@ -21,8 +23,48 @@ INTEREST_PREFIX = "interest:"
 CARD_BODY_MAX = 160
 
 
-def card_body(product) -> str:
-    """Nom du produit + un détail utile tiré de la fiche (jamais le prix)."""
+def money_text(value, currency: str) -> str:
+    """15000 → « 15 000 XOF » ; 49.9 → « 49,90 EUR »."""
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        number = Decimal(str(value)).quantize(Decimal("0.01"))
+    except InvalidOperation:
+        return ""
+    whole, cents = divmod(number, 1)
+    text = f"{int(whole):,}".replace(",", " ")
+    if cents:
+        text += "," + f"{number:.2f}".split(".")[1]
+    return f"{text} {(currency or '').upper()}".strip()
+
+
+def price_line(product) -> str | None:
+    """Le prix de la fiche, tel quel : « *15 000 XOF* ~20 000 XOF~ » ou « À partir de *12 000 XOF* »."""
+    from decimal import Decimal, InvalidOperation
+
+    def number(raw):
+        try:
+            return Decimal(str(raw)) if raw not in (None, "") else None
+        except InvalidOperation:
+            return None
+
+    price = number(getattr(product, "price", None))
+    if price is None or price <= 0:
+        return None
+    currency = getattr(product, "currency", "") or ""
+    variant_prices = {number(v.get("price")) for v in (getattr(product, "variants", None) or [])
+                      if isinstance(v, dict) and (v.get("stock") or 0) > 0} - {None}
+    if variant_prices and len(variant_prices | {price}) > 1:
+        return f"À partir de *{money_text(min(variant_prices | {price}), currency)}*"
+    line = f"*{money_text(price, currency)}*"
+    before = number((getattr(product, "sheet", None) or {}).get("compare_at_price"))
+    if before is not None and before > price:
+        line += f" ~{money_text(before, currency)}~"
+    return line
+
+
+def card_body(product, with_price: bool = False) -> str:
+    """Nom du produit + (lot 93) son prix exact de la fiche + un détail utile tiré de la fiche."""
     from app.services.product_sheets import CATEGORIES
 
     detail = None
@@ -56,8 +98,10 @@ def card_body(product) -> str:
         detail = summary(product.vehicle) or None
     if detail is None and sheet.get("brand"):
         detail = f"Marque : {sheet['brand']}"
-    text = product.name if not detail else f"{product.name}\n{detail}"
-    return text[:CARD_BODY_MAX]
+    price = price_line(product) if with_price else None
+    lines = [product.name[:CARD_BODY_MAX - 60] if price else product.name] + ([price] if price else []) \
+        + ([detail] if detail else [])
+    return "\n".join(lines)[:CARD_BODY_MAX]
 
 
 _PRICE = re.compile(r"\d[\d\s.,\u202f\u00a0]*\s?(€|eur\b|euros?\b|xof\b|fcfa\b|cfa\b|f\b|\$|usd\b)", re.IGNORECASE)

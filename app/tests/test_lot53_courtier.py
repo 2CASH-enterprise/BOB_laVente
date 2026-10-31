@@ -161,6 +161,8 @@ async def test_bob_rewrites_an_amount_then_falls_back(db_session):
 @pytest.mark.asyncio
 async def test_other_sectors_keep_their_prices(db_session):
     store = await _cabinet(db_session, business_type=ONLINE_STORE)
+    db_session.add(Product(tenant_id=store.id, sku="S93", name="Sac", price=15000, currency="XOF", stock_quantity=1))  # lot 93 : un prix annoncé par Bob existe dans le catalogue
+    await db_session.commit()
     _, conversation = await _conversation(db_session, store)
     fake = FakeLLMClient([text_response("Le sac coûte 15 000 FCFA.")])
     text, _ = await generate_ai_reply_detailed(db_session, store, conversation, [], "Prix ?", fake)

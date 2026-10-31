@@ -235,6 +235,9 @@ async def generate_ai_reply_detailed(
 
     catalog = await catalog_overview(db, tenant.id)  # lot 75 : même réponse à « qu'avez-vous ? »
     system_prompt = build_system_prompt(tenant, knowledge_entries, customer_memory, catalog=catalog)
+    # Lot 93 — garde-fou des prix : ce que Bob peut citer (informations de la boutique, messages du client, outils).
+    price_context = [system_prompt, incoming_text or ""] + [m.content or "" for m in history
+                                                            if m.sender == MessageSender.CUSTOMER]
     business_type = getattr(tenant, "business_type", None)
     executor = ToolExecutor(db, tenant.id, conversation, business_type=business_type)
     if booking_outbox is not None:
@@ -296,9 +299,13 @@ async def generate_ai_reply_detailed(
 
     dealership = is_appointment_sector(tenant)  # lot 53 : concession et courtier
     insurance = is_insurance(tenant)
+    from app.services.business_type import is_store
+
+    store = is_store(tenant)  # lot 93 : boutiques (concessions et agences ont leurs propres garde-fous de montants)
     date_retry_done = False
     claim_retry_done = False
     amount_retry_done = False
+    price_retry_done = False
     try:
         for iteration in range(settings.max_tool_iterations + 1):
             last_try = iteration == settings.max_tool_iterations
@@ -370,6 +377,28 @@ async def generate_ai_reply_detailed(
                         system_prompt += _CORRECTIONS[correction](text, tenant)
                         logger.warning("Réponse de Bob à corriger (%s, conversation %s) : nouvel essai", correction, conversation.id)
                         continue
+                if text and store:
+                    # Lot 93 — chaque montant écrit par l'IA doit exister dans la boutique (une correction, puis
+                    # la phrase est retirée ; si rien ne reste, les cartes donnent le prix exact).
+                    from app.services import price_guard
+
+                    allowed, wrong = set(), []
+                    if price_guard.amounts_in(text):  # la plupart des réponses n'annoncent aucun montant
+                        allowed = await price_guard.known_amounts(db, tenant.id, conversation.customer_id, price_context)
+                        wrong = price_guard.wrong_amounts(text, allowed)
+                    if wrong and not price_retry_done and not last_try:
+                        price_retry_done = True
+                        system_prompt += price_guard.correction(wrong)
+                        logger.warning("Prix faux dans la réponse de Bob (conversation %s) : nouvel essai", conversation.id)
+                        continue
+                    if wrong:
+                        logger.warning("Prix faux retiré de la réponse de Bob (conversation %s)", conversation.id)
+                        text = price_guard.without_wrong_amounts(text, allowed)
+                        if not text:
+                            ids = list(executor.products_with_photo)[:3]
+                            if ids and image_outbox is not None:
+                                await executor.execute("send_product_images", {"product_ids": ids})
+                            text = price_guard.FALLBACK_WITH_CARDS if executor.pending_images else price_guard.FALLBACK_NO_PRODUCT
                 if text:
                     if image_outbox is not None and not insurance and not dealership:
                         from app.services.product_cards import without_unasked_prices
@@ -414,6 +443,7 @@ async def generate_ai_reply_detailed(
                 if block.get("type") != "tool_use":
                     continue
                 result = await executor.execute(block["name"], block.get("input", {}))
+                price_context.append(tool_result_to_text(result))  # lot 93 : montants lus par les outils
                 tool_results.append(
                     {
                         "type": "tool_result",

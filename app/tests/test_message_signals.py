@@ -170,7 +170,12 @@ def test_signal_table_never_stores_the_message_text():
 
 @pytest.mark.asyncio
 async def test_previous_shop_message_is_given_as_context(client, db_session, unique_email, overrides):
-    await _setup(db_session, unique_email, "pn-sig-2")
+    tenant = await _setup(db_session, unique_email, "pn-sig-2")
+    from app.models.product import Product
+
+    db_session.add(Product(tenant_id=tenant.id, sku="A56", name="Samsung A56", price=280000, currency="XOF",
+                           stock_quantity=1))  # lot 93 : un prix annoncé par Bob existe dans le catalogue
+    await db_session.commit()
     classifier = FakeClassifier()
     overrides(classifier, [text_response("Le Samsung A56 est à 280 000 XOF."), text_response("Très bien.")])
 

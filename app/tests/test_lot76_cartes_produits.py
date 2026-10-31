@@ -159,7 +159,7 @@ async def test_bob_presents_two_products_in_a_carousel_then_reads_the_tap(client
     carousel = _Recorder.carousels[0]
     assert carousel["body"] == "Touchez « Ça m'intéresse » sous le produit qui vous plaît."
     assert [c["button_id"] for c in carousel["cards"]] == [f"interest:{r.id}" for r in robes]
-    assert all("35" not in c["body"] for c in carousel["cards"])  # 1A : jamais de prix sur la carte
+    assert all(c["body"].endswith("\n*35 EUR*") for c in carousel["cards"])  # lot 93 : prix exact de la fiche
     stored = (await db_session.execute(select(Message).where(Message.message_type == "product_cards"))).scalar_one()
     assert stored.content == "🛍 Cartes envoyées : Robe 0, Robe 1"
 
@@ -182,11 +182,11 @@ async def test_one_product_is_one_card_and_refused_cards_fall_back_to_photos(cli
         tool_use_response("send_product_images", {"product_ids": [str(robe.id)]}, tool_use_id="t2"), text_response("Encore :"),
     ])
     await client.post("/webhooks/whatsapp", json=_payload("pn-l76-2", "33612340002", "Une photo ?"))
-    assert _Recorder.cards == [{"link": robe.image_url, "body": "Robe 0", "button_id": f"interest:{robe.id}"}]
+    assert _Recorder.cards == [{"link": robe.image_url, "body": "Robe 0\n*35 EUR*", "button_id": f"interest:{robe.id}"}]
 
     _Recorder.fail_cards = True
     await client.post("/webhooks/whatsapp", json=_payload("pn-l76-2", "33612340002", "Vous pouvez renvoyer la photo ?"))
-    assert _Recorder.images == [{"link": robe.image_url, "caption": "Robe 0"}]  # repli : photo + légende, sans prix
+    assert _Recorder.images == [{"link": robe.image_url, "caption": "Robe 0\n*35 EUR*"}]  # repli : photo + légende
     image = (await db_session.execute(select(Message).where(Message.message_type == "image"))).scalar_one()
     assert image.content == "📷 Photo envoyée : Robe 0"
 
@@ -311,6 +311,7 @@ async def test_bob_text_loses_the_priced_list_when_cards_go(db_session, unique_e
 
     tenant, conversation = await _shop(db_session, unique_email)
     bag = _product(tenant, "S1", name="Sac à main dame")
+    bag.price = 220000  # lot 93 : un prix annoncé par Bob existe dans le catalogue
     db_session.add(bag)
     await db_session.commit()
     outbox: list = []
@@ -353,6 +354,12 @@ async def test_unasked_prices_are_removed_from_bob_list_even_without_cards(db_se
     from app.tests.test_product_images import _shop
 
     tenant, conversation = await _shop(db_session, unique_email)
+    from app.tests.test_product_images import _product
+
+    red = _product(tenant, "S2", name="Sac rouge", image_url=None)  # sans photo : pas de carte
+    red.price = 22000  # lot 93 : un prix annoncé par Bob existe dans le catalogue
+    db_session.add(red)
+    await db_session.commit()
     llm = FakeLLMClient([text_response("Voici nos sacs :\n• Sac rouge – 22 000 XOF\nQuelle couleur ?")])
     reply, _ = await generate_ai_reply_detailed(db=db_session, tenant=tenant, conversation=conversation, history=[],
                                                 incoming_text="Vous avez des sacs ?", llm_client=llm, image_outbox=[])

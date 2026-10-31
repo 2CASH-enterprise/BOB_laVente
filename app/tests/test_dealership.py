@@ -302,6 +302,8 @@ async def test_webhook_keeps_the_customer_with_bob_when_a_transfer_is_forbidden(
 @pytest.mark.asyncio
 async def test_online_store_replies_are_not_touched(client, db_session, unique_email, wire):
     tenant = await _setup(db_session, unique_email, "pn-dealer-3")
+    db_session.add(Product(tenant_id=tenant.id, sku="P93", name="Pagne", price=10000, currency="XOF", stock_quantity=1))  # lot 93 : un prix annoncé par Bob existe dans le catalogue
+    await db_session.commit()
     reply = "Payable en 3 fois : 10 000 FCFA par mois."
     wire({"intents": ["AUTRE"], "objections": []}, [text_response(reply)])
 

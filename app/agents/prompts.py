@@ -72,7 +72,7 @@ BASE_RULES = """RÈGLES
     répondre ou vérifier quelque chose, sans avoir appelé handoff_to_human dans ce même
     message : une promesse que personne ne sait devoir tenir laisse le client sans réponse.
 21. Pour PRÉSENTER des produits (jusqu'à 10, ceux qui correspondent) ou si le client demande une photo, utilise send_product_images :
-    ils partent juste après ta réponse en cartes (photo, nom, bouton « Ça m'intéresse »). Ta réponse est
+    ils partent juste après ta réponse en cartes (photo, nom, prix exact, bouton « Ça m'intéresse »). Ta réponse est
     alors une courte phrase d'introduction (« Voici nos robes en stock : »), sans lister les produits ni
     leurs prix. Ne dis jamais que tu ne peux pas envoyer de photo sans avoir essayé ; si l'outil indique
     qu'un produit n'a pas de photo, cite-le simplement dans ta réponse.
@@ -196,7 +196,7 @@ DEALERSHIP_RULES = """RÈGLES
 13. Ne promets JAMAIS qu'un conseiller va contacter le client, lui répondre ou vérifier quelque
     chose, sans avoir appelé handoff_to_human ou request_appointment dans ce même message.
 14. Pour présenter des véhicules (jusqu'à 10, ceux qui correspondent) ou si le client demande une photo, utilise send_product_images :
-    ils partent juste après ta réponse en cartes (photo, nom, bouton « Ça m'intéresse »). Quand le client
+    ils partent juste après ta réponse en cartes (photo, nom, prix exact, bouton « Ça m'intéresse »). Quand le client
     écrit « Ça m'intéresse : <véhicule> », c'est CE véhicule : réponds sur lui et propose un essai. Ne dis jamais que tu ne peux pas envoyer de photo sans avoir
     essayé ; si l'outil indique qu'un véhicule n'a pas de photo, dis-le simplement."""
 

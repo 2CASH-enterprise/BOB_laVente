@@ -360,6 +360,8 @@ async def test_whatsapp_valuation_is_replaced_and_transferred(client, db_session
 @pytest.mark.asyncio
 async def test_other_sectors_keep_their_replies(client, db_session, wire):  # noqa: F811
     store = await _agency(db_session, business_type=ONLINE_STORE)
+    db_session.add(Product(tenant_id=store.id, sku="M93", name="Maison", price=300000, currency="EUR", stock_quantity=1))  # lot 93 : un prix annoncé par Bob existe dans le catalogue
+    await db_session.commit()
     text = "Envoyez-moi vos relevés de compte, et votre maison vaut 300 000 €."
     wire({"intents": ["AUTRE"], "objections": []}, [text_response(text)])
     response = await client.post("/webhooks/whatsapp", json=_payload(store.pnid, "33633333333", "Bonjour"))

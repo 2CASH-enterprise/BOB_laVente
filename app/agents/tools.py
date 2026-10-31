@@ -361,9 +361,14 @@ class ToolExecutor:
                 break
             from app.services.product_cards import card_body
 
-            # Lot 76 : la carte (ou, en repli, la légende de la photo) dit le nom et un détail — jamais le prix.
+            # Lot 76 : la carte (ou, en repli, la légende de la photo) dit le nom et un détail. Lot 93 : avec le prix
+            # exact de la fiche pour une boutique ou une concession (jamais pour une agence ni un courtier).
+            from app.services.business_type import is_insurance, is_real_estate
+
+            sector = type("S", (), {"business_type": self.business_type})()
+            with_price = not is_insurance(sector) and not is_real_estate(sector)
             self.pending_images.append({"product_id": str(product.id), "link": url, "name": product.name,
-                                        "card": card_body(product)})
+                                        "card": card_body(product, with_price=with_price)})
             queued.append(product.name)
         result = {"status": "photos_queued" if queued else "no_photo_sent", "photos_sent_after_reply": queued}
         if without_photo:

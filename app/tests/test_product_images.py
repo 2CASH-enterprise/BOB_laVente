@@ -72,7 +72,7 @@ async def test_only_real_https_photos_of_this_shop_are_queued(db_session, unique
     assert others["status"] == "no_photo_sent"
     # Lot 76 : la carte dit le nom (et un détail de la fiche), jamais le prix.
     assert executor.pending_images == [{"product_id": str(car.id), "link": "https://cdn.example.com/p.jpg",
-                                        "name": "Peugeot 5008", "card": "Peugeot 5008"}]
+                                        "name": "Peugeot 5008", "card": "Peugeot 5008\n*15 000 000 XOF*"}]
 
 
 @pytest.mark.asyncio
@@ -184,7 +184,7 @@ async def test_incident_customer_asks_for_a_photo_and_receives_it(client, db_ses
     assert _WhatsAppRecorder.texts == ["Voici la Peugeot 5008 !"]
     # Lot 76 : la photo part en carte avec le bouton « Ça m'intéresse ».
     assert _WhatsAppRecorder.cards == [{"to": "221700000401", "link": "https://cdn.example.com/5008.jpg",
-                                        "body": "Peugeot 5008", "button_id": f"interest:{car.id}", "title": "Ça m'intéresse"}]
+                                        "body": "Peugeot 5008\n*15 000 000 XOF*", "button_id": f"interest:{car.id}", "title": "Ça m'intéresse"}]
     stored = (await db_session.execute(select(Message).where(Message.message_type == "product_cards"))).scalar_one()
     assert stored.content == "🛍 Cartes envoyées : Peugeot 5008"
     assert stored.message_metadata == {"product_ids": [str(car.id)], "image_urls": ["https://cdn.example.com/5008.jpg"]}

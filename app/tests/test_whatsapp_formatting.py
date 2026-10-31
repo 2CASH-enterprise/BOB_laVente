@@ -77,6 +77,9 @@ async def test_bob_reply_is_stored_as_sent(client, db_session, unique_email, mon
     await db_session.flush()
     db_session.add(User(tenant_id=tenant.id, email=unique_email, hashed_password=hash_password("x"), full_name="U", role=Role.OWNER))
     db_session.add(WhatsAppAccount(tenant_id=tenant.id, waba_id="w", phone_number_id="pn-fmt-1", system_user_token="t"))
+    from app.models.product import Product
+
+    db_session.add(Product(tenant_id=tenant.id, sku="R93", name="Robe", price=15000, currency="XOF", stock_quantity=1))  # lot 93 : un prix annoncé par Bob existe dans le catalogue
     await db_session.commit()
     sent = []
 

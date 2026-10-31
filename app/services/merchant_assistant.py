@@ -477,10 +477,10 @@ async def bob_continues(db, tenant, conversation_id) -> str:
 
 # --- Commandes écrites -----------------------------------------------------------------------------------------------
 
-async def _sales_text(db, tenant) -> str:
+async def _sales_text(db, tenant, now=None) -> str:
     from app.services.simple_mode import sales_summary
 
-    s = await sales_summary(db, tenant)
+    s = await sales_summary(db, tenant, now=now)
     cur = s["currency"]
 
     def line(label, p):
@@ -511,7 +511,7 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
     from app.services.simple_mode import waiting_list
 
     if key == "sales":
-        queue(db, connection, await _sales_text(db, tenant), now=now)
+        queue(db, connection, await _sales_text(db, tenant, now), now=now)
     elif key == "to_confirm":
         items = await _pending(db, tenant)
         if not items:
