@@ -576,7 +576,6 @@
   /* Lot 53 : « dealer-only » = secteurs à rendez-vous (concession et courtier) */
   body.rdv-sector .store-only { display: none !important; }
   body:not(.rdv-sector) .dealer-only { display: none !important; }
-  body.insurance .guided-card { display: none !important; }  /* lots 96-97 : boutiques, concessions, agences */
   body:not(.insurance) .insurance-only { display: none !important; }
   body.insurance .no-insurance { display: none !important; }
   /* Lot 79 : agence immobilière (fiche du bien, profil de l'agence) */
@@ -1491,7 +1490,7 @@
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span></p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
         <div class="card guided-card" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose des choix à toucher : le catalogue et le panier pour une boutique ; les véhicules, un essai, l'estimation de sa voiture et le financement pour une concession ; acheter, louer, vendre ou faire estimer pour une agence. Les produits, les véhicules, les prix et les créneaux qui s'affichent viennent directement de vos données : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose des choix à toucher : le catalogue et le panier pour une boutique ; les véhicules, un essai, l'estimation de sa voiture et le financement pour une concession ; acheter, louer, vendre ou faire estimer pour une agence ; demander un devis, voir son contrat ou faire une réclamation pour un cabinet d'assurance. Les produits, les véhicules, les prix et les créneaux qui s'affichent viennent directement de vos données : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
           <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 8px;">
             <input type="checkbox" id="guided-flow" onchange="saveGuidedFlow()"> Proposer des choix en boutons sur WhatsApp
           </label>
@@ -3060,7 +3059,7 @@ function showTab(name) {
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "pige") loadPige();  // lot 81
   if (name === "leads") loadLeads();  // lot 83
-  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (currentBusinessType === "CAR_DEALERSHIP" || currentBusinessType === "REAL_ESTATE") loadGuidedFlow(); if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (isRdvSector()) loadGuidedFlow();  /* lots 96 à 98 : concession, agence, courtier */ if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
@@ -3739,7 +3738,7 @@ async function saveGuidedFlow() {
     await api("/api/v1/tenants/me/guided-flow", { method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: box.checked }) });
     msg.style.color = "var(--success)";
-    msg.textContent = box.checked ? (currentBusinessType === "CAR_DEALERSHIP" ? "Bob proposera vos véhicules et les essais en boutons." : currentBusinessType === "REAL_ESTATE" ? "Bob proposera vos biens, les visites et les estimations en boutons." : "Bob proposera votre catalogue en boutons.") : "Bob répondra seulement par écrit.";
+    msg.textContent = box.checked ? (currentBusinessType === "CAR_DEALERSHIP" ? "Bob proposera vos véhicules et les essais en boutons." : currentBusinessType === "REAL_ESTATE" ? "Bob proposera vos biens, les visites et les estimations en boutons." : currentBusinessType === "INSURANCE_BROKER" ? "Bob proposera les demandes de devis, les contrats et les réclamations en boutons." : "Bob proposera votre catalogue en boutons.") : "Bob répondra seulement par écrit.";
   } catch (e) {
     box.checked = !box.checked;
     msg.style.color = "var(--danger)";

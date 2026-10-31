@@ -143,7 +143,9 @@ async def test_switch_off_and_other_sectors_keep_the_ai(client, db_session, uniq
     assert r.json()["ai_reply"] == "Bonjour ! Que cherchez-vous ?"
     tenant.guided_flow_enabled, tenant.business_type = True, "INSURANCE_BROKER"
     await db_session.commit()
-    assert not gf.applies(tenant)  # courtier : lot 98 (concession et agence ont leur parcours depuis les lots 96 et 97)
+    assert gf.applies(tenant)  # lots 96 à 98 : concession, agence et courtier ont aussi leur parcours
+    tenant.guided_flow_enabled = False
+    assert not gf.applies(tenant)
 
 
 # --- Les écrans ------------------------------------------------------------------------------------------------------

@@ -427,6 +427,19 @@ async def receive_webhook(
         await db.commit()
         wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
         await guided_flow.deliver(db, tenant, conversation, wa_client, customer.whatsapp_number, guided)
+        # Lot 98 : réclamation enregistrée (alerte au cabinet) et demande de cotation transmise (e-mail habituel).
+        guided_emails = []
+        if guided.alerts:
+            commercial = await commercial_for_customer(db, customer)
+            for subject, body in guided.alerts:
+                guided_emails += alert_emails(tenant.email, commercial, subject, body)
+        from app.services.insurance import quote_alert_emails as _quote_alerts
+
+        guided_emails += await _quote_alerts(db, tenant, customer, conversation)
+        if guided_emails:
+            await db.commit()
+        for email in guided_emails:
+            background_tasks.add_task(send_email, **email)
         if guided.booked:  # lot 96 : essai ou estimation réservé sur un créneau libre → la concession est prévenue
             from app.services import appointment_service
             from app.services.handoff_service import conversation_link, customer_display_name

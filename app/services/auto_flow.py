@@ -24,7 +24,8 @@ from app.services import vehicle as vehicle_service
 PREFIX = "g:"
 PAGE = 10
 HUMAN = (f"{PREFIX}human", "Un conseiller")
-KINDS = {"E": "ESSAI", "R": "ESTIMATION_REPRISE", "V": "VISITE", "S": "ESTIMATION"}  # V, S : agence (lot 97)
+KINDS = {"E": "ESSAI", "R": "ESTIMATION_REPRISE", "V": "VISITE", "S": "ESTIMATION",  # V, S : agence (lot 97)
+         "A": "APPEL"}  # A : courtier, « Être rappelé » (lot 98)
 YEARS = ["Avant 2010", "2010 à 2014", "2015 à 2018", "2019 à 2021", "2022 ou plus récent"]
 MILEAGES = ["Moins de 50 000 km", "50 000 à 100 000 km", "100 000 à 150 000 km", "Plus de 150 000 km"]
 CONDITION_PROFILE = {"N": "NEUF", "O": "OCCASION", "A": "INDIFFERENT"}
@@ -309,6 +310,8 @@ def _what(tu, kind, product) -> str:
         return f"Essai du *{_name(product)}*." if product is not None else "Essai d'un véhicule."
     if kind == "V":  # lot 97 : visite d'un bien
         return f"Visite : *{product.name}*." if product is not None else "Visite d'un bien."
+    if kind == "A":  # lot 98 : le cabinet rappelle le client
+        return _you(tu, "Un conseiller du cabinet vous appelle.", "Un conseiller du cabinet t'appelle.")
     if kind == "S":  # lot 97 : un conseiller vient voir le bien du propriétaire
         return _you(tu, "Pour une estimation juste, un conseiller vient voir votre bien.",
                     "Pour une estimation juste, un conseiller vient voir ton bien.")
@@ -361,7 +364,8 @@ async def book(db, tenant, tu, customer, conversation, kind: str, product, slot:
         if cart is not None:
             shop_cart._touch(cart, awaiting=None)
         what = {"E": f"Demande d'essai envoyée{f' : {_name(product)}' if product is not None else ''}",
-                "V": f"Demande de visite envoyée{f' : {product.name}' if product is not None else ''}"}.get(
+                "V": f"Demande de visite envoyée{f' : {product.name}' if product is not None else ''}",
+                "A": "Demande de rappel envoyée"}.get(
             kind, "Demande d'estimation envoyée")
         return _turn(handoff=True, handoff_done=True,
                      handoff_text=f"{what}, {availability}. " + _you(tu, "Un conseiller vous confirme l'heure ici.",
@@ -383,6 +387,8 @@ async def _owner_notes(db, tenant, customer) -> str | None:
 
 def after(tu, kind) -> dict:
     """« Autre chose ? » après un rendez-vous confirmé."""
+    if kind == "A":  # lot 98 : courtier
+        return _buttons("Autre chose ?", [(f"{PREFIX}menu", "Autre demande"), HUMAN])
     if kind in ("V", "S"):  # lot 97 : agence
         return _buttons("Autre chose ?", [(f"{PREFIX}ib", "Voir d'autres biens"), HUMAN])
     if kind == "R":
@@ -545,7 +551,7 @@ async def handle_text(db, tenant, tu, customer, conversation, text):
         shop_cart._touch(cart, awaiting=None)
         await _profile(db, tenant, customer, trade_in=clean[:120])
         return await trade_in_year(db, tenant, tu)
-    match = re.fullmatch(r"auto:avail:([ERVS]):(.+)", wanted)
+    match = re.fullmatch(r"auto:avail:([ERVSA]):(.+)", wanted)
     if match and conversation is not None:
         product = await _vehicle(db, tenant, match.group(2)) if match.group(2) != "-" else None
         return await book(db, tenant, tu, customer, conversation, match.group(1), product, availability=clean[:300])

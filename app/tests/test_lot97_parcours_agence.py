@@ -293,11 +293,10 @@ async def test_agency_switch_dashboard_and_fees_alert(client, db_session, unique
     headers = {"Authorization": f"Bearer {token}"}
     assert (await client.get("/api/v1/tenants/me/guided-flow", headers=headers)).json() == {"enabled": True}
     assert (await client.put("/api/v1/tenants/me/guided-flow", json={"enabled": False}, headers=headers)).json() == {"enabled": False}
-    assert "body.insurance .guided-card { display: none !important; }" in DASH
-    assert 'currentBusinessType === "REAL_ESTATE") loadGuidedFlow();' in DASH
+    assert "if (isRdvSector()) loadGuidedFlow();" in DASH
     assert "Honoraires à renseigner : sans eux, le prix n'apparaît pas sur WhatsApp" in DASH
     tenant = await db_session.get(Tenant, tenant.id)
-    tenant.business_type = "INSURANCE_BROKER"
+    tenant.guided_flow_enabled = False
     assert not gf.applies(tenant)
 
 

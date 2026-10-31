@@ -47,26 +47,30 @@ class GuidedTurn:
     handoff_reason: str | None = None
     handoff_done: bool = False
     booked: list = field(default_factory=list)
+    # Lot 98 : e-mails à envoyer au professionnel (sujet, texte), ex. une réclamation enregistrée.
+    alerts: list = field(default_factory=list)
 
 
 # --- Petits outils ---------------------------------------------------------------------------------------------------
 
 def applies(tenant) -> bool:
     from app.core.config import get_settings
-    from app.services.business_type import is_dealership, is_real_estate, is_store
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate, is_store
 
     return bool(get_settings().guided_flow_enabled and tenant is not None
-                and (is_store(tenant) or is_dealership(tenant) or is_real_estate(tenant))
-                and getattr(tenant, "guided_flow_enabled", True))  # lots 96 et 97 : concessions et agences aussi
+                and (is_store(tenant) or is_dealership(tenant) or is_real_estate(tenant) or is_insurance(tenant))
+                and getattr(tenant, "guided_flow_enabled", True))  # lots 96 à 98 : concessions, agences, courtiers
 
 
 async def expects_text(db, tenant, customer, text) -> bool:
     """Ce message écrit est-il attendu par le parcours (panier, quantité, adresse, reprise, disponibilité) ?"""
-    from app.services import auto_flow, shop_cart
-    from app.services.business_type import is_dealership, is_real_estate
+    from app.services import assu_flow, auto_flow, shop_cart
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate
 
     if not applies(tenant) or customer is None:
         return False
+    if is_insurance(tenant):
+        return await assu_flow.expects_text(db, tenant, customer, text)
     if is_dealership(tenant) or is_real_estate(tenant):
         return await auto_flow.expects_text(db, tenant, customer, text)
     return await shop_cart.expects_text(db, tenant, customer, text)
@@ -309,8 +313,12 @@ async def handle(db, tenant, text: str | None, reply_id: str | None, referral=No
 
     if not applies(tenant):
         return None
-    from app.services.business_type import is_dealership, is_real_estate
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate
 
+    if is_insurance(tenant):  # lot 98 : devis, contrat, réclamation (jamais de prix)
+        from app.services import assu_flow
+
+        return await assu_flow.handle(db, tenant, text, reply_id, referral, tu, customer, conversation)
     if is_dealership(tenant):  # lot 96 : essai, reprise, financement (pas de panier)
         from app.services import auto_flow
 
@@ -404,6 +412,8 @@ async def deliver(db, tenant, conversation, wa_client, to: str, turn: GuidedTurn
             except Exception:  # noqa: BLE001
                 logger.warning("Écran du parcours non envoyé (conversation %s)", conversation.id)
                 continue
+        if action.get("after_sent"):  # lot 98 : ex. accusé de réception d'une réclamation réellement parti
+            action["after_sent"]()
         if action.get("product_id") and action["type"] == "buttons" and action.get("image"):
             metadata = {"guided": "details", "product_ids": [action["product_id"]], "image_urls": [action["image"]]}
         db.add(Message(tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.AI, message_type=kind,
