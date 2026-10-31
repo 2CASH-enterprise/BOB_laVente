@@ -576,6 +576,7 @@
   /* Lot 53 : « dealer-only » = secteurs à rendez-vous (concession et courtier) */
   body.rdv-sector .store-only { display: none !important; }
   body:not(.rdv-sector) .dealer-only { display: none !important; }
+  body.insurance .guided-card, body.real-estate .guided-card { display: none !important; }  /* lot 96 : boutiques et concessions */
   body:not(.insurance) .insurance-only { display: none !important; }
   body.insurance .no-insurance { display: none !important; }
   /* Lot 79 : agence immobilière (fiche du bien, profil de l'agence) */
@@ -1489,10 +1490,10 @@
       <template class="page-tip-src">La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances. Ce que Bob sait de votre boutique se règle dans la Base de connaissances.</template>
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span></p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose « Voir le catalogue », « Voir les offres » et « Parler à un conseiller ». Les rayons, les produits, les prix et les tailles qui s'affichent viennent directement de votre catalogue : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
+        <div class="card guided-card" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose des choix à toucher : le catalogue et le panier pour une boutique ; les véhicules, un essai, l'estimation de sa voiture et le financement pour une concession. Les produits, les véhicules, les prix et les créneaux qui s'affichent viennent directement de vos données : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
           <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 8px;">
-            <input type="checkbox" id="guided-flow" onchange="saveGuidedFlow()"> Proposer le catalogue en boutons sur WhatsApp
+            <input type="checkbox" id="guided-flow" onchange="saveGuidedFlow()"> Proposer des choix en boutons sur WhatsApp
           </label>
           <div id="guided-flow-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
@@ -2678,6 +2679,7 @@ async function guessMissingCategories() {
 // ---- Lot 26 : fiches véhicules ----
 const VEHICLE_FUELS = { ESSENCE: "Essence", DIESEL: "Diesel", HYBRIDE: "Hybride", ELECTRIQUE: "Électrique", GPL: "GPL" };
 const VEHICLE_GEARBOXES = { MANUELLE: "Manuelle", AUTOMATIQUE: "Automatique" };
+const VEHICLE_CONDITIONS = { NEUF: "Neuf", OCCASION: "Occasion" };  // lot 96
 const VEHICLE_BODY_TYPES = { SUV: "SUV", BERLINE: "Berline", CITADINE: "Citadine", BREAK: "Break", MONOSPACE: "Monospace", COUPE: "Coupé", CABRIOLET: "Cabriolet", PICK_UP: "Pick-up", UTILITAIRE: "Utilitaire" };
 
 function vehicleSummary(v) {
@@ -2703,13 +2705,13 @@ function vehicleFields(prefix, v) {
       ${text("brand", "Marque")}${text("model", "Modèle")}${text("trim", "Finition")}${text("color", "Couleur")}
       ${text("year", "Année", "number")}${text("mileage_km", "Kilométrage", "number")}
       ${select("body_type", "Carrosserie", VEHICLE_BODY_TYPES)}${select("fuel", "Carburant", VEHICLE_FUELS)}
-      ${select("gearbox", "Boîte", VEHICLE_GEARBOXES)}
+      ${select("gearbox", "Boîte", VEHICLE_GEARBOXES)}${select("condition", "État (vide : selon le kilométrage)", VEHICLE_CONDITIONS)}
     </div>`;
 }
 
 function readVehicle(prefix) {
   const vehicle = {};
-  ["brand", "model", "trim", "color", "year", "mileage_km", "body_type", "fuel", "gearbox"].forEach((key) => {
+  ["brand", "model", "trim", "color", "year", "mileage_km", "body_type", "fuel", "gearbox", "condition"].forEach((key) => {
     const el = document.getElementById(`${prefix}-vehicle-${key}`);
     if (el && el.value.trim() !== "") vehicle[key] = el.value.trim();
   });
@@ -3058,7 +3060,7 @@ function showTab(name) {
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "pige") loadPige();  // lot 81
   if (name === "leads") loadLeads();  // lot 83
-  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (currentBusinessType === "CAR_DEALERSHIP") loadGuidedFlow(); if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
@@ -3737,7 +3739,7 @@ async function saveGuidedFlow() {
     await api("/api/v1/tenants/me/guided-flow", { method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: box.checked }) });
     msg.style.color = "var(--success)";
-    msg.textContent = box.checked ? "Bob proposera votre catalogue en boutons." : "Bob répondra seulement par écrit.";
+    msg.textContent = box.checked ? (currentBusinessType === "CAR_DEALERSHIP" ? "Bob proposera vos véhicules et les essais en boutons." : "Bob proposera votre catalogue en boutons.") : "Bob répondra seulement par écrit.";
   } catch (e) {
     box.checked = !box.checked;
     msg.style.color = "var(--danger)";

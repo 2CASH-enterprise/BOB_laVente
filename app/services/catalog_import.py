@@ -291,7 +291,7 @@ async def import_catalog_csv(
 
 VEHICLE_TEMPLATE = [("MARQUE", "brand"), ("MODELE", "model"), ("FINITION", "trim"), ("ANNEE", "year"),
                     ("KILOMETRAGE", "mileage_km"), ("CARBURANT", "fuel"), ("BOITE", "gearbox"),
-                    ("CARROSSERIE", "body_type"), ("COULEUR", "color")]
+                    ("CARROSSERIE", "body_type"), ("COULEUR", "color"), ("ETAT", "condition")]
 
 
 def file_columns(tenant, codes: list[str] | None = None) -> list[tuple[str, str, str]]:

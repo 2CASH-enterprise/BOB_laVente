@@ -13,7 +13,7 @@ from app.services.prospect import build_fiche, hot_alert_emails  # lot 43
 from app.agents.dependency import get_llm_client
 from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import FAILURE_LOOP, FAILURE_OUTAGE, generate_ai_reply_detailed
-from app.services import guided_flow, shop_cart  # lots 94 et 95 : parcours à boutons, panier
+from app.services import guided_flow  # lots 94 à 96 : parcours à boutons (boutiques, concessions)
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_message, verify_whatsapp_signature
@@ -344,7 +344,7 @@ async def receive_webhook(
     # Lot 95 : « panier », « ma commande », une quantité ou une adresse attendue par le panier, non plus.
     guided_tenant = await db.get(Tenant, tenant_id)
     guided_only = guided_tap or (guided_flow.applies(guided_tenant) and (
-        guided_flow.is_greeting(incoming_text) or (not parsed.get("reply_id") and await shop_cart.expects_text(
+        guided_flow.is_greeting(incoming_text) or (not parsed.get("reply_id") and await guided_flow.expects_text(
             db, guided_tenant, customer, incoming_text))))
     if rate == usage_guard.OK and not guided_only:
         signal = await classify_and_store(db, classifier, incoming_message, business_type=business_type)
@@ -427,12 +427,27 @@ async def receive_webhook(
         await db.commit()
         wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
         await guided_flow.deliver(db, tenant, conversation, wa_client, customer.whatsapp_number, guided)
+        if guided.booked:  # lot 96 : essai ou estimation réservé sur un créneau libre → la concession est prévenue
+            from app.services import appointment_service
+            from app.services.handoff_service import conversation_link, customer_display_name
+            from app.services.local_time import tenant_zone
+
+            commercial = await commercial_for_customer(db, customer)
+            for appointment in guided.booked:
+                subject, body = appointment_service.booking_alert_email(
+                    appointment, customer_display_name(customer), tenant_zone(tenant), conversation_link(conversation),
+                    await build_fiche(db, tenant, customer))
+                for email in alert_emails(tenant.email, commercial, subject, body):
+                    background_tasks.add_task(send_email, **email)
         return {"status": "processed", "guided": True}
     elif guided is not None:
         # « Parler à un conseiller » : le même transfert qu'une règle de transmission (commerçant prévenu par email).
-        conversation.status = ConversationStatus.WAITING_HUMAN
-        db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
-                       message_type="handoff", content="Transfert vers un humain : Le client a demandé un conseiller"))
+        # Lot 96 : une demande de rendez-vous transmise par l'outil est déjà enregistrée (motif détaillé).
+        if not guided.handoff_done:
+            conversation.status = ConversationStatus.WAITING_HUMAN
+            db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                           message_type="handoff", content="Transfert vers un humain : "
+                           + (guided.handoff_reason or "Le client a demandé un conseiller")))
         reply_text = guided.handoff_text
     else:
         history_stmt = (

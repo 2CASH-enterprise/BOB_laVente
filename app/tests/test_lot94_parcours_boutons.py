@@ -141,8 +141,10 @@ async def test_switch_off_and_other_sectors_keep_the_ai(client, db_session, uniq
     guided_on({"intents": [], "objections": []}, [text_response("Bonjour ! Que cherchez-vous ?")])
     r = await client.post("/webhooks/whatsapp", json=_text("pn-l94-3", "2250700000003", "Bonjour"))
     assert r.json()["ai_reply"] == "Bonjour ! Que cherchez-vous ?"
-    tenant.guided_flow_enabled, tenant.business_type = True, "CAR_DEALERSHIP"
+    tenant.guided_flow_enabled, tenant.business_type = True, "INSURANCE_BROKER"
     await db_session.commit()
+    assert not gf.applies(tenant)  # courtier et agence : lots 97 et 98 (la concession a son parcours depuis le lot 96)
+    tenant.business_type = "REAL_ESTATE"
     assert not gf.applies(tenant)
 
 

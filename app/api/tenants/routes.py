@@ -9,7 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_insurance, only_online_store, only_real_estate
+from app.services.business_type import (CAR_DEALERSHIP, ONLINE_STORE, only_insurance, only_online_store, only_real_estate,
+                                         require_business)
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.messaging_settings import KillSwitch, OutboundMode, TenantMessagingSettings
@@ -830,7 +831,7 @@ class GuidedFlowReq(BaseModel):  # lot 94 : parcours à boutons
     enabled: bool
 
 
-@router.get("/me/guided-flow", dependencies=[Depends(only_online_store())])
+@router.get("/me/guided-flow", dependencies=[Depends(require_business(ONLINE_STORE, CAR_DEALERSHIP))])
 async def get_guided_flow(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
@@ -838,7 +839,7 @@ async def get_guided_flow(current_user: CurrentUser = Depends(get_current_user),
     return {"enabled": tenant.guided_flow_enabled}
 
 
-@router.put("/me/guided-flow", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])
+@router.put("/me/guided-flow", dependencies=[Depends(require_business(ONLINE_STORE, CAR_DEALERSHIP)), Depends(require_role("ADMIN"))])
 async def update_guided_flow(payload: GuidedFlowReq, current_user: CurrentUser = Depends(get_current_user),
                              db: AsyncSession = Depends(get_db)) -> dict:
     from app.services.audit import log_audit_event

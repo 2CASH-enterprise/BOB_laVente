@@ -42,16 +42,33 @@ class GuidedTurn:
     actions: list = field(default_factory=list)
     handoff: bool = False
     handoff_text: str | None = None
+    # Lot 96 : motif du transfert (sinon « Le client a demandé un conseiller ») ; transfert déjà enregistré par l'outil
+    # de rendez-vous ; rendez-vous confirmés pendant ce tour (la concession est prévenue par e-mail).
+    handoff_reason: str | None = None
+    handoff_done: bool = False
+    booked: list = field(default_factory=list)
 
 
 # --- Petits outils ---------------------------------------------------------------------------------------------------
 
 def applies(tenant) -> bool:
     from app.core.config import get_settings
-    from app.services.business_type import is_store
+    from app.services.business_type import is_dealership, is_store
 
-    return bool(get_settings().guided_flow_enabled and tenant is not None and is_store(tenant)
-                and getattr(tenant, "guided_flow_enabled", True))
+    return bool(get_settings().guided_flow_enabled and tenant is not None and (is_store(tenant) or is_dealership(tenant))
+                and getattr(tenant, "guided_flow_enabled", True))  # lot 96 : concessions aussi
+
+
+async def expects_text(db, tenant, customer, text) -> bool:
+    """Ce message écrit est-il attendu par le parcours (panier, quantité, adresse, reprise, disponibilité) ?"""
+    from app.services import auto_flow, shop_cart
+    from app.services.business_type import is_dealership
+
+    if not applies(tenant) or customer is None:
+        return False
+    if is_dealership(tenant):
+        return await auto_flow.expects_text(db, tenant, customer, text)
+    return await shop_cart.expects_text(db, tenant, customer, text)
 
 
 def _norm(text: str | None) -> str:
@@ -291,6 +308,12 @@ async def handle(db, tenant, text: str | None, reply_id: str | None, referral=No
 
     if not applies(tenant):
         return None
+    from app.services.business_type import is_dealership
+
+    if is_dealership(tenant):  # lot 96 : essai, reprise, financement (pas de panier)
+        from app.services import auto_flow
+
+        return await auto_flow.handle(db, tenant, text, reply_id, referral, tu, customer, conversation)
     if reply_id and reply_id.startswith(PREFIX):
         parts = reply_id[len(PREFIX):].split(":")
         action = parts[0]

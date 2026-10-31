@@ -96,6 +96,9 @@ class ToolExecutor:
         self.change_outbox: list[tuple] = []
         # Lot 35c : dernier message du client (None hors conversation : aucun verrou appliqué).
         self.incoming_text: str | None = None
+        # Lot 96 : le client a touché « Autre moment » dans le parcours à boutons : sa disponibilité écrite est
+        # transmise même si des créneaux sont libres (choix explicite du client ; jamais mis par l'IA).
+        self.client_chose_other_time = False
 
     async def execute(self, tool_name: str, tool_input: dict) -> dict:
         from app.services.business_type import tool_allowed
@@ -568,7 +571,7 @@ class ToolExecutor:
             from app.services import booking
 
             tenant, settings, zone, now = await self._booking_context()
-            if booking.booking_enabled(settings):
+            if booking.booking_enabled(settings) and not self.client_chose_other_time:
                 slots = await booking.free_slots(self.db, tenant, settings, zone, now)
                 if slots:
                     return {

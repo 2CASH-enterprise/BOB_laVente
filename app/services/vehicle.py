@@ -18,10 +18,15 @@ FIELDS = {
     "gearbox": "Boîte",
     "body_type": "Carrosserie",
     "color": "Couleur",
+    "condition": "État",  # lot 96 : NEUF ou OCCASION (déduit du kilométrage s'il est vide, voir condition_of)
 }
 
 FUELS = {"ESSENCE": "Essence", "DIESEL": "Diesel", "HYBRIDE": "Hybride", "ELECTRIQUE": "Électrique", "GPL": "GPL"}
 GEARBOXES = {"MANUELLE": "Manuelle", "AUTOMATIQUE": "Automatique"}
+CONDITIONS = {"NEUF": "Neuf", "OCCASION": "Occasion"}
+_CONDITION_ALIASES = {"neuf": "NEUF", "neuve": "NEUF", "new": "NEUF", "0 km": "NEUF", "occasion": "OCCASION",
+                      "used": "OCCASION", "seconde main": "OCCASION", "venant": "OCCASION", "d'occasion": "OCCASION"}
+NEW_MAX_KM = 100  # moins de 100 km au compteur : véhicule neuf
 # Lot 26b — incident du 29/09 : « un SUV ? » → « je n'en ai pas », la 5008 n'avait pas « SUV » dans son nom.
 BODY_TYPES = {
     "SUV": "SUV", "BERLINE": "Berline", "CITADINE": "Citadine", "BREAK": "Break", "MONOSPACE": "Monospace",
@@ -61,6 +66,7 @@ CSV_HEADERS = {
     "gearbox": {"gearbox", "boite", "transmission"},
     "body_type": {"body_type", "body", "carrosserie", "segment"},
     "color": {"color", "colour", "couleur"},
+    "condition": {"condition", "etat", "neuf/occasion", "neuf ou occasion"},
 }
 
 MAX_MILEAGE_KM = 2_000_000
@@ -139,6 +145,15 @@ def normalize_vehicle(data: dict | None) -> tuple[dict | None, list[str]]:
         else:
             result["gearbox"] = code
 
+    condition = data.get("condition")
+    if condition is not None and str(condition).strip():
+        raw = str(condition).strip()
+        code = raw.upper() if raw.upper() in CONDITIONS else _CONDITION_ALIASES.get(_strip_accents(raw.lower()))
+        if code is None:
+            errors.append(f"État inconnu : {condition} (neuf ou occasion)")
+        else:
+            result["condition"] = code
+
     body = data.get("body_type")
     if body is not None and str(body).strip():
         code = body_type_code(body)
@@ -210,6 +225,16 @@ def summary(vehicle: dict | None) -> str:
     return " · ".join(parts)
 
 
+def condition_of(vehicle: dict | None) -> str | None:
+    """NEUF / OCCASION : la valeur de la fiche, sinon déduite du kilométrage ; None si on ne sait pas."""
+    vehicle = vehicle or {}
+    if vehicle.get("condition") in CONDITIONS:
+        return vehicle["condition"]
+    if vehicle.get("mileage_km") is not None:
+        return "NEUF" if int(vehicle["mileage_km"]) < NEW_MAX_KM else "OCCASION"
+    return None
+
+
 def for_ai(vehicle: dict | None) -> dict | None:
     """Caractéristiques lisibles transmises à Bob (libellés français, jamais de valeur inventée)."""
     if not vehicle:
@@ -225,6 +250,8 @@ def for_ai(vehicle: dict | None) -> dict | None:
             value = GEARBOXES.get(value, value)
         elif key == "body_type":
             value = BODY_TYPES.get(value, value)
+        elif key == "condition":
+            value = CONDITIONS.get(value, value)
         elif key == "mileage_km":
             value = f"{value:,} km".replace(",", " ")
         readable[label] = value
