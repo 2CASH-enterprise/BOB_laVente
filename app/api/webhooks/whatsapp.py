@@ -13,6 +13,7 @@ from app.services.prospect import build_fiche, hot_alert_emails  # lot 43
 from app.agents.dependency import get_llm_client
 from app.agents.llm_client import LLMClient
 from app.agents.orchestrator import FAILURE_LOOP, FAILURE_OUTAGE, generate_ai_reply_detailed
+from app.services import guided_flow  # lot 94 : parcours à boutons
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.integrations.whatsapp.client import WhatsAppClient, parse_whatsapp_message, verify_whatsapp_signature
@@ -204,6 +205,11 @@ async def receive_webhook(
         from app.services.product_cards import interest_text
 
         incoming_text = await interest_text(db, tenant_id, parsed["reply_id"]) or incoming_text
+        # Lot 94 — taille ou modèle choisi dans la liste du parcours à boutons : Bob reçoit le produit et la variante.
+        from app.services.guided_flow import variant_text
+
+        incoming_text = await variant_text(db, tenant_id, parsed["reply_id"]) or incoming_text
+    guided_tap = (parsed.get("reply_id") or "").startswith("g:") and not (parsed.get("reply_id") or "").startswith("g:v:")
 
     # Lot 28 — le client arrive d'une publicité (ou publication) Facebook / Instagram : Meta joint
     # une référence au message. Source notée au tout premier contact seulement ; le contexte de
@@ -334,7 +340,10 @@ async def receive_webhook(
     signal = None
     business_type = getattr(await db.get(Tenant, tenant_id), "business_type", None)
     # Lot 54 — le courtier a désormais ses propres objections (taxonomie v1.4assu) : ses messages sont analysés.
-    if rate == usage_guard.OK:
+    # Lot 94 : un bouton du parcours, ou un simple bonjour qui ouvre le menu, n'a rien à analyser (aucun appel d'IA).
+    guided_only = guided_tap or (guided_flow.is_greeting(incoming_text)
+                                 and guided_flow.applies(await db.get(Tenant, tenant_id)))
+    if rate == usage_guard.OK and not guided_only:
         signal = await classify_and_store(db, classifier, incoming_message, business_type=business_type)
 
     # Lot 57 — courtier (CIMA 01-24, art. 11) : une réclamation ou un sinistre est enregistré par le CODE dans le
@@ -409,6 +418,19 @@ async def receive_webhook(
                        message_type="rate_limited", content="Trop de messages en une heure : Bob fait une pause d'une heure"))
     elif quota_exceeded:
         reply_text = (FREEMIUM_QUOTA_MESSAGE_TU if tu else FREEMIUM_QUOTA_MESSAGE).format(company_name=tenant.name)
+    elif (guided := await guided_flow.handle(db, tenant, incoming_text, parsed.get("reply_id"), referral, tu)) is not None \
+            and not guided.handoff:
+        # Lot 94 — parcours à boutons : le code répond avec les vraies données, sans appel à l'IA.
+        await db.commit()
+        wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+        await guided_flow.deliver(db, tenant, conversation, wa_client, customer.whatsapp_number, guided)
+        return {"status": "processed", "guided": True}
+    elif guided is not None:
+        # « Parler à un conseiller » : le même transfert qu'une règle de transmission (commerçant prévenu par email).
+        conversation.status = ConversationStatus.WAITING_HUMAN
+        db.add(Message(tenant_id=tenant_id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
+                       message_type="handoff", content="Transfert vers un humain : Le client a demandé un conseiller"))
+        reply_text = guided.handoff_text
     else:
         history_stmt = (
             select(Message)

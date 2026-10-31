@@ -67,3 +67,12 @@ async def email_code(db_session):
         return code
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def _guided_flow_off_by_default(monkeypatch):
+    """Lot 94 — les anciens tests parlent à l'IA (« Bonjour ») : le parcours à boutons n'y est allumé que s'il est testé
+    (fixture « guided_on » de test_lot94_parcours_boutons.py)."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "guided_flow_enabled", False)

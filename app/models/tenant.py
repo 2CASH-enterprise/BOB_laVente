@@ -77,6 +77,8 @@ class Tenant(Base):
     renewal_digest_on: Mapped[date | None] = mapped_column(Date)
     # Lot 63 — commerce : Bob relance les commandes non payées (actif par défaut, désactivable).
     order_reminders_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
+    # Lot 94 — commerce : parcours à boutons sur WhatsApp (accueil, catalogue, produits), actif par défaut, désactivable.
+    guided_flow_enabled: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 68 — modèles WhatsApp autorisés pour cette boutique (le Super Admin peut les couper, ex. compte d'examen Meta).
     wa_templates_allowed: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 69 — alerte de plafond de conversations déjà envoyée ce mois-là (« 2026-10 ») et à quel seuil (80 puis 100).

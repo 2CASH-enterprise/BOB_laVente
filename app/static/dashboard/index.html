@@ -1489,6 +1489,13 @@
       <template class="page-tip-src">La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances. Ce que Bob sait de votre boutique se règle dans la Base de connaissances.</template>
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span></p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose « Voir le catalogue », « Voir les offres » et « Parler à un conseiller ». Les rayons, les produits, les prix et les tailles qui s'affichent viennent directement de votre catalogue : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
+          <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 8px;">
+            <input type="checkbox" id="guided-flow" onchange="saveGuidedFlow()"> Proposer le catalogue en boutons sur WhatsApp
+          </label>
+          <div id="guided-flow-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
         <div class="card insurance-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="insurance-profile-card">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Vous êtes<button class="tip"></button><span class="tip-bubble" hidden>Le règlement CIMA demande que le client sache clairement qui lui parle. Bob se présente avec votre statut, et donne votre numéro d'agrément, votre compagnie et votre contact réclamations quand un client les demande. Il n'invente jamais ce que vous n'avez pas indiqué.</span></div>
           <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px;" id="insurance-structure-options"></div>
@@ -3026,7 +3033,7 @@ function showTab(name) {
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "pige") loadPige();  // lot 81
   if (name === "leads") loadLeads();  // lot 83
-  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); } if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
@@ -3688,6 +3695,30 @@ function renderSimpleSales(s) {
 window.addEventListener("focus", () => {
   if (!document.getElementById("simple-app").classList.contains("hidden") && simpleScreen === "home") simpleShow("home");
 });
+
+// --- Lot 94 : parcours à boutons (commerce) ---------------------------------------------------------------------------
+async function loadGuidedFlow() {
+  const box = document.getElementById("guided-flow");
+  if (!box) return;
+  try {
+    box.checked = !!(await api("/api/v1/tenants/me/guided-flow")).enabled;
+  } catch (e) { /* carte réservée aux boutiques */ }
+}
+
+async function saveGuidedFlow() {
+  const box = document.getElementById("guided-flow");
+  const msg = document.getElementById("guided-flow-msg");
+  try {
+    await api("/api/v1/tenants/me/guided-flow", { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: box.checked }) });
+    msg.style.color = "var(--success)";
+    msg.textContent = box.checked ? "Bob proposera votre catalogue en boutons." : "Bob répondra seulement par écrit.";
+  } catch (e) {
+    box.checked = !box.checked;
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
 
 async function loadOverview() {
   loadHome();

@@ -83,6 +83,7 @@ SEND_SITES = {
     "api/orders/routes.py": 2,          # reçu et annulation : customer_window_open (sinon email)
     "services/wa_templates.py": 1,      # lot 68 : modèle APPROUVÉ par Meta (seul envoi permis hors fenêtre), Utilitaire
     "services/property_alerts.py": 3,   # lot 80 : alerte « nouveau bien » : customer_window_open juste avant l'envoi
+    "services/guided_flow.py": 3,       # lot 94 : écrans du parcours, appelés SEULEMENT par le webhook (fenêtre ouverte)
 }
 
 

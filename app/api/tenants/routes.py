@@ -825,6 +825,33 @@ async def get_order_reminders(current_user: CurrentUser = Depends(get_current_us
     return _order_reminders_response(tenant)
 
 
+class GuidedFlowReq(BaseModel):  # lot 94 : parcours à boutons
+    enabled: bool
+
+
+@router.get("/me/guided-flow", dependencies=[Depends(only_online_store())])
+async def get_guided_flow(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
+    return {"enabled": tenant.guided_flow_enabled}
+
+
+@router.put("/me/guided-flow", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])
+async def update_guided_flow(payload: GuidedFlowReq, current_user: CurrentUser = Depends(get_current_user),
+                             db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services.audit import log_audit_event
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
+    tenant.guided_flow_enabled = payload.enabled
+    await log_audit_event(db, actor=str(current_user.user_id), action="GUIDED_FLOW_UPDATED",
+                          tenant_id=tenant.id, details={"enabled": payload.enabled})
+    await db.commit()
+    return {"enabled": tenant.guided_flow_enabled}
+
+
 @router.put("/me/order-reminders", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])
 async def update_order_reminders(payload: OrderRemindersReq, current_user: CurrentUser = Depends(get_current_user),
                                  db: AsyncSession = Depends(get_db)) -> dict:

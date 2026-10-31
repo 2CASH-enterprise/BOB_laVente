@@ -228,9 +228,32 @@ class WhatsAppClient:
                        {"card_index": i, "type": "cta_url",  # valeur de l'exemple « quick reply » de la documentation Meta
                         "header": {"type": "image", "image": {"link": card["link"]}},
                         "body": {"text": to_whatsapp(card["body"])[:160]},
-                        "action": {"buttons": [{"type": "quick_reply", "quick_reply": {
-                            "id": card["button_id"][:256], "title": card["button_title"][:20]}}]}}
+                        "action": {"buttons": [{"type": "quick_reply", "quick_reply": {"id": bid[:256], "title": title[:20]}}
+                                               for bid, title in (card.get("buttons")
+                                                                  or [(card["button_id"], card["button_title"])])[:2]]}}
                        for i, card in enumerate(cards[:10])]}}}
+        return await self._post("/messages", payload)
+
+    async def send_buttons(self, to: str, body: str, buttons: list[tuple[str, str]], image_link: str | None = None) -> dict:
+        """Lot 94 — un message avec 1 à 3 boutons de réponse (20 caractères), photo en tête si donnée."""
+        interactive = {"type": "button", "body": {"text": to_whatsapp(body)[:1024]},
+                       "action": {"buttons": [{"type": "reply", "reply": {"id": bid[:256], "title": title[:20]}}
+                                              for bid, title in buttons[:3]]}}
+        if image_link:
+            interactive["header"] = {"type": "image", "image": {"link": image_link}}
+        payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+                   "interactive": interactive}
+        return await self._post("/messages", payload)
+
+    async def send_list(self, to: str, body: str, button: str, rows: list[tuple[str, str, str | None]],
+                        section: str | None = None) -> dict:
+        """Lot 94 — une liste (10 lignes au plus : titre 24, description 72 caractères) ouverte par un bouton (20)."""
+        payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+                   "interactive": {"type": "list", "body": {"text": to_whatsapp(body)[:1024]},
+                                   "action": {"button": button[:20], "sections": [{
+                                       "title": (section or button)[:24],
+                                       "rows": [{"id": rid[:200], "title": title[:24], **({"description": desc[:72]} if desc else {})}
+                                                for rid, title, desc in rows[:10]]}]}}}
         return await self._post("/messages", payload)
 
     async def send_template_message(self, to: str, template_name: str, language: str = "fr",

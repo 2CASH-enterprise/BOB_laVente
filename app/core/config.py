@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     # Lot 92 — « Bob, votre assistant » sur le numéro AgenC'AI : interrupteur général (éteint par défaut). Chaque
     # boutique a aussi le sien, dans la carte « Naomy ». L'envoi passe par Naomy (même domaine, chemin de Naomy).
     assistant_enabled: bool = False
+    # Lot 94 — parcours à boutons des boutiques : interrupteur général (allumé), en plus de celui de chaque boutique.
+    guided_flow_enabled: bool = True
     debug: bool = False
     # Lot 73 : politique de sécurité des contenus (CSP). False = « Report-Only » (signale sans bloquer, une semaine),
     # True = appliquée (bloque). Les signalements arrivent dans le Monitoring.
