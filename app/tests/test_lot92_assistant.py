@@ -587,8 +587,8 @@ async def test_retries_then_email(client, db_session, assistant_env):
 @pytest.mark.asyncio
 async def test_daily_cap_of_30(client, db_session, assistant_env):
     _, _, _, connection = await _linked(client, db_session)
-    for _ in range(ma.DAILY_CAP):
-        ma.queue(db_session, connection, "ok", now=NOW)
+    for _ in range(ma.DAILY_CAP):  # lot 99 : des alertes, pour atteindre le plafond (les réponses s'arrêtent à 25)
+        ma.queue(db_session, connection, "ok", kind="ALERT", now=NOW)
     await db_session.commit()
     sender = Sent()
     assert (await ma.send_outbox(db_session, NOW, sender=sender, mailer=assistant_env.mails))["sent"] == 30

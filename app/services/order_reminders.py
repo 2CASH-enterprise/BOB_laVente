@@ -153,10 +153,10 @@ async def _conversation(db, tenant, order: Order):
     ).order_by(Conversation.created_at.desc()).limit(1))).scalar_one_or_none()
 
 
-async def _send_whatsapp(db, tenant, conversation, customer, text) -> bool:
+async def _send_whatsapp(db, tenant, conversation, customer, text, buttons=None) -> bool:
     from app.services.appointment_service import send_fixed_message
 
-    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "order_reminder")
+    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "order_reminder", buttons=buttons)
     return sent
 
 
@@ -207,7 +207,11 @@ async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=Non
             items = await get_order_item_lines(db, order.id, order.currency)
             channel = None
             if conversation is not None and await customer_window_open(db, tenant.id, customer.id, now):
-                if await send_whatsapp(db, tenant, conversation, customer, whatsapp_text(tenant, customer, order, items, step)):
+                from app.services import followups  # lot 99 : « J'ai payé », « Une question », « Annuler »
+
+                buttons = followups.order_buttons(tenant, order)
+                if await send_whatsapp(db, tenant, conversation, customer, whatsapp_text(tenant, customer, order, items, step),
+                                       **({"buttons": buttons} if buttons else {})):
                     channel = WHATSAPP
             elif await send_template(db, tenant, customer, conversation, "commande_paiement",
                                      template_values(tenant, customer, order),

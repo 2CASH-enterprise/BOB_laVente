@@ -36,11 +36,12 @@ async def send_due_reminders(session_factory=None, now: datetime | None = None, 
             await engine.dispose()
 
 
-async def _whatsapp_reminder(db, tenant, conversation, customer, text) -> bool:
+async def _whatsapp_reminder(db, tenant, conversation, customer, text, buttons=None) -> bool:
     """Lot 35 — message fixe, uniquement si la conversation est ouverte (sinon l'email suffit)."""
     from app.services.appointment_service import send_fixed_message
 
-    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "appointment_reminder")
+    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "appointment_reminder",
+                                       buttons=buttons)
     return sent
 
 
@@ -104,7 +105,11 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None, send_templ
                     closes_at = await reply_window_closes_at(db, conversation) if conversation else None
                     if closes_at is not None and now < closes_at:
                         text = appointment_service.whatsapp_reminder_message(appointment, tenant.name, zone)
-                        if await send_whatsapp(db, tenant, conversation, customer, text):
+                        from app.services import followups  # lot 99 : « Je confirme », « Déplacer », « Annuler »
+
+                        buttons = followups.appointment_buttons(tenant, appointment)
+                        if await send_whatsapp(db, tenant, conversation, customer, text,
+                                               **({"buttons": buttons} if buttons else {})):
                             appointment.customer_whatsapp_reminder_sent_at = now
                             report["whatsapp"] += 1
                         else:

@@ -215,6 +215,7 @@ def cancel(appointment: AppointmentRequest, now: datetime | None = None) -> None
 
 async def send_fixed_message(
     db: AsyncSession, tenant, conversation, customer, text: str, user_id: str, message_type: str,
+    buttons: list[tuple[str, str]] | None = None,
 ) -> tuple[bool, str | None]:
     """
     Envoie un message fixe au client. Renvoie (envoyé, raison si non envoyé). Mêmes garde-fous que
@@ -248,14 +249,19 @@ async def send_fixed_message(
         return False, exc.reason
     try:
         client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
-        await client.send_text_message(to=customer.whatsapp_number, body=text)
+        if buttons:  # lot 99 : le même texte, avec 1 à 3 boutons de réponse
+            await client.send_buttons(to=customer.whatsapp_number, body=text, buttons=buttons)
+        else:
+            await client.send_text_message(to=customer.whatsapp_number, body=text)
     except WhatsAppSendError as exc:
         return False, f"WhatsApp a refusé le message : {exc.details}"
     except Exception:  # noqa: BLE001 — réseau, délai : jamais de faux « envoyé »
         return False, "Envoi impossible pour le moment."
     db.add(Message(
         tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.SYSTEM,
-        message_type=message_type, content=text, message_metadata={"sent_by": user_id},
+        message_type=message_type,
+        content=text + ("\n[Boutons : " + " · ".join(title for _, title in buttons) + "]" if buttons else ""),
+        message_metadata={"sent_by": user_id},
     ))
     return True, None
 

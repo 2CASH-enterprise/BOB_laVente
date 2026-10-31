@@ -52,7 +52,10 @@ async def notify(db, tenant, order, delivery, user_id: str, now: datetime | None
     text = wa_templates.render(key, wa_templates.form_of(tenant), vals)
     channel = None
     if customer is not None and conversation is not None and await customer_window_open(db, tenant.id, customer.id, now):
-        sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, user_id, f"delivery_{step.lower()}")
+        from app.services import followups  # lot 99 : « Suivre ma commande », « Pas reçue », « Racheter »…
+
+        sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, user_id, f"delivery_{step.lower()}",
+                                           buttons=followups.delivery_buttons(tenant, order, step))
         channel = "WHATSAPP" if sent else None
     if channel is None and customer is not None and await wa_templates.send(
             db, tenant, customer, conversation, key, vals, message_type=f"delivery_{step.lower()}"):

@@ -313,6 +313,14 @@ async def handle(db, tenant, text: str | None, reply_id: str | None, referral=No
 
     if not applies(tenant):
         return None
+    if reply_id and reply_id.startswith(PREFIX):  # lot 99 : boutons des relances, rappels et livraisons (tous secteurs)
+        from app.services import followups
+
+        parts = reply_id[len(PREFIX):].split(":")
+        if parts[0] in followups.ACTIONS:
+            turn = await followups.handle_tap(db, tenant, tu, customer, conversation, parts[0], parts)
+            if turn is not None:
+                return turn
     from app.services.business_type import is_dealership, is_insurance, is_real_estate
 
     if is_insurance(tenant):  # lot 98 : devis, contrat, réclamation (jamais de prix)

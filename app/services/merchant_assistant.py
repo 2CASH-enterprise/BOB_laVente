@@ -45,6 +45,8 @@ AUDIO_MIMES = {"audio/ogg", "audio/mpeg", "audio/mp4", "audio/aac", "audio/amr"}
 MAX_IMAGE = 5 * 1024 * 1024
 MAX_AUDIO = 16 * 1024 * 1024
 DAILY_CAP = 30
+ALERT_RESERVE = 5  # lot 99 (validé le 31/10) : les 5 derniers messages du jour sont gardés pour les alertes
+RESERVE_NOTICE = "\n\n(Limite de messages du jour presque atteinte : seules les alertes vous parviendront jusqu'à demain.)"
 RETRY_MINUTES = [1, 5, 30]
 AWAIT_MINUTES = 30
 ALERT_WINDOW = timedelta(minutes=30)       # messages des clients regardés pour une alerte
@@ -314,7 +316,11 @@ async def send_outbox(db, now: datetime | None = None, sender=None, mailer=None,
         AssistantOutbox.next_attempt_at.is_(None), AssistantOutbox.next_attempt_at <= now))
     if tenant_id is not None:
         stmt = stmt.where(AssistantOutbox.tenant_id == tenant_id)
-    due = (await db.execute(stmt.order_by(AssistantOutbox.created_at).limit(200))).scalars().all()
+    # Lot 99 : les alertes d'abord (elles passent avant les réponses quand le plafond approche).
+    from sqlalchemy import case
+
+    due = (await db.execute(stmt.order_by(case((AssistantOutbox.kind == "ALERT", 0), else_=1), AssistantOutbox.created_at)
+                            .limit(200))).scalars().all()
     url = assistant_url()
     for item in due:
         connection = await db.get(NaomyConnection, item.connection_id)
@@ -333,13 +339,21 @@ async def send_outbox(db, now: datetime | None = None, sender=None, mailer=None,
             item.status, item.last_error = "SKIPPED", "Assistant éteint"
             report["skipped"] += 1
             continue
-        if await _sent_today(db, tenant, now) >= DAILY_CAP:
+        sent_today = await _sent_today(db, tenant, now)
+        if sent_today >= DAILY_CAP:
             if item.kind == "ALERT":
                 await give_up("Plafond de 30 messages atteint aujourd'hui")
             else:
                 item.status, item.last_error = "SKIPPED", "Plafond de 30 messages atteint aujourd'hui"
                 report["skipped"] += 1
             continue
+        if item.kind != "ALERT" and sent_today >= DAILY_CAP - ALERT_RESERVE:
+            item.status, item.last_error = "SKIPPED", "Messages restants gardés pour les alertes"
+            report["skipped"] += 1
+            continue
+        if item.kind != "ALERT" and sent_today == DAILY_CAP - ALERT_RESERVE - 1 and RESERVE_NOTICE not in item.payload.get("texte", ""):
+            text = item.payload.get("texte", "")[:1024 - len(RESERVE_NOTICE)] + RESERVE_NOTICE  # dernière réponse du jour
+            item.payload = {**item.payload, "texte": text}
         body = json.dumps(item.payload, ensure_ascii=False, separators=(",", ":")).encode()
         stamp = str(int(now.timestamp()))
         headers = {"Content-Type": "application/json", "X-Bob-Timestamp": stamp,
