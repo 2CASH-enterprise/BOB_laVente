@@ -378,7 +378,7 @@ async def test_renewal_template_values(db_session):
 
     assert renewal_template_values(tenant, customer, contract) == ["Awa", branch_label("AUTO"), "Cabinet Kouassi", "31/10/2026"]
     source = Path("app/services/insurance_contracts.py").read_text(encoding="utf-8")
-    block = source[source.index("customer_window_open(db, tenant.id, customer.id, now):\n                if await send_whatsapp"):]
+    block = source[source.index("customer_window_open(db, tenant.id, customer.id, now):\n"):]  # lot 100 : boutons en plus
     assert block.index('"contrat_echeance"') < block.index("reminder_email(db, tenant, customer, contract)")
 
 

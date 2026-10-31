@@ -179,6 +179,7 @@ async def update_project(db, tenant_id, customer_id, values: dict) -> tuple[dict
         profile = ProspectProfile(tenant_id=tenant_id, customer_id=customer_id)
         db.add(profile)
     data = dict(profile.real_estate or {})
+    data.pop("alerts_stopped_at", None)  # lot 100 : le client reparle de son projet → les alertes de biens reprennent
     projects = dict(data.get("projects") or {})
     current = dict(projects.get(project) or {})
     rejected = []

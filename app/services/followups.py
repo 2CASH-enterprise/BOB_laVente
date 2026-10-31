@@ -14,7 +14,8 @@ import re
 import uuid
 
 PREFIX = "g:"
-ACTIONS = {"op", "oq", "ox", "oxy", "oxn", "rk", "rm", "rn", "rny", "rnn", "rs", "dp", "dk", "dn"}
+ACTIONS = {"op", "oq", "ox", "oxy", "oxn", "rk", "rm", "rn", "rny", "rnn", "rs", "dp", "dk", "dn",
+           "pi", "ai", "ar"}  # lot 100 : « Pas intéressé » (alerte de bien), réponses après le rendez-vous
 
 
 def _applies(tenant) -> bool:
@@ -43,6 +44,41 @@ def delivery_buttons(tenant, order, step: str) -> list | None:
     if step == "SHIPPED":
         return [(f"{PREFIX}s", "Suivre ma commande"), (f"{PREFIX}dp:{order.id}", "Un problème")]
     return [(f"{PREFIX}dk:{order.id}", "Bien reçue"), (f"{PREFIX}dn:{order.id}", "Pas reçue"), (f"{PREFIX}cat", "Racheter")]
+
+
+# --- Lot 100 : rappel d'échéance, alerte « nouveau bien », après le rendez-vous, confirmation, reçu ----------------
+
+def contract_buttons(tenant, contract) -> list | None:
+    if not _applies(tenant):
+        return None
+    return [(f"{PREFIX}mr:{contract.id}:R", "Le renouveler"), (f"{PREFIX}mr:{contract.id}:M", "Le modifier"),
+            (f"{PREFIX}human", "Un conseiller")]
+
+
+def property_buttons(tenant, product) -> list | None:
+    if not _applies(tenant):
+        return None
+    return [(f"{PREFIX}d:{product.id}", "Voir le bien"), (f"{PREFIX}vi:{product.id}", "Demander une visite"),
+            (f"{PREFIX}pi:{product.id}", "Pas intéressé")]
+
+
+def after_visit_buttons(tenant, appointment) -> list | None:
+    if not _applies(tenant):
+        return None
+    return [(f"{PREFIX}ai:{appointment.id}", "Ça m'intéresse"), (f"{PREFIX}ar:{appointment.id}", "Je réfléchis"),
+            (f"{PREFIX}human", "Un conseiller")]
+
+
+def booking_buttons(tenant, appointment) -> list | None:
+    if not _applies(tenant):
+        return None
+    return [(f"{PREFIX}rm:{appointment.id}", "Déplacer"), (f"{PREFIX}rn:{appointment.id}", "Annuler")]
+
+
+def receipt_buttons(tenant) -> list | None:
+    if not _applies(tenant):
+        return None
+    return [(f"{PREFIX}cat", "Voir le catalogue"), (f"{PREFIX}s", "Suivre ma commande")]
 
 
 def _you(tu, vous, toi):
@@ -231,10 +267,47 @@ async def _appointment_tap(db, tenant, tu, customer, conversation, action, parts
     return None
 
 
+async def _not_interested(db, tenant, tu, customer, conversation, raw):
+    """« Pas intéressé » : plus aucune alerte de bien pour ce contact (il peut écrire pour en recevoir de nouveau)."""
+    from datetime import datetime, timezone
+
+    from app.models.prospect_profile import ProspectProfile
+    from app.services import prospect
+
+    profile = await prospect.load(db, tenant.id, customer.id)
+    if profile is None:
+        profile = ProspectProfile(tenant_id=tenant.id, customer_id=customer.id)
+        db.add(profile)
+    profile.real_estate = {**(profile.real_estate or {}), "alerts_stopped_at": datetime.now(timezone.utc).isoformat()}
+    _note(db, tenant, conversation, "Le client ne veut plus recevoir d'alertes de biens")
+    return _turn([_text(_you(tu, "C'est noté : je ne vous enverrai plus de nouveaux biens. Écrivez-moi quand vous voulez "
+                                 "reprendre votre recherche.",
+                             "C'est noté : je ne t'enverrai plus de nouveaux biens. Écris-moi quand tu veux reprendre ta recherche."))])
+
+
+async def _after_visit(db, tenant, tu, customer, conversation, action, raw):
+    from app.services.appointment_service import subject_phrase
+
+    tools = _tools(db, tenant, customer, conversation)
+    appointment = await tools._my_appointment(raw)
+    what = subject_phrase(appointment) if appointment is not None else "le rendez-vous"
+    if action == "ai":
+        return _turn(handoff=True, handoff_reason=f"Après {what}, le client est intéressé",
+                     handoff_text=_you(tu, "Très bien ! Je préviens un conseiller : il vous recontacte ici pour la suite.",
+                                       "Très bien ! Je préviens un conseiller : il te recontacte ici pour la suite."))
+    _note(db, tenant, conversation, f"Après {what}, le client réfléchit")
+    return _turn([_text(_you(tu, "Prenez votre temps. Écrivez-moi quand vous voulez : je suis là.",
+                             "Prends ton temps. Écris-moi quand tu veux : je suis là."))])
+
+
 async def handle_tap(db, tenant, tu, customer, conversation, action, parts):
     """Réponse à un bouton de relance, de rappel ou de livraison ; None si ce n'est pas l'un d'eux."""
     if action not in ACTIONS or customer is None or conversation is None or len(parts) < 2:
         return None
+    if action == "pi":
+        return await _not_interested(db, tenant, tu, customer, conversation, parts[1])
+    if action in ("ai", "ar"):
+        return await _after_visit(db, tenant, tu, customer, conversation, action, parts[1])
     if action.startswith("o"):
         return await _order_tap(db, tenant, tu, customer, conversation, action, parts[1])
     if action.startswith("d"):

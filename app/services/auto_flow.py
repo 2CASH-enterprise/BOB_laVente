@@ -358,7 +358,10 @@ async def book(db, tenant, tu, customer, conversation, kind: str, product, slot:
             shop_cart._touch(cart, awaiting=None)
         appointment = tools.booking_outbox[-1]
         text = appointment_service.confirmation_message(appointment, tenant.name, tenant_zone(tenant))
-        return _turn([{"type": "text", "body": text, "message_type": "appointment_confirmed"}, after(tu, kind)],
+        from app.services import followups  # lot 100 : la confirmation porte « Déplacer » et « Annuler »
+
+        return _turn([{"type": "buttons", "body": text, "message_type": "appointment_confirmed",
+                       "buttons": followups.booking_buttons(tenant, appointment)}, after(tu, kind)],
                      booked=[appointment])
     if result.get("status") == "appointment_requested":
         if cart is not None:

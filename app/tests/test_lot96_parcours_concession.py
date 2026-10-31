@@ -315,7 +315,7 @@ async def test_whatsapp_trial_booking_alerts_the_dealer_without_ai(client, db_se
     slot_id = _WA.sent[-1]["rows"][0][0]
     r = await client.post("/webhooks/whatsapp", json=_tap("pn-l96-1", number, slot_id, "Lundi", "list_reply"))
     assert r.json()["guided"] is True
-    assert [s["kind"] for s in _WA.sent[-2:]] == ["text", "buttons"]
+    assert [s["kind"] for s in _WA.sent[-2:]] == ["buttons", "buttons"]  # lot 100 : confirmation avec « Déplacer », « Annuler »
     assert [e["subject"].startswith("Nouveau rendez-vous : +2210700009601") for e in state["outbox"]] == [True]
     trace = (await db_session.execute(select(Message).where(Message.message_type == "appointment_confirmed"))).scalar_one()
     assert "est confirmé" in trace.content

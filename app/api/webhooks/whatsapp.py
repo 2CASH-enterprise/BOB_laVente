@@ -666,7 +666,7 @@ async def receive_webhook(
 
     # Lot 29 — Bob a réservé un créneau : la boutique et le commercial du client sont prévenus.
     booking_emails: list[dict] = []
-    booking_messages: list[str] = []
+    booking_messages: list[tuple] = []  # lot 100 : (texte, rendez-vous) pour « Déplacer » / « Annuler »
     if booking_outbox:
         from app.services import appointment_service
         from app.services.handoff_service import conversation_link, customer_display_name
@@ -680,7 +680,7 @@ async def receive_webhook(
                 await build_fiche(db, tenant, customer),
             )
             booking_emails += alert_emails(tenant.email, commercial, subject, body)
-            booking_messages.append(appointment_service.confirmation_message(appointment, tenant.name, zone))
+            booking_messages.append((appointment_service.confirmation_message(appointment, tenant.name, zone), appointment))
     if change_outbox:
         # Lot 35 — le prospect a déplacé ou annulé son rendez-vous : boutique et commercial prévenus.
         from app.services import appointment_service
@@ -719,9 +719,15 @@ async def receive_webhook(
 
     # Lot 29 — confirmation FIXE (jamais rédigée par l'IA) du rendez-vous réservé, après la réponse ;
     # tracée seulement si Meta l'accepte.
-    for text in booking_messages:
+    from app.services import followups
+
+    for text, booked_appointment in booking_messages:
+        buttons = followups.booking_buttons(tenant, booked_appointment)  # lot 100 : « Déplacer », « Annuler »
         try:
-            await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
+            if buttons:
+                await wa_client.send_buttons(to=customer.whatsapp_number, body=text, buttons=buttons)
+            else:
+                await wa_client.send_text_message(to=customer.whatsapp_number, body=text)
         except Exception:  # noqa: BLE001 — le rendez-vous reste confirmé et visible dans la page Rendez-vous
             logging.getLogger(__name__).warning("Confirmation de rendez-vous non envoyée (conversation %s)", conversation.id)
             continue

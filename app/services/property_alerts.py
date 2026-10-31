@@ -204,6 +204,8 @@ async def candidates(db, tenant, product, now: datetime | None = None) -> list[d
                 item["reason"] = REASON_PRICE_DROP
         if item["blocked"] is None and not customer.marketing_consent:
             item["blocked"] = "n'a pas accepté d'être prévenu"
+        if item["blocked"] is None and (profile.real_estate or {}).get("alerts_stopped_at"):
+            item["blocked"] = "ne veut plus d'alertes (« Pas intéressé »)"  # lot 100
         if item["blocked"] is None and (await db.execute(select(func.count(AppointmentRequest.id)).where(
                 AppointmentRequest.customer_id == customer.id, AppointmentRequest.product_id == product.id))).scalar_one():
             item["blocked"] = "visite déjà demandée"
@@ -300,8 +302,16 @@ async def _send_whatsapp(db, tenant, item: dict, product) -> bool:
         return False
     text = intro(customer, item["reason"])
     client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+    from app.services import followups
+
+    buttons = followups.property_buttons(tenant, product)  # lot 100 : « Voir le bien », « Demander une visite », « Pas intéressé »
     try:
-        if has_sendable_photo(product):
+        if buttons:
+            photo = product.image_url.strip() if has_sendable_photo(product) else None
+            await client.send_text_message(to=customer.whatsapp_number, body=text)
+            await client.send_buttons(to=customer.whatsapp_number, body=product_cards.card_body(product) if photo
+                                      else _describe(product), buttons=buttons, image_link=photo)
+        elif has_sendable_photo(product):
             await client.send_text_message(to=customer.whatsapp_number, body=text)
             await client.send_product_card(to=customer.whatsapp_number, link=product.image_url.strip(),
                                            body=product_cards.card_body(product),

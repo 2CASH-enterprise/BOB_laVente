@@ -143,10 +143,14 @@ async def send_followup(db, tenant, appointment, now: datetime, send_email=None,
     closes_at = await reply_window_closes_at(db, conversation) if conversation is not None else None
     if customer is not None and closes_at is not None and as_utc(now) < closes_at:
         text = whatsapp_text(appointment, tenant.name, tenant.business_type)
+        from app.services import followups  # lot 100 : « Ça m'intéresse », « Je réfléchis », « Un conseiller »
+
+        buttons = followups.after_visit_buttons(tenant, appointment)
         if send_whatsapp is not None:
-            sent = await send_whatsapp(db, tenant, conversation, customer, text)
+            sent = await send_whatsapp(db, tenant, conversation, customer, text, **({"buttons": buttons} if buttons else {}))
         else:
-            sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "appointment_followup")
+            sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "appointment_followup",
+                                               buttons=buttons)
         if sent:
             channel = CHANNEL_WHATSAPP
     elif customer is not None and appointment.outcome == OUTCOME_NO_SHOW and appointment.kind != "APPEL" \

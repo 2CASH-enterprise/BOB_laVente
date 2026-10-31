@@ -203,7 +203,13 @@ async def mark_order_paid(
             and await customer_window_open(db, current_user.tenant_id, customer.id):
         try:
             wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
-            await wa_client.send_text_message(to=customer.whatsapp_number, body=receipt_text)
+            from app.services import followups
+
+            buttons = followups.receipt_buttons(tenant)  # lot 100 : « Voir le catalogue », « Suivre ma commande »
+            if buttons:
+                await wa_client.send_buttons(to=customer.whatsapp_number, body=receipt_text, buttons=buttons)
+            else:
+                await wa_client.send_text_message(to=customer.whatsapp_number, body=receipt_text)
             receipt_sent = True
         except Exception:  # noqa: BLE001 — un échec d'envoi ne doit jamais bloquer la confirmation
             pass

@@ -75,15 +75,15 @@ async def _customer(db, tenant, email="client@example.com", consent=True, first_
 # Chaque envoi WhatsApp du code est listé ici, avec sa justification. Un nouvel envoi fait échouer ce test
 # tant qu'on n'a pas vérifié qu'il respecte la règle des 20 h.
 SEND_SITES = {
-    "api/webhooks/whatsapp.py": 4,      # réponses au message que le client vient d'envoyer (fenêtre ouverte) ; lot 57 : accusé de réception
+    "api/webhooks/whatsapp.py": 5,      # réponses au message que le client vient d'envoyer (fenêtre ouverte) ; lot 57 : accusé de réception ; lot 100 : confirmation de rendez-vous à boutons
     "services/product_cards.py": 3,     # lot 76 : cartes / carrousel / photos de repli, appelés SEULEMENT par le webhook (fenêtre ouverte)
     "agents/tools.py": 1,               # confirmation de commande pendant la conversation (idem)
     "api/messages/routes.py": 1,        # réponse humaine : ensure_reply_window_open
-    "services/appointment_service.py": 1,  # messages fixes : ensure_reply_window_open (puis email)
-    "api/orders/routes.py": 2,          # reçu et annulation : customer_window_open (sinon email)
+    "services/appointment_service.py": 2,  # messages fixes : ensure_reply_window_open (puis email) ; lot 99 : avec boutons
+    "api/orders/routes.py": 3,          # reçu (lot 100 : à boutons) et annulation : customer_window_open (sinon email)
     "services/wa_templates.py": 1,      # lot 68 : modèle APPROUVÉ par Meta (seul envoi permis hors fenêtre), Utilitaire
-    "services/property_alerts.py": 3,   # lot 80 : alerte « nouveau bien » : customer_window_open juste avant l'envoi
-    "services/guided_flow.py": 3,       # lot 94 : écrans du parcours, appelés SEULEMENT par le webhook (fenêtre ouverte)
+    "services/property_alerts.py": 5,   # lot 80 : alerte « nouveau bien » : customer_window_open juste avant l'envoi ; lot 100 : à boutons
+    "services/guided_flow.py": 5,       # lot 94 : écrans du parcours (boutons, listes), appelés SEULEMENT par le webhook (fenêtre ouverte)
 }
 
 
@@ -93,7 +93,9 @@ def _send_calls():
         rel = path.relative_to(ROOT).as_posix()
         if rel.startswith(("tests/", "integrations/")):
             continue
-        count = len(re.findall(r"\.send_(?:(?:text|image|template|interactive|document)_message|product_card|product_carousel)\(", path.read_text(encoding="utf-8")))
+        # Lot 100 : les messages à boutons et les listes sont comptés aussi.
+        count = len(re.findall(r"\.send_(?:(?:text|image|template|interactive|document)_message|product_card|product_carousel|buttons|list)\(",
+                               path.read_text(encoding="utf-8")))
         if count:
             found[rel] = count
     return found
@@ -105,12 +107,12 @@ def test_every_whatsapp_send_is_reviewed():
 
 def test_proactive_sends_check_the_20h_window():
     orders = (ROOT / "api/orders/routes.py").read_text(encoding="utf-8")
-    for match in re.finditer(r"\.send_text_message\(", orders):
-        before = orders[max(0, match.start() - 900):match.start()]
+    for match in re.finditer(r"\.send_(?:text_message|buttons)\(", orders):  # lot 100 : reçu à boutons aussi
+        before = orders[max(0, match.start() - 1200):match.start()]
         assert "customer_window_open(" in before
     service = (ROOT / "services/appointment_service.py").read_text(encoding="utf-8")
     fixed = service[service.index("async def send_fixed_message("):service.index("async def notify_customer(")]
-    assert fixed.index("ensure_reply_window_open(") < fixed.index(".send_text_message(")
+    assert fixed.index("ensure_reply_window_open(") < fixed.index(".send_buttons(") < fixed.index(".send_text_message(")
     replies = (ROOT / "api/messages/routes.py").read_text(encoding="utf-8")
     assert replies.index("ensure_reply_window_open(") < replies.index(".send_text_message(")
 
@@ -118,7 +120,7 @@ def test_proactive_sends_check_the_20h_window():
 def test_property_alert_checks_the_20h_window_before_sending():
     source = (ROOT / "services/property_alerts.py").read_text(encoding="utf-8")
     sender = source[source.index("async def _send_whatsapp("):source.index("def _email(")]
-    assert sender.index("customer_window_open(") < sender.index(".send_text_message(")
+    assert sender.index("customer_window_open(") < sender.index(".send_text_message(") < sender.index(".send_buttons(")
 
 
 def test_relances_never_use_whatsapp():

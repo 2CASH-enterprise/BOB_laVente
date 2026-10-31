@@ -752,7 +752,11 @@ async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=Non
             ).order_by(Conversation.created_at.desc()).limit(1))).scalar_one_or_none()
             # Règle des 20 h (lot 49) : WhatsApp seulement si le client a écrit récemment, sinon email.
             if conversation is not None and await customer_window_open(db, tenant.id, customer.id, now):
-                if await send_whatsapp(db, tenant, conversation, customer, whatsapp_reminder(tenant, customer, contract)):
+                from app.services import followups  # lot 100 : « Le renouveler », « Le modifier », « Un conseiller »
+
+                buttons = followups.contract_buttons(tenant, contract)
+                if await send_whatsapp(db, tenant, conversation, customer, whatsapp_reminder(tenant, customer, contract),
+                                       **({"buttons": buttons} if buttons else {})):
                     channel = "WHATSAPP"
             elif await wa_templates.send(db, tenant, customer, conversation, "contrat_echeance",
                                          renewal_template_values(tenant, customer, contract), message_type="renewal_reminder"):
@@ -785,10 +789,10 @@ async def run_for_tenant(db, tenant, now: datetime | None = None, send_email=Non
     return report
 
 
-async def _send_whatsapp(db, tenant, conversation, customer, text) -> bool:
+async def _send_whatsapp(db, tenant, conversation, customer, text, buttons=None) -> bool:
     from app.services.appointment_service import send_fixed_message
 
-    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "renewal_reminder")
+    sent, _ = await send_fixed_message(db, tenant, conversation, customer, text, "BOB", "renewal_reminder", buttons=buttons)
     return sent
 
 
