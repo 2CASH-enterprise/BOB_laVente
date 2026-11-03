@@ -31,6 +31,7 @@ STATUSES = {"AGENCE": "Agence immobilière", "MANDATAIRE": "Mandataire / agent c
 ACTIVITIES = {"VENTE": "Vente", "LOCATION": "Location", "GESTION": "Gestion locative"}
 PROFILE_TEXT_FIELDS = {  # clé : (libellé, longueur maximale)
     "card": ("Carte professionnelle", 200),
+    "address": ("Adresse de l'agence", 200),  # lot 103 : imprimée sur les affiches des biens
     "network": ("Réseau ou agence mandante", 150),
     "rsac": ("Immatriculation RSAC (mandataire)", 150),
     "guarantee": ("Garantie financière", 200),

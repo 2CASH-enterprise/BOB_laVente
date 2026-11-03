@@ -664,6 +664,7 @@ class RealEstateProfileReq(BaseModel):
     status: str | None = Field(default=None, max_length=24)
     activities: list[str] | None = Field(default=None, max_length=3)
     card: str | None = Field(default=None, max_length=400)
+    address: str | None = Field(default=None, max_length=400)
     network: str | None = Field(default=None, max_length=400)
     rsac: str | None = Field(default=None, max_length=400)
     guarantee: str | None = Field(default=None, max_length=400)

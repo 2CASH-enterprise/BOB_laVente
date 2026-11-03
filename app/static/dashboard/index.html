@@ -530,6 +530,9 @@
   .kit-main { flex: 1 1 300px; min-width: 0; }
   .kit-row { display: flex; gap: 8px; align-items: center; }
   .kit-row .input { flex: 1; min-width: 0; }
+  .kit-poster { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border, #e5e7eb); }
+  .kit-poster label { flex: 1 1 150px; }
+  .kit-poster select { width: 100%; margin-top: 2px; }
   .kit-texts { display: grid; gap: 10px; margin-top: 10px; }
   .kit-text { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
   .kit-text p { font-size: 13px; margin: 4px 0 8px; overflow-wrap: anywhere; }
@@ -1567,6 +1570,10 @@
           <div style="margin-bottom: 8px;">
             <label for="estate-card" style="font-size: 12px; color: var(--muted);">Carte professionnelle (facultatif)</label>
             <input id="estate-card" class="input" maxlength="200" placeholder="Ex. Carte T n° CPI 6901 2024 000 012 345, CCI de Lyon">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label for="estate-address" style="font-size: 12px; color: var(--muted);">Adresse de l'agence (facultatif, imprimée sur les affiches des biens)</label>
+            <input id="estate-address" class="input" maxlength="200" placeholder="Ex. 12 rue de la République, 69002 Lyon">
           </div>
           <div style="margin-bottom: 8px;" id="estate-network-row">
             <label for="estate-network" style="font-size: 12px; color: var(--muted);">Réseau ou agence mandante (facultatif)</label>
@@ -5133,6 +5140,8 @@ async function loadQrCodes() {
         <div style="font-weight: 600; font-size: 13px;">${esc(c.product_name)}</div>
         <div style="color: var(--muted); font-size: 11px; margin: 4px 0 8px;">${c.scan_count} scan${c.scan_count > 1 ? "s" : ""}</div>
         <button class="action" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="shareQrImage(${jsArg(c.id)})">Image à partager</button>
+        ${document.body.classList.contains("real-estate") ? `<button class="action" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="openQrPoster(${jsArg(c.id)}, 'bien')">Affiche du bien (A4)</button>` : ""}
+        <button class="action secondary" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="openQrPoster(${jsArg(c.id)}, 'vitre')">Autocollant vitre</button>
         <button class="action secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyQrLink(${jsArg(fullUrl)})">Copier le lien</button>
         <button class="action secondary" style="font-size: 11px; padding: 5px 10px;" onclick="deleteQrCode(${jsArg(c.id)})">Supprimer</button>
       </div>`;
@@ -6529,7 +6538,7 @@ async function previewFollowup(stage) {
 
 // ---- Lot 79 : agence immobilière — qui parle au client (loi Hoguet, loi ALUR) ----
 let estateProfile = null;
-const ESTATE_TEXT_FIELDS = { card: "estate-card", network: "estate-network", rsac: "estate-rsac", guarantee: "estate-guarantee",
+const ESTATE_TEXT_FIELDS = { card: "estate-card", address: "estate-address", network: "estate-network", rsac: "estate-rsac", guarantee: "estate-guarantee",
   zones: "estate-zones", mediator: "estate-mediator", fees_url: "estate-fees-url" };
 
 async function loadRealEstateProfile() {
@@ -6664,8 +6673,17 @@ async function loadKit() {
         <label for="kit-greeting" style="font-size: 12px; color: var(--muted); display: block; margin-top: 10px;">Message pré-rempli quand le client ouvre le lien</label>
         <div class="kit-row"><input id="kit-greeting" class="input" maxlength="300" value="${esc(k.greeting)}"><button class="action secondary" onclick="saveKitGreeting()">Enregistrer</button></div>
         <div class="kit-row" style="margin-top: 12px; flex-wrap: wrap;">
-          <button class="action" onclick="openKitPoster()">Affiche à imprimer</button>
           <button class="action secondary" onclick="downloadKitQr()">Télécharger le QR code</button>
+        </div>
+        <div class="kit-poster" id="kit-poster">
+          <div style="font-weight: 600; font-size: 14px; margin-bottom: 6px;">Affiche vitrine à imprimer</div>
+          <div class="kit-row" style="flex-wrap: wrap; align-items: flex-end;">
+            <label style="font-size: 12px; color: var(--muted);">Modèle<br><select id="kit-poster-model" class="input" onchange="kitPosterModelChanged()"></select></label>
+            <label style="font-size: 12px; color: var(--muted);">Teinte<br><select id="kit-poster-accent" class="input"></select></label>
+            <label style="font-size: 12px; color: var(--muted);" id="kit-poster-photo-row">Photo<br><select id="kit-poster-photo" class="input"></select></label>
+            <button class="action" onclick="openKitPoster()">Voir l'affiche</button>
+          </div>
+          <p style="font-size: 12px; color: var(--muted); margin: 6px 0 0;">L'affiche s'ouvre dans un nouvel onglet : « Imprimer ou enregistrer en PDF », le format est déjà réglé. L'affiche d'un produit ou d'un bien se fait depuis son QR code (page Produits).</p>
         </div>
         <p style="font-size: 12px; color: var(--muted); margin: 10px 0 0;">${Number(k.clicks)} ouverture${k.clicks > 1 ? "s" : ""} du lien · ${Number(k.customers)} client${k.customers > 1 ? "s" : ""} venu${k.customers > 1 ? "s" : ""} par le kit · numéro ${esc(k.phone)}</p>
       </div>
@@ -6679,6 +6697,7 @@ async function loadKit() {
           <button class="action secondary" onclick="copyText(document.getElementById('kit-text-${i}').textContent, 'Texte copié.')">Copier</button>
         </div>`).join("")}</div>
     </details>`;
+  loadKitPosterOptions();
 }
 
 async function copyText(text, done) {
@@ -6705,10 +6724,47 @@ async function saveKitGreeting() {
   }
 }
 
+// Lot 103 — affiches vitrine premium : modèle, teinte et photo choisis par le commerçant.
+var kitPosterOptions = null;
+
+async function loadKitPosterOptions() {
+  try { kitPosterOptions = await api("/api/v1/kit/poster-options"); } catch (e) { return; }
+  const o = kitPosterOptions;
+  const model = document.getElementById("kit-poster-model");
+  if (!model) return;
+  model.innerHTML = o.models.map((m) => `<option value="${esc(m.code)}">${esc(m.label)}</option>`).join("");
+  document.getElementById("kit-poster-accent").innerHTML = o.accents.map((a) => `<option value="${esc(a.code)}">${esc(a.label)}</option>`).join("");
+  document.getElementById("kit-poster-photo").innerHTML = `<option value="">Sans photo</option>` +
+    o.photos.map((p, i) => `<option value="${esc(p.id)}" ${i === 0 ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+  kitPosterModelChanged();
+}
+
+function kitPosterModelChanged() {
+  const model = (document.getElementById("kit-poster-model") || {}).value;
+  const row = document.getElementById("kit-poster-photo-row");
+  if (row) row.classList.toggle("hidden", model === "sombre");
+}
+
+function posterAccent() {
+  return (document.getElementById("kit-poster-accent") || {}).value || "or";
+}
+
 async function openKitPoster() {
+  const model = (document.getElementById("kit-poster-model") || {}).value || "agence";
+  const photo = model === "sombre" ? "" : ((document.getElementById("kit-poster-photo") || {}).value || "");
+  const query = new URLSearchParams({ model, accent: posterAccent() });
+  if (photo) query.set("photo", photo);
+  await openPosterPage("/api/v1/kit/poster?" + query.toString());
+}
+
+async function openQrPoster(id, model) {
+  await openPosterPage(`/api/v1/qr-codes/${encodeURIComponent(id)}/poster?` + new URLSearchParams({ model, accent: posterAccent() }).toString());
+}
+
+async function openPosterPage(path) {
   const tab = window.open("", "_blank");
   try {
-    const r = await fetch(API_BASE + "/api/v1/kit/poster", { headers: { Authorization: "Bearer " + token } });
+    const r = await fetch(API_BASE + path, { headers: { Authorization: "Bearer " + token } });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Affiche indisponible pour le moment.");
     const url = URL.createObjectURL(new Blob([await r.text()], { type: "text/html" }));
     if (tab) tab.location.href = url; else window.location.href = url;

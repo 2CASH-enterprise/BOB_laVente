@@ -9,7 +9,6 @@ de liens du plan. Sans numéro WhatsApp connecté, il n'y a pas de kit.
 """
 import io
 import secrets
-from html import escape
 
 from sqlalchemy import select
 
@@ -110,36 +109,3 @@ async def kit(db, tenant, base_url: str) -> dict:
         "greeting": cp.greeting, "active": cp.active, "clicks": cp.click_count, "customers": customers,
         "qr_svg": qr_svg(link), "texts": texts(tenant, link),
     }
-
-
-def poster_html(tenant, data: dict) -> str:
-    """Affiche A4 imprimable : nom, appel à écrire, QR code, numéro. Tout est échappé."""
-    lead = _HOOKS.get(_sector(tenant), _HOOKS["ONLINE_STORE"])[1]
-    return f"""<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Affiche WhatsApp — {escape(tenant.name)}</title>
-<style>
-  @page {{ size: A4; margin: 14mm; }}
-  body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #10251b; background: #f4f5f7; }}
-  .sheet {{ max-width: 720px; margin: 24px auto; background: #fff; border-radius: 16px; padding: 48px 40px; text-align: center; box-sizing: border-box; }}
-  .name {{ font-size: 22px; font-weight: 700; letter-spacing: .02em; color: #3d5a4c; margin: 0 0 18px; }}
-  h1 {{ font-size: 44px; line-height: 1.1; margin: 0 0 12px; }}
-  .lead {{ font-size: 20px; color: #3d5a4c; margin: 0 0 28px; }}
-  .qr {{ width: 320px; max-width: 80%; margin: 0 auto 20px; }} .qr svg {{ width: 100%; height: auto; display: block; }}
-  .hint {{ font-size: 18px; margin: 0 0 6px; }} .phone {{ font-size: 30px; font-weight: 800; margin: 0 0 22px; letter-spacing: .03em; }}
-  .badge {{ display: inline-block; background: #25d366; color: #0b2a17; font-weight: 700; border-radius: 999px; padding: 10px 22px; font-size: 18px; }}
-  .print {{ display: block; margin: 0 auto 24px; background: #1f3d2f; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }}
-  @media print {{ body {{ background: #fff; }} .sheet {{ margin: 0; border-radius: 0; padding: 20mm 10mm; max-width: none; }} .print {{ display: none; }} }}
-</style></head>
-<body>
-<div class="sheet">
-  <button class="print" type="button" onclick="window.print()">Imprimer cette affiche</button>
-  <p class="name">{escape(tenant.name)}</p>
-  <h1>Écrivez-nous sur WhatsApp</h1>
-  <p class="lead">{escape(lead)}</p>
-  <div class="qr">{data["qr_svg"]}</div>
-  <p class="hint">Scannez avec l'appareil photo de votre téléphone, ou écrivez au</p>
-  <p class="phone">{escape(data["phone"])}</p>
-  <span class="badge">Réponse immédiate, 7 jours sur 7</span>
-</div>
-</body></html>"""

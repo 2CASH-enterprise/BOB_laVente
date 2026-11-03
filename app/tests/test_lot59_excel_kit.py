@@ -406,8 +406,8 @@ async def test_poster_is_escaped_and_printable(client, db_session):
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
     page = response.text
     assert "<script>alert" not in page and "&lt;script&gt;alert(1)&lt;/script&gt; Auto" in page
-    assert "Écrivez-nous sur WhatsApp" in page and "+225 07 07 00 00 99" in page and "<svg" in page
-    assert "Disponibilité, essai" in page and "@page" in page and "window.print()" in page
+    assert "WhatsApp" in page and "+225 07 07 00 00 99" in page and "<svg" in page  # lot 103 : affiche premium
+    assert "Disponibilité" in page and "Essai" in page and "@page" in page and "window.print()" in page
 
 
 # --- Tableau de bord ----------------------------------------------------------------------------------------
@@ -424,7 +424,7 @@ def test_dashboard():
     assert "/api/v1/customers/import/preview" in _function("previewCustomerImport")
     run = _function("runCustomerImport")
     assert "/api/v1/customers/import" in run and "mapping" in run
-    assert "Authorization" in _function("openKitPoster")
+    assert "Authorization" in _function("openPosterPage") and "/api/v1/kit/poster" in _function("openKitPoster")  # lot 103
     show = HTML[HTML.index("function showTab("):]
     show = show[:show.index("\n}\n")]
     assert "loadKit()" in show and "initCustomersDrop()" in show

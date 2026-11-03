@@ -1,4 +1,6 @@
 """Lot 59 — kit de lancement : lien suivi, QR code, affiche et textes pour faire écrire les clients sur WhatsApp."""
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -48,8 +50,39 @@ async def update_kit(payload: KitIn, current_user: CurrentUser = Depends(get_cur
 
 
 @router.get("/poster", response_class=HTMLResponse)
-async def kit_poster(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def kit_poster(model: str = "agence", accent: str = "or", photo: UUID | None = None,
+                     current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Lot 103 — affiche vitrine premium (agence A4, sombre A4, chevalet A5) avec le QR code du kit."""
+    from app.models.product import Product
+    from app.services import vitrine_posters
+
     tenant, data = await _kit(db, current_user)
     if not data["connected"]:
         raise HTTPException(status_code=409, detail="Connectez d'abord votre numéro WhatsApp (Intégrations)")
-    return HTMLResponse(launch_kit.poster_html(tenant, data), headers={"Cache-Control": "no-store"})
+    picture = None
+    if photo is not None:
+        product = await db.get(Product, photo)
+        if product is None or product.tenant_id != tenant.id:
+            raise HTTPException(status_code=404, detail="Photo introuvable")
+        picture = vitrine_posters.photo_of(product)
+    try:
+        page = vitrine_posters.kit_poster(tenant, data, model, accent, picture)
+    except vitrine_posters.PosterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/poster-options")
+async def kit_poster_options(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    """Modèles, teintes et photos possibles (les produits ou biens actifs qui ont une photo)."""
+    from sqlalchemy import select
+
+    from app.models.product import Product
+    from app.services import vitrine_posters as vp
+
+    rows = (await db.execute(select(Product).where(Product.tenant_id == current_user.tenant_id, Product.active.is_(True))
+                             .order_by(Product.created_at.desc()).limit(200))).scalars().all()
+    photos = [{"id": str(p.id), "name": p.name, "url": vp.photo_of(p)} for p in rows if vp.photo_of(p)][:60]
+    return {"models": [{"code": m, "label": vp.MODEL_LABELS[m]} for m in vp.KIT_MODELS],
+            "accents": [{"code": c, "label": vp.ACCENT_LABELS[c], "color": vp.ACCENTS[c][0]} for c in vp.ACCENTS],
+            "photos": photos}

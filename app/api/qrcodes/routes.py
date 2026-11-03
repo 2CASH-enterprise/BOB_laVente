@@ -8,7 +8,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +89,36 @@ async def delete_qr_code(
         raise HTTPException(status_code=404, detail="Code QR introuvable")
     await db.delete(qr)
     await db.commit()
+
+
+@router.get("/api/v1/qr-codes/{qr_id}/poster", response_class=HTMLResponse)
+async def qr_code_poster(
+    qr_id: UUID,
+    model: str = "vitre",
+    accent: str = "or",
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lot 103 — affiche du bien (A4) ou autocollant vitre (20 × 20 cm) avec le QR code de ce produit."""
+    from app.core.config import get_settings
+    from app.models.tenant import Tenant
+    from app.services import launch_kit, vitrine_posters
+
+    stmt = select(ProductQrCode).where(ProductQrCode.tenant_id == current_user.tenant_id, ProductQrCode.id == qr_id)
+    qr = (await db.execute(stmt)).scalar_one_or_none()
+    product = await db.get(Product, qr.product_id) if qr is not None else None
+    if qr is None or product is None:
+        raise HTTPException(status_code=404, detail="Code QR introuvable")
+    account = (await db.execute(select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == qr.tenant_id))).scalar_one_or_none()
+    if account is None or not account.display_phone_number:
+        raise HTTPException(status_code=409, detail="Connectez d'abord votre numéro WhatsApp (Intégrations)")
+    tenant = await db.get(Tenant, qr.tenant_id)
+    svg = launch_kit.qr_svg(f"{get_settings().public_base_url.rstrip('/')}/qr/{qr.code}")
+    try:
+        page = vitrine_posters.product_poster(tenant, product, account.display_phone_number, svg, model, accent)
+    except vitrine_posters.PosterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/qr/{code}")
