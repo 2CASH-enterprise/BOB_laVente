@@ -72,6 +72,8 @@ class PreviewTable(BaseModel):
     header: list[str]
     rows: list[list[str | None]]
     import_id: UUID | None = None
+    source: str | None = None  # lot 105 a : « POLIRIS » = annonces du logiciel de l'agence (annule et remplace)
+    file_skus: list[str] | None = None  # lot 105 a : références du fichier (une ligne retirée de l'aperçu n'est pas « vendue »)
 
 
 async def _tenant_and_slots(db, current_user):
@@ -110,10 +112,12 @@ async def import_preview(file: UploadFile, current_user: CurrentUser = Depends(g
     from app.services import catalog_pdf, catalog_preview
 
     name = (file.filename or "").lower()
-    if not name.endswith((".csv", ".xlsx", ".xlsm", ".pdf")):
-        raise HTTPException(status_code=400, detail="Formats acceptés : Excel (.xlsx), CSV ou PDF")
+    if not name.endswith((".csv", ".xlsx", ".xlsm", ".pdf", ".zip")):
+        raise HTTPException(status_code=400, detail="Formats acceptés : Excel (.xlsx), CSV, PDF ou ZIP (logiciel immobilier)")
     raw = await file.read()
     tenant, max_new = await _tenant_and_slots(db, current_user)
+    if name.endswith(".zip"):
+        return await _poliris_preview(db, tenant, max_new, raw)
     if not name.endswith(".pdf"):
         header, rows = catalog_preview.to_canonical(tenant, *_read_sheet(raw, name))
         return await _checked(db, tenant, max_new, header, rows, source="SHEET")
@@ -148,6 +152,34 @@ async def import_preview(file: UploadFile, current_user: CurrentUser = Depends(g
         await db.commit()
         raise HTTPException(status_code=503, detail="La lecture du PDF est momentanément indisponible, réessayez.") from None
     return {"id": str(record.id), "status": "PROCESSING", "pages": read["pages"], "source": "PDF_AI"}
+
+
+async def _poliris_preview(db, tenant, max_new, raw: bytes) -> dict:
+    """Lot 105 a — l'export « format SeLoger (Poliris) » du logiciel de l'agence : lu sans IA, montré à vérifier."""
+    from sqlalchemy import select
+
+    from app.core.config import get_settings
+    from app.models.product import Product
+    from app.services import catalog_preview, poliris
+    from app.services.business_type import is_real_estate
+    from app.services.photo_formats import UPLOADS
+
+    if not is_real_estate(tenant):
+        raise HTTPException(status_code=400, detail="Le fichier ZIP d'un logiciel immobilier est réservé aux agences.")
+    known = {p.sku: p.image_url for p in (await db.execute(select(Product).where(Product.tenant_id == tenant.id))).scalars()}
+    try:
+        read = poliris.read_zip(raw, poliris.photo_saver(UPLOADS, get_settings().public_base_url), known.get)
+    except poliris.PolirisError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    header, rows = catalog_preview.to_canonical(tenant, read["header"], read["rows"])
+    data = await _checked(db, tenant, max_new, header, rows, source="POLIRIS", listings=read["count"],
+                          skipped=read["skipped"])
+    skus = {row[0] for row in read["rows"]}
+    data["file_skus"] = sorted(skus)
+    data["retiring"] = sorted(p.name for p in (await db.execute(select(Product).where(
+        Product.tenant_id == tenant.id, Product.external_source == "POLIRIS", Product.stock_quantity > 0))).scalars()
+        if p.sku not in skus)[:50]
+    return data
 
 
 @router.get("/import-preview/{import_id}", dependencies=[Depends(require_role("MANAGER"))])
@@ -209,7 +241,16 @@ async def import_rows(payload: PreviewTable, current_user: CurrentUser = Depends
         record = await db.get(CatalogImport, payload.import_id)
         if record is not None and record.tenant_id == tenant.id:
             record.status, record.result = "IMPORTED", None  # l'aperçu n'est plus gardé
-    return await import_catalog_csv(db, tenant.id, catalog_preview.to_csv(header, rows), max_new_products=max_new, **options)
+    result = await import_catalog_csv(db, tenant.id, catalog_preview.to_csv(header, rows), max_new_products=max_new, **options)
+    from app.services.business_type import is_real_estate
+
+    if payload.source == "POLIRIS" and is_real_estate(tenant) and "SKU" in header:
+        from app.services import poliris
+
+        at = header.index("SKU")  # lot 105 a : annule et remplace — un bien absent du fichier passe en Vendu ou Loué
+        kept = {row[at].strip() for row in rows if len(row) > at and row[at].strip()} | set(payload.file_skus or [])
+        await poliris.retire_missing(db, tenant.id, kept)
+    return result
 
 
 @router.get("/pdf-quota", dependencies=[Depends(require_role("MANAGER"))])

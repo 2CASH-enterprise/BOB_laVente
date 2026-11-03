@@ -160,6 +160,9 @@ async def update_business_type(
     previous = tenant.business_type
     tenant.business_type = payload.business_type
     tenant.business_type_chosen_at = datetime.now(timezone.utc)
+    from app.services.launch_kit import follow_sector
+
+    await follow_sector(db, tenant, previous)  # lot 105 a : le message du kit suit le secteur
     if payload.business_type == "INSURANCE_BROKER":
         from app.services.insurance import seed_products
 

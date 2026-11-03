@@ -1113,7 +1113,7 @@
               <span class="file-title" id="csv-file-name">Choisir un fichier Excel, CSV ou PDF</span>
               <span class="file-hint" id="csv-file-hint">ou glissez-le ici · fichier .xlsx, .csv ou .pdf</span>
             </span>
-            <input type="file" id="csv-file-input" accept=".xlsx,.csv,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Choisir un fichier Excel, CSV ou PDF" onchange="showChosenCsv()">
+            <input type="file" id="csv-file-input" accept=".xlsx,.csv,.pdf,.zip,text/csv,application/pdf,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Choisir un fichier Excel, CSV, PDF ou ZIP" onchange="showChosenCsv()">
           </label>
           <button class="action" onclick="importCsv()">Importer</button>
           <button class="action secondary" onclick="exportXlsx()">Exporter en Excel</button>
@@ -1416,7 +1416,18 @@
       </div>
 
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div class="card" style="flex: 1; min-width: 300px;">
+        <div class="card estate-only" style="flex: 1; min-width: 300px;" id="estate-software-card">
+          <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;">Votre logiciel immobilier</div>
+          <p style="font-size: 13px; color: var(--muted); margin: 0 0 10px;">Vos biens arrivent dans Bob tels que votre logiciel les envoie aux portails : prix et honoraires, DPE, ville et quartier, photos. Dans votre logiciel (La Boîte Immo, Hektor, Apimo, AC3, Netty…), exportez vos annonces au <b>format SeLoger (Poliris)</b>, puis déposez le fichier ZIP ici. Vous vérifiez le tableau avant l'import ; un bien qui n'est plus dans le fichier passe en Vendu ou Loué.</p>
+          <label class="file-drop" id="estate-zip-drop">
+            <span class="file-text"><span class="file-title" id="estate-zip-name">Choisir le fichier ZIP de vos annonces</span>
+            <span class="file-hint">export « format SeLoger (Poliris) » · fichier .zip</span></span>
+            <input type="file" id="estate-zip-input" accept=".zip,application/zip" aria-label="Choisir le fichier ZIP des annonces" onchange="document.getElementById('estate-zip-name').textContent = this.files[0] ? this.files[0].name : 'Choisir le fichier ZIP de vos annonces'">
+          </label>
+          <button class="action" onclick="importEstateZip()" style="margin-top: 8px;">Lire mes annonces</button>
+          <div id="estate-zip-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+        <div class="card no-estate" style="flex: 1; min-width: 300px;">
           <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;"><span class="app-icon shopify" aria-hidden="true"><svg><use href="#ico-shopify"/></svg></span>Shopify</div>
           <div id="shopify-status" style="font-size: 13px; color: var(--muted); margin-bottom: 12px;">Vérification…</div>
           <div id="shopify-form">
@@ -3584,7 +3595,9 @@ function renderSimpleWhere(h) {
   return `${simpleHead("Vos produits")}
     <p class="sm-muted" style="margin: 0;">Où sont vos produits aujourd'hui ?</p>
     ${choice("tab:integrations", "shop", "Dans mon catalogue WhatsApp ou Facebook", "Un clic : tout arrive, photos et prix")}
-    ${choice("tab:integrations", "store", "Dans ma boutique Shopify", "Un clic : produits, photos, prix et stock")}
+    ${currentBusinessType === "REAL_ESTATE"  // lot 105 a : les agences n'ont pas Shopify, mais un logiciel immobilier
+      ? choice("tab:integrations", "store", "Dans mon logiciel immobilier", "L'export de vos annonces : prix, honoraires, photos")
+      : choice("tab:integrations", "store", "Dans ma boutique Shopify", "Un clic : produits, photos, prix et stock")}
     ${choice("tab:products", "file", "Dans un fichier Excel ou un PDF", "Bob lit le fichier, même une brochure")}
     ${choice("screen:add", "photos", "Seulement en photos sur mon téléphone", "Une photo, un nom, un prix : c'est ajouté")}
     ${help}
@@ -6305,6 +6318,27 @@ async function importCsv() {
   }
 }
 
+// Lot 105 a — l'export « format SeLoger (Poliris) » du logiciel de l'agence, vérifié dans la page Biens.
+async function importEstateZip() {
+  const msg = document.getElementById("estate-zip-msg");
+  const input = document.getElementById("estate-zip-input");
+  if (!input.files.length) { msg.style.color = "var(--danger)"; msg.textContent = "Choisissez d'abord le fichier ZIP."; return; }
+  const formData = new FormData();
+  formData.append("file", input.files[0]);
+  msg.style.color = "var(--muted)";
+  msg.textContent = "Lecture des annonces…";
+  try {
+    const r = await api("/api/v1/catalog/import-preview", { method: "POST", body: formData });
+    input.value = "";
+    msg.textContent = "";
+    showTab("products");
+    openImportReview(r, null);
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
 function waitForImport(id) {
   clearTimeout(importPoll);
   importPoll = setTimeout(async () => {
@@ -6328,7 +6362,8 @@ function openImportReview(r, importId) {
   const notes = r.rows.map(() => ({}));
   (r.issues || []).filter((i) => i.level === "info" && i.row !== null && notes[i.row]).forEach((i) => { notes[i.row][i.field] = i.message; });
   importDraft = { header: r.header, labels: r.labels, rows: r.rows, issues: (r.issues || []).filter((i) => i.level !== "info"),
-                  notes, importId, source: r.source, pages: r.pages };
+                  notes, importId, source: r.source, pages: r.pages,
+                  skipped: r.skipped || [], retiring: r.retiring || [], fileSkus: r.file_skus || null, listings: r.listings };
   renderImportReview();
   document.getElementById("import-review").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -6347,7 +6382,11 @@ function renderImportReview() {
   const ready = allBlocked ? 0 : live.filter(({ i }) => !blocked.has(i)).length;
   const toFix = live.length - ready;
   const origin = d.source === "PDF_AI" ? `PDF lu par l'IA (${d.pages} page${d.pages > 1 ? "s" : ""}) : relisez les noms et les prix.`
-    : d.source === "PDF_TABLE" ? "Tableau lu dans votre PDF." : "";
+    : d.source === "PDF_TABLE" ? "Tableau lu dans votre PDF."
+    : d.source === "POLIRIS" ? `Annonces de votre logiciel immobilier (${Number(d.listings) || live.length} lue${(Number(d.listings) || live.length) > 1 ? "s" : ""}).`
+      + (d.skipped.length ? ` Écartées : ${d.skipped.slice(0, 5).join(" ; ")}${d.skipped.length > 5 ? " …" : ""}.` : "")
+      + (d.retiring.length ? ` Plus dans le fichier, ils passeront en Vendu ou Loué : ${d.retiring.slice(0, 8).join(", ")}${d.retiring.length > 8 ? " …" : ""}.` : "")
+    : "";
   const general = d.issues.filter((i) => i.row === null).map((i) => `<p class="tone-danger">${esc(i.message)}</p>`).join("");
   const head = d.labels.map((l) => `<th>${esc(l)}</th>`).join("");
   const body = live.map(({ row, i }) => {
@@ -6423,7 +6462,8 @@ async function confirmImport() {
   msg.textContent = "Import en cours…";
   try {
     const result = await api("/api/v1/catalog/import-rows", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ header: importDraft.header, rows: importDraft.rows, import_id: importDraft.importId }) });
+      body: JSON.stringify({ header: importDraft.header, rows: importDraft.rows, import_id: importDraft.importId,
+                             source: importDraft.source || null, file_skus: importDraft.fileSkus }) });
     closeImportReview();
     const out = document.getElementById("csv-import-msg");
     out.style.color = result.failed ? "var(--danger)" : "var(--success)";

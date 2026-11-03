@@ -50,6 +50,24 @@ async def kit_link(db, tenant):
     return cp, account
 
 
+async def follow_sector(db, tenant, previous: str | None) -> int:
+    """Lot 105 a — la boutique change de secteur : le message du kit suit le nouveau secteur, sauf s'il a été écrit par
+    le commerçant (« Bonjour, j'ai une question sur mon assurance » restait sur l'affiche d'une agence, 03/11)."""
+    from app.models.contact_point import ContactPoint
+    from app.services.business_type import normalize
+
+    old, new = GREETINGS.get(normalize(previous)), GREETINGS.get(_sector(tenant), GREETINGS["ONLINE_STORE"])
+    if old is None or old == new:
+        return 0
+    points = (await db.execute(select(ContactPoint).where(
+        ContactPoint.tenant_id == tenant.id, ContactPoint.code.startswith(KIT_CODE_PREFIX)))).scalars().all()
+    changed = 0
+    for point in points:
+        if " ".join((point.greeting or "").split()) == old:
+            point.greeting, changed = new, changed + 1
+    return changed
+
+
 def qr_svg(url: str) -> str:
     import segno
 

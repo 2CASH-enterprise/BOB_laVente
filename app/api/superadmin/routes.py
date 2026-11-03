@@ -394,6 +394,9 @@ async def update_tenant_business_type(
     previous = normalize_business_type(tenant.business_type)
     tenant.business_type = payload.business_type
     tenant.business_type_chosen_at = tenant.business_type_chosen_at or datetime.now(timezone.utc)
+    from app.services.launch_kit import follow_sector
+
+    await follow_sector(db, tenant, previous)  # lot 105 a : le message du kit suit le secteur
     await log_audit_event(
         db, actor=f"superadmin:{current.superadmin_user_id}", action="BUSINESS_TYPE_CHANGED_BY_ADMIN", tenant_id=tenant.id,
         details={"from": previous, "to": payload.business_type},

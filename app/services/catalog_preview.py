@@ -12,7 +12,12 @@ MAX_COLUMNS = 60
 MAX_CELL = 5000
 
 LABELS = {"SKU": "Référence", "NAME": "Nom", "DESCRIPTION": "Description", "CATEGORY": "Rayon", "PRICE": "Prix",
-          "CURRENCY": "Devise", "STOCK": "Stock", "IMAGE_URL": "Photo", "ACTIVE": "Actif"}
+          "CURRENCY": "Devise", "STOCK": "Stock", "IMAGE_URL": "Photo", "ACTIVE": "Actif",
+          # Lot 105 a : colonnes d'un bien (export du logiciel immobilier, modèle Excel des agences)
+          "TYPE": "Type de bien", "TRANSACTION": "Vente ou location", "VILLE": "Ville", "QUARTIER": "Quartier",
+          "SURFACE": "Surface (m²)", "TERRAIN": "Terrain (m²)", "PIECES": "Pièces", "CHAMBRES": "Chambres",
+          "HONORAIRES": "Honoraires", "CHARGES": "Charges", "DEPOT DE GARANTIE": "Dépôt de garantie", "ETAGE": "Étage",
+          "MEUBLE": "Meublé", "REFERENCE MANDAT": "N° de mandat", "DISPONIBILITE": "Disponible le"}
 
 
 class PreviewError(ValueError):
