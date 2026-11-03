@@ -695,8 +695,15 @@ async def create_product(db, connection, tenant, name: str, price: Decimal, phot
     product = Product(id=uuid.uuid4(), tenant_id=tenant.id, sku=sku, name=name, price=price,
                       currency=tenant.currency or "XOF", stock_quantity=1, active=True)
     PRODUCT_UPLOADS.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex}{source.suffix}"
-    (PRODUCT_UPLOADS / filename).write_bytes(source.read_bytes())
+    from app.services.photo_formats import sendable
+
+    content, ext = source.read_bytes(), source.suffix.lstrip(".") or "jpg"
+    try:  # lot 104 : JPEG ou PNG seulement (WhatsApp)
+        content, ext = sendable(content, ext)
+    except Exception:  # noqa: BLE001 — illisible : gardée telle quelle
+        logger.warning("Photo du commerçant non convertie en JPEG : gardée telle quelle")
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    (PRODUCT_UPLOADS / filename).write_bytes(content)
     _remove(photo)
     reset_for_new_source(product, f"{get_settings().public_base_url}/uploads/products/{filename}")
     product.image_status = "PENDING"  # lot 87 : fond blanc studio en arrière-plan

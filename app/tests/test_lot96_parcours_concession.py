@@ -205,10 +205,10 @@ async def test_trial_on_a_free_slot_is_booked_and_confirmed(db_session, unique_e
     turn = await _go(db_session, tenant, customer, conv, slots["rows"][0][0])
     [appointment] = turn.booked
     assert appointment.status == "CONFIRMED" and appointment.kind == "ESSAI" and appointment.product_id == items[0].id
-    confirmation, after = turn.actions
+    [confirmation] = turn.actions  # lot 104 : un seul message
     assert confirmation["message_type"] == "appointment_confirmed"
     assert confirmation["body"].startswith("Bonjour ! Votre essai (Toyota RAV4) est confirmé le ")
-    assert after["body"] == "Autre chose ?" and _titles(after) == ["Estimer ma voiture", "Financement", "Autres véhicules"]
+    assert _titles(confirmation) == ["Déplacer", "Annuler", "Autres véhicules"]
     # Le même créneau touché à nouveau (capacité 1) : refusé, d'autres créneaux libres sont proposés.
     [again] = (await _go(db_session, tenant, customer, conv, slots["rows"][0][0])).actions
     assert again["body"].startswith("Ce créneau vient d'être pris.") and slots["rows"][0][0] not in [r[0] for r in again["rows"]]
@@ -275,7 +275,7 @@ async def test_trade_in_in_three_questions_without_any_value(db_session, unique_
     [appointment] = turn.booked
     assert appointment.kind == "ESTIMATION_REPRISE" and appointment.trade_in == profile.trade_in
     assert "XOF" not in str(turn.actions) and "valeur" not in str(turn.actions).lower()
-    assert _titles(turn.actions[-1]) == ["Voir les véhicules", "Réserver un essai", "Financement"]
+    assert _titles(turn.actions[-1]) == ["Déplacer", "Annuler", "Voir les véhicules"]  # lot 104 : un seul message
     # Le client change d'avis sur l'année : la nouvelle remplace l'ancienne.
     await _go(db_session, tenant, customer, conv, "g:ty:3")
     await db_session.refresh(profile)
@@ -315,7 +315,8 @@ async def test_whatsapp_trial_booking_alerts_the_dealer_without_ai(client, db_se
     slot_id = _WA.sent[-1]["rows"][0][0]
     r = await client.post("/webhooks/whatsapp", json=_tap("pn-l96-1", number, slot_id, "Lundi", "list_reply"))
     assert r.json()["guided"] is True
-    assert [s["kind"] for s in _WA.sent[-2:]] == ["buttons", "buttons"]  # lot 100 : confirmation avec « Déplacer », « Annuler »
+    assert [s["kind"] for s in _WA.sent[-2:]] == ["list", "buttons"]  # lot 104 : la confirmation seule (Déplacer, Annuler…)
+    assert [t for _, t in _WA.sent[-1]["buttons"]] == ["Déplacer", "Annuler", "Autres véhicules"]
     assert [e["subject"].startswith("Nouveau rendez-vous : +2210700009601") for e in state["outbox"]] == [True]
     trace = (await db_session.execute(select(Message).where(Message.message_type == "appointment_confirmed"))).scalar_one()
     assert "est confirmé" in trace.content

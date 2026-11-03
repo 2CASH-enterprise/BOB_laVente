@@ -229,7 +229,7 @@ async def test_guided_booking_confirmation_carries_move_and_cancel(db_session, u
     [appointment] = turn.booked
     confirmation = turn.actions[0]
     assert confirmation["type"] == "buttons" and confirmation["message_type"] == "appointment_confirmed"
-    assert confirmation["buttons"] == [(f"g:rm:{appointment.id}", "Déplacer"), (f"g:rn:{appointment.id}", "Annuler")]
+    assert confirmation["buttons"][:2] == [(f"g:rm:{appointment.id}", "Déplacer"), (f"g:rn:{appointment.id}", "Annuler")]
     assert Product and ProspectProfile
 
 

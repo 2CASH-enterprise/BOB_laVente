@@ -165,6 +165,11 @@ async def receive_webhook(
             background_tasks.add_task(notifications.queue_check, echo_tenant_id)
         return {"status": "phone_reply_recorded", "recorded": len(tenant_ids)}
 
+    # Lot 104 — compte rendu d'envoi : un écran du parcours que WhatsApp n'a pas pu livrer repart en plus simple.
+    failures = guided_flow.parse_failures(payload)
+    if failures:
+        return {"status": "delivery_failures", "resent": await guided_flow.resend_failed(db, failures, WhatsAppClient)}
+
     parsed = parse_whatsapp_message(payload)
     if parsed is None:
         # Accusé de statut (delivered/read) ou payload non pertinent : on accuse réception sans traiter.

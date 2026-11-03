@@ -218,7 +218,7 @@ async def test_visit_on_a_free_slot_is_booked(db_session, unique_email):
     [appointment] = turn.booked
     assert appointment.kind == "VISITE" and appointment.status == "CONFIRMED" and appointment.product_id == items[0].id
     assert turn.actions[0]["body"].startswith("Bonjour ! Votre visite (Appartement 3 pièces, Riviera 3) est confirmée le ")
-    assert _titles(turn.actions[1]) == ["Voir d'autres biens", "Un conseiller"]
+    assert len(turn.actions) == 1 and _titles(turn.actions[0]) == ["Déplacer", "Annuler", "Voir d'autres biens"]  # lot 104
 
 
 @pytest.mark.asyncio

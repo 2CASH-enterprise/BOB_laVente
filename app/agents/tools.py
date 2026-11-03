@@ -40,7 +40,11 @@ ASKS_TO_SEE = re.compile(r"photo|image|\bpics?\b|vid[ée]o|\bvoir\b|montr|ressem
 
 def has_sendable_photo(product) -> bool:
     """Une photo n'est envoyée sur WhatsApp que par une adresse publique sécurisée (https)."""
-    return (getattr(product, "image_url", None) or "").strip().lower().startswith("https://")
+    from app.services.photo_formats import refused_by_whatsapp
+
+    url = (getattr(product, "image_url", None) or "").strip()
+    # Lot 104 : un .webp (ou .gif…) est accepté par l'API puis jamais livré — il part sans photo.
+    return url.lower().startswith("https://") and not refused_by_whatsapp(url)
 
 
 # Lot 35c — mots d'une annulation EXPLICITE (« annulez », « supprimez », « plus besoin »,

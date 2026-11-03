@@ -1080,7 +1080,8 @@
             <input id="new-product-name" placeholder="Nom" class="input">
             <input id="new-product-price" placeholder="Prix" type="number" class="input no-insurance">
             <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input no-insurance" maxlength="3">
-            <input id="new-product-stock" placeholder="Stock" type="number" class="input no-insurance" style="grid-column: span 2;">
+            <input id="new-product-stock" placeholder="Stock" type="number" class="input no-insurance no-estate" style="grid-column: span 2;">
+            <select id="new-product-estate-status" class="input estate-only" style="grid-column: span 2;" aria-label="Statut du bien"><option value="Disponible">Disponible</option><option value="Sous compromis">Sous compromis</option><option value="Vendu">Vendu</option><option value="Loué">Loué</option></select>
             <select id="new-product-bob-category" class="input sheets-only" style="grid-column: span 2;" aria-label="Catégorie du produit"></select>
             <textarea id="new-product-description" class="input insurance-only" rows="3" style="grid-column: span 2; resize: vertical;"
               placeholder="Garanties et conditions, comme vous les présentez à vos clients (jamais de prix : Bob n'en donne pas)"></textarea>
@@ -2569,7 +2570,7 @@ function applyBusinessType(code, label) {
   document.getElementById("new-product-name").placeholder = estate ? "Titre (ex. T3 Lyon 3e)" : "Nom";
   document.getElementById("new-product-price").placeholder = estate ? "Prix HAI ou loyer CC" : "Prix";
   document.getElementById("new-product-price").title = estate ? "Vente : prix honoraires inclus. Location : loyer mensuel charges comprises." : "";
-  document.getElementById("products-stock-head").textContent = estate ? "Disponible" : "Stock";
+  document.getElementById("products-stock-head").textContent = estate ? "Statut" : "Stock";
   document.getElementById("new-product-stock").placeholder = estate ? "Disponible : 1 (0 = vendu ou loué)" : "Stock";
   // Lot 26 : fiche véhicule dans l'ajout de produit et aide de l'import CSV.
   const fields = document.getElementById("new-vehicle-fields");
@@ -2605,6 +2606,16 @@ function categoryOptions(selected, emptyLabel) {
   const cats = productSheets ? productSheets.categories : [];
   return `<option value="">${esc(emptyLabel)}</option>` + cats.map((c) =>
     `<option value="${esc(c.code)}" ${c.code === selected ? "selected" : ""}>${esc(c.label)}</option>`).join("");
+}
+
+// Lot 104 — statut d'un bien (à la place du stock) : seuls les biens « Disponible » sont proposés aux clients.
+const ESTATE_STATUSES = ["Disponible", "Sous compromis", "Vendu", "Loué"];
+
+function estateStatusOf(p) {
+  const status = (p.sheet || {}).status;
+  if (ESTATE_STATUSES.includes(status)) return status;
+  if ((p.stock_quantity || 0) > 0) return "Disponible";
+  return String((p.sheet || {}).transaction || "").toLowerCase() === "location" ? "Loué" : "Vendu";
 }
 
 function sheetInput(prefix, f, sheet) {
@@ -4553,7 +4564,7 @@ async function loadProducts() {
       (p) => `<tr>
         <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}${p.bob_category ? `<div style="font-size: 12px; color: var(--muted);">${esc((sheetCategory(p.bob_category) || {}).label || "")}${p.sheet_completeness !== null && p.sheet_completeness !== undefined ? ` · <span class="sheet-score" style="color: ${p.sheet_completeness >= 80 ? "var(--success)" : p.sheet_completeness >= 50 ? "var(--warning)" : "var(--danger)"};">fiche ${p.sheet_completeness} %</span>` : ""}</div>` : ""}${currentBusinessType === "REAL_ESTATE" && p.bob_category && !((p.sheet || {}).fees || "").toString().trim() ? `<div class="fees-missing" style="font-size: 12px; color: var(--warning);">Honoraires à renseigner : sans eux, le prix n'apparaît pas sur WhatsApp</div>` : ""}${currentBusinessType === "REAL_ESTATE" ? `<div id="alert-link-${p.id}"></div>` : ""}</td>
         <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix" class="no-insurance">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
-        <td data-label="${currentBusinessType === "REAL_ESTATE" ? "Disponible" : "Stock"}" class="no-insurance">${currentBusinessType === "REAL_ESTATE" ? (p.stock_quantity > 0 ? "Oui" : "Non") : p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
+        <td data-label="${currentBusinessType === "REAL_ESTATE" ? "Disponible" : "Stock"}" class="no-insurance">${currentBusinessType === "REAL_ESTATE" ? esc(estateStatusOf(p)) : p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
         <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel(${jsArg(p.id)})">Gérer</button></td>
         <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel(${jsArg(p.id)})">Modifier</button></td>
       </tr>
@@ -4925,7 +4936,8 @@ function renderEditPanel(productId) {
     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 620px; margin-bottom: 10px;">
       <input id="edit-name-${p.id}" class="input" placeholder="Nom" value="${esc(p.name)}">
       <input id="edit-price-${p.id}" class="input no-insurance" type="number" placeholder="Prix" value="${esc(p.price)}">
-      <input id="edit-stock-${p.id}" class="input no-insurance" type="number" placeholder="Stock" value="${esc(p.stock_quantity)}">
+      <input id="edit-stock-${p.id}" class="input no-insurance no-estate" type="number" placeholder="Stock" value="${esc(p.stock_quantity)}">
+      <select id="edit-estate-status-${p.id}" class="input estate-only" aria-label="Statut du bien">${ESTATE_STATUSES.map((o) => `<option value="${esc(o)}" ${o === estateStatusOf(p) ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>
     </div>
     <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${esc(p.description || "")}</textarea>
     ${currentBusinessType === "CAR_DEALERSHIP" || p.vehicle ? `<div style="max-width: 620px; margin-bottom: 10px;">${vehicleFields(`edit-${p.id}`, p.vehicle)}</div>` : ""}
@@ -5033,7 +5045,9 @@ async function saveProductEdit(productId) {
         name: document.getElementById(`edit-name-${productId}`).value,
         ...(currentBusinessType === "INSURANCE_BROKER" ? {} : {  // lot 53 : jamais de prix chez un courtier
           price: document.getElementById(`edit-price-${productId}`).value,
-          stock_quantity: parseInt(document.getElementById(`edit-stock-${productId}`).value, 10),
+          ...(currentBusinessType === "REAL_ESTATE"  // lot 104 : le statut décide si le bien est proposé
+            ? { estate_status: document.getElementById(`edit-estate-status-${productId}`).value }
+            : { stock_quantity: parseInt(document.getElementById(`edit-stock-${productId}`).value, 10) }),
         }),
         description: document.getElementById(`edit-description-${productId}`).value || null,
         active: document.getElementById(`edit-active-${productId}`).checked,
@@ -6152,6 +6166,10 @@ async function createProduct() {
     currency: document.getElementById("new-product-currency").value.trim().toUpperCase(),
     stock_quantity: parseInt(document.getElementById("new-product-stock").value || "0", 10),
   };
+  if (currentBusinessType === "REAL_ESTATE") {  // lot 104 : un statut plutôt qu'un stock
+    payload.estate_status = document.getElementById("new-product-estate-status").value || "Disponible";
+    payload.stock_quantity = payload.estate_status === "Disponible" ? 1 : 0;
+  }
   if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");
   const bobCategory = document.getElementById("new-product-bob-category");
   if ((currentBusinessType === "ONLINE_STORE" || currentBusinessType === "REAL_ESTATE") && bobCategory && bobCategory.value) payload.bob_category = bobCategory.value;  // lots 78 / 79
@@ -6196,6 +6214,7 @@ async function createProduct() {
       showChosenPhoto();
     }
     ["sku", "name", "price", "currency", "stock", "description"].forEach((f) => (document.getElementById("new-product-" + f).value = ""));
+    document.getElementById("new-product-estate-status").value = "Disponible";
     if (currentBusinessType === "CAR_DEALERSHIP") document.getElementById("new-vehicle-fields").innerHTML = vehicleFields("new", null);
     loadProducts();
   } catch (e) {

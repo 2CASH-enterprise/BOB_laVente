@@ -48,6 +48,24 @@ def _checked_sheet(tenant, code: str | None, raw: dict | None, *texts) -> dict:
     return {"bob_category": code, "sheet": product_sheets.normalize_sheet(code, raw)}
 
 
+def _apply_estate_status(data: dict, status: str | None, previous_sheet: dict | None) -> None:
+    """Lot 104 — un bien : le statut choisi est gardé dans sa fiche et décide s'il est proposé (Disponible = 1, sinon 0).
+    Une fiche réenregistrée sans statut garde le précédent."""
+    from app.services import product_sheets
+
+    if not product_sheets.is_property(data.get("bob_category")):
+        return
+    chosen = product_sheets.clean_estate_status(status) if status is not None else None
+    if status is not None and chosen is None:
+        raise HTTPException(status_code=422, detail="Statut du bien : Disponible, Sous compromis, Vendu ou Loué.")
+    chosen = chosen or (previous_sheet or {}).get("status")
+    if not chosen:
+        return
+    data["sheet"] = {**(data.get("sheet") or {}), "status": chosen}
+    if status is not None:
+        data["stock_quantity"] = 1 if chosen == "Disponible" else 0
+
+
 @router.post("", response_model=ProductResponse, status_code=201, dependencies=[Depends(require_role("MANAGER"))])
 async def create_product(
     payload: ProductCreate,
@@ -71,9 +89,11 @@ async def create_product(
         raise HTTPException(status_code=409, detail=f"Un produit avec la référence « {payload.sku} » existe déjà")
 
     data = payload.model_dump()
+    estate_status = data.pop("estate_status", None)
     data["vehicle"] = _checked_vehicle(data.get("vehicle"), tenant)
     data.update(_checked_sheet(tenant, data.pop("bob_category", None), data.pop("sheet", None),
                                data.get("name"), data.get("description")))
+    _apply_estate_status(data, estate_status, None)
     from app.services.business_type import is_insurance
 
     if is_insurance(tenant):
@@ -244,6 +264,7 @@ async def update_product(
         raise HTTPException(status_code=404, detail="Produit introuvable")
 
     changes = payload.model_dump(exclude_unset=True)
+    estate_status = changes.pop("estate_status", None)
     from app.models.tenant import Tenant
     from app.services.business_type import is_insurance
 
@@ -254,6 +275,13 @@ async def update_product(
         # Lot 78 — changer de catégorie garde les champs communs et ceux que la nouvelle catégorie connaît.
         code = changes.get("bob_category") or product.bob_category
         changes.update(_checked_sheet(tenant, code, changes.get("sheet", product.sheet), product.name))
+    if estate_status is not None or "sheet" in changes:
+        merged = {"bob_category": changes.get("bob_category", product.bob_category),
+                  "sheet": changes.get("sheet", product.sheet), "stock_quantity": changes.get("stock_quantity")}
+        _apply_estate_status(merged, estate_status, product.sheet)
+        changes["sheet"] = merged["sheet"]
+        if merged.get("stock_quantity") is not None:
+            changes["stock_quantity"] = merged["stock_quantity"]
     if is_insurance(tenant):
         for key in ("price", "cost_price", "stock_quantity"):  # lot 53 : jamais de prix chez un courtier
             changes.pop(key, None)
@@ -315,6 +343,12 @@ async def upload_product_image(
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image trop volumineuse (max 5 Mo)")
 
+    from app.services.photo_formats import sendable
+
+    try:  # lot 104 : WhatsApp n'accepte que le JPEG et le PNG — un .webp est converti en JPEG
+        content, ext = sendable(content, ext)
+    except Exception:  # noqa: BLE001 — fichier qui n'est pas une image lisible
+        raise HTTPException(status_code=400, detail="Image illisible : envoyez une photo jpg, png ou webp") from None
     upload_dir = Path(__file__).resolve().parents[2] / "static" / "uploads" / "products"
     upload_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid_module.uuid4().hex}.{ext}"

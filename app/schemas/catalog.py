@@ -32,6 +32,7 @@ class ProductCreate(BaseModel):
     vehicle: dict | None = None  # lot 26 — concession : année, kilométrage, carburant, boîte…
     bob_category: str | None = None  # lot 78 — commerce : catégorie Bob (proposée par mots-clés si absente)
     sheet: dict | None = None        # lot 78 — fiche de la catégorie
+    estate_status: str | None = None  # lot 104 — agence : Disponible, Sous compromis, Vendu, Loué
 
 
 class ProductUpdate(BaseModel):
@@ -46,6 +47,7 @@ class ProductUpdate(BaseModel):
     vehicle: dict | None = None
     bob_category: str | None = None
     sheet: dict | None = None
+    estate_status: str | None = None  # lot 104
 
 
 class ProductResponse(BaseModel):

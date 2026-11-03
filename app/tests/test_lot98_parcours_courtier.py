@@ -195,7 +195,8 @@ async def test_callback_on_a_free_slot(db_session, unique_email):
     turn = await _go(db_session, tenant, customer, conv, slots["rows"][0][0])
     [appointment] = turn.booked
     assert appointment.kind == "APPEL" and appointment.status == "CONFIRMED"
-    assert "vous appelle le" in turn.actions[0]["body"] and _titles(turn.actions[1]) == ["Autre demande", "Un conseiller"]
+    assert "vous appelle le" in turn.actions[0]["body"] and len(turn.actions) == 1  # lot 104 : un seul message
+    assert _titles(turn.actions[0]) == ["Déplacer", "Annuler", "Autre demande"]
 
 
 # --- Mon contrat ----------------------------------------------------------------------------------------------------

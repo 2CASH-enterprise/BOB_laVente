@@ -303,6 +303,22 @@ async def budget_or_list(db, tenant, tu, customer, filters):
     return _turn([{"type": "list", "body": body, "button": "Choisir un budget", "rows": rows}])
 
 
+def intro(props, filters) -> str:
+    """Lot 104 — ce que Bob a compris, pour que le client sache pourquoi une question a été sautée :
+    « Nous avons 1 appartement à louer, à Rennes : »."""
+    codes = {p.bob_category for p in props}
+    code = filters.get("p") or (next(iter(codes)) if len(codes) == 1 else None)
+    cities = {_place_key(_city(p)): _city(p) for p in props}
+    where = ""
+    if len(cities) == 1 and next(iter(cities.values())):
+        districts = {_place_key(_district(p)): _district(p) for p in props}
+        place = next(iter(cities.values()))
+        if filters.get("q") and len(districts) == 1 and next(iter(districts.values())):
+            place = _place(props[0]) or place
+        where = f", à {place}"
+    return f"Nous avons {_count(len(props), code, filters.get('t'))}{where} :"
+
+
 async def listing(db, tenant, tu, filters, number):
     from app.agents.tools import has_sendable_photo
     from app.services.product_cards import money_text
@@ -317,13 +333,14 @@ async def listing(db, tenant, tu, filters, number):
     if not chunk:
         return await listing(db, tenant, tu, filters, 0)
     if len(props) == 1:
-        return await details(db, tenant, tu, props[0])
+        return await details(db, tenant, tu, props[0], lead=intro(props, filters) if number == 0 else None)
     actions = []
     with_photo = [p for p in chunk if has_sendable_photo(p)]
     without = [p for p in chunk if not has_sendable_photo(p)]
     if len(with_photo) >= 2:
-        actions.append({"type": "carousel", "body": _you(tu, "Voici nos biens. Touchez « Demander une visite » sous celui qui vous plaît.",
-                                                         "Voici nos biens. Touche « Demander une visite » sous celui qui te plaît."),
+        actions.append({"type": "carousel", "body": (intro(props, filters) + " " if number == 0 else "Voici nos biens. ") + _you(
+                            tu, "Touchez « Demander une visite » sous celui qui vous plaît.",
+                            "Touche « Demander une visite » sous celui qui te plaît."),
                         "cards": [{"link": p.image_url.strip(), "body": card_body(p), "product_id": str(p.id), "name": p.name,
                                    "buttons": [(f"{PREFIX}d:{p.id}", "Voir détails"), (f"{PREFIX}vi:{p.id}", "Demander une visite")]}
                                   for p in with_photo]})
@@ -332,7 +349,8 @@ async def listing(db, tenant, tu, filters, number):
     if without:
         rows = [(f"{PREFIX}d:{p.id}", p.name[:24], (money_text(p.price, p.currency) if (p.sheet or {}).get("fees")
                                                     else "Prix sur demande")[:72]) for p in without[:10]]
-        actions.append({"type": "list", "body": "Voici nos biens." if not actions else "Et ceux-ci, sans photo pour l'instant :",
+        actions.append({"type": "list", "body": (intro(props, filters) if number == 0 else "Voici nos biens.") if not actions
+                        else "Et ceux-ci, sans photo pour l'instant :",
                         "button": "Voir les biens", "rows": rows})
     more = len(props) > start + PAGE
     nav = [(f"{PREFIX}il:{encode(filters)}:{number + 1}", "Voir plus")] if more else []
@@ -344,11 +362,11 @@ async def listing(db, tenant, tu, filters, number):
     return _turn(actions)
 
 
-async def details(db, tenant, tu, product):
+async def details(db, tenant, tu, product, lead: str | None = None):
     from app.agents.tools import has_sendable_photo
 
     sheet = product.sheet or {}
-    lines = [f"*{product.name}*"]
+    lines = ([lead] if lead else []) + [f"*{product.name}*"]
     if _detail(product):
         lines.append(_detail(product))
     lines += price_lines(product)

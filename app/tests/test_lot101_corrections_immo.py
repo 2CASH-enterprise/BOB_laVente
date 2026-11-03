@@ -66,8 +66,9 @@ async def test_type_then_city_then_district(db_session, unique_email):
     assert [r[1:] for r in districts["rows"]] == [("Monplaisir", "1 appartement à louer"), ("Part-Dieu", "1 appartement à louer"),
                                                   ("Peu importe", "2 appartements à louer")]
     [card] = (await _go(db_session, tenant, customer, conv, districts["rows"][0][0])).actions  # un seul bien : sa fiche
-    assert card["body"].splitlines()[1] == "68 m² · 2 chambres · Lyon 3e · Monplaisir"
-    assert card["body"].splitlines()[2] == "*1 150 EUR* / mois, charges 90 EUR"
+    assert card["body"].splitlines()[0] == "Nous avons 1 appartement à louer, à Lyon 3e · Monplaisir :"  # lot 104
+    assert card["body"].splitlines()[2] == "68 m² · 2 chambres · Lyon 3e · Monplaisir"
+    assert card["body"].splitlines()[3] == "*1 150 EUR* / mois, charges 90 EUR"
     from app.models.prospect_profile import ProspectProfile
 
     profile = (await db_session.execute(select(ProspectProfile))).scalar_one()
@@ -80,7 +81,7 @@ async def test_a_city_with_one_district_goes_straight_to_its_properties(db_sessi
     customer, conv = await _client(db_session, tenant)
     [cities] = (await _go(db_session, tenant, customer, conv, "g:pl")).actions
     [card] = (await _go(db_session, tenant, customer, conv, cities["rows"][1][0])).actions  # Villeurbanne : Gratte-Ciel seul
-    assert card["body"].startswith("*T4 familial*")
+    assert card["body"].startswith("Nous avons 1 appartement à louer, à Villeurbanne :\n*T4 familial*")  # lot 104
 
 
 @pytest.mark.asyncio
@@ -134,7 +135,7 @@ async def test_see_other_properties_reopens_the_last_search(db_session, unique_e
     assert "g:menu" in [b[0] for b in again[-1]["buttons"]]  # « Autre recherche » ramène à l'accueil
     await _go(db_session, tenant, customer, conv, "g:il:tV:0")  # une autre recherche (achat), par la liste directe
     [house] = (await _go(db_session, tenant, customer, conv, "g:ib")).actions
-    assert house["body"].startswith("*Maison avec jardin*")
+    assert house["body"].startswith("Nous avons 1 maison à vendre, à Villeurbanne :\n*Maison avec jardin*")
 
 
 # --- QR code d'un bien, lien de l'agence ------------------------------------------------------------------------------

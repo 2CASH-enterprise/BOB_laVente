@@ -167,6 +167,24 @@ FIELD_OPTIONS = {  # lot 79 : valeurs imposées (listes dans le tableau de bord)
     "transaction": ["Vente", "Location"], "dpe": _DPE_CLASSES, "ges": _DPE_CLASSES,
     "furnished": ["Meublé", "Vide"], "elevator": ["Oui", "Non"],
 }
+# Lot 104 — statut d'un bien (à la place du « stock ») : seuls les biens disponibles sont proposés aux clients.
+ESTATE_STATUSES = ("Disponible", "Sous compromis", "Vendu", "Loué")
+
+
+def estate_status(product) -> str:
+    """Le statut affiché : celui choisi dans le tableau de bord, sinon déduit du stock (0 = vendu ou loué)."""
+    sheet = getattr(product, "sheet", None) or {}
+    if sheet.get("status") in ESTATE_STATUSES:
+        return sheet["status"]
+    if (getattr(product, "stock_quantity", 0) or 0) > 0:
+        return "Disponible"
+    return "Loué" if _plain(sheet.get("transaction")) == _plain("Location") else "Vendu"
+
+
+def clean_estate_status(value) -> str | None:
+    return next((s for s in ESTATE_STATUSES if _plain(s) == _plain(value)), None)
+
+
 NUMERIC_FIELDS = frozenset({"surface", "rooms", "bedrooms", "land_surface"})  # lot 79 : filtrés par la recherche
 
 # Lot 79 — type de bien proposé par mots-clés (nom, description).

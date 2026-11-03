@@ -360,8 +360,9 @@ async def book(db, tenant, tu, customer, conversation, kind: str, product, slot:
         text = appointment_service.confirmation_message(appointment, tenant.name, tenant_zone(tenant))
         from app.services import followups  # lot 100 : la confirmation porte « Déplacer » et « Annuler »
 
-        return _turn([{"type": "buttons", "body": text, "message_type": "appointment_confirmed",
-                       "buttons": followups.booking_buttons(tenant, appointment)}, after(tu, kind)],
+        # Lot 104 : un seul message — « Déplacer », « Annuler » et la suite (« Voir d'autres biens »…).
+        buttons = (followups.booking_buttons(tenant, appointment) or [])[:2] + [NEXT.get(kind, NEXT["E"])]
+        return _turn([{"type": "buttons", "body": text, "message_type": "appointment_confirmed", "buttons": buttons}],
                      booked=[appointment])
     if result.get("status") == "appointment_requested":
         if cart is not None:
@@ -388,18 +389,10 @@ async def _owner_notes(db, tenant, customer) -> str | None:
     return await immo_flow.owner_summary(db, tenant, customer)
 
 
-def after(tu, kind) -> dict:
-    """« Autre chose ? » après un rendez-vous confirmé."""
-    if kind == "A":  # lot 98 : courtier
-        return _buttons("Autre chose ?", [(f"{PREFIX}menu", "Autre demande"), HUMAN])
-    if kind in ("V", "S"):  # lot 97 : agence
-        return _buttons("Autre chose ?", [(f"{PREFIX}ib", "Voir d'autres biens"), HUMAN])
-    if kind == "R":
-        buttons = [(f"{PREFIX}veh", "Voir les véhicules"), (f"{PREFIX}e:-", "Réserver un essai"), (f"{PREFIX}fi", "Financement")]
-    else:
-        buttons = [(f"{PREFIX}tr", "Estimer ma voiture"), (f"{PREFIX}fi", "Financement"),
-                   (f"{PREFIX}veh", "Autres véhicules")]
-    return _buttons("Autre chose ?", buttons)
+# Lot 104 : le 3e bouton de la confirmation d'un rendez-vous (« Un conseiller » reste dans tous les autres écrans).
+NEXT = {"V": (f"{PREFIX}ib", "Voir d'autres biens"), "S": (f"{PREFIX}ib", "Voir d'autres biens"),
+        "A": (f"{PREFIX}menu", "Autre demande"), "E": (f"{PREFIX}veh", "Autres véhicules"),
+        "R": (f"{PREFIX}veh", "Voir les véhicules")}
 
 
 async def trade_in_start(db, tenant, tu, customer):

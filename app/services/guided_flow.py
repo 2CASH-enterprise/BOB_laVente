@@ -423,39 +423,146 @@ def _fallback_text(action: dict) -> str:
     return action["body"]
 
 
+def degraded(action: dict) -> dict | None:
+    """Lot 104 — la version suivante, plus simple, d'un écran refusé : cartes → liste sans photo ; fiche avec photo →
+    mêmes boutons sans photo ; liste ou boutons → texte ; texte → rien. Les boutons restent tant que possible."""
+    kind = action["type"]
+    if kind == "carousel":
+        rows = []
+        for card in action["cards"][:10]:
+            first = (card.get("buttons") or [(card.get("button_id"), None)])[0][0]
+            detail = " · ".join(line for line in card["body"].split("\n")[1:] if line)
+            rows.append((first, (card.get("name") or card["body"].split("\n")[0])[:24], detail[:72] or None))
+        return {"type": "list", "body": action["body"], "button": "Voir la liste", "rows": rows}
+    if kind == "buttons" and action.get("image"):
+        return {**{k: v for k, v in action.items() if k != "image"}, "type": "buttons"}
+    if kind in ("buttons", "list"):
+        return {"type": "text", "body": _fallback_text(action)}
+    return None
+
+
+async def _send(wa_client, to: str, action: dict):
+    if action["type"] == "buttons":
+        return await wa_client.send_buttons(to=to, body=action["body"], buttons=action["buttons"], image_link=action.get("image"))
+    if action["type"] == "list":
+        return await wa_client.send_list(to=to, body=action["body"], button=action["button"], rows=action["rows"])
+    if action["type"] == "carousel":
+        return await wa_client.send_product_carousel(to=to, body=action["body"], cards=action["cards"])
+    return await wa_client.send_text_message(to=to, body=action["body"])
+
+
+def message_id(response) -> str | None:
+    """L'identifiant WhatsApp (wamid) du message envoyé, pour reconnaître son compte rendu d'envoi."""
+    try:
+        return str(response["messages"][0]["id"])
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def _portable(action: dict) -> dict:
+    """Ce qu'on garde pour un renvoi : l'écran simplifié, sans fonctions."""
+    keep = ("type", "body", "buttons", "button", "rows", "image")
+    return {k: (list(map(list, v)) if k in ("buttons", "rows") else v) for k, v in action.items() if k in keep}
+
+
 async def deliver(db, tenant, conversation, wa_client, to: str, turn: GuidedTurn) -> int:
-    """Envoie les écrans (repli en texte si WhatsApp refuse) et les note dans la conversation. Renvoie le nombre envoyé."""
+    """Envoie les écrans (version plus simple si WhatsApp refuse) et les note dans la conversation. Renvoie le nombre
+    envoyé. Lot 104 : chaque écran garde son identifiant WhatsApp et sa version simplifiée ; si Meta annonce plus tard
+    que le message n'a pas pu être livré (photo refusée…), la version simplifiée part aussitôt (resend_failed)."""
     from app.models.conversation import Message, MessageSender
 
     sent = 0
     for action in turn.actions:
         kind = action.get("message_type") or "guided"
         metadata = {"guided": action["type"]}
-        try:
-            if action["type"] == "buttons":
-                await wa_client.send_buttons(to=to, body=action["body"], buttons=action["buttons"], image_link=action.get("image"))
-            elif action["type"] == "list":
-                await wa_client.send_list(to=to, body=action["body"], button=action["button"], rows=action["rows"])
-            elif action["type"] == "carousel":
-                await wa_client.send_product_carousel(to=to, body=action["body"], cards=action["cards"])
-                kind = "product_cards"
-                metadata = {"product_ids": [c["product_id"] for c in action["cards"]],
-                            "image_urls": [c["link"] for c in action["cards"]]}
-            else:
-                await wa_client.send_text_message(to=to, body=action["body"])
-        except Exception:  # noqa: BLE001 — message interactif refusé : le contenu part en texte
-            logger.warning("Écran du parcours refusé par WhatsApp (%s) : envoi en texte", action["type"])
+        current, response = action, None
+        while current is not None:
             try:
-                await wa_client.send_text_message(to=to, body=_fallback_text(action))
-            except Exception:  # noqa: BLE001
-                logger.warning("Écran du parcours non envoyé (conversation %s)", conversation.id)
-                continue
+                response = await _send(wa_client, to, current)
+                break
+            except Exception:  # noqa: BLE001 — écran refusé : sa version plus simple part
+                logger.warning("Écran du parcours refusé par WhatsApp (%s) : envoi simplifié", current["type"])
+                current = degraded(current)
+        if current is None:
+            logger.warning("Écran du parcours non envoyé (conversation %s)", conversation.id)
+            continue
+        if current["type"] == "carousel":
+            kind = "product_cards"
+            metadata = {"product_ids": [c["product_id"] for c in current["cards"]],
+                        "image_urls": [c["link"] for c in current["cards"]]}
         if action.get("after_sent"):  # lot 98 : ex. accusé de réception d'une réclamation réellement parti
             action["after_sent"]()
-        if action.get("product_id") and action["type"] == "buttons" and action.get("image"):
-            metadata = {"guided": "details", "product_ids": [action["product_id"]], "image_urls": [action["image"]]}
+        if action.get("product_id") and current["type"] == "buttons" and current.get("image"):
+            metadata = {"guided": "details", "product_ids": [action["product_id"]], "image_urls": [current["image"]]}
+        wamid, simpler = message_id(response), degraded(current)
+        if wamid and simpler is not None:
+            metadata = {**metadata, "wamid": wamid, "fallback": _portable(simpler)}
         db.add(Message(tenant_id=tenant.id, conversation_id=conversation.id, sender=MessageSender.AI, message_type=kind,
-                       content=_trace(action), message_metadata=metadata))
+                       content=_trace(current), message_metadata=metadata))
         sent += 1
     await db.commit()
     return sent
+
+
+# --- Lot 104 : comptes rendus d'envoi de WhatsApp ------------------------------------------------------------------
+
+def parse_failures(payload: dict) -> list[dict]:
+    """Les messages que Meta n'a pas pu livrer : [{phone_number_id, wamid, to, code}]."""
+    out = []
+    for entry in (payload or {}).get("entry") or []:
+        for change in entry.get("changes") or []:
+            value = change.get("value") or {}
+            number = (value.get("metadata") or {}).get("phone_number_id")
+            for status in value.get("statuses") or []:
+                if status.get("status") == "failed" and status.get("id"):
+                    errors = status.get("errors") or [{}]
+                    out.append({"phone_number_id": number, "wamid": str(status["id"]), "to": status.get("recipient_id"),
+                                "code": errors[0].get("code")})
+    return out
+
+
+def has_statuses(payload: dict) -> bool:
+    return any((change.get("value") or {}).get("statuses") for entry in (payload or {}).get("entry") or []
+               for change in entry.get("changes") or [])
+
+
+async def resend_failed(db, failures: list[dict], client_factory=None) -> int:
+    """Un écran du parcours non livré repart dans sa version simplifiée (une seule fois) ; seul le code d'erreur est noté."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.conversation import Conversation, Message, MessageSender
+    from app.models.customer import Customer
+    from app.repositories.whatsapp_account_repository import WhatsAppAccountRepository
+
+    if client_factory is None:
+        from app.integrations.whatsapp.client import WhatsAppClient as client_factory
+    resent = 0
+    since = datetime.now(timezone.utc) - timedelta(days=2)
+    for failure in failures:
+        account = await WhatsAppAccountRepository(db).find_tenant_by_phone_number_id(failure["phone_number_id"] or "")
+        if account is None:
+            continue
+        message = (await db.execute(select(Message).where(
+            Message.tenant_id == account.tenant_id, Message.sender == MessageSender.AI, Message.created_at >= since,
+            Message.message_metadata["wamid"].as_string() == failure["wamid"]).limit(1))).scalar_one_or_none()
+        metadata = (message.message_metadata or {}) if message is not None else {}
+        logger.warning("WhatsApp n'a pas livré un message (code %s)%s", failure.get("code"),
+                       " : écran du parcours renvoyé en plus simple" if metadata.get("fallback") and not metadata.get("resent") else "")
+        if message is None or not metadata.get("fallback") or metadata.get("resent"):
+            continue
+        conversation = await db.get(Conversation, message.conversation_id)
+        customer = await db.get(Customer, conversation.customer_id) if conversation is not None else None
+        if customer is None:
+            continue
+        wa_client = client_factory(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+        message.message_metadata = {**metadata, "resent": True}
+        from app.models.tenant import Tenant
+
+        tenant = await db.get(Tenant, account.tenant_id)
+        fallback = metadata["fallback"]
+        fallback = {**fallback, **({"buttons": [tuple(b) for b in fallback["buttons"]]} if "buttons" in fallback else {}),
+                    **({"rows": [tuple(r) for r in fallback["rows"]]} if "rows" in fallback else {})}
+        resent += await deliver(db, tenant, conversation, wa_client, customer.whatsapp_number,
+                                GuidedTurn(actions=[fallback]))
+    await db.commit()
+    return resent
