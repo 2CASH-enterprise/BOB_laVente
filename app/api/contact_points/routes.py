@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -226,6 +226,7 @@ async def widget_config(code: str, db: AsyncSession = Depends(get_db)):
 @router.get("/w/{code}")
 async def contact_point_redirect(
     code: str,
+    request: Request,
     p: str | None = Query(default=None, max_length=64, description="SKU d'un produit du catalogue"),
     db: AsyncSession = Depends(get_db),
 ):
@@ -239,6 +240,7 @@ async def contact_point_redirect(
         return HTMLResponse(_INACTIVE_PAGE, status_code=404)
 
     message = cp.greeting
+    product = None
     if p:
         # Le produit est TOUJOURS lu dans le catalogue de CE commerce : un site partenaire
         # ne peut ni faire écrire n'importe quoi au client, ni pointer le produit d'un autre.
@@ -249,14 +251,25 @@ async def contact_point_redirect(
         if product is not None:
             message = f"Bonjour, je suis intéressé(e) par : {product.name}"
 
-    # Incrément atomique (plusieurs clics simultanés ne se perdent pas).
-    await db.execute(update(ContactPoint).where(ContactPoint.id == cp.id).values(click_count=ContactPoint.click_count + 1))
-    await db.commit()
+    from app.services import link_preview
+
+    if not link_preview.is_crawler(request.headers.get("user-agent")):  # lot 101 : un aperçu n'est pas un clic
+        # Incrément atomique (plusieurs clics simultanés ne se perdent pas).
+        await db.execute(update(ContactPoint).where(ContactPoint.id == cp.id).values(click_count=ContactPoint.click_count + 1))
+        await db.commit()
 
     digits = "".join(ch for ch in account.display_phone_number if ch.isdigit())
     # [W:code] : attribution au premier contact, retirée par le webhook avant tout traitement.
     text = quote(f"{message} [W:{cp.code}]")
-    return RedirectResponse(url=f"https://wa.me/{digits}?text={text}", status_code=302)
+    wa_link = f"https://wa.me/{digits}?text={text}"
+    # Lot 101 : aperçu du produit (photo, titre, prix) ou de la boutique, puis WhatsApp aussitôt.
+    from app.models.tenant import Tenant
+
+    tenant = await db.get(Tenant, cp.tenant_id)
+    shop = tenant.name if tenant else ""
+    if product is not None:
+        return link_preview.page(*link_preview.product_preview(product, shop), wa_link, shop)
+    return link_preview.page(shop or "WhatsApp", f"Écrivez à {shop} sur WhatsApp." if shop else "", None, wa_link, shop)
 
 
 @router.get("/widget.js")

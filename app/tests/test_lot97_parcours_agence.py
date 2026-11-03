@@ -125,7 +125,7 @@ async def test_rent_type_then_district_from_the_listings(db_session, unique_emai
     names = sorted(c["name"] for c in actions[0]["cards"])
     assert names == ["Appartement 2 pièces, Angré", "Appartement 3 pièces, Riviera 3"]
     projects = await _projects(db_session)
-    assert projects["LOCATION"]["property_type"] == "APPARTEMENT" and projects["LOCATION"]["zone"] == "Cocody"
+    assert projects["LOCATION"]["property_type"] == "APPARTEMENT" and projects["LOCATION"]["zone"] == "Abidjan · Cocody"
 
 
 @pytest.mark.asyncio
@@ -198,7 +198,7 @@ async def test_details_and_foreign_listing(db_session, unique_email):
     _, foreign = await _agence(db_session, "x" + unique_email)
     customer, conv = await _client(db_session, tenant)
     [card] = (await _go(db_session, tenant, customer, conv, f"g:d:{items[0].id}")).actions
-    assert card["body"].splitlines()[:4] == ["*Appartement 3 pièces, Riviera 3*", "85 m² · 2 chambres · 2e étage · Cocody",
+    assert card["body"].splitlines()[:4] == ["*Appartement 3 pièces, Riviera 3*", "85 m² · 2 chambres · 2e étage · Abidjan · Cocody",
                                              "*350 000 XOF* / mois, charges 25 000 XOF",
                                              "Honoraires : 1 mois de loyer, à la charge du locataire"]
     assert _titles(card) == ["Demander une visite", "Voir d'autres biens", "Un conseiller"]
@@ -242,7 +242,7 @@ async def test_owner_journey_never_gives_a_figure(db_session, unique_email):
     assert types["body"] == "Avec plaisir. Quel type de bien ?"
     assert [r[1] for r in types["rows"]] == ["Appartement", "Maison ou villa", "Terrain", "Bureau ou local"]
     [ask] = (await _go(db_session, tenant, customer, conv, "g:ot:V:MAISON")).actions
-    assert ask["body"].startswith("Dans quel quartier, et quelle surface environ (et celle du terrain) ?")
+    assert ask["body"].startswith("Dans quelle ville et quel quartier, et quelle surface environ (et celle du terrain) ?")
     assert await gf.expects_text(db_session, tenant, customer, "Bingerville, 180 m² sur 500 m² de terrain")
     [slots] = (await _go(db_session, tenant, customer, conv, text="Bingerville, 180 m² sur 500 m² de terrain")).actions
     assert slots["body"] == "Merci.\nPour une estimation juste, un conseiller vient voir votre bien. Quand êtes-vous disponible ?"

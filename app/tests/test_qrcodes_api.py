@@ -71,10 +71,12 @@ async def test_qr_redirect_increments_scan_count_and_redirects_to_whatsapp(clien
     created = await client.post("/api/v1/qr-codes", json={"product_id": str(product.id)}, headers=headers)
     code = created.json()["code"]
 
+    # Lot 101 : un robot d'aperçu (WhatsApp) ne compte pas comme un scan.
+    preview = await client.get(f"/qr/{code}", headers={"user-agent": "WhatsApp/2.24.1 A"})
+    assert preview.status_code == 200 and '<meta property="og:title" content="' in preview.text
     response = await client.get(f"/qr/{code}", follow_redirects=False)
-    assert response.status_code == 302
-    assert "wa.me/221771234567" in response.headers["location"]
-    assert "Samsung" in response.headers["location"]
+    assert response.status_code == 200  # page d'aperçu qui ouvre WhatsApp aussitôt
+    assert "wa.me/221771234567" in response.text and "Samsung" in response.text
 
     listing = await client.get("/api/v1/qr-codes", headers=headers)
     assert listing.json()[0]["scan_count"] == 1

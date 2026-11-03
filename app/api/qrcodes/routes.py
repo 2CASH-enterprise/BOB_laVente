@@ -7,7 +7,7 @@ import secrets
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,7 +92,7 @@ async def delete_qr_code(
 
 
 @router.get("/qr/{code}")
-async def redirect_qr_code(code: str, db: AsyncSession = Depends(get_db)):
+async def redirect_qr_code(code: str, request: Request, db: AsyncSession = Depends(get_db)):
     """
     Endpoint public (aucune authentification) — c'est la cible physique du QR imprimé.
     Incrémente le compteur puis redirige vers WhatsApp avec le produit pré-rempli.
@@ -111,13 +111,21 @@ async def redirect_qr_code(code: str, db: AsyncSession = Depends(get_db)):
             status_code=404, detail="Ce commerce n'a pas encore configuré son numéro WhatsApp pour ce QR"
         )
 
-    qr.scan_count += 1
-    await db.commit()
+    from app.services import link_preview
+
+    crawler = link_preview.is_crawler(request.headers.get("user-agent"))
+    if not crawler:  # lot 101 : l'aperçu d'un lien partagé n'est pas un scan
+        qr.scan_count += 1
+        await db.commit()
 
     digits = "".join(ch for ch in account.display_phone_number if ch.isdigit())
     # La référence [QR:code] permet au webhook de savoir exactement quel QR a généré ce
     # premier contact (section CRM.7) — jamais une supposition, une vraie traçabilité.
     message = quote(f"Bonjour, je suis intéressé(e) par : {product.name} [QR:{qr.code}]")
     wa_link = f"https://wa.me/{digits}?text={message}"
+    # Lot 101 : une petite page avec l'aperçu du produit (photo, titre, prix), qui ouvre WhatsApp aussitôt.
+    from app.models.tenant import Tenant
 
-    return RedirectResponse(url=wa_link, status_code=302)
+    tenant = await db.get(Tenant, qr.tenant_id)
+    shop = tenant.name if tenant else ""
+    return link_preview.page(*link_preview.product_preview(product, shop), wa_link, shop)

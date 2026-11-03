@@ -225,9 +225,11 @@ async def receive_webhook(
     # affiché ni l'IA ne voient jamais cette balise. La recherche est toujours limitée au
     # tenant qui reçoit le message : un code d'un autre commerce n'attribue jamais rien.
     match = TRACKING_REFERENCE_PATTERN.search(incoming_text)
+    entry = None  # lot 101 : arrivée par un QR code ou un lien → fiche du produit, ou accueil (parcours à boutons)
     if match:
         incoming_text = TRACKING_REFERENCE_PATTERN.sub("", incoming_text).strip()
         kind, code = match.group(1), match.group(2)
+        entry = await _entry_of(db, tenant_id, kind, code, incoming_text)
         if is_new_customer and referral is None and kind == "QR":
             qr_stmt = select(ProductQrCode).where(ProductQrCode.tenant_id == tenant_id, ProductQrCode.code == code)
             qr = (await db.execute(qr_stmt)).scalar_one_or_none()
@@ -343,7 +345,7 @@ async def receive_webhook(
     # Lot 94 : un bouton du parcours, ou un simple bonjour qui ouvre le menu, n'a rien à analyser (aucun appel d'IA).
     # Lot 95 : « panier », « ma commande », une quantité ou une adresse attendue par le panier, non plus.
     guided_tenant = await db.get(Tenant, tenant_id)
-    guided_only = guided_tap or (guided_flow.applies(guided_tenant) and (
+    guided_only = guided_tap or (guided_flow.applies(guided_tenant) and bool(entry)) or (guided_flow.applies(guided_tenant) and (
         guided_flow.is_greeting(incoming_text) or (not parsed.get("reply_id") and await guided_flow.expects_text(
             db, guided_tenant, customer, incoming_text))))
     if rate == usage_guard.OK and not guided_only:
@@ -422,7 +424,7 @@ async def receive_webhook(
     elif quota_exceeded:
         reply_text = (FREEMIUM_QUOTA_MESSAGE_TU if tu else FREEMIUM_QUOTA_MESSAGE).format(company_name=tenant.name)
     elif (guided := await guided_flow.handle(db, tenant, incoming_text, parsed.get("reply_id"), referral, tu,
-                                             customer=customer, conversation=conversation)) is not None and not guided.handoff:
+                                             customer=customer, conversation=conversation, entry=entry)) is not None and not guided.handoff:
         # Lot 94 — parcours à boutons : le code répond avec les vraies données, sans appel à l'IA.
         await db.commit()
         wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
@@ -786,6 +788,30 @@ async def receive_webhook(
             await db.commit()
 
     return {"status": "received", "ai_reply": reply_text, "images_sent": images_sent}
+
+
+INTEREST_PREFIX = "Bonjour, je suis intéressé(e) par : "
+
+
+async def _entry_of(db, tenant_id, kind: str, code: str, text: str) -> dict | None:
+    """Lot 101 — ce qu'un QR code ou un lien de Bob a ouvert : un produit précis, ou l'accueil de la boutique."""
+    if kind == "QR":
+        qr = (await db.execute(select(ProductQrCode).where(ProductQrCode.tenant_id == tenant_id,
+                                                           ProductQrCode.code == code))).scalar_one_or_none()
+        product = await db.get(Product, qr.product_id) if qr is not None else None
+        return {"product": product} if product is not None else None
+    cp = (await db.execute(select(ContactPoint).where(ContactPoint.tenant_id == tenant_id,
+                                                      ContactPoint.code == code))).scalar_one_or_none()
+    if cp is None:
+        return None
+    if text.startswith(INTEREST_PREFIX):  # lien d'un produit (?p=SKU) : « Bonjour, je suis intéressé(e) par : <nom> »
+        product = (await db.execute(select(Product).where(Product.tenant_id == tenant_id, Product.active.is_(True),
+                                                          Product.name == text[len(INTEREST_PREFIX):].strip())
+                                    .limit(1))).scalar_one_or_none()
+        return {"product": product} if product is not None else None
+    if " ".join(text.split()) == " ".join((cp.greeting or "").split()):  # message d'origine, non modifié : l'accueil
+        return {"welcome": True}
+    return None
 
 
 async def _send_complaint_ack(db, tenant, conversation, customer, complaint, text) -> None:

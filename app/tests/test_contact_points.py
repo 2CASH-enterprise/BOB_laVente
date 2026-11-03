@@ -47,8 +47,16 @@ async def _product(db_session, tenant, sku="ROBE-1", name="Robe Wax Bleue", acti
     return product
 
 
+def _wa_link(response) -> str:
+    """Lot 101 : la page d'aperçu ouvre WhatsApp (location.replace) au lieu d'une redirection 302."""
+    import json
+    import re
+
+    return json.loads(re.search(r"location\.replace\((.+?)\);", response.text).group(1))
+
+
 def _wa_text(response) -> str:
-    return unquote(parse_qs(urlparse(response.headers["location"]).query)["text"][0])
+    return unquote(parse_qs(urlparse(_wa_link(response)).query)["text"][0])
 
 
 # --- Gestion depuis le dashboard ------------------------------------------------------
@@ -172,8 +180,8 @@ async def test_redirect_to_whatsapp_with_greeting_and_counts_click(client, db_se
 
     r = await client.get(cp["short_path"])
 
-    assert r.status_code == 302
-    assert r.headers["location"].startswith("https://wa.me/221701112233?text=")
+    assert r.status_code == 200 and 'property="og:title"' in r.text
+    assert _wa_link(r).startswith("https://wa.me/221701112233?text=")
     assert _wa_text(r) == f"Bonjour, je viens de Facebook [W:{cp['code']}]"
     assert (await client.get(API, headers=headers)).json()[0]["click_count"] == 1
 
@@ -211,7 +219,7 @@ async def test_unknown_or_inactive_product_falls_back_to_greeting(client, db_ses
 
     r = await client.get(f"{cp['short_path']}?p={sku}")
 
-    assert r.status_code == 302
+    assert r.status_code == 200
     assert _wa_text(r) == f"Bonjour [W:{cp['code']}]"
 
 

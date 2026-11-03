@@ -306,13 +306,17 @@ async def variant_text(db, tenant_id, reply_id: str | None) -> str | None:
 
 
 async def handle(db, tenant, text: str | None, reply_id: str | None, referral=None, tu: bool = False,
-                 customer=None, conversation=None) -> GuidedTurn | None:
+                 customer=None, conversation=None, entry: dict | None = None) -> GuidedTurn | None:
     """Réponse du parcours, ou None : l'IA répond (question libre, « Ça m'intéresse » d'une carte de l'IA)."""
     from app.models.product import Product
     from app.services import shop_cart
 
     if not applies(tenant):
         return None
+    if entry and not reply_id:  # lot 101 : arrivée par un QR code ou un lien de Bob
+        turn = await _entry(db, tenant, tu, customer, conversation, entry)
+        if turn is not None:
+            return turn
     if reply_id and reply_id.startswith(PREFIX):  # lot 99 : boutons des relances, rappels et livraisons (tous secteurs)
         from app.services import followups
 
@@ -366,6 +370,32 @@ async def handle(db, tenant, text: str | None, reply_id: str | None, referral=No
         return await welcome(db, tenant, tu, await shop_cart.has_items(db, tenant, customer))
     if not reply_id and customer is not None:
         return await shop_cart.handle_text(db, tenant, tu, customer, text)  # « panier », quantité ou adresse attendue
+    return None
+
+
+async def _entry(db, tenant, tu, customer, conversation, entry: dict):
+    """
+    QR code d'un produit ou d'un bien (ou lien « je suis intéressé(e) par … ») : sa fiche à boutons, d'où le client voit
+    aussi le reste de l'offre. Lien ou QR code de la boutique (kit de lancement) avec son message d'origine : l'accueil.
+    """
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate
+
+    product = entry.get("product")
+    if product is not None and product.tenant_id == tenant.id and product.active:
+        if is_real_estate(tenant):
+            from app.services import immo_flow
+
+            return await immo_flow.details(db, tenant, tu, product)
+        if is_dealership(tenant):
+            from app.services import auto_flow
+
+            return await auto_flow.details(db, tenant, tu, product)
+        if not is_insurance(tenant):
+            from app.services import shop_cart
+
+            return await details(db, tenant, tu, product, await shop_cart.has_items(db, tenant, customer))
+    if entry.get("welcome"):
+        return await handle(db, tenant, "menu", None, None, tu, customer=customer, conversation=conversation)
     return None
 
 
