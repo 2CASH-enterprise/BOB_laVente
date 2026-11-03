@@ -204,6 +204,7 @@ async def confirm_appointment(
             db, tenant, conversation, customer, text, user_id, "appointment_confirmed",
             subject=f"Votre rendez-vous est confirmé — {tenant.name}",
         )
+    await _agenda_email(db, tenant, appointment, current_user, "confirmé")  # lot 102 : dans l'agenda du conseiller
     await log_audit_event(
         db, actor=user_id, action="APPOINTMENT_CONFIRMED", tenant_id=tenant.id,
         details={"appointment_id": str(appointment.id), "scheduled_at": scheduled.isoformat(), "customer_notified": notified, "notified_by": channel},
@@ -237,12 +238,45 @@ async def cancel_appointment(
             subject=f"Votre rendez-vous est annulé — {tenant.name}",
         )
     appointment_service.cancel(appointment, now=now)
+    await _agenda_email(db, tenant, appointment, current_user, "annulé")  # lot 102 : retiré de l'agenda du conseiller
     await log_audit_event(
         db, actor=user_id, action="APPOINTMENT_CANCELLED", tenant_id=tenant.id,
         details={"appointment_id": str(appointment.id), "customer_notified": notified, "notified_by": channel},
     )
     await db.commit()
     return ActionResult(appointment=await _out(db, appointment, zone, now), customer_notified=notified, notify_error=error, notified_by=channel)
+
+
+async def _agenda_email(db, tenant, appointment, current_user, what: str) -> None:
+    """
+    Lot 102 — le conseiller qui confirme (ou annule) un rendez-vous depuis la page Rendez-vous reçoit l'invitation
+    d'agenda (ou son annulation) : son agenda Google reste à jour. Un échec d'envoi ne bloque jamais l'action.
+    """
+    import asyncio
+
+    from app.models.user import User
+    from app.services.calendar_invite import event_for
+    from app.services.email_service import send_email
+    from app.services.handoff_service import conversation_link, customer_display_name
+    from app.services.local_time import format_local
+
+    user = await db.get(User, current_user.user_id)
+    customer = await db.get(Customer, appointment.customer_id)
+    conversation = await db.get(Conversation, appointment.conversation_id)
+    if user is None or not user.email or appointment.scheduled_at is None:
+        return
+    name = customer_display_name(customer) if customer else "Client"
+    link = conversation_link(conversation) if conversation else ""
+    invite = await event_for(db, tenant, appointment, name, link)
+    when = format_local(appointment.scheduled_at, tenant_zone(tenant))
+    subject = f"Rendez-vous {what} : {name}, {when}"
+    body = (f"Bonjour,\n\nRendez-vous {what} : {appointment_service.subject_phrase(appointment)} avec {name}, {when}.\n"
+            + ("L'invitation jointe l'ajoute à votre agenda.\n" if what != "annulé" else "L'invitation jointe le retire de votre agenda.\n")
+            + (f"\nOuvrir la conversation : {link}" if link else ""))
+    try:
+        await asyncio.to_thread(send_email, to=user.email, subject=subject, body=body, invite=invite)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # --- Lot 36 : issue du rendez-vous --------------------------------------------------------------

@@ -433,8 +433,9 @@ async def receive_webhook(
         guided_emails = []
         if guided.alerts:
             commercial = await commercial_for_customer(db, customer)
-            for subject, body in guided.alerts:
-                guided_emails += alert_emails(tenant.email, commercial, subject, body)
+            for alert in guided.alerts:  # (sujet, texte) ou (sujet, texte, {"invite": …}) — lot 102
+                subject, body, *more = alert
+                guided_emails += alert_emails(tenant.email, commercial, subject, body, **(more[0] if more else {}))
         from app.services.insurance import quote_alert_emails as _quote_alerts
 
         guided_emails += await _quote_alerts(db, tenant, customer, conversation)
@@ -448,11 +449,14 @@ async def receive_webhook(
             from app.services.local_time import tenant_zone
 
             commercial = await commercial_for_customer(db, customer)
+            from app.services.calendar_invite import event_for
+
             for appointment in guided.booked:
                 subject, body = appointment_service.booking_alert_email(
                     appointment, customer_display_name(customer), tenant_zone(tenant), conversation_link(conversation),
                     await build_fiche(db, tenant, customer))
-                for email in alert_emails(tenant.email, commercial, subject, body):
+                invite = await event_for(db, tenant, appointment, customer_display_name(customer), conversation_link(conversation))
+                for email in alert_emails(tenant.email, commercial, subject, body, invite=invite):  # lot 102 : invitation
                     background_tasks.add_task(send_email, **email)
         return {"status": "processed", "guided": True}
     elif guided is not None:
@@ -681,7 +685,10 @@ async def receive_webhook(
                 appointment, customer_display_name(customer), zone, conversation_link(conversation),
                 await build_fiche(db, tenant, customer),
             )
-            booking_emails += alert_emails(tenant.email, commercial, subject, body)
+            from app.services.calendar_invite import event_for  # lot 102 : invitation d'agenda pour le conseiller
+
+            invite = await event_for(db, tenant, appointment, customer_display_name(customer), conversation_link(conversation))
+            booking_emails += alert_emails(tenant.email, commercial, subject, body, invite=invite)
             booking_messages.append((appointment_service.confirmation_message(appointment, tenant.name, zone), appointment))
     if change_outbox:
         # Lot 35 — le prospect a déplacé ou annulé son rendez-vous : boutique et commercial prévenus.
@@ -694,7 +701,10 @@ async def receive_webhook(
             subject, body = appointment_service.staff_change_email(
                 appointment, customer_display_name(customer), tenant_zone(tenant), conversation_link(conversation), previous,
             )
-            booking_emails += alert_emails(tenant.email, commercial, subject, body)
+            from app.services.calendar_invite import event_for  # lot 102 : l'agenda suit (déplacé ou retiré)
+
+            invite = await event_for(db, tenant, appointment, customer_display_name(customer), conversation_link(conversation))
+            booking_emails += alert_emails(tenant.email, commercial, subject, body, invite=invite)
 
     # Lot 40 — email donné pendant la réponse de Bob (outil record_customer_email) : même récapitulatif.
     recap_emails = [r for r in [await recap_to_send(db, tenant, customer)] if r is not None]

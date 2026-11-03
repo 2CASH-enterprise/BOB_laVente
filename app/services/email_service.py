@@ -60,6 +60,7 @@ def build_message(
     reply_to: str | None = None,
     extra_headers: dict[str, str] | None = None,
     html: str | None = None,
+    invite: dict | None = None,
 ) -> MIMEMultipart:
     """
     Lot 40 — deux versions dans le même email : le texte (lu par les messageries simples, et
@@ -71,12 +72,33 @@ def build_message(
     settings = get_settings()
     display_name = _sanitize_display_name(from_name if from_name is not None else settings.smtp_from_name)
 
-    msg = MIMEMultipart("alternative")
-    msg.attach(MIMEText(body, "plain", _charset="utf-8"))
+    alternative = MIMEMultipart("alternative")
+    alternative.attach(MIMEText(body, "plain", _charset="utf-8"))
     for_customer = from_name is not None
     # Lot 60 : un email peut fournir sa propre version HTML (rapport mensuel, avec graphiques).
-    msg.attach(MIMEText(html if html is not None else render_html(subject, body, display_name or "Bob", for_customer),
-                        "html", _charset="utf-8"))
+    alternative.attach(MIMEText(html if html is not None else render_html(subject, body, display_name or "Bob", for_customer),
+                                "html", _charset="utf-8"))
+    if invite:
+        # Lot 102 : invitation d'agenda (Gmail, Outlook, iPhone la reconnaissent) + le fichier .ics en pièce jointe.
+        from email.mime.base import MIMEBase
+
+        from app.services.calendar_invite import ics
+
+        calendar = ics(invite, to, settings.smtp_from_email)
+        method = "CANCEL" if invite.get("cancelled") else "REQUEST"
+        alternative.attach(MIMEText(calendar, "calendar", _charset="utf-8"))
+        alternative.get_payload()[-1].set_param("method", method)
+        msg = MIMEMultipart("mixed")
+        msg.attach(alternative)
+        attachment = MIMEBase("application", "ics", name="invitation.ics")
+        attachment.set_payload(calendar.encode("utf-8"))
+        from email import encoders
+
+        encoders.encode_base64(attachment)
+        attachment.add_header("Content-Disposition", "attachment", filename="invitation.ics")
+        msg.attach(attachment)
+    else:
+        msg = alternative
     msg["Subject"] = subject
     msg["From"] = formataddr((display_name, settings.smtp_from_email), charset="utf-8") if display_name else settings.smtp_from_email
     msg["To"] = to
@@ -103,6 +125,7 @@ def send_email(
     reply_to: str | None = None,
     extra_headers: dict[str, str] | None = None,
     html: str | None = None,
+    invite: dict | None = None,
 ) -> bool:
     settings = get_settings()
 
@@ -112,7 +135,8 @@ def send_email(
         )
         return False
 
-    msg = build_message(to, subject, body, from_name=from_name, reply_to=reply_to, extra_headers=extra_headers, html=html)
+    msg = build_message(to, subject, body, from_name=from_name, reply_to=reply_to, extra_headers=extra_headers, html=html,
+                        invite=invite)
 
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:

@@ -186,9 +186,16 @@ async def _change_alerts(db, tenant, customer, conversation, tools) -> list:
     from app.services.handoff_service import conversation_link, customer_display_name
     from app.services.local_time import tenant_zone
 
-    return [staff_change_email(appointment, customer_display_name(customer), tenant_zone(tenant),
-                               conversation_link(conversation), previous)
-            for appointment, previous in tools.change_outbox]
+    from app.services.calendar_invite import event_for
+
+    out = []
+    for appointment, previous in tools.change_outbox:
+        subject, body = staff_change_email(appointment, customer_display_name(customer), tenant_zone(tenant),
+                                           conversation_link(conversation), previous)
+        # Lot 102 : l'invitation d'agenda du conseiller suit (déplacée ou retirée).
+        invite = await event_for(db, tenant, appointment, customer_display_name(customer), conversation_link(conversation))
+        out.append((subject, body, {"invite": invite}))
+    return out
 
 
 async def _slot_rows(db, tenant, appointment, tu):

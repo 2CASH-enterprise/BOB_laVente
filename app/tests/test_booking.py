@@ -338,6 +338,8 @@ async def test_booking_through_whatsapp_sends_fixed_confirmation_and_alerts(clie
     assert sorted(m["to"] for m in outbox) == sorted([unique_email, "moussa@example.com"])
     assert all(m["subject"].startswith("Nouveau rendez-vous") and label in m["subject"] for m in outbox)
     assert "Client amené par : Moussa" in outbox[0]["body"]
+    # Lot 102 : la boutique et le commercial reçoivent l'invitation d'agenda du rendez-vous.
+    assert all(m["invite"] and m["invite"]["uid"].startswith("rdv-") and not m["invite"]["cancelled"] for m in outbox)
     stored = (await db_session.execute(select(Message).where(Message.message_type == "appointment_confirmed"))).scalars().all()
     assert [m.content for m in stored] == [sent[1]]
     conversation = (await db_session.execute(select(Conversation).where(Conversation.tenant_id == tenant.id)

@@ -212,6 +212,7 @@ async def test_cancel_by_whatsapp_confirms_and_alerts_shop_and_commercial(client
     assert stored == ["auto_message"]
     assert sorted(m["to"] for m in mails) == sorted([unique_email, "moussa@example.com"])
     assert all(m["subject"].startswith("Rendez-vous annulé par le client") for m in mails)
+    assert all(m["invite"]["cancelled"] for m in mails)  # lot 102 : l'événement est retiré de l'agenda du conseiller
 
 
 # --- Rappel WhatsApp la veille ----------------------------------------------------------------
