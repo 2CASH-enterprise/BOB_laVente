@@ -184,8 +184,13 @@ async def test_tables_are_counted_in_covers_per_service(db_session):
     customer, conversation = await _conversation(db_session, tenant)
     tools = ToolExecutor(db_session, tenant.id, conversation, customer.id, business_type=RESTAURANT)
     assert "pour combien de personnes" in (await tools.execute("request_appointment", {"kind": "TABLE"}))["error"]
-    slots = (await tools.execute("get_available_slots", {"party_size": 6}))["slots"]
-    result = await tools.execute("request_appointment", {"kind": "TABLE", "party_size": 6, "slot": slots[0]["slot"]})
+    assert (await tools.execute("get_available_slots", {"party_size": 6}))["slots"]
+    # Lot 107 : le midi de demain (aujourd'hui, le midi peut être passé et le soir resterait seul).
+    tomorrow = await booking.free_slots(db_session, tenant, await booking.load_settings(db_session, tenant.id), timezone.utc,
+                                        datetime.now(timezone.utc), day=(datetime.now(timezone.utc) + timedelta(days=1)).date(),
+                                        party=6, limit=1)
+    result = await tools.execute("request_appointment", {"kind": "TABLE", "party_size": 6,
+                                                         "slot": tomorrow[0].strftime("%Y-%m-%dT%H:%M")})
     assert result.get("status") != "error" and "error" not in result, result
     table = (await db_session.execute(select(AppointmentRequest))).scalar_one()
     assert table.kind == "TABLE" and table.party_size == 6 and table.vehicle_label == "6 personnes" and table.status == "CONFIRMED"

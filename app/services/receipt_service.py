@@ -18,7 +18,27 @@ async def get_order_item_lines(db: AsyncSession, order_id, currency: str) -> lis
     # emails, relances), sur la même ligne que les articles.
     order = await db.get(Order, order_id)
     fee_line = delivery_line(order, currency) if order is not None else None
-    return lines + ([fee_line] if fee_line else [])
+    when_line = None
+    if order is not None and getattr(order, "scheduled_for", None) is not None:  # lot 107 : commande pour plus tard
+        from app.models.tenant import Tenant
+        from app.services.local_time import tenant_zone
+
+        when_line = scheduled_line(order.scheduled_for, tenant_zone(await db.get(Tenant, order.tenant_id)))
+    return lines + [line for line in (fee_line, when_line) if line]
+
+
+DAY_NAMES = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MONTH_NAMES = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+               "novembre", "décembre"]
+
+
+def scheduled_line(moment: datetime, zone) -> str:
+    """Lot 107 — « Pour le mercredi 4 novembre à 19 h 30 » (date écrite en entier : le texte reste juste plus tard)."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    local = moment.astimezone(zone)
+    hour = f"{local.hour} h" + (f" {local.minute:02d}" if local.minute else "")
+    return f"Pour le {DAY_NAMES[local.weekday()]} {local.day} {MONTH_NAMES[local.month - 1]} à {hour}"
 
 
 def delivery_line(order: Order, currency: str) -> str | None:
@@ -35,7 +55,7 @@ def delivery_line(order: Order, currency: str) -> str | None:
 
 
 def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant_name: str, payment_link: str | None,
-                                      tu: bool = False) -> str:
+                                      tu: bool = False, pay_on: str | None = None) -> str:
     """
     Envoyé UNE SEULE FOIS, juste après la création de la commande — jamais un reçu de
     paiement (aucun paiement n'a encore été confirmé à ce stade, section 13/39).
@@ -53,6 +73,10 @@ def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant
                          else "\n\nContactez-nous pour connaître les moyens de paiement disponibles.")
         follow_up = "Une fois la capture d'écran du paiement envoyée, je vous enverrai les détails de suivi."
 
+    if pay_on and not payment_link:  # lot 107 : paiement à la livraison ou au restaurant, choisi par le client
+        payment_block = f"\n\nPaiement : {pay_on}."
+        follow_up = _you_text(tu, "Le restaurant prépare votre commande. Vous pouvez la suivre ici.",
+                              "Le restaurant prépare ta commande. Tu peux la suivre ici.")
     return (
         f"✅ Commande confirmée — {tenant_name}\n"
         f"Référence : {order_ref}\n\n"
@@ -61,6 +85,10 @@ def generate_order_confirmation_text(order: Order, item_lines: list[str], tenant
         f"{payment_block}\n\n"
         f"{follow_up}"
     )
+
+
+def _you_text(tu: bool, vous: str, toi: str) -> str:
+    return toi if tu else vous
 
 
 def generate_receipt_text(order: Order, item_lines: list[str], tenant_name: str) -> str:

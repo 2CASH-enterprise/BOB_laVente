@@ -50,6 +50,7 @@ async def create_order(
     fulfillment: str | None = None,
     table_number: str | None = None,
     delivery_area: str | None = None,
+    scheduled_for=None,
 ) -> Order:
     """
     Lot 95 : une ligne peut porter « variant » (position dans les variantes du produit) et « label » (« Taille 42 ») :
@@ -93,6 +94,8 @@ async def create_order(
             raise OrderCreationError(f"Produit introuvable ou indisponible : {product_id}")
 
         variant_index, chosen_label, variant = _variant(product, item)
+        if menu and variant is None and item.get("option"):  # lot 107 : l'accompagnement choisi (« Avec alloco »)
+            chosen_label = " ".join(str(item["option"]).split())[:120] or None
         # Vérification stock RÉELLE au moment de la commande (section 18.1, 33) — jamais celle
         # que l'IA a pu voir plus tôt dans la conversation, qui peut être obsolète.
         available = int(variant.get("stock") or 0) if variant is not None else product.stock_quantity
@@ -135,6 +138,7 @@ async def create_order(
         fulfillment=fulfillment,
         table_number=(table_number or "").strip()[:16] or None,  # lot 106 : restaurant
         delivery_area=(delivery_area or "").strip()[:64] or None,
+        scheduled_for=scheduled_for,  # lot 107 : commande pour plus tard (heure du restaurant)
         tenant_id=tenant_id,
         customer_id=customer_id,
         conversation_id=conversation_id,

@@ -73,6 +73,7 @@ async def get_cart(db, tenant, customer, create: bool = False):
     cart = (await db.execute(select(Cart).where(Cart.tenant_id == tenant.id, Cart.customer_id == customer.id))).scalar_one_or_none()
     if cart is not None and _aware(cart.updated_at) < _now() - timedelta(hours=CART_HOURS):
         cart.items, cart.fulfillment, cart.address, cart.awaiting = [], None, None, None
+        cart.meta = None  # lot 107 : choix du restaurant (mode, commune, table, heure)
     if cart is None and create:
         # Paniers oubliés de la boutique : effacés au passage (rien n'est gardé plus longtemps que nécessaire).
         await db.execute(delete(Cart).where(Cart.tenant_id == tenant.id,

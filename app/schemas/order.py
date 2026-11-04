@@ -48,6 +48,7 @@ class OrderResponse(BaseModel):
     fulfillment: str | None = None
     table_number: str | None = None  # lot 106 : restaurant, commande sur place
     delivery_area: str | None = None  # lot 106 : commune de livraison
+    scheduled_for: datetime | None = None  # lot 107 : commande pour plus tard
 
     model_config = ConfigDict(from_attributes=True)
 

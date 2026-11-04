@@ -78,7 +78,9 @@ def booking_buttons(tenant, appointment) -> list | None:
 def receipt_buttons(tenant) -> list | None:
     if not _applies(tenant):
         return None
-    return [(f"{PREFIX}cat", "Voir le catalogue"), (f"{PREFIX}s", "Suivre ma commande")]
+    from app.services.business_type import is_restaurant
+
+    return [(f"{PREFIX}cat", "Voir la carte" if is_restaurant(tenant) else "Voir le catalogue"), (f"{PREFIX}s", "Suivre ma commande")]
 
 
 def _you(tu, vous, toi):

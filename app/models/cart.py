@@ -27,5 +27,7 @@ class Cart(Base):
     fulfillment: Mapped[str | None] = mapped_column(String(16))  # DELIVERY ou PICKUP, choisi par le client
     address: Mapped[str | None] = mapped_column(String(500))
     awaiting: Mapped[str | None] = mapped_column(String(120))  # « qty:<produit>:<variante> », « address »
+    # Lot 107 — restaurant : commune de livraison, table, paiement choisi, heure (commande pour plus tard).
+    meta: Mapped[dict | None] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False,
                                                  index=True)

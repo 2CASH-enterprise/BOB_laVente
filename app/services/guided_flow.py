@@ -55,20 +55,23 @@ class GuidedTurn:
 
 def applies(tenant) -> bool:
     from app.core.config import get_settings
-    from app.services.business_type import is_dealership, is_insurance, is_real_estate, is_store
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate, is_restaurant, is_store
 
     return bool(get_settings().guided_flow_enabled and tenant is not None
-                and (is_store(tenant) or is_dealership(tenant) or is_real_estate(tenant) or is_insurance(tenant))
+                and (is_store(tenant) or is_dealership(tenant) or is_real_estate(tenant) or is_insurance(tenant)
+                     or is_restaurant(tenant))  # lot 107 : restaurants
                 and getattr(tenant, "guided_flow_enabled", True))  # lots 96 à 98 : concessions, agences, courtiers
 
 
 async def expects_text(db, tenant, customer, text) -> bool:
     """Ce message écrit est-il attendu par le parcours (panier, quantité, adresse, reprise, disponibilité) ?"""
-    from app.services import assu_flow, auto_flow, shop_cart
-    from app.services.business_type import is_dealership, is_insurance, is_real_estate
+    from app.services import assu_flow, auto_flow, resto_flow, shop_cart
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate, is_restaurant
 
     if not applies(tenant) or customer is None:
         return False
+    if is_restaurant(tenant):
+        return await resto_flow.expects_text(db, tenant, customer, text)
     if is_insurance(tenant):
         return await assu_flow.expects_text(db, tenant, customer, text)
     if is_dealership(tenant) or is_real_estate(tenant):
@@ -325,8 +328,12 @@ async def handle(db, tenant, text: str | None, reply_id: str | None, referral=No
             turn = await followups.handle_tap(db, tenant, tu, customer, conversation, parts[0], parts)
             if turn is not None:
                 return turn
-    from app.services.business_type import is_dealership, is_insurance, is_real_estate
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate, is_restaurant
 
+    if is_restaurant(tenant):  # lot 107 : commander, réserver une table, la carte
+        from app.services import resto_flow
+
+        return await resto_flow.handle(db, tenant, text, reply_id, referral, tu, customer, conversation)
     if is_insurance(tenant):  # lot 98 : devis, contrat, réclamation (jamais de prix)
         from app.services import assu_flow
 
@@ -378,10 +385,14 @@ async def _entry(db, tenant, tu, customer, conversation, entry: dict):
     QR code d'un produit ou d'un bien (ou lien « je suis intéressé(e) par … ») : sa fiche à boutons, d'où le client voit
     aussi le reste de l'offre. Lien ou QR code de la boutique (kit de lancement) avec son message d'origine : l'accueil.
     """
-    from app.services.business_type import is_dealership, is_insurance, is_real_estate
+    from app.services.business_type import is_dealership, is_insurance, is_real_estate, is_restaurant
 
     product = entry.get("product")
     if product is not None and product.tenant_id == tenant.id and product.active:
+        if is_restaurant(tenant):  # lot 107 : le plat, avec « Ajouter »
+            from app.services import resto_flow
+
+            return await resto_flow.details(db, tenant, tu, product)
         if is_real_estate(tenant):
             from app.services import immo_flow
 
