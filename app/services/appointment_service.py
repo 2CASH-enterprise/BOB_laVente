@@ -47,13 +47,17 @@ def confirmation_message(appointment: AppointmentRequest, shop_name: str, zone) 
         what = f"Votre rendez-vous d'estimation{f' ({appointment.vehicle_label})' if appointment.vehicle_label else ''} est confirmé"
     elif appointment.kind == "AGENCE":
         what = "Votre rendez-vous à l'agence est confirmé"
+    elif appointment.kind == "TABLE":  # lot 106 : restaurant
+        what = f"Votre table{f' pour {appointment.vehicle_label}' if appointment.vehicle_label else ''} est réservée"
     else:
         what = "Votre rendez-vous d'estimation de reprise est confirmé"
     return f"Bonjour ! {what} le {when}. À bientôt chez {shop_name} !"
 
 
 def cancellation_message(appointment: AppointmentRequest, shop_name: str, zone) -> str:
-    if appointment.scheduled_at is not None:
+    if appointment.kind == "TABLE" and appointment.scheduled_at is not None:  # lot 106
+        what = f"votre réservation du {format_local(appointment.scheduled_at, zone)} est annulée"
+    elif appointment.scheduled_at is not None:
         what = f"votre rendez-vous du {format_local(appointment.scheduled_at, zone)} est annulé"
     else:
         what = "votre demande de rendez-vous est annulée"

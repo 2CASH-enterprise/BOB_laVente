@@ -14,6 +14,10 @@ Type d'activité de la boutique (lot 24) : un seul Bob, un comportement par sect
   une estimation (le mandat) ou un rendez-vous ; il ne promet jamais un prix de vente, cite toujours les
   honoraires avec un prix et ne demande au locataire que les pièces autorisées par la loi.
 
+- RESTAURANT (lot 106) : Bob prend les commandes (à emporter, en livraison avec frais par commune, sur place depuis la
+  table) comme une boutique, ET réserve les tables (couverts par service) comme un secteur à rendez-vous. Jamais de
+  négociation de prix ; allergènes et composition seulement tels que le restaurant les a renseignés.
+
 Concession, courtier et agence immobilière forment la famille des « secteurs à rendez-vous » (aucune commande,
 rendez-vous, commerciaux) ; ce qui est propre aux véhicules reste réservé à la concession.
 
@@ -24,6 +28,7 @@ ONLINE_STORE = "ONLINE_STORE"
 CAR_DEALERSHIP = "CAR_DEALERSHIP"
 INSURANCE_BROKER = "INSURANCE_BROKER"
 REAL_ESTATE = "REAL_ESTATE"
+RESTAURANT = "RESTAURANT"
 
 BUSINESS_TYPES = {
     ONLINE_STORE: {
@@ -46,6 +51,11 @@ BUSINESS_TYPES = {
         "hint": "Vente, location, gestion",
         "description": "Bob présente vos biens, qualifie acheteurs, locataires et propriétaires, et obtient visites et estimations.",
     },
+    RESTAURANT: {  # lot 106
+        "label": "Restaurant",
+        "hint": "Commandes et réservations",
+        "description": "Bob présente votre carte, prend les commandes (à emporter, en livraison, sur place) et réserve les tables.",
+    },
 }
 APPOINTMENT_SECTORS = frozenset({CAR_DEALERSHIP, INSURANCE_BROKER, REAL_ESTATE})
 
@@ -54,6 +64,7 @@ APPOINTMENT_KINDS_BY_SECTOR = {
     CAR_DEALERSHIP: ("ESSAI", "VISITE", "ESTIMATION_REPRISE"),
     INSURANCE_BROKER: ("CABINET", "APPEL"),
     REAL_ESTATE: ("VISITE", "ESTIMATION", "AGENCE", "APPEL"),  # lot 79
+    RESTAURANT: ("TABLE",),  # lot 106
 }
 
 # Outils de vente directe : jamais en concession.
@@ -100,6 +111,16 @@ def is_real_estate(tenant) -> bool:
     return normalize(getattr(tenant, "business_type", None)) == REAL_ESTATE
 
 
+def is_restaurant(tenant) -> bool:
+    """Lot 106 — restaurant : commandes (comme une boutique) et réservations de table."""
+    return normalize(getattr(tenant, "business_type", None)) == RESTAURANT
+
+
+def books_appointments(tenant) -> bool:
+    """Secteurs où Bob réserve des rendez-vous ou des tables (concession, courtier, agence, restaurant)."""
+    return is_appointment_sector(tenant) or is_restaurant(tenant)
+
+
 def is_appointment_sector(tenant) -> bool:
     """Concession, courtier ou agence immobilière : rendez-vous, commerciaux, jamais de commande."""
     return normalize(getattr(tenant, "business_type", None)) in APPOINTMENT_SECTORS
@@ -121,6 +142,8 @@ def tool_allowed(business_type: str | None, tool_name: str) -> bool:
         return tool_name not in INSURANCE_FORBIDDEN_TOOLS | VEHICLE_ONLY_TOOLS | REAL_ESTATE_ONLY_TOOLS
     if sector == REAL_ESTATE:
         return tool_name not in SALES_TOOLS | VEHICLE_ONLY_TOOLS | INSURANCE_ONLY_TOOLS
+    if sector == RESTAURANT:  # lot 106 : vente ET réservation ; jamais de négociation ni de fiche véhicule
+        return tool_name not in {"negotiate_price"} | VEHICLE_ONLY_TOOLS | INSURANCE_ONLY_TOOLS | REAL_ESTATE_ONLY_TOOLS
     return tool_name not in DEALERSHIP_TOOLS | INSURANCE_ONLY_TOOLS | REAL_ESTATE_ONLY_TOOLS
 
 
@@ -145,6 +168,8 @@ def tools_for(business_type: str | None, tool_definitions: list[dict]) -> list[d
         return [_for_insurance(t) for t in tools]
     if normalize(business_type) == REAL_ESTATE:
         return [_for_real_estate(t) for t in tools]
+    if normalize(business_type) == RESTAURANT:
+        return [_for_restaurant(t) for t in tools]
     if normalize(business_type) != CAR_DEALERSHIP:
         return tools
     adapted = []
@@ -162,6 +187,49 @@ def tools_for(business_type: str | None, tool_definitions: list[dict]) -> list[d
             tool["input_schema"]["required"] = []
         adapted.append(tool)
     return adapted
+
+
+def _for_restaurant(tool: dict) -> dict:
+    """Lot 106 — la carte, la commande (mode, commune, table) et la réservation de table (couverts)."""
+    import copy
+
+    name = tool["name"]
+    if name not in ("search_products", "create_order", "request_appointment", "get_available_slots"):
+        return tool
+    tool = copy.deepcopy(tool)
+    props = tool["input_schema"]["properties"]
+    if name == "search_products":
+        tool["description"] = (
+            "Recherche des plats et des boissons sur la carte du restaurant, par nom ou par mot-clé (ex. « garba », "
+            "« poulet braisé », « jus de bissap »). Retourne seulement les plats disponibles aujourd'hui, avec leur prix et "
+            "leur fiche (composition, accompagnements, allergènes…). N'invente jamais un plat ni un ingrédient."
+        )
+    elif name == "create_order":
+        props["fulfillment"] = {"type": "string", "enum": ["EMPORTER", "LIVRAISON", "SUR_PLACE"],
+                                "description": "À emporter, en livraison ou sur place (depuis la table), selon le choix du client"}
+        props["delivery_area"] = {"type": "string",
+                                  "description": "LIVRAISON : la commune ou le quartier de livraison, parmi ceux du restaurant"}
+        props["table_number"] = {"type": "string", "description": "SUR_PLACE : le numéro de la table du client"}
+        tool["input_schema"]["required"] = ["items", "fulfillment"]
+        tool["description"] += (" Restaurant : précise toujours le mode (à emporter, livraison ou sur place) ; en "
+                                "livraison, la commune (les frais sont calculés par le code) et l'adresse ; sur place, "
+                                "le numéro de table.")
+    elif name == "get_available_slots":
+        props["party_size"] = {"type": "integer", "description": "Nombre de personnes (couverts) de la réservation"}
+        tool["description"] = ("Tables réellement libres pour ce nombre de personnes, calculées par le code (couverts "
+                               "restants par service). Demande d'abord le nombre de personnes.")
+    else:
+        props["kind"] = {"type": "string", "enum": ["TABLE"], "description": "TABLE = réservation d'une table"}
+        props["party_size"] = {"type": "integer", "description": "Nombre de personnes (couverts), obligatoire"}
+        for key in ("product_id", "vehicle", "need", "budget", "trade_in", "financing_interest"):
+            props.pop(key, None)
+        tool["input_schema"]["required"] = ["kind", "party_size"]
+        tool["description"] = (
+            "Réserve une table. Avec un créneau proposé par get_available_slots (slot), la réservation est confirmée "
+            "tout de suite et le client reçoit une confirmation ; sans créneau, la demande est transmise au restaurant, "
+            "qui confirmera. Toujours avec le nombre de personnes."
+        )
+    return tool
 
 
 def _for_insurance(tool: dict) -> dict:
@@ -291,6 +359,16 @@ def require_business(*allowed: str):
 
 def only_online_store():
     return require_business(ONLINE_STORE)
+
+
+def only_sellers():
+    """Lot 106 — commandes, livraison, relances de commande : boutique et restaurant."""
+    return require_business(ONLINE_STORE, RESTAURANT)
+
+
+def only_bookers():
+    """Lot 106 — page Rendez-vous / Réservations : secteurs à rendez-vous et restaurant."""
+    return require_business(*APPOINTMENT_SECTORS, RESTAURANT)
 
 
 def only_dealership():

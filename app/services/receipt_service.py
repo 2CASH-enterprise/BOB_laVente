@@ -22,8 +22,11 @@ async def get_order_item_lines(db: AsyncSession, order_id, currency: str) -> lis
 
 
 def delivery_line(order: Order, currency: str) -> str | None:
+    if getattr(order, "fulfillment", None) == "DINE_IN":  # lot 106 : restaurant, commande depuis la table
+        return f"Sur place — table {order.table_number}" if getattr(order, "table_number", None) else "Sur place"
+    area = getattr(order, "delivery_area", None)
     if order.delivery_fee is not None and float(order.delivery_fee) > 0:
-        return f"Livraison — {float(order.delivery_fee):,.0f} {currency}".replace(",", " ")
+        return (f"Livraison{f' ({area})' if area else ''} — {float(order.delivery_fee):,.0f} {currency}").replace(",", " ")
     if order.fulfillment == "DELIVERY" and order.delivery_fee is not None:
         return "Livraison — offerte"
     if order.fulfillment == "PICKUP":

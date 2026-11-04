@@ -67,6 +67,7 @@ TASK_LABELS = {
     "app.workers.monitoring.purge_task": "Monitoring : effacement après 30 jours",
     "app.workers.wa_templates.refresh_templates_task": "Modèles WhatsApp : statut chez Meta",
     "app.workers.plan_quota.check_quotas_task": "Plafonds des formules : alertes",
+    "app.workers.plan_quota.restore_dishes_task": "Restaurant : plats remis sur la carte",  # lot 106
     "app.workers.coexistence_sync.retry_syncs_task": "Numéro partagé : contacts et historique du téléphone",
     "app.workers.catalog_sync.sync_shopify_task": "Catalogues Shopify (prix, stock, variantes)",
     "app.workers.property_alerts.run_alerts_task": "Alertes « nouveau bien » (agences immobilières)",

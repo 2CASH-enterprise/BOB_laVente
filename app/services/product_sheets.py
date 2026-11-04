@@ -185,6 +185,66 @@ def clean_estate_status(value) -> str | None:
     return next((s for s in ESTATE_STATUSES if _plain(s) == _plain(value)), None)
 
 
+# --- Lot 106 : restaurant — la carte (rubriques fixes, fiche d'un plat) ---------------------------------------------
+# Les 14 allergènes à déclarer (règlement INCO, annexe II) ; « Aucun des 14 » distingue « vérifié » de « non renseigné ».
+ALLERGENS = ["Gluten", "Crustacés", "Œufs", "Poissons", "Arachides", "Soja", "Lait", "Fruits à coque", "Céleri",
+             "Moutarde", "Sésame", "Sulfites", "Lupin", "Mollusques"]
+NO_ALLERGEN = "Aucun des 14"
+_DISH_KEY = [("composition", "Composition", "Ex. poulet braisé, oignons, tomates"),
+             ("sides", "Accompagnements au choix", "Ex. attiéké, alloco, riz"),
+             ("allergens", "Allergènes", "")]
+_DISH_OPTIONAL = [("extras", "Suppléments", "Ex. œuf + 200 F, piment à part"), ("spicy", "Piment", ""),
+                  ("vegetarian", "Végétarien", ""), ("prep_time", "Temps de préparation", "Ex. 20 min"),
+                  ("portion", "Portion", "Ex. pour 1 personne, pour 2")]
+DISH_CATEGORIES: dict[str, dict] = {
+    "ENTREE": {"label": "Entrées", "key": _DISH_KEY, "optional": _DISH_OPTIONAL, "questions": []},
+    "PLAT": {"label": "Plats", "key": _DISH_KEY, "optional": _DISH_OPTIONAL, "questions": []},
+    "GRILLADE": {"label": "Grillades", "key": _DISH_KEY, "optional": _DISH_OPTIONAL, "questions": []},
+    "DESSERT": {"label": "Desserts", "key": _DISH_KEY[:1] + _DISH_KEY[2:], "optional": _DISH_OPTIONAL[:1] + _DISH_OPTIONAL[2:],
+                "questions": []},
+    "BOISSON": {"label": "Boissons", "key": [("volume", "Contenance", "Ex. 33 cl, 1 L"), _DISH_KEY[2]],
+                "optional": [("alcohol", "Avec alcool", ""), ("served", "Servie", "Ex. fraîche, glacée")], "questions": []},
+    "MENU": {"label": "Menus et formules", "key": [("menu_content", "Ce que comprend le menu", "Ex. plat + boisson + dessert"),
+                                                   _DISH_KEY[1], _DISH_KEY[2]],
+             "optional": _DISH_OPTIONAL[1:], "questions": []},
+}
+DISH_OPTIONS = {"spicy": ["Pas pimenté", "Un peu pimenté", "Pimenté", "Très pimenté"], "vegetarian": ["Oui", "Non"],
+                "alcohol": ["Oui", "Non"]}
+DISH_MULTI = {"allergens": ALLERGENS + [NO_ALLERGEN]}
+DISH_KEYWORDS = {
+    "BOISSON": ["jus", "bissap", "gnamakoudji", "soda", "coca", "biere", "vin", "eau", "the", "cafe", "cocktail", "boisson"],
+    "DESSERT": ["dessert", "gateau", "glace", "salade de fruits", "degue", "creme", "tarte", "beignet"],
+    "GRILLADE": ["grillade", "braise", "brochette", "choukouya", "poulet braise", "poisson braise", "soya"],
+    "ENTREE": ["entree", "salade", "soupe", "nems", "accras"],
+    "MENU": ["menu", "formule"],
+}
+
+
+def is_dish(code: str | None) -> bool:
+    return code in DISH_CATEGORIES
+
+
+def guess_dish(*texts: str | None) -> str:
+    """Rubrique la plus probable d'après les mots ; PLAT si rien ne ressort."""
+    plain = " " + " ".join(_plain(t) for t in texts if t) + " "
+    best, best_score = "PLAT", 0
+    for code, words in DISH_KEYWORDS.items():
+        score = sum(1 for w in words if re.search(rf"(?<![a-z]){re.escape(w)}s?(?![a-z])", plain))
+        if score > best_score:
+            best, best_score = code, score
+    return best
+
+
+def clean_allergens(value) -> str | None:
+    """« gluten, lait » → « Gluten, Lait » (seulement les 14) ; « Aucun des 14 » seul, jamais avec un allergène."""
+    items = value if isinstance(value, list) else re.split(r"[,;/\n]", str(value or ""))
+    wanted = {_plain(x).strip() for x in items if str(x).strip()}
+    found = [a for a in ALLERGENS if _plain(a) in wanted]
+    if found:
+        return ", ".join(found)
+    return NO_ALLERGEN if _plain(NO_ALLERGEN) in wanted else None
+
+
 NUMERIC_FIELDS = frozenset({"surface", "rooms", "bedrooms", "land_surface"})  # lot 79 : filtrés par la recherche
 
 # Lot 79 — type de bien proposé par mots-clés (nom, description).
@@ -241,6 +301,8 @@ def is_property(code: str | None) -> bool:
 def _category(code: str | None) -> dict:
     if code in PROPERTY_CATEGORIES:
         return PROPERTY_CATEGORIES[code]
+    if code in DISH_CATEGORIES:  # lot 106
+        return DISH_CATEGORIES[code]
     return CATEGORIES.get(code or GENERAL, CATEGORIES[GENERAL])
 
 
@@ -272,6 +334,8 @@ def guess_category(*texts: str | None) -> str:
 
 def fields_of(code: str | None) -> list[tuple[str, str, str]]:
     cat = _category(code)
+    if code in DISH_CATEGORIES:  # lot 106 : un plat n'a ni marque ni garantie
+        return cat["key"] + cat["optional"] + [("highlights", "Points forts", "Ex. la spécialité de la maison")]
     common = PROPERTY_COMMON_FIELDS if code in PROPERTY_CATEGORIES else COMMON_FIELDS
     return cat["key"] + cat["optional"] + common if code in PROPERTY_CATEGORIES else common + cat["key"] + cat["optional"]
 
@@ -293,6 +357,16 @@ def normalize_sheet(code: str | None, raw: dict | None) -> dict | None:
     sheet = {}
     for key, value in raw.items():
         if key not in allowed or value is None:
+            continue
+        if key in DISH_MULTI and code in DISH_CATEGORIES:  # lot 106 : les 14 allergènes, rien d'autre
+            allergens = clean_allergens(value)
+            if allergens:
+                sheet[key] = allergens
+            continue
+        if key in DISH_OPTIONS and code in DISH_CATEGORIES:
+            match = next((o for o in DISH_OPTIONS[key] if _plain(o) == _plain(value)), None)
+            if match:
+                sheet[key] = match
             continue
         if key in FIELD_OPTIONS and code in PROPERTY_CATEGORIES:  # lot 79 : seulement une valeur de la liste
             match = next((o for o in FIELD_OPTIONS[key] if _plain(o) == _plain(value)), None)
@@ -369,10 +443,14 @@ def sheet_for_ai(product) -> dict | None:
     return out
 
 
-def _pack(items, real_estate: bool = False) -> list[dict]:
+def _pack(items, real_estate: bool = False, restaurant: bool = False) -> list[dict]:
     out = []
     for k, lab, hint in items:
         field = {"key": k, "label": lab, "hint": hint}
+        if restaurant and k in DISH_OPTIONS:
+            field["options"] = DISH_OPTIONS[k]
+        if restaurant and k in DISH_MULTI:
+            field["multi"] = DISH_MULTI[k]
         if real_estate and k in FIELD_OPTIONS:
             field["options"] = FIELD_OPTIONS[k]
         if real_estate and k in NUMERIC_FIELDS:
@@ -381,15 +459,17 @@ def _pack(items, real_estate: bool = False) -> list[dict]:
     return out
 
 
-def definitions(real_estate: bool = False) -> list[dict]:
-    """Pour le formulaire du tableau de bord (lot 79 : types de bien pour une agence immobilière)."""
-    source = PROPERTY_CATEGORIES if real_estate else CATEGORIES
-    return [{"code": code, "label": cat["label"], "key_fields": _pack(cat["key"], real_estate),
-             "optional_fields": _pack(cat["optional"], real_estate), "questions": cat["questions"]}
+def definitions(real_estate: bool = False, restaurant: bool = False) -> list[dict]:
+    """Pour le formulaire du tableau de bord (lot 79 : types de bien ; lot 106 : rubriques de la carte)."""
+    source = DISH_CATEGORIES if restaurant else PROPERTY_CATEGORIES if real_estate else CATEGORIES
+    return [{"code": code, "label": cat["label"], "key_fields": _pack(cat["key"], real_estate, restaurant),
+             "optional_fields": _pack(cat["optional"], real_estate, restaurant), "questions": cat["questions"]}
             for code, cat in source.items()]
 
 
-def common_definitions(real_estate: bool = False) -> list[dict]:
+def common_definitions(real_estate: bool = False, restaurant: bool = False) -> list[dict]:
+    if restaurant:
+        return _pack([("highlights", "Points forts", "Ex. la spécialité de la maison")])
     return _pack(PROPERTY_COMMON_FIELDS if real_estate else COMMON_FIELDS, real_estate)
 
 

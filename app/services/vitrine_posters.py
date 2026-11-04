@@ -44,23 +44,27 @@ INK, IVORY, MUTED, RULE = "#0E1116", "#F5F2EC", "#5E5A53", "#CFC8BA"
 SIGNATURE = "Proposé par Bob"
 
 SECTOR_WORD = {"REAL_ESTATE": "Immobilier", "CAR_DEALERSHIP": "Automobile", "INSURANCE_BROKER": "Assurance",
-               "ONLINE_STORE": "Boutique"}
+               "ONLINE_STORE": "Boutique", "RESTAURANT": "Restaurant"}
 KICKER = {"REAL_ESTATE": "Votre projet immobilier", "CAR_DEALERSHIP": "Votre prochain véhicule",
-          "INSURANCE_BROKER": "Votre assurance", "ONLINE_STORE": "Vos achats"}
+          "INSURANCE_BROKER": "Votre assurance", "ONLINE_STORE": "Vos achats", "RESTAURANT": "Votre repas"}
 SERVICES = {"CAR_DEALERSHIP": ["Disponibilité", "Essai", "Reprise", "Rendez-vous"],
             "INSURANCE_BROKER": ["Devis", "Renouvellement", "Votre contrat", "Réclamation"],
-            "ONLINE_STORE": ["Questions", "Commandes", "Livraison", "Suivi"]}
+            "ONLINE_STORE": ["Questions", "Commandes", "Livraison", "Suivi"],
+            "RESTAURANT": ["La carte", "À emporter", "Livraison", "Réserver"]}
 TAGLINE = {"REAL_ESTATE": "Nos biens, vos questions, une réponse immédiate.",
            "CAR_DEALERSHIP": "Nos véhicules, vos questions, une réponse immédiate.",
            "INSURANCE_BROKER": "Vos devis, vos questions, une réponse immédiate.",
-           "ONLINE_STORE": "Nos produits, vos questions, une réponse immédiate."}
+           "ONLINE_STORE": "Nos produits, vos questions, une réponse immédiate.",
+           "RESTAURANT": "La carte, vos commandes, vos réservations."}
 CHEVALET_KICKER = {"REAL_ESTATE": "Nos biens et nos services", "CAR_DEALERSHIP": "Nos véhicules disponibles",
-                   "INSURANCE_BROKER": "Devis et contrats", "ONLINE_STORE": "Nos produits"}
+                   "INSURANCE_BROKER": "Devis et contrats", "ONLINE_STORE": "Nos produits",
+                   "RESTAURANT": "Commander ou réserver"}
 VITRE = {  # (accroche, titre, titre en italique, ligne)
     "REAL_ESTATE": ("Ce bien vous plaît ?", "Visitez-le", "depuis la rue.", "Photos, prix, visite : scannez, on vous répond."),
     "CAR_DEALERSHIP": ("Ce véhicule vous plaît ?", "Réservez", "votre essai.", "Prix, essai, reprise : scannez, on vous répond."),
     "INSURANCE_BROKER": ("Une question ?", "Votre devis", "en un message.", "Devis, contrat : scannez, on vous répond."),
     "ONLINE_STORE": ("Ce produit vous plaît ?", "Commandez-le", "en un message.", "Prix, stock, livraison : scannez, on vous répond."),
+    "RESTAURANT": ("Ce plat vous tente ?", "Commandez-le", "en un message.", "À emporter, en livraison : scannez, on vous répond."),
 }
 VITRE_TU = {
     "ONLINE_STORE": ("Ce produit te plaît ?", "Commande-le", "en un message.", "Prix, stock, livraison : scanne, on te répond."),

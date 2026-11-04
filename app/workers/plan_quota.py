@@ -13,3 +13,12 @@ def check_quotas_task() -> dict:
     from app.workers.monitoring import _with_session
 
     return asyncio.run(_with_session(plan_quota.check_all))
+
+
+@celery_app.task(name="app.workers.plan_quota.restore_dishes_task")
+def restore_dishes_task() -> int:
+    """Lot 106 — chaque heure : les plats « indisponibles aujourd'hui » d'un jour passé reviennent sur la carte."""
+    from app.services import restaurant
+    from app.workers.monitoring import _with_session
+
+    return asyncio.run(_with_session(restaurant.restore_dishes))

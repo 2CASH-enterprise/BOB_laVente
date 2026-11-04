@@ -577,7 +577,7 @@ def test_sector_everywhere():
 def test_dashboard_and_demo_know_the_sector():
     for marker in ('["CAR_DEALERSHIP", "INSURANCE_BROKER", "REAL_ESTATE"].includes(currentBusinessType)',
                    'id="estate-profile-card"', "loadRealEstateProfile()", '"/api/v1/tenants/me/real-estate-profile"',
-                   'productsLabel = insurance ? "Produits d\'assurance" : estate ? "Biens" : "Produits"',
+                   'productsLabel = insurance ? "Produits d\'assurance" : estate ? "Biens" : restaurant ? "Ma carte" : "Produits"',
                    "Affaire conclue (vente, location, mandat)", "f.options", 'class="input sheets-only"',
                    'code === "REAL_ESTATE" ? "Ex. Agence du Parc"', "Affaires conclues"):
         assert marker in HTML, marker

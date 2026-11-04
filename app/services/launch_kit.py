@@ -21,6 +21,7 @@ GREETINGS = {
     "CAR_DEALERSHIP": "Bonjour, je m'intéresse à un véhicule",
     "INSURANCE_BROKER": "Bonjour, j'ai une question sur mon assurance",
     "REAL_ESTATE": "Bonjour, j'ai un projet immobilier",  # lot 79
+    "RESTAURANT": "Bonjour, je voudrais commander ou réserver une table",  # lot 106
 }
 
 
@@ -82,6 +83,7 @@ _HOOKS = {  # (accroche courte, accroche longue) — concession et courtier vouv
                          "Devis, renouvellement, question sur votre contrat"),
     "CAR_DEALERSHIP": ("Un véhicule vous intéresse ?", "Disponibilité, essai, reprise de votre véhicule"),
     "REAL_ESTATE": ("Un projet immobilier ?", "Achat, location, estimation de votre bien"),  # lot 79
+    "RESTAURANT": ("Une petite faim ?", "Commandes à emporter, livraison et réservation de table"),  # lot 106
     "ONLINE_STORE": ("Une question, une commande ?", "Questions, commandes, suivi de commande"),
 }
 

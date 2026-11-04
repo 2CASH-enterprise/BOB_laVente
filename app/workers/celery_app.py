@@ -187,6 +187,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.plan_quota.check_quotas_task",
         "schedule": crontab(minute=40),
     },
+    # Lot 106 — restaurant : les plats « indisponibles aujourd'hui » reviennent sur la carte le lendemain.
+    "restaurant-dishes-back": {
+        "task": "app.workers.plan_quota.restore_dishes_task",
+        "schedule": crontab(minute=5),
+    },
     "monitoring-purge": {
         "task": "app.workers.monitoring.purge_task",
         "schedule": crontab(hour=4, minute=10),

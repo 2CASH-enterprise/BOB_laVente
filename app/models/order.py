@@ -60,6 +60,9 @@ class Order(Base):
     # remise choisi par le client (DELIVERY, PICKUP ; None pour les commandes prises autrement).
     delivery_fee: Mapped[float | None] = mapped_column(Numeric(14, 2))
     fulfillment: Mapped[str | None] = mapped_column(String(16))
+    # Lot 106 — restaurant : numéro de table (commande sur place) et commune de livraison (frais par commune).
+    table_number: Mapped[str | None] = mapped_column(String(16))
+    delivery_area: Mapped[str | None] = mapped_column(String(64))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

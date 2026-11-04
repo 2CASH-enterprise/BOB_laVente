@@ -30,6 +30,13 @@ class OrderItemRequest:
         self.quantity = quantity
 
 
+async def _is_menu(db, tenant_id) -> bool:
+    from app.models.tenant import Tenant
+    from app.services.business_type import is_restaurant
+
+    return is_restaurant(await db.get(Tenant, tenant_id))
+
+
 async def create_order(
     db: AsyncSession,
     tenant_id: uuid.UUID,
@@ -41,6 +48,8 @@ async def create_order(
     conversation_id: uuid.UUID | None = None,
     delivery_fee: float | None = None,
     fulfillment: str | None = None,
+    table_number: str | None = None,
+    delivery_area: str | None = None,
 ) -> Order:
     """
     Lot 95 : une ligne peut porter « variant » (position dans les variantes du produit) et « label » (« Taille 42 ») :
@@ -62,6 +71,7 @@ async def create_order(
     order_items: list[OrderItem] = []
     total = 0.0
     currency = None
+    menu = await _is_menu(db, tenant_id)  # lot 106 : un plat n'a pas de stock, seulement « disponible ou non »
 
     for item in items:
         try:
@@ -86,7 +96,10 @@ async def create_order(
         # Vérification stock RÉELLE au moment de la commande (section 18.1, 33) — jamais celle
         # que l'IA a pu voir plus tôt dans la conversation, qui peut être obsolète.
         available = int(variant.get("stock") or 0) if variant is not None else product.stock_quantity
-        if available < quantity:
+        if menu and variant is None:
+            if available <= 0:
+                raise OrderCreationError(f"{product.name} n'est pas disponible aujourd'hui")
+        elif available < quantity:
             name = f"{product.name} ({chosen_label})" if chosen_label else product.name
             raise OrderCreationError(f"Stock insuffisant pour {name} : demandé {quantity}, disponible {available}")
 
@@ -103,7 +116,9 @@ async def create_order(
                                      variant_index=variant_index, variant_label=chosen_label))
         # Décrément immédiat du stock (réservation) — cohérent avec section 18 : la commande
         # engage réellement le stock dès sa création, pas seulement à la livraison.
-        if variant is not None:
+        if menu and variant is None:
+            pass  # lot 106 : la carte d'un restaurant ne se vide pas à chaque commande
+        elif variant is not None:
             _move_variant_stock(product, variant_index, -quantity)
             product.stock_quantity = max(0, (product.stock_quantity or 0) - quantity)
         else:
@@ -118,6 +133,8 @@ async def create_order(
     order = Order(
         delivery_fee=fee,
         fulfillment=fulfillment,
+        table_number=(table_number or "").strip()[:16] or None,  # lot 106 : restaurant
+        delivery_area=(delivery_area or "").strip()[:64] or None,
         tenant_id=tenant_id,
         customer_id=customer_id,
         conversation_id=conversation_id,
@@ -257,9 +274,10 @@ async def cancel_order(db: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UU
         raise OrderCreationError("La livraison de cette commande est déjà partie : annulation impossible")
 
     items = (await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))).scalars().all()
+    menu = await _is_menu(db, tenant_id)
     for item in items:
         product = await db.get(Product, item.product_id)
-        if product is not None and product.tenant_id == tenant_id:
+        if product is not None and product.tenant_id == tenant_id and not (menu and item.variant_index is None):
             product.stock_quantity += item.quantity  # même produit désactivé : le stock reste juste
             if item.variant_index is not None:  # lot 95 : la taille vendue retrouve aussi son stock
                 _move_variant_stock(product, item.variant_index, item.quantity, item.variant_label)

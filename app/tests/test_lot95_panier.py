@@ -434,7 +434,8 @@ async def test_merchant_fulfillment_settings(client, db_session, unique_email):
     headers = {"Authorization": f"Bearer {token}"}
     got = (await client.get("/api/v1/tenants/me/fulfillment", headers=headers)).json()
     assert got == {"delivery_enabled": True, "delivery_fee": None, "delivery_zone": None, "delivery_min_order": None,
-                   "delivery_free_from": None, "pickup_enabled": False, "pickup_address": None, "currency": "XOF"}
+                   "delivery_free_from": None, "pickup_enabled": False, "pickup_address": None, "currency": "XOF",
+                   "dine_in_enabled": False, "delivery_areas": [], "kitchen_hours": {}}  # lot 106 : réglages du restaurant
     body = {"delivery_enabled": True, "delivery_fee": 1500, "delivery_zone": "  Abidjan ", "delivery_min_order": 10000,
             "delivery_free_from": 50000, "pickup_enabled": True, "pickup_address": "Cocody"}
     saved = (await client.put("/api/v1/tenants/me/fulfillment", json=body, headers=headers)).json()

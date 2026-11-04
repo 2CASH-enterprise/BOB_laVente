@@ -2,6 +2,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -31,8 +32,13 @@ def _checked_sheet(tenant, code: str | None, raw: dict | None, *texts) -> dict:
     """Lot 78 — commerce : catégorie Bob valide (proposée par mots-clés si absente) et fiche nettoyée.
     Lot 79 — agence immobilière : la catégorie est le type de bien (proposé d'après le nom si absent)."""
     from app.services import product_sheets
-    from app.services.business_type import is_real_estate, is_store
+    from app.services.business_type import is_real_estate, is_restaurant, is_store
 
+    if is_restaurant(tenant):  # lot 106 : la rubrique de la carte (proposée d'après le nom si absente)
+        if code and not product_sheets.is_dish(code):
+            raise HTTPException(status_code=422, detail="Rubrique de la carte inconnue")
+        code = code or product_sheets.guess_dish(*texts)
+        return {"bob_category": code, "sheet": product_sheets.normalize_sheet(code, raw)}
     if is_real_estate(tenant):
         if code and not product_sheets.is_property(code):
             raise HTTPException(status_code=422, detail="Type de bien inconnu")
@@ -140,13 +146,15 @@ async def product_sheet_definitions(
     from app.models.tenant import Tenant
     from app.services import product_sheets
 
-    from app.services.business_type import is_real_estate
+    from app.services.business_type import is_real_estate, is_restaurant
 
     tenant = await db.get(Tenant, current_user.tenant_id)
     estate = is_real_estate(tenant)  # lot 79 : types de bien et fiche du bien
-    return {"categories": product_sheets.definitions(estate), "common_fields": product_sheets.common_definitions(estate),
-            "default_category": None if estate else getattr(tenant, "default_bob_category", None),
-            "real_estate": estate}
+    restaurant = is_restaurant(tenant)  # lot 106 : rubriques de la carte et fiche d'un plat
+    return {"categories": product_sheets.definitions(estate, restaurant),
+            "common_fields": product_sheets.common_definitions(estate, restaurant),
+            "default_category": None if estate or restaurant else getattr(tenant, "default_bob_category", None),
+            "real_estate": estate, "restaurant": restaurant}
 
 
 @router.post("/sheets/guess", dependencies=[Depends(require_role("MANAGER"))])
@@ -275,6 +283,9 @@ async def update_product(
         # Lot 78 — changer de catégorie garde les champs communs et ceux que la nouvelle catégorie connaît.
         code = changes.get("bob_category") or product.bob_category
         changes.update(_checked_sheet(tenant, code, changes.get("sheet", product.sheet), product.name))
+    kept = (product.sheet or {}).get("unavailable_on")
+    if kept and "sheet" in changes:  # lot 106 : réenregistrer la fiche d'un plat ne le remet pas en vente
+        changes["sheet"] = {**(changes["sheet"] or {}), "unavailable_on": kept}
     if estate_status is not None or "sheet" in changes:
         merged = {"bob_category": changes.get("bob_category", product.bob_category),
                   "sheet": changes.get("sheet", product.sheet), "stock_quantity": changes.get("stock_quantity")}
@@ -292,6 +303,34 @@ async def update_product(
     for field, value in changes.items():
         setattr(product, field, value)
 
+    await db.commit()
+    await db.refresh(product)
+    return product
+
+
+class UnavailableToday(BaseModel):
+    unavailable: bool
+
+
+@router.post("/{product_id}/unavailable-today", response_model=ProductResponse, dependencies=[Depends(require_role("MANAGER"))])
+async def set_unavailable_today(
+    product_id: UUID,
+    payload: UnavailableToday,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lot 106 — restaurant : un plat « indisponible aujourd'hui » n'est plus proposé ; il revient tout seul demain."""
+    from app.models.tenant import Tenant
+    from app.services import restaurant
+    from app.services.business_type import is_restaurant
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not is_restaurant(tenant):
+        raise HTTPException(status_code=403, detail="Réservé aux restaurants")
+    product = await ProductRepository(db).get(tenant_id=current_user.tenant_id, record_id=product_id)
+    if product is None:
+        raise HTTPException(status_code=404, detail="Plat introuvable")
+    restaurant.set_unavailable_today(product, tenant, payload.unavailable)
     await db.commit()
     await db.refresh(product)
     return product

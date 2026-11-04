@@ -550,7 +550,7 @@ def _function(name):
 def test_dashboard_sector_switches():
     apply = _function("applyBusinessType")
     assert 'document.body.classList.toggle("rdv-sector", dealership || insurance || estate);' in apply  # lot 79
-    assert 'const productsLabel = insurance ? "Produits d\'assurance" : estate ? "Biens" : "Produits";' in apply  # lot 79
+    assert 'const productsLabel = insurance ? "Produits d\'assurance" : estate ? "Biens" : restaurant ? "Ma carte" : "Produits";' in apply  # lots 79 / 106
     assert "productsNav.lastChild.textContent = productsLabel;" in apply
     assert "body:not(.insurance) .insurance-only { display: none !important; }" in HTML
     assert "body.insurance .no-insurance { display: none !important; }" in HTML

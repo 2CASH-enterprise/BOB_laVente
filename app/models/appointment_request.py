@@ -5,7 +5,7 @@ un humain. Bob ne confirme jamais un rendez-vous lui-même : il transmet la dema
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, Uuid, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -18,6 +18,7 @@ APPOINTMENT_KINDS = {
     "APPEL": "Appel d'un conseiller",
     "ESTIMATION": "Estimation de votre bien",  # lot 79 : agence immobilière (le mandat)
     "AGENCE": "Rendez-vous à l'agence",
+    "TABLE": "Réservation de table",  # lot 106 : restaurant
 }
 STATUS_REQUESTED = "REQUESTED"
 STATUS_CONFIRMED = "CONFIRMED"
@@ -55,6 +56,7 @@ class AppointmentRequest(Base):
     )
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     vehicle_label: Mapped[str | None] = mapped_column(String(255))  # véhicule tel que le client l'a désigné
+    party_size: Mapped[int | None] = mapped_column(Integer)  # lot 106 : restaurant, nombre de couverts
     availability: Mapped[str] = mapped_column(String(300), nullable=False)  # texte libre (« samedi matin »)
     notes: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=STATUS_REQUESTED)

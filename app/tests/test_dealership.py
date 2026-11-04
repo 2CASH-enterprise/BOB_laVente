@@ -355,7 +355,8 @@ async def test_new_shop_is_asked_its_business_type_then_it_is_saved(client, db_s
 
     before = (await client.get("/api/v1/tenants/me/business-type", headers=headers)).json()
     assert before["business_type"] == ONLINE_STORE and before["chosen"] is False
-    assert [o["code"] for o in before["options"]] == [ONLINE_STORE, CAR_DEALERSHIP, "INSURANCE_BROKER", "REAL_ESTATE"]  # lots 53 / 79
+    assert [o["code"] for o in before["options"]] == [ONLINE_STORE, CAR_DEALERSHIP, "INSURANCE_BROKER", "REAL_ESTATE",
+                                                       "RESTAURANT"]  # lots 53 / 79 / 106
 
     after = await client.put("/api/v1/tenants/me/business-type", json={"business_type": CAR_DEALERSHIP}, headers=headers)
 

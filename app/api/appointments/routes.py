@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_appointment_sectors
+from app.services.business_type import only_bookers
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.appointment_request import (
@@ -32,7 +32,7 @@ from app.services.handoff_service import customer_display_name
 from app.services.human_reply import reply_window_closes_at
 from app.services.local_time import as_utc, format_local, local_to_utc, tenant_zone
 
-router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"], dependencies=[Depends(only_appointment_sectors())])  # lot 32 / 53 : concession et courtier
+router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"], dependencies=[Depends(only_bookers())])  # lot 32 / 53 : concession et courtier ; lot 106 : restaurant
 
 
 class AppointmentOut(BaseModel):
@@ -370,8 +370,13 @@ async def update_booking_settings(
         raise HTTPException(status_code=422, detail=str(exc))
     if payload.slot_minutes not in booking.SLOT_CHOICES:
         raise HTTPException(status_code=422, detail="Durée d'un rendez-vous : 30, 45, 60, 90 ou 120 minutes.")
-    if not 1 <= payload.capacity <= booking.MAX_CAPACITY:
-        raise HTTPException(status_code=422, detail=f"Rendez-vous en même temps : entre 1 et {booking.MAX_CAPACITY}.")
+    from app.services.business_type import is_restaurant
+
+    covers = is_restaurant(await db.get(Tenant, current_user.tenant_id))  # lot 106 : couverts par service
+    limit = booking.MAX_COVERS if covers else booking.MAX_CAPACITY
+    if not 1 <= payload.capacity <= limit:
+        raise HTTPException(status_code=422, detail=f"Couverts par service : entre 1 et {limit}." if covers
+                            else f"Rendez-vous en même temps : entre 1 et {limit}.")
     if payload.online_booking and not hours:
         raise HTTPException(status_code=422, detail="Indiquez au moins un jour d'ouverture pour que Bob propose des créneaux.")
 

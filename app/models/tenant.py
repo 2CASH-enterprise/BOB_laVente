@@ -89,6 +89,11 @@ class Tenant(Base):
     delivery_free_from: Mapped[float | None] = mapped_column(Numeric(14, 2))
     pickup_enabled: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
     pickup_address: Mapped[str | None] = mapped_column(String(300))
+    # Lot 106 — restaurant : commande sur place (depuis la table), frais de livraison par commune
+    # ([{"name": "Cocody", "fee": 1000}]), horaires de la cuisine (même forme que les horaires des rendez-vous).
+    dine_in_enabled: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
+    delivery_areas: Mapped[list | None] = mapped_column(JSON)
+    kitchen_hours: Mapped[dict | None] = mapped_column(JSON)
     # Lot 68 — modèles WhatsApp autorisés pour cette boutique (le Super Admin peut les couper, ex. compte d'examen Meta).
     wa_templates_allowed: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 69 — alerte de plafond de conversations déjà envoyée ce mois-là (« 2026-10 ») et à quel seuil (80 puis 100).

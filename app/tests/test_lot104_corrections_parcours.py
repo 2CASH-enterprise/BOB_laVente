@@ -245,7 +245,7 @@ def test_status_shown_for_older_properties():
 
 def test_dashboard():
     assert 'id="new-product-estate-status"' in HTML and "edit-estate-status-${p.id}" in HTML
-    assert 'class="input no-insurance no-estate"' in HTML and "function estateStatusOf(" in HTML
+    assert 'class="input no-insurance no-estate no-restaurant"' in HTML and "function estateStatusOf(" in HTML
     assert 'payload.estate_status = document.getElementById("new-product-estate-status").value' in HTML
     assert "estate_status: document.getElementById(`edit-estate-status-${productId}`).value" in HTML
     assert uuid

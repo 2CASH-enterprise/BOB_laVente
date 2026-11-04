@@ -583,6 +583,8 @@
   body.insurance .no-insurance { display: none !important; }
   /* Lot 79 : agence immobilière (fiche du bien, profil de l'agence) */
   body:not(.real-estate) .estate-only { display: none !important; }
+  body:not(.restaurant) .restaurant-only { display: none !important; }
+  body.restaurant .no-restaurant { display: none !important; }
   body.real-estate .no-estate { display: none !important; }
   body:not(.has-sheets) .sheets-only { display: none !important; }
   .option-hint { font-weight: 400; color: var(--muted); font-size: 0.9em; }
@@ -1080,7 +1082,7 @@
             <input id="new-product-name" placeholder="Nom" class="input">
             <input id="new-product-price" placeholder="Prix" type="number" class="input no-insurance">
             <input id="new-product-currency" placeholder="Devise (ex. XOF)" class="input no-insurance" maxlength="3">
-            <input id="new-product-stock" placeholder="Stock" type="number" class="input no-insurance no-estate" style="grid-column: span 2;">
+            <input id="new-product-stock" placeholder="Stock" type="number" class="input no-insurance no-estate no-restaurant" style="grid-column: span 2;">
             <select id="new-product-estate-status" class="input estate-only" style="grid-column: span 2;" aria-label="Statut du bien"><option value="Disponible">Disponible</option><option value="Sous compromis">Sous compromis</option><option value="Vendu">Vendu</option><option value="Loué">Loué</option></select>
             <select id="new-product-bob-category" class="input sheets-only" style="grid-column: span 2;" aria-label="Catégorie du produit"></select>
             <textarea id="new-product-description" class="input insurance-only" rows="3" style="grid-column: span 2; resize: vertical;"
@@ -1137,7 +1139,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Nom</th><th>Référence</th><th class="no-insurance">Prix</th><th class="no-insurance" id="products-stock-head">Stock</th><th>Actif</th><th class="store-only">Upsell</th><th>Gérer</th></tr></thead>
+        <thead><tr><th>Nom</th><th>Référence</th><th class="no-insurance">Prix</th><th class="no-insurance" id="products-stock-head">Stock</th><th>Actif</th><th class="store-only no-restaurant">Upsell</th><th>Gérer</th></tr></thead>
         <tbody id="product-rows"></tbody>
       </table>
 
@@ -1267,21 +1269,22 @@
       <template class="page-tip-src">Les rendez-vous obtenus par Bob. Avec les créneaux en ligne, Bob propose vos créneaux libres et confirme celui que le client choisit ; sinon, fixez vous-même la date et l'heure, le client est prévenu sur WhatsApp. Un rappel vous est envoyé par email la veille à 18 h.</template>
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;"><span id="appt-timezone"></span></p>
       <details class="card" id="booking-card" style="margin-bottom: 16px;">
-        <summary style="cursor: pointer; font-weight: 600;">Créneaux proposés par Bob <span id="booking-status" style="font-weight: 400; color: var(--muted); font-size: 13px;"></span></summary>
+        <summary style="cursor: pointer; font-weight: 600;"><span id="booking-summary-title">Créneaux proposés par Bob</span> <span id="booking-status" style="font-weight: 400; color: var(--muted); font-size: 13px;"></span></summary>
         <div style="margin-top: 12px;">
           <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-bottom: 12px;">
             <input type="checkbox" id="booking-enabled" style="margin-top: 3px;">
             <span>Bob propose vos créneaux libres et <strong>confirme lui-même</strong> le rendez-vous choisi par le client
               (vous êtes prévenu par email et pouvez toujours changer l'heure ou annuler).</span>
           </label>
+          <p class="restaurant-only" style="font-size: 13px; color: var(--muted); margin: 0 0 8px;">Chaque plage horaire est un service (par exemple midi, puis soir). Bob ne réserve plus quand les couverts du service sont tous pris.</p>
           <div id="booking-hours" style="display: grid; gap: 6px; margin-bottom: 12px;"></div>
           <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; font-size: 14px;">
-            <label>Durée d'un rendez-vous
+            <label id="booking-slot-label">Durée d'un rendez-vous
               <select id="booking-slot" class="input" style="width: auto; display: inline-block; margin-left: 6px;">
                 <option value="30">30 min</option><option value="45">45 min</option><option value="60">1 h</option>
                 <option value="90">1 h 30</option><option value="120">2 h</option>
               </select></label>
-            <label>Clients reçus en même temps
+            <label id="booking-capacity-label">Clients reçus en même temps
               <input id="booking-capacity" class="input" type="number" min="1" max="20" style="width: 80px; display: inline-block; margin-left: 6px;"></label>
           </div>
           <button class="action" onclick="saveBookingSettings()">Enregistrer</button>
@@ -1504,7 +1507,7 @@
       <template class="page-tip-src">La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances. Ce que Bob sait de votre boutique se règle dans la Base de connaissances.</template>
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span></p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div class="card guided-card" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
+        <div class="card guided-card no-restaurant" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose des choix à toucher : le catalogue et le panier pour une boutique ; les véhicules, un essai, l'estimation de sa voiture et le financement pour une concession ; acheter, louer, vendre ou faire estimer pour une agence ; demander un devis, voir son contrat ou faire une réclamation pour un cabinet d'assurance. Les produits, les véhicules, les prix et les créneaux qui s'affichent viennent directement de vos données : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
           <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 8px;">
             <input type="checkbox" id="guided-flow" onchange="saveGuidedFlow()"> Proposer des choix en boutons sur WhatsApp
@@ -1526,12 +1529,24 @@
             <div><label for="ff-free" style="font-size: 12px; color: var(--muted);">Livraison offerte dès (facultatif)</label>
               <input id="ff-free" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="Ex. 50000"></div>
           </div>
+          <div class="restaurant-only" style="margin: 8px 0 4px 24px;">
+            <label for="ff-areas" style="font-size: 12px; color: var(--muted);">Frais par commune (une par ligne : « Cocody : 1000 ») — s'ils sont remplis, ils remplacent les frais ci-dessus</label>
+            <textarea id="ff-areas" class="input" rows="4" placeholder="Cocody : 1000&#10;Marcory : 1500&#10;Yopougon : 2000" style="resize: vertical;"></textarea>
+          </div>
           <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 10px;">
-            <input type="checkbox" id="ff-pickup"> Retrait en boutique
+            <input type="checkbox" id="ff-pickup"> <span class="no-restaurant">Retrait en boutique</span><span class="restaurant-only">À emporter</span>
           </label>
           <div style="margin: 8px 0 4px 24px;">
             <label for="ff-address" style="font-size: 12px; color: var(--muted);">Adresse de la boutique</label>
             <input id="ff-address" class="input" maxlength="300" placeholder="Ex. Cocody, rue des Jardins, face à la pharmacie">
+          </div>
+          <div class="restaurant-only">
+            <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 10px;">
+              <input type="checkbox" id="ff-dine-in"> Sur place : le client commande depuis sa table (il donne son numéro de table)
+            </label>
+            <div style="font-size: 13px; font-weight: 600; margin: 12px 0 6px;">Horaires de la cuisine (commandes)</div>
+            <p style="font-size: 12px; color: var(--muted); margin: 0 0 6px;">Cuisine fermée : Bob ne prend pas la commande et donne l'heure d'ouverture suivante. Aucun jour coché : commandes à toute heure.</p>
+            <div id="ff-kitchen-hours" style="display: grid; gap: 6px;"></div>
           </div>
           <button class="action" style="margin-top: 10px;" onclick="saveFulfillment()">Enregistrer</button>
           <div id="fulfillment-msg" style="margin-top: 8px; font-size: 13px;"></div>
@@ -1620,7 +1635,7 @@
           <div id="estate-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
 
-        <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card">
+        <div class="card store-only no-restaurant" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Comment Bob s'adresse à vos clients<button class="tip"></button><span class="tip-bubble" hidden>S'applique aux réponses de Bob et à tous ses messages automatiques sur WhatsApp (récapitulatif de commande, transmission à un conseiller…).</span></div>
           <div style="display: flex; gap: 16px; margin-bottom: 10px; font-size: 13px;">
             <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="address-form" value="VOUS" onchange="showAddressPreview()"> Vouvoiement</label>
@@ -1631,7 +1646,7 @@
           <div id="address-form-msg" style="margin-top: 8px; font-size: 13px;"></div>
         </div>
 
-        <div class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;">
+        <div class="card store-only no-restaurant" style="max-width: 480px; flex: 1; min-width: 300px;">
           <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix<button class="tip"></button><span class="tip-bubble" hidden>Bob cède progressivement jusqu'à cette remise maximale, jamais plus, jamais d'un coup.</span></div>
           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px;">
             <input type="checkbox" id="negotiation-enabled"> Autoriser Bob à négocier
@@ -2564,24 +2579,33 @@ function applyBusinessType(code, label) {
   const dealership = code === "CAR_DEALERSHIP";
   const insurance = code === "INSURANCE_BROKER";
   const estate = code === "REAL_ESTATE";  // lot 79
+  const restaurant = code === "RESTAURANT";  // lot 106 : commandes + réservations de table
+  document.body.classList.toggle("restaurant", restaurant);
   document.body.classList.toggle("dealership", dealership);
   document.body.classList.toggle("insurance", insurance);
   document.body.classList.toggle("real-estate", estate);
   document.body.classList.toggle("rdv-sector", dealership || insurance || estate);
-  document.body.classList.toggle("has-sheets", code === "ONLINE_STORE" || estate);
+  document.body.classList.toggle("has-sheets", code === "ONLINE_STORE" || estate || restaurant);
   const labelEl = document.getElementById("business-type-label");
   if (labelEl && label) labelEl.textContent = label;
   // Lot 25 / 53 / 79 : la page Rendez-vous existe pour la concession, le courtier et l'agence immobilière.
-  document.getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance || estate));
+  document.getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance || estate || restaurant));
+  const apptNav = document.getElementById("nav-appointments");  // lot 106 : « Réservations » pour un restaurant
+  apptNav.dataset.label = restaurant ? "Réservations" : "Rendez-vous";
+  apptNav.lastChild.textContent = apptNav.dataset.label;
+  document.getElementById("booking-slot-label").firstChild.textContent = restaurant ? "Une heure d'arrivée toutes les " : "Durée d'un rendez-vous ";
+  document.getElementById("booking-capacity-label").firstChild.textContent = restaurant ? "Couverts par service " : "Clients reçus en même temps ";
+  document.getElementById("booking-capacity").max = restaurant ? "500" : "20";
+  document.getElementById("booking-summary-title").textContent = restaurant ? "Tables proposées par Bob" : "Créneaux proposés par Bob";
   const productsNav = document.getElementById("nav-products");
-  const productsLabel = insurance ? "Produits d'assurance" : estate ? "Biens" : "Produits";
+  const productsLabel = insurance ? "Produits d'assurance" : estate ? "Biens" : restaurant ? "Ma carte" : "Produits";
   productsNav.dataset.label = productsLabel;
   productsNav.lastChild.textContent = productsLabel;
-  document.getElementById("new-product-title").textContent = estate ? "Ajouter un bien" : "Ajouter un produit";
-  document.getElementById("new-product-name").placeholder = estate ? "Titre (ex. T3 Lyon 3e)" : "Nom";
+  document.getElementById("new-product-title").textContent = estate ? "Ajouter un bien" : restaurant ? "Ajouter un plat ou une boisson" : "Ajouter un produit";
+  document.getElementById("new-product-name").placeholder = estate ? "Titre (ex. T3 Lyon 3e)" : restaurant ? "Nom (ex. Poulet braisé, attiéké)" : "Nom";
   document.getElementById("new-product-price").placeholder = estate ? "Prix HAI ou loyer CC" : "Prix";
   document.getElementById("new-product-price").title = estate ? "Vente : prix honoraires inclus. Location : loyer mensuel charges comprises." : "";
-  document.getElementById("products-stock-head").textContent = estate ? "Statut" : "Stock";
+  document.getElementById("products-stock-head").textContent = estate ? "Statut" : restaurant ? "Aujourd'hui" : "Stock";
   document.getElementById("new-product-stock").placeholder = estate ? "Disponible : 1 (0 = vendu ou loué)" : "Stock";
   // Lot 26 : fiche véhicule dans l'ajout de produit et aide de l'import CSV.
   const fields = document.getElementById("new-vehicle-fields");
@@ -2595,13 +2619,14 @@ let productSheets = null;
 const LONG_SHEET_FIELDS = ["highlights", "features", "ingredients", "how_to", "precautions", "size_guide", "box_contents", "package_contents"];
 
 async function loadProductSheets() {
-  if (currentBusinessType !== "ONLINE_STORE" && currentBusinessType !== "REAL_ESTATE") return null;
+  if (!["ONLINE_STORE", "REAL_ESTATE", "RESTAURANT"].includes(currentBusinessType)) return null;  // lot 106 : la carte
   if (!productSheets) {
     try { productSheets = await api("/api/v1/products/sheets"); } catch (e) { return null; }
   }
   const add = document.getElementById("new-product-bob-category");
   if (add) add.innerHTML = categoryOptions(productSheets.default_category,
-    productSheets.real_estate ? "Type de bien : proposé d'après le titre" : "Catégorie : proposée d'après le nom");
+    productSheets.real_estate ? "Type de bien : proposé d'après le titre"
+      : productSheets.restaurant ? "Rubrique : proposée d'après le nom" : "Catégorie : proposée d'après le nom");
   const def = document.getElementById("default-bob-category");
   if (def) def.innerHTML = categoryOptions(productSheets.default_category, "Aucune (proposée d'après le nom de chaque produit)");
   const model = document.getElementById("template-category");  // lot 78 B : modèle Excel d'une catégorie
@@ -2622,6 +2647,22 @@ function categoryOptions(selected, emptyLabel) {
 // Lot 104 — statut d'un bien (à la place du stock) : seuls les biens « Disponible » sont proposés aux clients.
 const ESTATE_STATUSES = ["Disponible", "Sous compromis", "Vendu", "Loué"];
 
+// Lot 106 — restaurant : un plat est disponible ou « indisponible aujourd'hui » (il revient tout seul demain).
+function dishToday(p) {
+  const off = (p.stock_quantity || 0) <= 0;
+  return `<span class="badge ${off ? "off" : "on"}">${off ? "Indisponible" : "Disponible"}</span>
+    <button class="action secondary" style="font-size: 11px; padding: 4px 8px; margin-left: 4px;" onclick="toggleDishToday(${jsArg(p.id)}, ${off ? "false" : "true"})">${off ? "Remettre" : "Indisponible aujourd'hui"}</button>`;
+}
+
+async function toggleDishToday(id, unavailable) {
+  try {
+    await api(`/api/v1/products/${encodeURIComponent(id)}/unavailable-today`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unavailable }) });
+    toast(unavailable ? "Plat retiré pour aujourd'hui : il revient demain." : "Plat remis sur la carte.");
+    loadProducts();
+  } catch (e) { toast(e.message, "error"); }
+}
+
 function estateStatusOf(p) {
   const status = (p.sheet || {}).status;
   if (ESTATE_STATUSES.includes(status)) return status;
@@ -2632,6 +2673,12 @@ function estateStatusOf(p) {
 function sheetInput(prefix, f, sheet) {
   const id = `${prefix}-sheet-${f.key}`;
   const value = sheet[f.key] ?? "";
+  if (f.multi) {  // lot 106 : les 14 allergènes, à cocher
+    const chosen = String(value).split(",").map((x) => x.trim()).filter(Boolean);
+    return `<div><span style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">${esc(f.label)}</span>
+      <div id="${id}" class="sheet-multi" style="display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px;">${f.multi.map((o) =>
+        `<label style="display: inline-flex; gap: 4px; align-items: center;"><input type="checkbox" value="${esc(o)}" ${chosen.includes(o) ? "checked" : ""}> ${esc(o)}</label>`).join("")}</div></div>`;
+  }
   const field = f.options  // lot 79 : valeurs imposées (vente ou location, DPE…)
     ? `<select id="${id}" class="input"><option value="">—</option>${f.options.map((o) => `<option value="${esc(o)}" ${o === value ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`
     : f.numeric ? `<input id="${id}" class="input" type="number" min="0" step="any" placeholder="${esc(f.hint || "")}" value="${esc(value)}">`
@@ -2643,7 +2690,7 @@ function sheetInput(prefix, f, sheet) {
 
 function sheetFields(prefix, code, sheet) {
   const cat = sheetCategory(code);
-  if (!productSheets || !cat) return `<p style="font-size: 13px; color: var(--muted);">${productSheets && productSheets.real_estate ? "Choisissez le type de bien" : "Choisissez une catégorie"} pour remplir la fiche.</p>`;
+  if (!productSheets || !cat) return `<p style="font-size: 13px; color: var(--muted);">${productSheets && productSheets.real_estate ? "Choisissez le type de bien" : productSheets && productSheets.restaurant ? "Choisissez la rubrique de la carte" : "Choisissez une catégorie"} pour remplir la fiche.</p>`;
   sheet = sheet || {};
   const grid = (fields) => `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">${fields.map((f) => sheetInput(prefix, f, sheet)).join("")}</div>`;
   const key = cat.key_fields.length ? `<div class="label" style="margin: 6px 0; font-size: 12px;">${productSheets.real_estate ? "Champs clés — honoraires obligatoires avec un prix (loi ALUR)" : "Champs clés — ce que les clients demandent le plus"}</div>${grid(cat.key_fields)}` : "";
@@ -2659,7 +2706,10 @@ function readSheet(prefix, code) {
   const sheet = {};
   cat.key_fields.concat(cat.optional_fields, productSheets.common_fields).forEach((f) => {
     const el = document.getElementById(`${prefix}-sheet-${f.key}`);
-    if (el && el.value.trim() !== "") sheet[f.key] = el.value.trim();
+    if (el && f.multi) {  // lot 106 : allergènes cochés
+      const checked = [...el.querySelectorAll("input:checked")].map((c) => c.value);
+      if (checked.length) sheet[f.key] = checked.join(", ");
+    } else if (el && el.value.trim() !== "") sheet[f.key] = el.value.trim();
   });
   return sheet;
 }
@@ -2850,16 +2900,29 @@ function appointmentCard(a, view) {
 // ---- Lot 29 : créneaux proposés par Bob ----
 const BOOKING_DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
-function bookingDayRow(i, ranges) {
+function bookingDayRow(i, ranges, prefix = "bd") {
   const [r1, r2] = [ranges[0] || ["", ""], ranges[1] || ["", ""]];
   const open = ranges.length > 0;
-  const t = (id, v) => `<input type="time" class="input" id="${id}" value="${esc(v)}" step="900" style="width: 110px; display: inline-block; padding: 6px;">`;
+  const t = (id, v) => `<input type="time" class="input" id="${id}" value="${esc(v)}" step="900" style="width: 110px; display: inline-block; padding: 6px;" aria-label="Heure">`;
   return `<div class="booking-day" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px;">
-    <label style="width: 110px;"><input type="checkbox" id="bd-open-${i}" ${open ? "checked" : ""}> ${BOOKING_DAYS[i]}</label>
-    <span style="white-space: nowrap;">${t(`bd-${i}-a1`, open ? r1[0] : "09:00")} – ${t(`bd-${i}-a2`, open ? r1[1] : "18:00")}</span>
+    <label style="width: 110px;"><input type="checkbox" id="${prefix}-open-${i}" ${open ? "checked" : ""}> ${BOOKING_DAYS[i]}</label>
+    <span style="white-space: nowrap;">${t(`${prefix}-${i}-a1`, open ? r1[0] : (prefix === "kh" ? "11:00" : "09:00"))} – ${t(`${prefix}-${i}-a2`, open ? r1[1] : (prefix === "kh" ? "23:00" : "18:00"))}</span>
     <span style="white-space: nowrap;"><span style="color: var(--muted); font-size: 12px;">puis</span>
-    ${t(`bd-${i}-b1`, r2[0])} – ${t(`bd-${i}-b2`, r2[1])}</span>
+    ${t(`${prefix}-${i}-b1`, r2[0])} – ${t(`${prefix}-${i}-b2`, r2[1])}</span>
   </div>`;
+}
+
+// Lot 106 : les horaires saisis jour par jour (rendez-vous, réservations, cuisine).
+function readDayRows(prefix) {
+  const hours = {};
+  for (let i = 0; i < 7; i++) {
+    if (!document.getElementById(`${prefix}-open-${i}`).checked) continue;
+    const v = (k) => document.getElementById(`${prefix}-${i}-${k}`).value;
+    const ranges = [[v("a1"), v("a2")]];
+    if (v("b1") && v("b2")) ranges.push([v("b1"), v("b2")]);
+    hours[String(i)] = ranges;
+  }
+  return hours;
 }
 
 async function loadBookingSettings() {
@@ -2885,14 +2948,7 @@ function renderBookingPreview(s) {
 
 async function saveBookingSettings() {
   const msg = document.getElementById("booking-msg");
-  const hours = {};
-  for (let i = 0; i < 7; i++) {
-    if (!document.getElementById(`bd-open-${i}`).checked) continue;
-    const v = (k) => document.getElementById(`bd-${i}-${k}`).value;
-    const ranges = [[v("a1"), v("a2")]];
-    if (v("b1") && v("b2")) ranges.push([v("b1"), v("b2")]);
-    hours[String(i)] = ranges;
-  }
+  const hours = readDayRows("bd");
   const body = {
     online_booking: document.getElementById("booking-enabled").checked,
     opening_hours: hours,
@@ -3088,7 +3144,7 @@ function showTab(name) {
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "pige") loadPige();  // lot 81
   if (name === "leads") loadLeads();  // lot 83
-  if (name === "bob") { if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (isRdvSector()) loadGuidedFlow();  /* lots 96 à 98 : concession, agence, courtier */ if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (currentBusinessType === "RESTAURANT") loadFulfillment(); /* lot 106 : ni négociation, ni tutoiement */ else if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (isRdvSector()) loadGuidedFlow();  /* lots 96 à 98 : concession, agence, courtier */ if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
@@ -3790,6 +3846,11 @@ async function loadFulfillment() {
     document.getElementById("ff-free").value = f.delivery_free_from ?? "";
     document.getElementById("ff-address").value = f.pickup_address || "";
     card.querySelectorAll(".ff-cur").forEach((el) => { el.textContent = f.currency || "XOF"; });
+    // Lot 106 — restaurant : sur place, frais par commune, horaires de la cuisine.
+    document.getElementById("ff-dine-in").checked = !!f.dine_in_enabled;
+    document.getElementById("ff-areas").value = (f.delivery_areas || []).map((a) => `${a.name} : ${a.fee}`).join("\n");
+    document.getElementById("ff-kitchen-hours").innerHTML = BOOKING_DAYS.map((_, i) =>
+      bookingDayRow(i, (f.kitchen_hours || {})[String(i)] || [], "kh")).join("");
   } catch (e) { /* carte réservée aux boutiques */ }
 }
 
@@ -3809,6 +3870,12 @@ async function saveFulfillment() {
     pickup_enabled: document.getElementById("ff-pickup").checked,
     pickup_address: document.getElementById("ff-address").value.trim() || null,
   };
+  if (currentBusinessType === "RESTAURANT") {  // lot 106
+    payload.dine_in_enabled = document.getElementById("ff-dine-in").checked;
+    payload.delivery_areas = document.getElementById("ff-areas").value.split("\n").map((line) => line.trim()).filter(Boolean)
+      .map((line) => { const at = line.lastIndexOf(":"); return at > 0 ? { name: line.slice(0, at).trim(), fee: line.slice(at + 1).trim() || 0 } : { name: line, fee: 0 }; });
+    payload.kitchen_hours = readDayRows("kh");
+  }
   try {
     await api("/api/v1/tenants/me/fulfillment", { method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload) });
@@ -4577,8 +4644,9 @@ async function loadProducts() {
       (p) => `<tr>
         <td data-label="Nom">${p.image_url ? `<img src="${esc(p.image_url)}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px;">` : ""}${esc(p.name)}${p.vehicle ? `<div style="font-size: 12px; color: var(--muted);">${esc(vehicleSummary(p.vehicle))}</div>` : ""}${p.bob_category ? `<div style="font-size: 12px; color: var(--muted);">${esc((sheetCategory(p.bob_category) || {}).label || "")}${p.sheet_completeness !== null && p.sheet_completeness !== undefined ? ` · <span class="sheet-score" style="color: ${p.sheet_completeness >= 80 ? "var(--success)" : p.sheet_completeness >= 50 ? "var(--warning)" : "var(--danger)"};">fiche ${p.sheet_completeness} %</span>` : ""}</div>` : ""}${currentBusinessType === "REAL_ESTATE" && p.bob_category && !((p.sheet || {}).fees || "").toString().trim() ? `<div class="fees-missing" style="font-size: 12px; color: var(--warning);">Honoraires à renseigner : sans eux, le prix n'apparaît pas sur WhatsApp</div>` : ""}${currentBusinessType === "REAL_ESTATE" ? `<div id="alert-link-${p.id}"></div>` : ""}</td>
         <td data-label="Référence">${esc(p.sku)}</td><td data-label="Prix" class="no-insurance">${Number(p.price).toLocaleString()} ${esc(p.currency)}</td>
-        <td data-label="${currentBusinessType === "REAL_ESTATE" ? "Disponible" : "Stock"}" class="no-insurance">${currentBusinessType === "REAL_ESTATE" ? esc(estateStatusOf(p)) : p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
-        <td data-label="Upsell" class="store-only"><button class="action secondary" onclick="toggleUpsellPanel(${jsArg(p.id)})">Gérer</button></td>
+        <td data-label="${currentBusinessType === "REAL_ESTATE" ? "Disponible" : "Stock"}" class="no-insurance">${currentBusinessType === "REAL_ESTATE" ? esc(estateStatusOf(p))
+          : currentBusinessType === "RESTAURANT" ? dishToday(p) : p.stock_quantity}</td><td data-label="Actif">${p.active ? '<span class="badge on">Actif</span>' : '<span class="badge off">Inactif</span>'}</td>
+        <td data-label="Upsell" class="store-only no-restaurant"><button class="action secondary" onclick="toggleUpsellPanel(${jsArg(p.id)})">Gérer</button></td>
         <td data-label="Gérer"><button class="action secondary" onclick="toggleEditPanel(${jsArg(p.id)})">Modifier</button></td>
       </tr>
       <tr id="upsell-row-${p.id}" class="hidden"><td colspan="7"><div id="upsell-panel-${p.id}" style="padding: 10px 0;"></div></td></tr>
@@ -4949,14 +5017,14 @@ function renderEditPanel(productId) {
     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; max-width: 620px; margin-bottom: 10px;">
       <input id="edit-name-${p.id}" class="input" placeholder="Nom" value="${esc(p.name)}">
       <input id="edit-price-${p.id}" class="input no-insurance" type="number" placeholder="Prix" value="${esc(p.price)}">
-      <input id="edit-stock-${p.id}" class="input no-insurance no-estate" type="number" placeholder="Stock" value="${esc(p.stock_quantity)}">
+      <input id="edit-stock-${p.id}" class="input no-insurance no-estate no-restaurant" type="number" placeholder="Stock" value="${esc(p.stock_quantity)}">
       <select id="edit-estate-status-${p.id}" class="input estate-only" aria-label="Statut du bien">${ESTATE_STATUSES.map((o) => `<option value="${esc(o)}" ${o === estateStatusOf(p) ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>
     </div>
     <textarea id="edit-description-${p.id}" class="input" rows="2" placeholder="Description" style="margin-bottom: 10px; max-width: 620px; resize: vertical;">${esc(p.description || "")}</textarea>
     ${currentBusinessType === "CAR_DEALERSHIP" || p.vehicle ? `<div style="max-width: 620px; margin-bottom: 10px;">${vehicleFields(`edit-${p.id}`, p.vehicle)}</div>` : ""}
-    ${(currentBusinessType === "ONLINE_STORE" || currentBusinessType === "REAL_ESTATE") && productSheets ? `<div style="max-width: 760px; margin-bottom: 10px;">
-      <label for="edit-${p.id}-bob-category" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">${productSheets.real_estate ? "Type de bien" : "Catégorie du produit"}</label>
-      <select id="edit-${p.id}-bob-category" class="input" style="max-width: 360px;" onchange="changeEditCategory(${jsArg(p.id)})">${categoryOptions(p.bob_category || "", productSheets.real_estate ? "Choisir le type de bien" : "Choisir une catégorie")}</select>
+    ${["ONLINE_STORE", "REAL_ESTATE", "RESTAURANT"].includes(currentBusinessType) && productSheets ? `<div style="max-width: 760px; margin-bottom: 10px;">
+      <label for="edit-${p.id}-bob-category" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px;">${productSheets.real_estate ? "Type de bien" : productSheets.restaurant ? "Rubrique de la carte" : "Catégorie du produit"}</label>
+      <select id="edit-${p.id}-bob-category" class="input" style="max-width: 360px;" onchange="changeEditCategory(${jsArg(p.id)})">${categoryOptions(p.bob_category || "", productSheets.real_estate ? "Choisir le type de bien" : productSheets.restaurant ? "Choisir la rubrique" : "Choisir une catégorie")}</select>
       ${p.variants && p.variants.length ? `<p style="font-size: 12px; margin: 6px 0;">Variantes (Shopify) : ${esc(variantsSummary(p.variants))}</p>` : ""}
       <div id="edit-${p.id}-sheet-box" data-code="${esc(p.bob_category || "")}" style="margin-top: 6px;">${sheetFields(`edit-${p.id}`, p.bob_category, p.sheet)}</div>
     </div>` : ""}
@@ -5060,6 +5128,7 @@ async function saveProductEdit(productId) {
           price: document.getElementById(`edit-price-${productId}`).value,
           ...(currentBusinessType === "REAL_ESTATE"  // lot 104 : le statut décide si le bien est proposé
             ? { estate_status: document.getElementById(`edit-estate-status-${productId}`).value }
+            : currentBusinessType === "RESTAURANT" ? {}  // lot 106 : « Indisponible aujourd'hui » se règle dans la liste
             : { stock_quantity: parseInt(document.getElementById(`edit-stock-${productId}`).value, 10) }),
         }),
         description: document.getElementById(`edit-description-${productId}`).value || null,
@@ -6179,13 +6248,14 @@ async function createProduct() {
     currency: document.getElementById("new-product-currency").value.trim().toUpperCase(),
     stock_quantity: parseInt(document.getElementById("new-product-stock").value || "0", 10),
   };
+  if (currentBusinessType === "RESTAURANT") payload.stock_quantity = 1;  // lot 106 : un plat est disponible, sans stock
   if (currentBusinessType === "REAL_ESTATE") {  // lot 104 : un statut plutôt qu'un stock
     payload.estate_status = document.getElementById("new-product-estate-status").value || "Disponible";
     payload.stock_quantity = payload.estate_status === "Disponible" ? 1 : 0;
   }
   if (currentBusinessType === "CAR_DEALERSHIP") payload.vehicle = readVehicle("new");
   const bobCategory = document.getElementById("new-product-bob-category");
-  if ((currentBusinessType === "ONLINE_STORE" || currentBusinessType === "REAL_ESTATE") && bobCategory && bobCategory.value) payload.bob_category = bobCategory.value;  // lots 78 / 79
+  if (["ONLINE_STORE", "REAL_ESTATE", "RESTAURANT"].includes(currentBusinessType) && bobCategory && bobCategory.value) payload.bob_category = bobCategory.value;  // lots 78 / 79
   if (currentBusinessType === "INSURANCE_BROKER") {
     // Lot 53 — un produit d'assurance n'a ni prix ni stock : seulement ses garanties.
     delete payload.price;
@@ -7681,8 +7751,9 @@ async function renderDeliveryPanel(orderId) {
   const variants = (order.items || []).filter((i) => i.variant_label).map((i) => `${esc(i.variant_label)} × ${i.quantity}`);
   const fee = order.delivery_fee !== null && order.delivery_fee !== undefined && Number(order.delivery_fee) > 0
     ? ` · frais ${Number(order.delivery_fee).toLocaleString()} ${esc(order.currency)}` : "";
-  const mode = order.fulfillment === "PICKUP" ? "Retrait en boutique"
-    : order.delivery_address ? `Livraison : ${esc(order.delivery_address)}${fee}` : "";
+  const mode = order.fulfillment === "DINE_IN" ? `Sur place${order.table_number ? ` · table ${esc(order.table_number)}` : ""}`  // lot 106
+    : order.fulfillment === "PICKUP" ? (currentBusinessType === "RESTAURANT" ? "À emporter" : "Retrait en boutique")
+    : order.delivery_address ? `Livraison${order.delivery_area ? ` (${esc(order.delivery_area)})` : ""} : ${esc(order.delivery_address)}${fee}` : "";
   const summary = mode || variants.length
     ? `<div style="font-size: 13px; margin-bottom: 8px;">${mode}${variants.length ? `<div style="color: var(--muted);">Tailles : ${variants.join(", ")}</div>` : ""}</div>` : "";
   panel.innerHTML = `${summary}

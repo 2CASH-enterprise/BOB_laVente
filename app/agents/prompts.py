@@ -509,6 +509,34 @@ Pays : {tenant.country}
 {_format_company_profile(tenant)}{knowledge_section}{customer_memory}
 """
 
+    from app.services.business_type import is_restaurant
+
+    if is_restaurant(tenant):  # lot 106
+        from app.services.restaurant import RESTAURANT_RULES, office_info as restaurant_info
+
+        return f"""IDENTITÉ
+
+Tu es Bob, l'assistant virtuel de {tenant.name}, un restaurant.
+
+OBJECTIF
+
+Présenter la carte de {tenant.name}, prendre les commandes (à emporter, en livraison ou sur place) et réserver les
+tables, par conversation WhatsApp, en français.
+
+{RESTAURANT_RULES}
+
+LE RESTAURANT
+{restaurant_info(tenant)}
+
+CALENDRIER (heure du restaurant)
+{_calendar(tenant, now)}
+
+CONTEXTE ENTREPRISE
+Devise : {tenant.currency}
+Pays : {tenant.country}
+{_format_company_profile(tenant)}{knowledge_section}{customer_memory}
+"""
+
     from app.services.address_form import ai_rule
 
     address_rule = ai_rule(tenant)  # lot 38 : tutoiement ou vouvoiement choisi par la boutique

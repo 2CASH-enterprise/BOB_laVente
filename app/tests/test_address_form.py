@@ -378,7 +378,7 @@ def test_dashboard_has_the_setting_for_stores_only():
     from pathlib import Path
 
     html = (Path(__file__).resolve().parents[1] / "static" / "dashboard" / "index.html").read_text(encoding="utf-8")
-    assert 'class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card"' in html
+    assert 'class="card store-only no-restaurant" style="max-width: 480px; flex: 1; min-width: 300px;" id="address-form-card"' in html
     assert "/api/v1/tenants/me/address-form" in html and 'name="address-form" value="TU"' in html
     assert "esc(line)" in html  # aperçu échappé
 

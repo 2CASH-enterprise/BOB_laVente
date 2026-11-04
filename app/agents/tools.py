@@ -28,6 +28,15 @@ from app.services.customer_memory_service import record_product_view
 
 PRODUCT_DESCRIPTION_MAX_CHARS = 300
 # Lot 44 — outils qui enregistrent ou consultent réellement un rendez-vous.
+def _party(tool_input: dict) -> int | None:
+    """Lot 106 : le nombre de personnes d'une réservation de table (1 à 200), sinon None."""
+    try:
+        value = int(tool_input.get("party_size"))
+    except (TypeError, ValueError):
+        return None
+    return value if 1 <= value <= 200 else None
+
+
 APPOINTMENT_TOOLS = frozenset({"request_appointment", "reschedule_my_appointment", "cancel_my_appointment", "get_my_appointments"})
 MAX_IMAGES_PER_REPLY = 10  # lot 86 : carrousel jusqu'à 10 cartes (3 avant)
 # Lot 73 g — une photo déjà montrée ne repart pas avant 24 h, sauf si le client demande à la voir.
@@ -180,7 +189,7 @@ class ToolExecutor:
         return {"results": [await self._product_to_dict(p) for p in found]}
 
     async def _tool_search_products(self, tool_input: dict) -> dict:
-        from app.services.business_type import CAR_DEALERSHIP, REAL_ESTATE, normalize
+        from app.services.business_type import CAR_DEALERSHIP, REAL_ESTATE, RESTAURANT, normalize
         from app.services.vehicle import criteria_from_query, matches
 
         if normalize(self.business_type) == REAL_ESTATE:
@@ -218,6 +227,12 @@ class ToolExecutor:
             products = [p for p in products if fits_size(p, size) is not False][:10]
             if not products:
                 return {"results": [], "message": f"Aucun article de cette recherche n'est disponible en taille {size}."}
+        if normalize(self.business_type) == RESTAURANT:  # lot 106 : un plat indisponible aujourd'hui n'est pas proposé
+            unavailable = [p.name for p in products if (p.stock_quantity or 0) <= 0]
+            products = [p for p in products if (p.stock_quantity or 0) > 0]
+            if not products and unavailable:
+                return {"results": [], "message": "Pas disponible aujourd'hui : " + ", ".join(unavailable[:5])
+                        + ". Propose un autre plat de la carte."}
         if not products:
             return {"results": [], "message": "Aucun produit trouvé pour cette recherche."}
         await record_product_view(self.db, self.tenant_id, self.customer_id, [p.id for p in products])
@@ -503,10 +518,11 @@ class ToolExecutor:
                 return {"error": "preferred_date doit être au format AAAA-MM-JJ", **booking.today_for_ai(now, zone)}
         if tool_input.get("part_of_day") in booking.PARTS_OF_DAY:
             part = tool_input["part_of_day"]
-        slots = await booking.free_slots(self.db, tenant, settings, zone, now, day=day, part=part)
+        party = _party(tool_input)  # lot 106 : restaurant, couverts restants pour ce groupe
+        slots = await booking.free_slots(self.db, tenant, settings, zone, now, day=day, part=part, party=party)
         if not slots and (day is not None or part is not None):
             note = "Aucun créneau libre à ce moment-là : propose plutôt ces prochains créneaux libres."
-            slots = await booking.free_slots(self.db, tenant, settings, zone, now)
+            slots = await booking.free_slots(self.db, tenant, settings, zone, now, party=party)
         result = {**booking.today_for_ai(now, zone), "slots": booking.slots_for_ai(slots, zone)}
         if note:
             result["note"] = note
@@ -536,8 +552,9 @@ class ToolExecutor:
             start = booking.parse_slot_id(tool_input.get("slot"), zone)
         except ValueError:
             start = None
-        if start is None or not await booking.is_bookable(self.db, tenant, settings, zone, now, start):
-            fresh = await booking.free_slots(self.db, tenant, settings, zone, now)
+        party = _party(tool_input)
+        if start is None or not await booking.is_bookable(self.db, tenant, settings, zone, now, start, party=party):
+            fresh = await booking.free_slots(self.db, tenant, settings, zone, now, party=party)
             return None, {
                 "error": "Ce créneau n'est pas disponible (déjà pris, fermé ou passé).",
                 "available_slots": booking.slots_for_ai(fresh, zone),
@@ -563,6 +580,9 @@ class ToolExecutor:
         allowed_kinds = appointment_kinds(self.business_type)  # lot 53 : selon le secteur
         if kind not in APPOINTMENT_KINDS or kind not in allowed_kinds:
             return {"error": "Type de rendez-vous invalide : " + ", ".join(allowed_kinds)}
+        party = _party(tool_input)
+        if kind == "TABLE" and party is None:  # lot 106 : une table se réserve toujours pour un nombre de personnes
+            return {"error": "Demande d'abord au client pour combien de personnes : rien n'a été enregistré."}
         booked = None
         if tool_input.get("slot"):
             booked, error = await self._book_slot(tool_input, kind)
@@ -576,7 +596,7 @@ class ToolExecutor:
 
             tenant, settings, zone, now = await self._booking_context()
             if booking.booking_enabled(settings) and not self.client_chose_other_time:
-                slots = await booking.free_slots(self.db, tenant, settings, zone, now)
+                slots = await booking.free_slots(self.db, tenant, settings, zone, now, party=party)
                 if slots:
                     return {
                         "error": "Ne transmets pas cette demande : la concession a des créneaux libres.",
@@ -609,6 +629,8 @@ class ToolExecutor:
             except (ValueError, TypeError):
                 product = None
         vehicle = (product.name if product is not None else (tool_input.get("vehicle") or "").strip()) or None
+        if kind == "TABLE":  # lot 106 : « 4 personnes », repris dans les messages et l'agenda
+            vehicle = f"{party} personne{'s' if party > 1 else ''}"
         notes = (tool_input.get("notes") or "").strip() or None
 
         def _text(key: str, limit: int) -> str | None:
@@ -634,6 +656,7 @@ class ToolExecutor:
             product_id=product.id if product is not None else None,
             kind=kind,
             vehicle_label=vehicle[:255] if vehicle else None,
+            party_size=party if kind == "TABLE" else None,
             availability=availability[:300],
             notes=notes,
             need=need,
@@ -849,8 +872,10 @@ class ToolExecutor:
             start = booking.parse_slot_id(tool_input.get("slot"), zone)
         except ValueError:
             start = None
-        if start is None or not await booking.is_bookable(self.db, tenant, settings, zone, now, start, exclude_id=appointment.id):
-            fresh = await booking.free_slots(self.db, tenant, settings, zone, now)
+        party = getattr(appointment, "party_size", None)  # lot 106 : la même table, le même nombre de personnes
+        if start is None or not await booking.is_bookable(self.db, tenant, settings, zone, now, start, exclude_id=appointment.id,
+                                                          party=party):
+            fresh = await booking.free_slots(self.db, tenant, settings, zone, now, party=party)
             return {"error": "Ce créneau n'est pas disponible (déjà pris, fermé ou passé).",
                     "available_slots": booking.slots_for_ai(fresh, zone),
                     "instruction": "Propose au client ces créneaux libres à la place."}
@@ -1110,16 +1135,30 @@ class ToolExecutor:
                                 "pas et ne refais pas de récapitulatif. Dis simplement au client qu'elle est bien "
                                 "enregistrée. S'il veut un article EN PLUS, il doit le dire clairement."),
             }
+        terms = {}
+        from app.services.business_type import RESTAURANT, normalize
+
+        if normalize(self.business_type) == RESTAURANT:  # lot 106 : mode, cuisine ouverte, commune et frais, table
+            from app.models.tenant import Tenant as _Shop
+            from app.services import restaurant
+
+            try:
+                terms = restaurant.order_terms(await self.db.get(_Shop, self.tenant_id), tool_input.get("fulfillment"),
+                                               tool_input.get("delivery_area"), tool_input.get("table_number"),
+                                               tool_input.get("delivery_address"))
+            except restaurant.RestaurantError as exc:
+                return {"error": str(exc)}
         try:
             order = await create_order(
                 db=self.db,
                 tenant_id=self.tenant_id,
                 customer_id=self.customer_id,
                 items=tool_input.get("items", []),
-                delivery_address=tool_input.get("delivery_address"),
+                delivery_address=tool_input.get("delivery_address") if terms.get("fulfillment") in (None, "DELIVERY") else None,
                 payment_method=tool_input.get("payment_method"),
                 created_by="IA",
                 conversation_id=self.conversation.id,
+                **terms,
             )
         except OrderCreationError as exc:
             return {"error": exc.message}

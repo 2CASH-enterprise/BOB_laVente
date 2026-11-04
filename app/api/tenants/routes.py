@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.business_type import (CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, REAL_ESTATE, only_insurance,
-                                         only_online_store, only_real_estate, require_business)
+                                         only_online_store, only_real_estate, only_sellers, require_business)
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.models.messaging_settings import KillSwitch, OutboundMode, TenantMessagingSettings
@@ -822,7 +822,7 @@ def _order_reminders_response(tenant: Tenant) -> dict:
     return {"enabled": tenant.order_reminders_enabled, "payment_link": bool(tenant.payment_link)}
 
 
-@router.get("/me/order-reminders", dependencies=[Depends(only_online_store())])
+@router.get("/me/order-reminders", dependencies=[Depends(only_sellers())])
 async def get_order_reminders(current_user: CurrentUser = Depends(get_current_user),
                               db: AsyncSession = Depends(get_db)) -> dict:
     tenant = await db.get(Tenant, current_user.tenant_id)
@@ -866,6 +866,10 @@ class FulfillmentReq(BaseModel):
     delivery_free_from: Decimal | None = Field(default=None, ge=0, le=100_000_000)
     pickup_enabled: bool
     pickup_address: str | None = Field(default=None, max_length=300)
+    # Lot 106 — restaurant : sur place (depuis la table), frais par commune, horaires de la cuisine.
+    dine_in_enabled: bool | None = None
+    delivery_areas: list[dict] | None = Field(default=None, max_length=60)
+    kitchen_hours: dict | None = None
 
 
 def _fulfillment_response(tenant: Tenant) -> dict:
@@ -875,10 +879,13 @@ def _fulfillment_response(tenant: Tenant) -> dict:
     return {"delivery_enabled": tenant.delivery_enabled, "delivery_fee": number(tenant.delivery_fee),
             "delivery_zone": tenant.delivery_zone, "delivery_min_order": number(tenant.delivery_min_order),
             "delivery_free_from": number(tenant.delivery_free_from), "pickup_enabled": tenant.pickup_enabled,
-            "pickup_address": tenant.pickup_address, "currency": tenant.currency or "XOF"}
+            "pickup_address": tenant.pickup_address, "currency": tenant.currency or "XOF",
+            "dine_in_enabled": bool(getattr(tenant, "dine_in_enabled", False)),  # lot 106 : restaurant
+            "delivery_areas": getattr(tenant, "delivery_areas", None) or [],
+            "kitchen_hours": getattr(tenant, "kitchen_hours", None) or {}}
 
 
-@router.get("/me/fulfillment", dependencies=[Depends(only_online_store())])
+@router.get("/me/fulfillment", dependencies=[Depends(only_sellers())])
 async def get_fulfillment(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
     """Lot 95 — livraison et retrait proposés au client à la fin du panier WhatsApp."""
     tenant = await db.get(Tenant, current_user.tenant_id)
@@ -887,7 +894,7 @@ async def get_fulfillment(current_user: CurrentUser = Depends(get_current_user),
     return _fulfillment_response(tenant)
 
 
-@router.put("/me/fulfillment", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])
+@router.put("/me/fulfillment", dependencies=[Depends(only_sellers()), Depends(require_role("ADMIN"))])
 async def update_fulfillment(payload: FulfillmentReq, current_user: CurrentUser = Depends(get_current_user),
                              db: AsyncSession = Depends(get_db)) -> dict:
     from app.services.audit import log_audit_event
@@ -895,11 +902,27 @@ async def update_fulfillment(payload: FulfillmentReq, current_user: CurrentUser 
     tenant = await db.get(Tenant, current_user.tenant_id)
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compte introuvable")
-    if not payload.delivery_enabled and not payload.pickup_enabled:
-        raise HTTPException(status_code=422, detail="Choisissez au moins la livraison ou le retrait en boutique.")
+    from app.services.business_type import is_restaurant
+
+    restaurant = is_restaurant(tenant)
+    if not payload.delivery_enabled and not payload.pickup_enabled and not (restaurant and payload.dine_in_enabled):
+        raise HTTPException(status_code=422, detail="Choisissez au moins la livraison ou le retrait en boutique."
+                            if not restaurant else "Choisissez au moins un mode : à emporter, livraison ou sur place.")
+    if restaurant:  # lot 106
+        from app.services import booking, restaurant as restaurant_service
+
+        try:
+            areas = restaurant_service.clean_delivery_areas(payload.delivery_areas)
+            hours = booking.validate_opening_hours(payload.kitchen_hours or {})
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        tenant.dine_in_enabled = bool(payload.dine_in_enabled)
+        tenant.delivery_areas = areas or None
+        tenant.kitchen_hours = hours or None
     address = " ".join((payload.pickup_address or "").split()) or None
     if payload.pickup_enabled and not address:
-        raise HTTPException(status_code=422, detail="Indiquez l'adresse de la boutique pour le retrait.")
+        raise HTTPException(status_code=422, detail="Indiquez l'adresse de la boutique pour le retrait."
+                            if not restaurant else "Indiquez l'adresse du restaurant pour les commandes à emporter.")
     tenant.delivery_enabled = payload.delivery_enabled
     tenant.delivery_fee = payload.delivery_fee
     tenant.delivery_zone = " ".join((payload.delivery_zone or "").split()) or None
@@ -913,7 +936,7 @@ async def update_fulfillment(payload: FulfillmentReq, current_user: CurrentUser 
     return _fulfillment_response(tenant)
 
 
-@router.put("/me/order-reminders", dependencies=[Depends(only_online_store()), Depends(require_role("ADMIN"))])
+@router.put("/me/order-reminders", dependencies=[Depends(only_sellers()), Depends(require_role("ADMIN"))])
 async def update_order_reminders(payload: OrderRemindersReq, current_user: CurrentUser = Depends(get_current_user),
                                  db: AsyncSession = Depends(get_db)) -> dict:
     from app.services.audit import log_audit_event

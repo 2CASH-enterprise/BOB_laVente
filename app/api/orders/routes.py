@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.business_type import only_online_store
+from app.services.business_type import only_sellers
 from app.core.database import get_db
 from app.core.security import CurrentUser, get_current_user, require_role
 from app.integrations.whatsapp.client import WhatsAppClient
@@ -24,7 +24,7 @@ from app.services.order_service import (
     mark_order_as_paid,
 )
 
-router = APIRouter(prefix="/api/v1/orders", tags=["orders"], dependencies=[Depends(only_online_store())])  # lot 32
+router = APIRouter(prefix="/api/v1/orders", tags=["orders"], dependencies=[Depends(only_sellers())])  # lot 32 ; lot 106 : restaurant
 
 
 async def _build_order_detail(db: AsyncSession, order) -> OrderDetailResponse:
@@ -45,6 +45,8 @@ async def _build_order_detail(db: AsyncSession, order) -> OrderDetailResponse:
         created_by=order.created_by,
         delivery_fee=order.delivery_fee,
         fulfillment=order.fulfillment,
+        table_number=order.table_number,
+        delivery_area=order.delivery_area,
         items=items,
         delivery_status=delivery.status.value if delivery else None,
         tracking_number=delivery.tracking_number if delivery else None,

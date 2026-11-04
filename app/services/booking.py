@@ -19,6 +19,7 @@ from app.services.local_time import as_utc, format_local
 
 SLOT_CHOICES = (30, 45, 60, 90, 120)
 MAX_CAPACITY = 20
+MAX_COVERS = 500  # lot 106 : restaurant, couverts par service
 MAX_RANGES_PER_DAY = 2
 HORIZON_DAYS = 7  # aujourd'hui + 7 jours
 MIN_NOTICE = timedelta(hours=2)  # jamais un créneau qui commence dans moins de 2 h
@@ -106,6 +107,48 @@ async def _booked(db, tenant_id, now: datetime, exclude_id=None) -> list[datetim
     return [as_utc(r) for r in rows]
 
 
+# --- Lot 106 : restaurant — la capacité est un nombre de couverts par service (chaque plage horaire = un service) ----
+
+def _service_of(start: datetime, settings) -> tuple[int, int] | None:
+    minute = start.hour * 60 + start.minute
+    for start_txt, end_txt in settings.opening_hours.get(str(start.weekday())) or []:
+        low, high = _minutes(start_txt), _minutes(end_txt)
+        if low <= minute < high:
+            return low, high
+    return None
+
+
+async def _booked_covers(db, tenant_id, now: datetime, exclude_id=None) -> list[tuple[datetime, int]]:
+    stmt = select(AppointmentRequest.scheduled_at, AppointmentRequest.party_size).where(
+        AppointmentRequest.tenant_id == tenant_id,
+        AppointmentRequest.status == STATUS_CONFIRMED,
+        AppointmentRequest.scheduled_at.is_not(None),
+        AppointmentRequest.scheduled_at >= now - timedelta(hours=24),
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(AppointmentRequest.id != exclude_id)
+    return [(as_utc(at), max(1, size or 1)) for at, size in (await db.execute(stmt)).all()]
+
+
+def _has_room(start: datetime, settings, zone, booked: list[tuple[datetime, int]], party: int) -> bool:
+    """Couverts déjà réservés dans le même service, le même jour, + ce groupe ≤ couverts du service."""
+    service = _service_of(start, settings)
+    if service is None:
+        return False
+    taken = 0
+    for at, size in booked:
+        local = at.astimezone(zone)
+        if local.date() == start.date() and _service_of(local, settings) == service:
+            taken += size
+    return taken + party <= settings.capacity
+
+
+def _restaurant(tenant) -> bool:
+    from app.services.business_type import is_restaurant
+
+    return is_restaurant(tenant)
+
+
 def _candidates(settings, zone, now: datetime, day: date | None = None, part: str | None = None) -> list[datetime]:
     today = as_utc(now).astimezone(zone).date()
     earliest = as_utc(now) + MIN_NOTICE
@@ -143,18 +186,25 @@ def _spread(slots: list[datetime], limit: int) -> list[datetime]:
 
 
 async def free_slots(db, tenant, settings, zone, now: datetime, day: date | None = None,
-                     part: str | None = None, limit: int = MAX_PROPOSED) -> list[datetime]:
-    booked = await _booked(db, tenant.id, now)
-    free = [s for s in _candidates(settings, zone, now, day, part) if _is_free(s, settings, booked)]
+                     part: str | None = None, limit: int = MAX_PROPOSED, party: int | None = None) -> list[datetime]:
+    if _restaurant(tenant):  # lot 106 : des couverts restants dans le service, pour ce groupe
+        covers = await _booked_covers(db, tenant.id, now)
+        free = [s for s in _candidates(settings, zone, now, day, part) if _has_room(s, settings, zone, covers, party or 1)]
+    else:
+        booked = await _booked(db, tenant.id, now)
+        free = [s for s in _candidates(settings, zone, now, day, part) if _is_free(s, settings, booked)]
     if day is not None or part is not None:
         return free[:limit]
     return _spread(free, limit)
 
 
-async def is_bookable(db, tenant, settings, zone, now: datetime, start: datetime, exclude_id=None) -> bool:
+async def is_bookable(db, tenant, settings, zone, now: datetime, start: datetime, exclude_id=None,
+                      party: int | None = None) -> bool:
     """Revérifié au moment de réserver : horaires, alignement, délai, horizon et places libres."""
     if start not in _candidates(settings, zone, now, day=start.date()):
         return False
+    if _restaurant(tenant):
+        return _has_room(start, settings, zone, await _booked_covers(db, tenant.id, now, exclude_id), party or 1)
     return _is_free(start, settings, await _booked(db, tenant.id, now, exclude_id))
 
 

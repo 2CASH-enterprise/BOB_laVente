@@ -13,7 +13,7 @@ import re
 
 from app.services.promise_guard import CONDITIONAL as _WHEN
 
-_THING = r"(?:rendez-vous|rdv|essai|visite|estimation|demande|cr[ée]neau)"
+_THING = r"(?:rendez-vous|rdv|essai|visite|estimation|demande|cr[ée]neau|r[ée]servation)"  # lot 106 : réservation de table
 _DONE = r"(?:not[ée]e?s?|enregistr[ée]e?s?|confirm[ée]e?s?|r[ée]serv[ée]e?s?|fix[ée]e?s?|bloqu[ée]e?s?|programm[ée]e?s?|cal[ée]e?s?)"
 _DAYS = r"(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|demain)"
 _CLAIMS = [

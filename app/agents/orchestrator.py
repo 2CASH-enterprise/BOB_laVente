@@ -298,6 +298,9 @@ async def generate_ai_reply_detailed(
     from app.services.business_type import is_appointment_sector, is_insurance
 
     dealership = is_appointment_sector(tenant)  # lot 53 : concession et courtier
+    from app.services.business_type import books_appointments
+
+    appointments_checked = books_appointments(tenant)  # lot 106 : le restaurant réserve aussi (tables)
     insurance = is_insurance(tenant)
     from app.services.business_type import is_store
 
@@ -362,7 +365,7 @@ async def generate_ai_reply_detailed(
                             system_prompt += insurance_service.amount_correction()
                             logger.warning("Réponse de Bob à corriger (AMOUNT, conversation %s) : nouvel essai", conversation.id)
                             continue
-                if text and dealership:
+                if text and appointments_checked:
                     correction, fixed = _appointment_check(text, tenant, executor, date_retry_done, claim_retry_done)
                     if correction == "DATE":
                         date_retry_done = True

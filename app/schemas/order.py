@@ -46,6 +46,8 @@ class OrderResponse(BaseModel):
     # Lot 95 — panier WhatsApp : frais de livraison inclus dans le total, livraison (DELIVERY) ou retrait (PICKUP).
     delivery_fee: Decimal | None = None
     fulfillment: str | None = None
+    table_number: str | None = None  # lot 106 : restaurant, commande sur place
+    delivery_area: str | None = None  # lot 106 : commune de livraison
 
     model_config = ConfigDict(from_attributes=True)
 

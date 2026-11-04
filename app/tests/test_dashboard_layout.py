@@ -224,8 +224,8 @@ def test_store_only_features_are_hidden_for_dealerships():
     assert 'data-tab="orders" data-label="Commandes" class="store-only"' in nav
     assert 'class="card store-only" id="sales-card"' in HTML
     section = _section("bob")
-    assert 'class="card store-only" style="max-width: 480px; flex: 1; min-width: 300px;">\n          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix' in section
-    assert '<th class="store-only">Upsell</th>' in HTML and 'data-label="Upsell" class="store-only"' in HTML
+    assert 'class="card store-only no-restaurant" style="max-width: 480px; flex: 1; min-width: 300px;">\n          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Négociation de prix' in section
+    assert '<th class="store-only no-restaurant">Upsell</th>' in HTML and 'data-label="Upsell" class="store-only no-restaurant"' in HTML  # lot 106
     apply = re.search(r"function applyBusinessType\(code, label\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert 'document.body.classList.toggle("dealership", dealership);' in apply
 
@@ -237,7 +237,7 @@ def test_appointments_page_only_for_dealerships_and_loaded_with_its_tab():
     assert 'data-tab="appointments" data-label="Rendez-vous" id="nav-appointments" class="hidden"' in nav
     apply = re.search(r"function applyBusinessType\(code, label\) \{(.*?)\n\}", HTML, re.S).group(1)
     assert 'const dealership = code === "CAR_DEALERSHIP";' in apply
-    assert 'getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance || estate))' in apply  # lots 53 / 79
+    assert 'getElementById("nav-appointments").classList.toggle("hidden", !(dealership || insurance || estate || restaurant))' in apply  # lots 53 / 79 / 106
     assert HTML.count("applyBusinessType(") >= 2  # définition + chargement
     assert "loadAppointments(currentAppointmentView)" in _show_tab_line("appointments")
     assert "if (item.kind === \"APPOINTMENT\") return `showTab('appointments')`" in HTML
