@@ -66,10 +66,30 @@ async def kit_poster(model: str = "agence", accent: str = "or", photo: UUID | No
             raise HTTPException(status_code=404, detail="Photo introuvable")
         picture = vitrine_posters.photo_of(product)
     try:
-        page = vitrine_posters.kit_poster(tenant, data, model, accent, picture)
+        from app.services import resto_posters
+
+        if model in resto_posters.RESTO_KIT_MODELS:  # lot 108 b : affiches du restaurant
+            from app.services.business_type import is_restaurant
+
+            if not is_restaurant(tenant):
+                raise vitrine_posters.PosterError("Ce modèle d'affiche est réservé aux restaurants.")
+            page = resto_posters.kit_poster(tenant, data, model, accent, picture, await _resto_extra(db, tenant))
+        else:
+            page = vitrine_posters.kit_poster(tenant, data, model, accent, picture)
     except vitrine_posters.PosterError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
+async def _resto_extra(db, tenant) -> dict:
+    """Réservation en ligne ouverte ? Rubriques de la carte qui ont des plats disponibles (dans l'ordre de la carte)."""
+    from app.services import booking, resto_flow
+    from app.services.product_sheets import DISH_CATEGORIES
+
+    books = booking.booking_enabled(await booking.load_settings(db, tenant.id))
+    present = {resto_flow._section(d) for d in await resto_flow._dishes(db, tenant)}
+    sections = [DISH_CATEGORIES[c]["label"] for c in DISH_CATEGORIES if c in present]
+    return {"books": books, "sections": sections}
 
 
 @router.get("/poster-options")
@@ -83,6 +103,13 @@ async def kit_poster_options(current_user: CurrentUser = Depends(get_current_use
     rows = (await db.execute(select(Product).where(Product.tenant_id == current_user.tenant_id, Product.active.is_(True))
                              .order_by(Product.created_at.desc()).limit(200))).scalars().all()
     photos = [{"id": str(p.id), "name": p.name, "url": vp.photo_of(p)} for p in rows if vp.photo_of(p)][:60]
-    return {"models": [{"code": m, "label": vp.MODEL_LABELS[m]} for m in vp.KIT_MODELS],
-            "accents": [{"code": c, "label": vp.ACCENT_LABELS[c], "color": vp.ACCENTS[c][0]} for c in vp.ACCENTS],
+    from app.models.tenant import Tenant
+    from app.services import resto_posters
+    from app.services.business_type import is_restaurant
+
+    restaurant = is_restaurant(await db.get(Tenant, current_user.tenant_id))
+    models = (resto_posters.RESTO_KIT_MODELS + vp.KIT_MODELS) if restaurant else vp.KIT_MODELS  # lot 108 b
+    accents = sorted(vp.ACCENTS, key=lambda c: c != "safran") if restaurant else [c for c in vp.ACCENTS if c != "safran"]
+    return {"models": [{"code": m, "label": vp.MODEL_LABELS[m]} for m in models],
+            "accents": [{"code": c, "label": vp.ACCENT_LABELS[c], "color": vp.ACCENTS[c][0]} for c in accents],
             "photos": photos}

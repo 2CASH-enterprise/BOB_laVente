@@ -1149,19 +1149,21 @@
           <select id="new-qr-product" class="input"></select>
           <button class="action" onclick="createQrCode()" style="white-space: nowrap;">Générer un QR</button>
         </div>
+        <label class="restaurant-only" style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 12px; max-width: 260px;">Bandeau de l'affiche du plat<br><select id="qr-banner" class="input"><option value="jour">Plat du jour</option><option value="specialite">Notre spécialité</option><option value="nouveau">Nouveau</option></select></label>
         <div id="qr-codes-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="qr-codes-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px;"></div>
       </div>
 
       <div class="card restaurant-only" style="margin-top: 24px;" id="table-qr-card">
         <div class="label" style="margin-bottom: 4px; font-weight: 600;">QR codes des tables<button class="tip"></button><span class="tip-bubble" hidden>Un QR code par table. Le client le scanne : WhatsApp s'ouvre avec le numéro de sa table, et Bob sait qu'il commande sur place, à cette table. Il n'a rien à écrire. Une table déjà créée garde son QR code : rien à réimprimer.</span></div>
-        <p style="font-size: 13px; color: var(--muted); margin: 0 0 12px;">Créez vos tables d'un coup. Chaque table a son QR code, qui ne change jamais.</p>
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 12px;">Créez vos tables d'un coup, puis imprimez les chevalets : 4 par page A4, à découper. Chaque table garde son QR code.</p>
         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
           <label for="table-first" style="font-size: 13px;">De la table</label>
           <input id="table-first" class="input" type="number" min="1" max="999" value="1" style="width: 80px; margin: 0;">
           <label for="table-last" style="font-size: 13px;">à la table</label>
           <input id="table-last" class="input" type="number" min="1" max="999" value="10" style="width: 80px; margin: 0;">
           <button class="action" onclick="createTableQrs()" style="white-space: nowrap;">Créer les QR des tables</button>
+          <button class="action secondary" onclick="openTableSheet()" style="white-space: nowrap;">Imprimer les chevalets</button>
         </div>
         <div id="table-qr-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="table-qr-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
@@ -2665,7 +2667,8 @@ const ESTATE_STATUSES = ["Disponible", "Sous compromis", "Vendu", "Loué"];
 function dishToday(p) {
   const off = (p.stock_quantity || 0) <= 0;
   return `<span class="badge ${off ? "off" : "on"}">${off ? "Indisponible" : "Disponible"}</span>
-    <button class="action secondary" style="font-size: 11px; padding: 4px 8px; margin-left: 4px;" onclick="toggleDishToday(${jsArg(p.id)}, ${off ? "false" : "true"})">${off ? "Remettre" : "Indisponible aujourd'hui"}</button>`;
+    <button class="action secondary" style="font-size: 11px; padding: 4px 8px; margin-left: 4px;" onclick="toggleDishToday(${jsArg(p.id)}, ${off ? "false" : "true"})">${off ? "Remettre" : "Indisponible aujourd'hui"}</button>
+    ${off ? "" : `<button class="action secondary" style="font-size: 11px; padding: 4px 8px; margin-left: 4px;" onclick="shareDishImage(${jsArg(p.id)})">Image à partager</button>`}`;
 }
 
 async function toggleDishToday(id, unavailable) {
@@ -5252,6 +5255,7 @@ async function loadQrCodes() {
         <div style="color: var(--muted); font-size: 11px; margin: 4px 0 8px;">${c.scan_count} scan${c.scan_count > 1 ? "s" : ""}</div>
         <button class="action" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="shareQrImage(${jsArg(c.id)})">Image à partager</button>
         ${document.body.classList.contains("real-estate") ? `<button class="action" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="openQrPoster(${jsArg(c.id)}, 'bien')">Affiche du bien (A4)</button>` : ""}
+        ${currentBusinessType === "RESTAURANT" ? `<button class="action" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="openQrPoster(${jsArg(c.id)}, 'plat')">Affiche du plat (A4)</button>` : ""}
         <button class="action secondary" style="font-size: 11px; padding: 5px 10px; display: block; width: 100%; margin-bottom: 6px;" onclick="openQrPoster(${jsArg(c.id)}, 'vitre')">Autocollant vitre</button>
         <button class="action secondary" style="font-size: 11px; padding: 5px 10px;" onclick="copyQrLink(${jsArg(fullUrl)})">Copier le lien</button>
         <button class="action secondary" style="font-size: 11px; padding: 5px 10px;" onclick="deleteQrCode(${jsArg(c.id)})">Supprimer</button>
@@ -5297,6 +5301,10 @@ async function loadTableQrs() {
       <button class="action secondary" style="font-size: 11px; padding: 4px 8px;" aria-label="Supprimer la table ${esc(t.label)}" onclick="deleteTableQr(${jsArg(t.id)}, ${jsArg(t.label)})">Supprimer</button>
     </div>`;
   }).join("");
+}
+
+async function openTableSheet() {
+  await openPosterPage("/api/v1/table-qr-codes/sheet?" + new URLSearchParams({ accent: posterAccent() }).toString());
 }
 
 async function downloadTableQr(id, label) {
@@ -5692,6 +5700,122 @@ async function shareQrImage(qrId) {
   } catch (e) {
     bobAlert("Image impossible à créer", "La photo du produit ne permet pas de créer l'image depuis ce navigateur.\n\nVous pouvez faire une capture d'écran de la carte QR en attendant.");
   }
+}
+
+// Lot 108 b — « Plat du jour » au format statut WhatsApp (1080 × 1920), maquette validée le 06/11 : sans QR code
+// (on le regarde sur son téléphone), avec le numéro WhatsApp du restaurant en grand.
+var dishFontsReady = null;
+
+function loadDishFonts() {
+  if (dishFontsReady) return dishFontsReady;
+  const faces = [["Cormorant Garamond", "cormorant-garamond-latin-500-normal.woff2", "500", "normal"],
+    ["Cormorant Garamond", "cormorant-garamond-latin-400-italic.woff2", "400", "italic"],
+    ["Cormorant Garamond", "cormorant-garamond-latin-500-italic.woff2", "500", "italic"],
+    ["Jost", "jost-latin-400-normal.woff2", "400", "normal"], ["Jost", "jost-latin-500-normal.woff2", "500", "normal"]];
+  dishFontsReady = Promise.all(faces.map(([family, file, weight, style]) => {
+    const face = new FontFace(family, `url(${API_BASE}/fonts/${file})`, { weight, style });
+    return face.load().then((f) => { document.fonts.add(f); }).catch(() => {});
+  }));
+  return dishFontsReady;
+}
+
+function dishSides(raw) {
+  const seen = new Set();
+  const out = [];
+  String(raw || "").split(/,|;|\/|\bou\b|\n/).map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean).forEach((x) => {
+    if (!seen.has(x.toLowerCase())) { seen.add(x.toLowerCase()); out.push(x); }
+  });
+  return out.length >= 2 ? out.slice(0, 4) : [];
+}
+
+function spaced(ctx, text, x, y, spacing) {  // petites capitales espacées, centrées sur x
+  const chars = [...text];
+  const width = chars.reduce((w, c) => w + ctx.measureText(c).width, 0) + spacing * (chars.length - 1);
+  let cx = x - width / 2;
+  const align = ctx.textAlign;
+  ctx.textAlign = "left";
+  chars.forEach((c) => { ctx.fillText(c, cx, y); cx += ctx.measureText(c).width + spacing; });
+  ctx.textAlign = align;
+}
+
+async function shareDishImage(productId) {
+  const p = allProducts.find((x) => x.id === productId);
+  if (!p) return;
+  let kit, me, ff;
+  try {
+    [kit, me, ff] = await Promise.all([api("/api/v1/kit"), api("/api/v1/tenants/me"), api("/api/v1/tenants/me/fulfillment")]);
+  } catch (e) { toast(e.message, "error"); return; }
+  const modes = [ff.pickup_enabled ? "À EMPORTER" : "", ff.delivery_enabled ? "LIVRAISON" : "", ff.dine_in_enabled ? "SUR PLACE" : ""].filter(Boolean);
+  if (!kit.connected) { bobAlert("Numéro WhatsApp à connecter", "Connectez d'abord votre numéro WhatsApp (Intégrations) : il apparaît en grand sur l'image."); return; }
+  await loadDishFonts();
+  const W = 1080, H = 1920;
+  const canvas = document.createElement("canvas");
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  // Image dessinée (canvas) : les couleurs de la maquette, pas celles du thème.
+  const INK = "rgb(20,17,15)", CREAM = "rgb(244,238,227)", ACCENT = "rgb(201,145,61)", MUTED = "rgb(207,198,182)";
+  ctx.fillStyle = INK; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.strokeRect(32, 32, W - 64, H - 64);
+  ctx.strokeStyle = "rgba(201,145,61,0.35)"; ctx.strokeRect(44, 44, W - 88, H - 88);
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = CREAM; ctx.font = "500 26px Jost, sans-serif";
+  spaced(ctx, (me.name || "").toUpperCase(), W / 2, 150, 9);
+  ctx.fillStyle = ACCENT; ctx.fillRect(W / 2 - 140, 184, 108, 2); ctx.fillRect(W / 2 + 32, 184, 108, 2);
+  ctx.save(); ctx.translate(W / 2, 185); ctx.rotate(Math.PI / 4); ctx.strokeStyle = ACCENT; ctx.strokeRect(-6, -6, 12, 12); ctx.restore();
+  ctx.font = "italic 400 128px 'Cormorant Garamond', Georgia, serif"; ctx.fillText("Plat du jour", W / 2, 345);
+  const now = new Date();
+  const day = now.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  ctx.fillStyle = MUTED; ctx.font = "400 24px Jost, sans-serif";
+  spaced(ctx, day.toUpperCase(), W / 2, 418, 7);
+  const cy = 790, r = 320;
+  ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W / 2, cy, r + 20, 0, Math.PI * 2); ctx.stroke();
+  ctx.save(); ctx.beginPath(); ctx.arc(W / 2, cy, r, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = "#2A231D"; ctx.fillRect(W / 2 - r, cy - r, 2 * r, 2 * r);
+  let photo = p.image_original_url || p.image_url;
+  try {  // photo déposée dans Bob : lue sur la même adresse que le tableau de bord (sinon le navigateur bloque l'image)
+    const u = new URL(photo, window.location.href);
+    if (u.origin !== window.location.origin && u.pathname.includes("/uploads/")) photo = window.location.origin + u.pathname;
+  } catch (e) { /* adresse illisible : essai tel quel */ }
+  if (photo) {
+    try {
+      const img = await _loadImage(photo, true);
+      const scale = Math.max((2 * r) / img.width, (2 * r) / img.height);
+      ctx.drawImage(img, W / 2 - (img.width * scale) / 2, cy - (img.height * scale) / 2, img.width * scale, img.height * scale);
+    } catch (e) { /* photo illisible depuis ce navigateur : l'assiette reste unie */ }
+  }
+  ctx.restore();
+  ctx.fillStyle = CREAM; ctx.font = "500 92px 'Cormorant Garamond', Georgia, serif";
+  wrapText(ctx, p.name, W / 2, 1225, 880, 92);
+  const sheet = p.sheet || {};
+  const sides = dishSides(sheet.sides);
+  const line = sides.length ? "Au choix : " + sides.slice(0, -1).join(", ") + " ou " + sides[sides.length - 1]
+    : String(sheet.composition || "").slice(0, 70);
+  if (line) { ctx.fillStyle = "#D9D0C1"; ctx.font = "italic 400 38px 'Cormorant Garamond', Georgia, serif"; wrapText(ctx, line, W / 2, 1300, 860, 46); }
+  if (Number(p.price) > 0) {
+    const amount = Number(p.price).toLocaleString("fr-FR").replace(/ | /g, " ");
+    const cur = p.currency === "XOF" ? "FCFA" : p.currency;
+    ctx.fillStyle = CREAM; ctx.font = "400 64px Jost, sans-serif";  // chiffres alignés, comme sur les affiches
+    const text = `${amount} ${cur}`;
+    ctx.fillText(text, W / 2, 1420);
+    const half = ctx.measureText(text).width / 2;
+    ctx.fillStyle = "rgba(201,145,61,0.6)"; ctx.fillRect(W / 2 - half - 110, 1394, 80, 2); ctx.fillRect(W / 2 + half + 30, 1394, 80, 2);
+  }
+  ctx.fillStyle = ACCENT; ctx.fillRect(76, 1560, W - 152, 230);
+  ctx.fillStyle = INK; ctx.font = "600 52px 'Cormorant Garamond', Georgia, serif"; ctx.fillText("Commandez sur WhatsApp", W / 2, 1636);
+  ctx.font = "500 44px Jost, sans-serif"; ctx.fillText(kit.phone, W / 2, 1704);
+  ctx.font = "400 22px Jost, sans-serif"; spaced(ctx, modes.join(" · "), W / 2, 1756, 5);
+  ctx.fillStyle = MUTED; ctx.font = "400 24px Jost, sans-serif"; ctx.fillText("Proposé par Bob", W / 2, 1850);
+  let blob;
+  try { blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png")); } catch (e) { blob = null; }
+  if (!blob) { bobAlert("Image impossible à créer", "La photo du plat ne permet pas de créer l'image depuis ce navigateur. Essayez avec une photo ajoutée dans Bob."); return; }
+  const file = new File([blob], `plat-du-jour-${p.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.png`, { type: "image/png" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {  // téléphone : directement vers WhatsApp (statut, groupe)
+    try { await navigator.share({ files: [file], title: p.name }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  toast("Image téléchargée : publiez-la en statut WhatsApp ou envoyez-la à vos clients.");
 }
 
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -6950,7 +7074,7 @@ function kitPosterModelChanged() {
 }
 
 function posterAccent() {
-  return (document.getElementById("kit-poster-accent") || {}).value || "or";
+  return (document.getElementById("kit-poster-accent") || {}).value || (currentBusinessType === "RESTAURANT" ? "safran" : "or");
 }
 
 async function openKitPoster() {
@@ -6962,7 +7086,9 @@ async function openKitPoster() {
 }
 
 async function openQrPoster(id, model) {
-  await openPosterPage(`/api/v1/qr-codes/${encodeURIComponent(id)}/poster?` + new URLSearchParams({ model, accent: posterAccent() }).toString());
+  const params = { model, accent: posterAccent() };
+  if (model === "plat") params.banner = (document.getElementById("qr-banner") || {}).value || "jour";  // lot 108 b
+  await openPosterPage(`/api/v1/qr-codes/${encodeURIComponent(id)}/poster?` + new URLSearchParams(params).toString());
 }
 
 async function openPosterPage(path) {

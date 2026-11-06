@@ -90,6 +90,26 @@ async def delete_table(qr_id: UUID, current_user: CurrentUser = Depends(get_curr
     await db.commit()
 
 
+@router.get("/api/v1/table-qr-codes/sheet", dependencies=[Depends(require_business(RESTAURANT))])
+async def table_sheet(accent: str = "safran", current_user: CurrentUser = Depends(get_current_user),
+                      db: AsyncSession = Depends(get_db)):
+    """Lot 108 b — les chevalets de toutes les tables (A6, 4 par page A4), prêts à imprimer."""
+    from fastapi.responses import HTMLResponse
+
+    from app.core.config import get_settings
+    from app.models.tenant import Tenant
+    from app.services import resto_posters, vitrine_posters
+    from app.services.launch_kit import qr_svg
+
+    base = get_settings().public_base_url.rstrip("/")
+    tables = [(qr.label, qr_svg(f"{base}/t/{qr.code}")) for qr in await _tables(db, current_user.tenant_id)]
+    try:
+        page = resto_posters.table_sheet(await db.get(Tenant, current_user.tenant_id), tables, accent)
+    except vitrine_posters.PosterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+
 @router.get("/api/v1/table-qr-codes/{qr_id}/qr.svg", dependencies=[Depends(require_business(RESTAURANT))])
 async def table_qr_image(qr_id: UUID, current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Le QR code d'une table, en SVG (net à toutes les tailles), en attendant le chevalet à imprimer."""

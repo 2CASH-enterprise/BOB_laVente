@@ -170,6 +170,11 @@ _visuals_dir = Path(__file__).parent / "static" / "visuels"
 if _visuals_dir.exists():
     app.mount("/visuels", StaticFiles(directory=str(_visuals_dir)), name="visuels")
 
+# Lot 108 b — polices des affiches (licence OFL), pour l'image « Plat du jour » dessinée dans le tableau de bord.
+_fonts_dir = Path(__file__).parent / "static" / "fonts"
+if _fonts_dir.exists():
+    app.mount("/fonts", StaticFiles(directory=str(_fonts_dir)), name="fonts")
+
 _uploads_dir = Path(__file__).parent / "static" / "uploads"
 _uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")

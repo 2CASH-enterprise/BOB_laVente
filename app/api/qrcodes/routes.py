@@ -96,6 +96,7 @@ async def qr_code_poster(
     qr_id: UUID,
     model: str = "vitre",
     accent: str = "or",
+    banner: str = "jour",
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -115,7 +116,15 @@ async def qr_code_poster(
     tenant = await db.get(Tenant, qr.tenant_id)
     svg = launch_kit.qr_svg(f"{get_settings().public_base_url.rstrip('/')}/qr/{qr.code}")
     try:
-        page = vitrine_posters.product_poster(tenant, product, account.display_phone_number, svg, model, accent)
+        if model == "plat":  # lot 108 b : affiche d'un plat (plat du jour, spécialité, nouveauté)
+            from app.services import resto_posters
+            from app.services.business_type import is_restaurant
+
+            if not is_restaurant(tenant):
+                raise vitrine_posters.PosterError("L'affiche d'un plat est réservée aux restaurants.")
+            page = resto_posters.dish_poster(tenant, product, account.display_phone_number, svg, accent, banner)
+        else:
+            page = vitrine_posters.product_poster(tenant, product, account.display_phone_number, svg, model, accent)
     except vitrine_posters.PosterError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     return HTMLResponse(page, headers={"Cache-Control": "no-store"})

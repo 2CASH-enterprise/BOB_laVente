@@ -33,12 +33,16 @@ KIT_MODELS = ("agence", "sombre", "chevalet")
 PRODUCT_MODELS = ("bien", "vitre")
 MODEL_LABELS = {"agence": "Affiche avec photo (A4)", "sombre": "Affiche sombre épurée (A4)",
                 "chevalet": "Chevalet de comptoir (A5)", "bien": "Affiche du bien (A4)",
-                "vitre": "Autocollant vitre (20 × 20 cm)"}
+                "vitre": "Autocollant vitre (20 × 20 cm)",
+                # Lot 108 b — restaurant (maquettes validées le 06/11)
+                "resto_vitrine": "Affiche vitrine du restaurant (A4)", "resto_comptoir": "Notre carte, au comptoir (A5)",
+                "plat": "Affiche du plat (A4)", "tables": "Chevalets des tables (A4, 4 par page)"}
 # Teinte d'accent : (sur fond sombre, sur fond clair) — la seconde, plus foncée, garde le contraste sur l'ivoire.
 ACCENTS = {"or": ("#B89A67", "#8A6D3B"), "champagne": ("#C9B79C", "#7A6A4F"),
-           "sauge": ("#A3B1A0", "#4F6150"), "rose": ("#D4A59A", "#8C4F45")}
-ACCENT_LABELS = {"or": "Or", "champagne": "Champagne", "sauge": "Sauge", "rose": "Rose poudré"}
-SIZES = {"agence": (210, 297), "sombre": (210, 297), "bien": (210, 297), "chevalet": (148, 210), "vitre": (200, 200)}
+           "sauge": ("#A3B1A0", "#4F6150"), "rose": ("#D4A59A", "#8C4F45"), "safran": ("#C9913D", "#8A5A1F")}
+ACCENT_LABELS = {"or": "Or", "champagne": "Champagne", "sauge": "Sauge", "rose": "Rose poudré", "safran": "Safran"}
+SIZES = {"agence": (210, 297), "sombre": (210, 297), "bien": (210, 297), "chevalet": (148, 210), "vitre": (200, 200),
+         "resto_vitrine": (210, 297), "resto_comptoir": (148, 210), "plat": (210, 297), "tables": (210, 297)}
 
 INK, IVORY, MUTED, RULE = "#0E1116", "#F5F2EC", "#5E5A53", "#CFC8BA"
 SIGNATURE = "Proposé par Bob"
@@ -141,8 +145,10 @@ def _qr_box(svg: str, size: int, pad: int, ring: str, offset: int, label: str) -
             f'outline:1px solid {ring};outline-offset:{offset}px">{svg}</div>')
 
 
-def _page(title: str, model: str, body: str, ground: str) -> str:
+def _page(title: str, model: str, body: str, ground: str, sheets: list[str] | None = None) -> str:
+    """Une page imprimable ; « sheets » : plusieurs feuilles du même format (une par page imprimée)."""
     width, height = SIZES[model]
+    pages = "\n".join(f'<div class="sheet">\n{sheet}\n</div>' for sheet in (sheets if sheets is not None else [body]))
     return f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{escape(title)}</title>
@@ -157,7 +163,7 @@ body {{ background: #E9E6E0; font-family: Jost, system-ui, sans-serif; -webkit-p
 .bar button {{ background: {INK}; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }}
 .bar span {{ color: #555; font-size: 13px; }}
 .sheet {{ width: {width}mm; height: {height}mm; margin: 24px auto; overflow: hidden; position: relative; background: {ground};
-  box-shadow: 0 8px 30px rgba(0,0,0,.18); display: flex; flex-direction: column; }}
+  box-shadow: 0 8px 30px rgba(0,0,0,.18); display: flex; flex-direction: column; break-after: page; }}
 .serif {{ font-family: 'Cormorant Garamond', Georgia, serif; font-variant-numeric: lining-nums; }}
 .lbl {{ font-weight: 500; font-size: 12px; letter-spacing: .3em; text-transform: uppercase; }}
 .name {{ font-weight: 500; letter-spacing: .32em; text-transform: uppercase; }}
@@ -171,9 +177,7 @@ h1 {{ margin: 0; font-weight: 500; }}
 <body>
 <div class="bar"><button type="button" onclick="window.print()">Imprimer ou enregistrer en PDF</button>
 <span>Format {escape(MODEL_LABELS[model].split("(")[-1].rstrip(")"))} · marges « Aucune » · échelle 100 %</span></div>
-<div class="sheet">
-{body}
-</div>
+{pages}
 </body></html>"""
 
 
