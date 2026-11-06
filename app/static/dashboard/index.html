@@ -1507,8 +1507,8 @@
       <template class="page-tip-src">La façon dont Bob vend : négociation, transmission à un humain, réponses aux objections et relances. Ce que Bob sait de votre boutique se règle dans la Base de connaissances.</template>
       <p style="font-size: 13px; color: var(--muted); margin: 0 0 16px;">Activité : <strong id="business-type-label"></strong> <span style="font-size: 12px;">(pour la changer, contactez le support Bob)</span></p>
       <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-        <div class="card guided-card no-restaurant" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
-          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose des choix à toucher : le catalogue et le panier pour une boutique ; les véhicules, un essai, l'estimation de sa voiture et le financement pour une concession ; acheter, louer, vendre ou faire estimer pour une agence ; demander un devis, voir son contrat ou faire une réclamation pour un cabinet d'assurance. Les produits, les véhicules, les prix et les créneaux qui s'affichent viennent directement de vos données : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
+        <div class="card guided-card" style="max-width: 480px; flex: 1; min-width: 300px;" id="guided-flow-card">
+          <div class="label" style="margin-bottom: 4px; font-weight: 600;">Parcours à boutons<button class="tip"></button><span class="tip-bubble" hidden>Quand un client dit bonjour, Bob lui propose des choix à toucher : le catalogue et le panier pour une boutique ; les véhicules, un essai, l'estimation de sa voiture et le financement pour une concession ; acheter, louer, vendre ou faire estimer pour une agence ; demander un devis, voir son contrat ou faire une réclamation pour un cabinet d'assurance ; commander, réserver une table ou voir la carte pour un restaurant. Les produits, les véhicules, les prix et les créneaux qui s'affichent viennent directement de vos données : ils sont toujours exacts. Le client peut toujours écrire librement : Bob lui répond.</span></div>
           <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 8px;">
             <input type="checkbox" id="guided-flow" onchange="saveGuidedFlow()"> Proposer des choix en boutons sur WhatsApp
           </label>
@@ -3144,7 +3144,7 @@ function showTab(name) {
   if (name === "appointments") { loadAppointments(currentAppointmentView); loadBookingSettings(); }
   if (name === "pige") loadPige();  // lot 81
   if (name === "leads") loadLeads();  // lot 83
-  if (name === "bob") { if (currentBusinessType === "RESTAURANT") loadFulfillment(); /* lot 106 : ni négociation, ni tutoiement */ else if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (isRdvSector()) loadGuidedFlow();  /* lots 96 à 98 : concession, agence, courtier */ if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
+  if (name === "bob") { if (currentBusinessType === "RESTAURANT") { loadFulfillment(); loadGuidedFlow(); } /* lot 106 : ni négociation, ni tutoiement ; lot 107 : boutons */ else if (!isRdvSector()) { loadNegotiationSettings(); loadAddressForm(); loadGuidedFlow(); loadFulfillment(); } if (isRdvSector()) loadGuidedFlow();  /* lots 96 à 98 : concession, agence, courtier */ if (currentBusinessType === "INSURANCE_BROKER") loadInsuranceProfile(); if (currentBusinessType === "REAL_ESTATE") loadRealEstateProfile(); loadHandoffSettings(); loadStrategySettings(); loadFollowupSettings(); }
   if (name === "quotes") loadQuotes(currentQuoteView);  // lot 53
   if (name === "contracts") loadContracts(currentContractView);  // lot 55
   if (name === "complaints") loadComplaints(currentComplaintView);  // lot 57
@@ -3825,7 +3825,7 @@ async function saveGuidedFlow() {
     await api("/api/v1/tenants/me/guided-flow", { method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: box.checked }) });
     msg.style.color = "var(--success)";
-    msg.textContent = box.checked ? (currentBusinessType === "CAR_DEALERSHIP" ? "Bob proposera vos véhicules et les essais en boutons." : currentBusinessType === "REAL_ESTATE" ? "Bob proposera vos biens, les visites et les estimations en boutons." : currentBusinessType === "INSURANCE_BROKER" ? "Bob proposera les demandes de devis, les contrats et les réclamations en boutons." : "Bob proposera votre catalogue en boutons.") : "Bob répondra seulement par écrit.";
+    msg.textContent = box.checked ? (currentBusinessType === "CAR_DEALERSHIP" ? "Bob proposera vos véhicules et les essais en boutons." : currentBusinessType === "REAL_ESTATE" ? "Bob proposera vos biens, les visites et les estimations en boutons." : currentBusinessType === "INSURANCE_BROKER" ? "Bob proposera les demandes de devis, les contrats et les réclamations en boutons." : currentBusinessType === "RESTAURANT" ? "Bob proposera votre carte, les commandes et les réservations de table en boutons." : "Bob proposera votre catalogue en boutons.") : "Bob répondra seulement par écrit.";
   } catch (e) {
     box.checked = !box.checked;
     msg.style.color = "var(--danger)";

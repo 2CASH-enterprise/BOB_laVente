@@ -284,3 +284,21 @@ async def test_written_quantities_and_party_sizes_stay_in_bounds(db_session):
     assert "Poulet braisé × 12" in cart["body"]
     party = (await _tap(db_session, tenant, customer, conversation, "fb:12")).actions[0]  # au-delà : la liste revient
     assert party["rows"][-1][0] == "g:fb:big"
+
+
+SUPERADMIN = (Path(__file__).resolve().parents[1] / "static" / "superadmin" / "index.html").read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_restaurant_in_superadmin_and_buttons_switch(client, db_session):
+    from app.tests.test_lot53_courtier import _headers
+
+    assert 'RESTAURANT: "Restaurant"' in SUPERADMIN  # liste des secteurs, filtre et changement de secteur
+    tenant = await _resto(db_session)
+    headers = await _headers(client, tenant)
+    assert (await client.get("/api/v1/tenants/me/guided-flow", headers=headers)).status_code == 200
+    r = await client.put("/api/v1/tenants/me/guided-flow", headers=headers, json={"enabled": False})
+    assert r.status_code == 200 and r.json() == {"enabled": False}
+    await db_session.refresh(tenant)
+    assert not guided_flow.applies(tenant)
+    assert 'class="card guided-card" style' in HTML and "loadFulfillment(); loadGuidedFlow(); }" in HTML
