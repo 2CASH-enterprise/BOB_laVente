@@ -24,6 +24,7 @@ from app.models.appointment_request import (
 from app.services.local_time import as_utc, format_local
 
 REMINDER_HOUR = 18  # la veille, heure locale de la boutique
+TABLE_REMINDER_BEFORE = timedelta(hours=2)  # lot 108 : restaurant, rappel 2 h avant (décision du 06/11)
 
 
 def subject_phrase(appointment: AppointmentRequest) -> str:
@@ -72,9 +73,19 @@ class ReminderDue:
 
 
 def reminder_due(appointment: AppointmentRequest, now: datetime, zone, customer_email: str | None) -> ReminderDue:
-    """La veille du rendez-vous (heure de la boutique), à partir de 18 h."""
+    """La veille du rendez-vous (heure de la boutique), à partir de 18 h ; une table de restaurant : 2 h avant."""
     if appointment.status != STATUS_CONFIRMED or appointment.scheduled_at is None:
         return ReminderDue(False, False, False)
+    if appointment.kind == "TABLE":
+        # Pas d'email au restaurant (ses réservations du jour sont dans Bob) ; rien si la table a été réservée
+        # moins de 2 h avant (le client vient d'avoir sa confirmation).
+        when, created = as_utc(appointment.scheduled_at), as_utc(appointment.created_at) if appointment.created_at else None
+        due = when - TABLE_REMINDER_BEFORE <= as_utc(now) < when and (created is None or when - created > TABLE_REMINDER_BEFORE)
+        return ReminderDue(
+            staff=False,
+            customer=due and bool(customer_email) and appointment.customer_reminder_sent_at is None,
+            whatsapp=due and appointment.customer_whatsapp_reminder_sent_at is None,
+        )
     local_now = as_utc(now).astimezone(zone)
     local_when = as_utc(appointment.scheduled_at).astimezone(zone)
     is_eve = local_when.date() == local_now.date() + timedelta(days=1) and local_now.hour >= REMINDER_HOUR
@@ -88,6 +99,10 @@ def reminder_due(appointment: AppointmentRequest, now: datetime, zone, customer_
 def whatsapp_reminder_message(appointment: AppointmentRequest, shop_name: str, zone) -> str:
     """Lot 35 — message fixe (jamais rédigé par l'IA), la veille du rendez-vous."""
     when = format_local(appointment.scheduled_at, zone)
+    if appointment.kind == "TABLE":  # lot 108 : 2 h avant
+        party = f" pour {appointment.vehicle_label}" if appointment.vehicle_label else ""
+        return (f"Bonjour ! Petit rappel : votre table{party} chez {shop_name} est réservée pour aujourd'hui à "
+                f"{when.partition(' à ')[2] or when}. Un empêchement ? Touchez « Déplacer » ou « Annuler ». À tout à l'heure !")
     return (f"Bonjour ! Petit rappel : votre {subject_phrase(appointment)} chez {shop_name} est prévu demain, "
             f"{when}. Pour le déplacer ou l'annuler, répondez simplement à ce message.")
 
@@ -169,6 +184,12 @@ def customer_reminder_email(appointment: AppointmentRequest, shop_name: str, zon
     from app.services.email_layout import customer_footer
 
     when = format_local(appointment.scheduled_at, zone)
+    if appointment.kind == "TABLE":  # lot 108
+        body = ("Bonjour,\n\n"
+                f"Nous vous rappelons votre table réservée chez {shop_name} : {appointment.vehicle_label or 'votre réservation'}, "
+                f"{when}.\n\nUn empêchement ? Écrivez-nous simplement sur WhatsApp ou répondez à cet email.\n\n"
+                f"À tout à l'heure,\n{shop_name}" + customer_footer(shop_name, powered_by))
+        return f"Rappel de votre table chez {shop_name}", body
     body = (
         "Bonjour,\n\n"
         f"Nous vous rappelons votre rendez-vous chez {shop_name} :\n\n"

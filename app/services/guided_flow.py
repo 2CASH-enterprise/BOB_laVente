@@ -405,6 +405,10 @@ async def _entry(db, tenant, tu, customer, conversation, entry: dict):
             from app.services import shop_cart
 
             return await details(db, tenant, tu, product, await shop_cart.has_items(db, tenant, customer))
+    if entry.get("table") and is_restaurant(tenant) and customer is not None:  # lot 108 : QR posé sur une table
+        from app.services import resto_flow
+
+        return await resto_flow.at_table(db, tenant, tu, customer, entry["table"])
     if entry.get("welcome"):
         return await handle(db, tenant, "menu", None, None, tu, customer=customer, conversation=conversation)
     return None

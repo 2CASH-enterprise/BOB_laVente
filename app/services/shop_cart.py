@@ -475,6 +475,10 @@ async def track(db, tenant, tu, customer):
                                  .limit(1))).scalar_one_or_none()
     state = order.status.value
     step = delivery.status.value if delivery is not None else None
+    from app.services.business_type import is_restaurant
+
+    if is_restaurant(tenant):  # lot 108 : payé à la livraison ou au restaurant, et le statut « Prête »
+        return _resto_track(tu, order, step, state)
     if state != "CANCELLED" and step in ("PICKED_UP", "IN_TRANSIT", "DELIVERED", "FAILED"):
         state = step
         if order.fulfillment == PICKUP and step == "DELIVERED":
@@ -490,6 +494,45 @@ async def track(db, tenant, tu, customer):
     if delivery is not None and delivery.tracking_number and state in ("PICKED_UP", "IN_TRANSIT"):
         body += f"\nN° de suivi : {delivery.tracking_number}"
     return _turn([_buttons(body, [(f"{PREFIX}cat", "Voir le catalogue"), HUMAN_BUTTON])])
+
+
+RESTO_TRACK = {
+    "CANCELLED": "annulée",
+    "PREPARING": "enregistrée : le restaurant la prépare",
+    "READY_PICKUP": "prête : vous pouvez venir la chercher",
+    "READY_DINE_IN": "prête : on vous l'apporte à table",
+    "READY_DELIVERY": "prête : elle part bientôt en livraison",
+    "ON_THE_WAY": "en route : le livreur arrive",
+    "DELIVERED_PICKUP": "retirée",
+    "DELIVERED_DINE_IN": "servie",
+    "DELIVERED_DELIVERY": "livrée",
+    "FAILED": "pas encore livrée : le restaurant vous recontacte",
+}
+
+
+def _resto_track(tu, order, step, state):
+    from app.services.guided_flow import PREFIX
+    from app.services.order_emails import _money as money
+
+    mode = order.fulfillment or "PICKUP"
+    if state == "CANCELLED" or step == "CANCELLED":
+        key = "CANCELLED"
+    elif step == "READY":
+        key = f"READY_{mode}"
+    elif step in ("PICKED_UP", "IN_TRANSIT"):
+        key = "ON_THE_WAY" if mode == "DELIVERY" else f"READY_{mode}"
+    elif step == "DELIVERED":
+        key = f"DELIVERED_{mode}"
+    elif step == "FAILED":
+        key = "FAILED"
+    else:
+        key = "PREPARING"
+    text = RESTO_TRACK.get(key, "enregistrée")
+    if tu:
+        text = text.replace("vous pouvez", "tu peux").replace("on vous l'apporte", "on te l'apporte").replace("vous recontacte", "te recontacte")
+    when = " (commande pour plus tard)" if getattr(order, "scheduled_for", None) is not None and key == "PREPARING" else ""
+    body = f"Commande n° {_ref(order)} ({money(order.total_amount, order.currency)}) : {text}{when}."
+    return _turn([_buttons(body, [(f"{PREFIX}cat", "Voir la carte"), (f"{PREFIX}human", "Parler au restaurant")])])
 
 
 # --- Messages écrits attendus (quantité, adresse) et mots-clés -------------------------------------------------------

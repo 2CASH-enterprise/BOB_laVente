@@ -30,7 +30,8 @@ from app.services.business_type import APPOINTMENT_SECTORS, INSURANCE_BROKER
 
 logger = logging.getLogger(__name__)
 
-KINDS = ("conversations", "appointments", "outcomes", "orders", "callbacks", "quotes", "renewals", "complaints")
+KINDS = ("conversations", "appointments", "outcomes", "orders", "kitchen", "callbacks", "quotes", "renewals", "complaints")
+KITCHEN_NOTICE = timedelta(minutes=45)  # lot 108 : commande pour plus tard, le restaurant est prévenu 45 min avant
 DEALERSHIP_ONLY = frozenset({"appointments", "outcomes"})  # secteurs à rendez-vous (concession, courtier)
 STORE_ONLY = frozenset({"orders"})
 INSURANCE_ONLY = frozenset({"quotes", "renewals", "complaints"})  # lots 53, 55, 57 : cotations, échéances, réclamations
@@ -41,6 +42,7 @@ TITLES = {
     "complaints": "Nouvelle réclamation à traiter",  # lot 57 : juste après un client qui attend
     "appointments": "Nouveau rendez-vous à confirmer",
     "orders": "Nouvelle commande",
+    "kitchen": "Commande pour plus tard à préparer",  # lot 108
     "callbacks": "Client à rappeler",
     "outcomes": "Rendez-vous passé : issue à indiquer",
     "quotes": "Nouvelle demande de cotation",
@@ -130,6 +132,22 @@ async def task_counts(db, tenant, now: datetime | None = None) -> dict:
         counts["orders"] = (await db.execute(select(func.count(Order.id)).where(
             Order.tenant_id == tenant_id, Order.status == OrderStatus.PENDING,
         ))).scalar_one()
+        from app.services.business_type import is_restaurant
+
+        if is_restaurant(tenant):  # lot 108 : réservations à confirmer et commandes pour plus tard à lancer
+            from app.models.delivery import Delivery, DeliveryStatus
+
+            requested = (await db.execute(select(AppointmentRequest.conversation_id).where(
+                AppointmentRequest.tenant_id == tenant_id, AppointmentRequest.status == STATUS_REQUESTED,
+            ))).scalars().all()
+            counts["appointments"] = sum(1 for c in requested if c not in waiting)
+            counts["kitchen"] = (await db.execute(
+                select(func.count(Order.id)).outerjoin(Delivery, Delivery.order_id == Order.id).where(
+                    Order.tenant_id == tenant_id, Order.status != OrderStatus.CANCELLED,
+                    Order.scheduled_for.is_not(None), Order.scheduled_for <= now + KITCHEN_NOTICE,
+                    Order.scheduled_for > now - timedelta(hours=3),
+                    (Delivery.id.is_(None)) | (Delivery.status == DeliveryStatus.PENDING),
+                ))).scalar_one()
 
     counts["total"] = sum(counts[k] for k in KINDS)
     return counts

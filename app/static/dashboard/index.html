@@ -1152,6 +1152,20 @@
         <div id="qr-codes-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
         <div id="qr-codes-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px;"></div>
       </div>
+
+      <div class="card restaurant-only" style="margin-top: 24px;" id="table-qr-card">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">QR codes des tables<button class="tip"></button><span class="tip-bubble" hidden>Un QR code par table. Le client le scanne : WhatsApp s'ouvre avec le numéro de sa table, et Bob sait qu'il commande sur place, à cette table. Il n'a rien à écrire. Une table déjà créée garde son QR code : rien à réimprimer.</span></div>
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 12px;">Créez vos tables d'un coup. Chaque table a son QR code, qui ne change jamais.</p>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+          <label for="table-first" style="font-size: 13px;">De la table</label>
+          <input id="table-first" class="input" type="number" min="1" max="999" value="1" style="width: 80px; margin: 0;">
+          <label for="table-last" style="font-size: 13px;">à la table</label>
+          <input id="table-last" class="input" type="number" min="1" max="999" value="10" style="width: 80px; margin: 0;">
+          <button class="action" onclick="createTableQrs()" style="white-space: nowrap;">Créer les QR des tables</button>
+        </div>
+        <div id="table-qr-msg" style="font-size: 13px; margin-bottom: 10px;"></div>
+        <div id="table-qr-list" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+      </div>
     </section>
 
     <section id="tab-quotes" class="hidden">
@@ -4655,6 +4669,7 @@ async function loadProducts() {
     )
     .join("") || "<tr><td colspan='7'>Aucun produit</td></tr>";
   loadQrCodes();
+  if (currentBusinessType === "RESTAURANT") loadTableQrs();  // lot 108
   if (currentBusinessType === "REAL_ESTATE") loadPropertyAlerts();  // lot 80
 }
 
@@ -5261,6 +5276,66 @@ async function createQrCode() {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
   }
+}
+
+// Lot 108 — QR codes des tables du restaurant.
+async function loadTableQrs() {
+  const list = document.getElementById("table-qr-list");
+  if (!list) return;
+  let tables = [];
+  try { tables = await api("/api/v1/table-qr-codes"); } catch (e) { list.textContent = e.message; return; }
+  if (!tables.length) {
+    list.innerHTML = "<p style='color: var(--muted); font-size: 13px; margin: 0;'>Aucune table pour le moment.</p>";
+    return;
+  }
+  list.innerHTML = tables.map((t) => {
+    const url = window.location.origin + API_BASE + t.short_path;
+    return `<div class="table-qr" style="border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; align-items: center;">
+      <strong>Table ${esc(t.label)}</strong><span style="color: var(--muted); font-size: 12px;">${t.scan_count} scan${t.scan_count > 1 ? "s" : ""}</span>
+      <button class="action" style="font-size: 11px; padding: 4px 8px;" onclick="downloadTableQr(${jsArg(t.id)}, ${jsArg(t.label)})">Télécharger le QR</button>
+      <button class="action secondary" style="font-size: 11px; padding: 4px 8px;" onclick="copyQrLink(${jsArg(url)})">Copier le lien</button>
+      <button class="action secondary" style="font-size: 11px; padding: 4px 8px;" aria-label="Supprimer la table ${esc(t.label)}" onclick="deleteTableQr(${jsArg(t.id)}, ${jsArg(t.label)})">Supprimer</button>
+    </div>`;
+  }).join("");
+}
+
+async function downloadTableQr(id, label) {
+  try {
+    const r = await fetch(API_BASE + `/api/v1/table-qr-codes/${encodeURIComponent(id)}/qr.svg`, { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) throw new Error("QR code indisponible pour le moment.");
+    const url = URL.createObjectURL(new Blob([await r.text()], { type: "image/svg+xml" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `qr-table-${label}.svg`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function createTableQrs() {
+  const msg = document.getElementById("table-qr-msg");
+  const first = parseInt(document.getElementById("table-first").value, 10);
+  const last = parseInt(document.getElementById("table-last").value, 10);
+  try {
+    const before = document.querySelectorAll("#table-qr-list .table-qr").length;
+    const tables = await api("/api/v1/table-qr-codes", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ first, last }) });
+    const created = tables.length - before;
+    msg.style.color = "var(--success)";
+    msg.textContent = created > 0 ? `${created} table${created > 1 ? "s" : ""} créée${created > 1 ? "s" : ""}.` : "Ces tables existent déjà.";
+  } catch (e) {
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+  loadTableQrs();
+}
+
+async function deleteTableQr(id, label) {
+  if (!(await bobConfirm(`Supprimer la table ${label} ?`, "Si son QR code est déjà imprimé, il ne fonctionnera plus.", { confirmLabel: "Supprimer", danger: true }))) return;
+  try {
+    await api(`/api/v1/table-qr-codes/${id}`, { method: "DELETE" });
+    toast("Table supprimée.");
+  } catch (e) { toast(e.message, "error"); }
+  loadTableQrs();
 }
 
 async function deleteQrCode(id) {
@@ -7616,6 +7691,16 @@ const DELIVERY_STATUSES = ["PENDING", "CONFIRMED", "PICKED_UP", "IN_TRANSIT", "D
 var DELIVERY_LABELS = { PENDING: "En préparation", CONFIRMED: "Confirmée", PICKED_UP: "Remise au livreur", IN_TRANSIT: "En route",
   DELIVERED: "Livrée", FAILED: "Échec de livraison", CANCELLED: "Annulée" };
 
+// Lot 108 — restaurant : les étapes selon le mode (« Prête » prévient le client).
+function restaurantSteps(mode) {
+  if (mode === "DELIVERY") {
+    return [["PENDING", "En préparation"], ["READY", "Prête"], ["PICKED_UP", "Remise au livreur"], ["IN_TRANSIT", "En route"],
+      ["DELIVERED", "Livrée"], ["FAILED", "Échec de livraison"], ["CANCELLED", "Annulée"]];
+  }
+  return [["PENDING", "En préparation"], ["READY", "Prête"], ["DELIVERED", mode === "DINE_IN" ? "Servie" : "Retirée"],
+    ["CANCELLED", "Annulée"]];
+}
+
 const STALE_ORDER_DAYS = 7;
 
 function staleOrderNotice(order) {
@@ -7757,9 +7842,12 @@ async function renderDeliveryPanel(orderId) {
   panel.innerHTML = "Chargement…";
   const order = await api(`/api/v1/orders/${orderId}`);
 
-  const options = DELIVERY_STATUSES.map(
-    (s) => `<option value="${s}" ${s === order.delivery_status ? "selected" : ""}>${DELIVERY_LABELS[s]}</option>`
+  const resto = currentBusinessType === "RESTAURANT";  // lot 108 : « Prête », puis retirée, servie ou livrée
+  const steps = resto ? restaurantSteps(order.fulfillment) : DELIVERY_STATUSES.map((s) => [s, DELIVERY_LABELS[s]]);
+  const options = steps.map(
+    ([s, label]) => `<option value="${s}" ${s === order.delivery_status ? "selected" : ""}>${label}</option>`
   ).join("");
+  const carrier = !resto || order.fulfillment === "DELIVERY";
 
   const variants = (order.items || []).filter((i) => i.variant_label).map((i) => `${esc(i.variant_label)} × ${i.quantity}`);
   const fee = order.delivery_fee !== null && order.delivery_fee !== undefined && Number(order.delivery_fee) > 0
@@ -7773,11 +7861,11 @@ async function renderDeliveryPanel(orderId) {
   panel.innerHTML = `${summary}
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; max-width: 760px; margin-bottom: 8px;">
       <select id="delivery-status-${orderId}" class="input" aria-label="Étape de la livraison">${options}</select>
-      <input id="delivery-tracking-${orderId}" class="input" placeholder="N° de suivi" value="${esc(order.tracking_number || "")}">
-      <input id="delivery-provider-${orderId}" class="input" placeholder="Transporteur">
-      <input id="delivery-date-${orderId}" class="input" type="date" aria-label="Livraison prévue le" title="Livraison prévue le">
+      <input id="delivery-tracking-${orderId}" class="input${carrier ? "" : " hidden"}" placeholder="N° de suivi" value="${esc(order.tracking_number || "")}">
+      <input id="delivery-provider-${orderId}" class="input${carrier ? "" : " hidden"}" placeholder="${resto ? "Livreur" : "Transporteur"}">
+      <input id="delivery-date-${orderId}" class="input${resto ? " hidden" : ""}" type="date" aria-label="Livraison prévue le" title="Livraison prévue le">
     </div>
-    <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 8px;"><input type="checkbox" id="delivery-notify-${orderId}" checked> Prévenir le client quand la commande part, puis quand elle est livrée</label>
+    <label style="display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 8px;"><input type="checkbox" id="delivery-notify-${orderId}" checked> ${resto ? (order.fulfillment === "DELIVERY" ? "Prévenir le client quand la commande est prête, puis quand elle part et quand elle est livrée" : "Prévenir le client quand la commande est prête") : "Prévenir le client quand la commande part, puis quand elle est livrée"}</label>
     <button class="action" onclick="saveDelivery(${jsArg(orderId)})">Enregistrer</button>
     <span id="delivery-msg-${orderId}" style="margin-left: 10px; font-size: 13px;"></span>
   `;
@@ -7799,7 +7887,7 @@ async function saveDelivery(orderId) {
       body: JSON.stringify(payload),
     });
     msg.style.color = "var(--success)";
-    const step = res.notified_step === "SHIPPED" ? "commande en route" : "commande livrée";
+    const step = res.notified_step === "READY" ? "commande prête" : res.notified_step === "SHIPPED" ? "commande en route" : "commande livrée";
     msg.textContent = res.notified_by ? `Enregistré · client prévenu (${step}) par ${res.notified_by === "EMAIL" ? "email" : "WhatsApp"}.`
       : (res.notified_step ? "Enregistré · client non prévenu (pas de WhatsApp possible ni d'email)." : "Enregistré.");
   } catch (e) {
@@ -7892,7 +7980,7 @@ async function revokeAllSessions() {
 // ---- Lot 37b : tâches à faire (pastille rouge) et notifications ----
 // Nombre = ce qu'il reste à faire ; il baisse quand la tâche est faite, pas quand elle est vue.
 var TASK_NAV = {  // rubrique du menu → types de tâches
-  overview: ["callbacks"], conversations: ["conversations"], orders: ["orders"], appointments: ["appointments", "outcomes"],
+  overview: ["callbacks"], conversations: ["conversations"], orders: ["orders", "kitchen"], appointments: ["appointments", "outcomes"],
   quotes: ["quotes"],  // lot 53
   contracts: ["renewals"],  // lot 55
   complaints: ["complaints"],  // lot 57
@@ -7983,13 +8071,14 @@ var TASK_ALERT_LABELS = {  // [une, plusieurs] — même ordre de priorité que 
   complaints: ["Nouvelle réclamation à traiter", (n) => `${n} réclamations à traiter`],
   appointments: ["Nouveau rendez-vous à confirmer", (n) => `${n} nouveaux rendez-vous à confirmer`],
   orders: ["Nouvelle commande", (n) => `${n} nouvelles commandes`],
+  kitchen: ["Commande pour plus tard à préparer", (n) => `${n} commandes pour plus tard à préparer`],  // lot 108
   callbacks: ["Client à rappeler", (n) => `${n} clients à rappeler`],
   outcomes: ["Rendez-vous passé : issue à indiquer", (n) => `${n} rendez-vous passés : issue à indiquer`],
   quotes: ["Nouvelle demande de cotation", (n) => `${n} nouvelles demandes de cotation`],
   renewals: ["Échéance de contrat à préparer", (n) => `${n} échéances de contrat à préparer`],
 };
 var TASK_ALERT_TAB = { conversations: "conversations", appointments: "appointments", outcomes: "appointments",
-  orders: "orders", callbacks: "overview", quotes: "quotes", renewals: "contracts", complaints: "complaints" };
+  orders: "orders", kitchen: "orders", callbacks: "overview", quotes: "quotes", renewals: "contracts", complaints: "complaints" };
 var SOUND_GAP_MS = 10000;  // au plus un son toutes les 10 secondes, tous onglets confondus
 var lastTaskCounts = null;   // null = premier relevé depuis l'ouverture : il sert de référence, sans alerte
 var pendingAlert = {};       // nouvelles tâches pas encore vues dans la fenêtre ouverte

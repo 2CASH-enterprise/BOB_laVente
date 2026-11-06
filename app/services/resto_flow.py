@@ -133,7 +133,48 @@ def _photo(product) -> str | None:
     return product.image_url.strip() if has_sendable_photo(product) else None
 
 
+SEATED_HOURS = 3  # lot 108 : après le scan du QR d'une table, le client y est assis pendant 3 h
+
+
+def _seated(cart) -> str | None:
+    """Numéro de la table scannée il y a moins de 3 h (QR posé sur la table), sinon None."""
+    meta = _meta(cart) if cart is not None else {}
+    try:
+        since = datetime.fromisoformat(meta.get("seated") or "")
+    except ValueError:
+        return None
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    return meta.get("table") if meta.get("table") and _now() - since < timedelta(hours=SEATED_HOURS) else None
+
+
+def _kept(cart) -> dict | None:
+    """Ce qui reste après une commande ou un panier vidé : la table, tant que le client y est assis."""
+    meta = _meta(cart)
+    return {"table": meta["table"], "seated": meta["seated"]} if _seated(cart) else None
+
+
+async def at_table(db, tenant, tu, customer, label: str):
+    """Lot 108 — le client a scanné le QR de sa table : sur place, table connue, sans rien écrire."""
+    from app.services import restaurant
+
+    if "DINE_IN" not in restaurant.modes(tenant):  # « Sur place » coupé dans les réglages : l'accueil habituel
+        return await welcome(db, tenant, tu, customer)
+    cart = await _cart(db, tenant, customer, create=True)
+    _set_meta(cart, table=" ".join(str(label).split())[:8].upper(), seated=_now().isoformat(), later=None)
+    return await welcome(db, tenant, tu, customer)
+
+
 async def welcome(db, tenant, tu, customer=None):
+    table = _seated(await _cart(db, tenant, customer)) if customer is not None else None
+    if table:
+        rows = [(f"{PREFIX}fc", "Commander", None), (f"{PREFIX}fv", "Voir la carte", None)]
+        if await _has_items(db, tenant, customer):
+            rows.append((f"{PREFIX}fk", "Mon panier", None))
+        rows.append((HUMAN[0], "Appeler un serveur", None))
+        body = (f"Bienvenue chez *{tenant.name}* ! " + _you(tu, f"Vous êtes à la *table {table}*.", f"Tu es à la *table {table}*.")
+                + " " + _you(tu, "Que souhaitez-vous faire ?", "Que veux-tu faire ?"))
+        return _turn([{"type": "list", "body": body, "button": "Choisir", "rows": rows}])
     rows = [(f"{PREFIX}fc", "Commander", None),
             (f"{PREFIX}fb", "Réserver une table", None),
             (f"{PREFIX}fv", "Voir la carte", None)]
@@ -377,7 +418,7 @@ async def show(db, tenant, tu, customer, notes=None, added=False):
 async def clear(db, tenant, tu, customer):
     cart = await _cart(db, tenant, customer)
     if cart is not None:
-        _touch(cart, items=[], fulfillment=None, address=None, awaiting=None, meta=None)
+        _touch(cart, items=[], fulfillment=None, address=None, awaiting=None, meta=_kept(cart))
     return _turn([_buttons(_you(tu, "Votre panier est vidé.", "Ton panier est vidé."), [(f"{PREFIX}fv", "Voir la carte"), HUMAN])])
 
 
@@ -476,6 +517,8 @@ async def order(db, tenant, tu, customer):
     modes = restaurant.modes(tenant)
     if not modes:
         return _turn([_buttons("Le restaurant ne prend pas de commande sur WhatsApp pour le moment.", [HUMAN])])
+    if "DINE_IN" in modes and _seated(cart):  # lot 108 : QR de la table, ni mode ni numéro à demander
+        return await choose_mode(db, tenant, tu, customer, "DINE_IN")
     if len(modes) == 1:
         return await choose_mode(db, tenant, tu, customer, modes[0])
     buttons = [(f"{PREFIX}fm:{MODE_BUTTONS[m][0]}", MODE_BUTTONS[m][1]) for m in modes]
@@ -713,7 +756,7 @@ async def validate(db, tenant, tu, customer, conversation):
             scheduled_for=later.astimezone(timezone.utc) if later else None)
     except OrderCreationError as exc:
         return _turn([_buttons(f"{exc.message}.", [(f"{PREFIX}fk", "Voir mon panier"), HUMAN])])
-    _touch(cart, items=[], fulfillment=None, address=None, awaiting=None, meta=None)
+    _touch(cart, items=[], fulfillment=None, address=None, awaiting=None, meta=_kept(cart))
     text = generate_order_confirmation_text(created, await get_order_item_lines(db, created.id, created.currency), tenant.name,
                                             tenant.payment_link if pay == "k" else None, tu=tu,
                                             pay_on=None if pay == "k" else PAYMENTS[pay].lower())
@@ -947,6 +990,11 @@ async def _tap(db, tenant, tu, customer, conversation, action, parts):  # noqa: 
     if action == "menu":
         return await welcome(db, tenant, tu, customer)
     if action == "human":
+        table = _seated(await _cart(db, tenant, customer)) if customer is not None else None
+        if table:  # lot 108 : à table, « Appeler un serveur »
+            return _turn(handoff=True, handoff_reason=f"Table {table} : le client appelle un serveur",
+                         handoff_text=_you(tu, f"Je préviens l'équipe : quelqu'un vient vous voir à la table {table}.",
+                                           f"Je préviens l'équipe : quelqu'un vient te voir à la table {table}."))
         return _turn(handoff=True, handoff_text=_you(tu, "Je préviens le restaurant : il vous répond ici dès que possible.",
                                                      "Je préviens le restaurant : il te répond ici dès que possible."))
     if action in ("fv", "cat"):  # « cat » : boutons communs (suivi, livraison reçue, reçu)

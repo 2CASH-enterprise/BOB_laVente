@@ -80,4 +80,5 @@ from app.models.catalog_import import CatalogImport  # noqa: F401 — lot 88
 from app.models.naomy import (AssistantMessage, AssistantOutbox, NaomyConnection, NaomyEvent, NaomyPairingCode,  # noqa: F401 — lots 89, 92
                               NaomyPairingRequest, NaomyReminder)
 from app.models.cart import Cart  # noqa: F401 — lot 95
+from app.models.table_qr_code import TableQrCode  # noqa: F401 — lot 108
 from app.services import naomy_bridge as _naomy_bridge  # noqa: F401,E402 — lot 89 : événements Naomy détectés à chaque enregistrement

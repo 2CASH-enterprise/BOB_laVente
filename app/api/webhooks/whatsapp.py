@@ -67,9 +67,9 @@ router = APIRouter(prefix="/webhooks/whatsapp", tags=["webhooks"])
 settings = get_settings()
 
 HISTORY_LIMIT = 20  # section 13 — mémoire conversationnelle, fenêtre raisonnable
-# Référence technique cachée en fin de message : [QR:code] (QR produit) ou [W:code]
-# (lien/widget traçable). Toujours retirée ; utilisée pour l'attribution au premier contact.
-TRACKING_REFERENCE_PATTERN = re.compile(r"\s*\[(QR|W):([A-Za-z0-9_-]+)\]\s*$")
+# Référence technique cachée en fin de message : [QR:code] (QR produit), [W:code] (lien/widget traçable) ou
+# [T:code] (QR d'une table de restaurant, lot 108). Toujours retirée ; utilisée pour l'attribution au premier contact.
+TRACKING_REFERENCE_PATTERN = re.compile(r"\s*\[(QR|W|T):([A-Za-z0-9_-]+)\]\s*$")
 
 
 
@@ -242,6 +242,9 @@ async def receive_webhook(
                 product = await db.get(Product, qr.product_id)
                 customer.acquisition_source = "QR"
                 customer.acquisition_detail = f"Produit scanné : {product.name}" if product else None
+        elif kind == "T" and entry is not None and is_new_customer and referral is None:  # lot 108 : QR d'une table
+            customer.acquisition_source = "QR"
+            customer.acquisition_detail = f"Table {entry['table']}"
         elif kind == "W":
             cp_stmt = select(ContactPoint).where(ContactPoint.tenant_id == tenant_id, ContactPoint.code == code)
             contact_point = (await db.execute(cp_stmt)).scalar_one_or_none()
@@ -810,6 +813,12 @@ INTEREST_PREFIX = "Bonjour, je suis intéressé(e) par : "
 
 async def _entry_of(db, tenant_id, kind: str, code: str, text: str) -> dict | None:
     """Lot 101 — ce qu'un QR code ou un lien de Bob a ouvert : un produit précis, ou l'accueil de la boutique."""
+    if kind == "T":  # lot 108 : la table du restaurant
+        from app.models.table_qr_code import TableQrCode
+
+        table = (await db.execute(select(TableQrCode).where(TableQrCode.tenant_id == tenant_id,
+                                                            TableQrCode.code == code))).scalar_one_or_none()
+        return {"table": table.label} if table is not None else None
     if kind == "QR":
         qr = (await db.execute(select(ProductQrCode).where(ProductQrCode.tenant_id == tenant_id,
                                                            ProductQrCode.code == code))).scalar_one_or_none()

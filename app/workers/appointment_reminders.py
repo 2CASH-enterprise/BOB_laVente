@@ -114,13 +114,14 @@ async def _send_all(factory, now: datetime, send, send_whatsapp=None, send_templ
                             report["whatsapp"] += 1
                         else:
                             report["failed"] += 1
-                    elif await send_template(db, tenant, customer, conversation, "rdv_rappel",
+                    elif appointment.kind != "TABLE" and await send_template(db, tenant, customer, conversation, "rdv_rappel",
                                              appointment_service.reminder_template_values(appointment, tenant, customer, zone),
                                              message_type="appointment_reminder"):
                         # Lot 68 — fenêtre fermée : le modèle approuvé par Meta (l'email part aussi, ci-dessous).
                         appointment.customer_whatsapp_reminder_sent_at = now
                         report["whatsapp"] += 1
-                if due.customer:
+                table_reminded = appointment.kind == "TABLE" and appointment.customer_whatsapp_reminder_sent_at is not None
+                if due.customer and not table_reminded:  # lot 108 : une table, un seul rappel (WhatsApp, sinon email)
                     subject, body = appointment_service.customer_reminder_email(appointment, tenant.name, zone,
                                                                                 powered_by=not tenant.is_paid)
                     if send(to=customer.email, subject=subject, body=body, from_name=tenant.name, reply_to=tenant.email):

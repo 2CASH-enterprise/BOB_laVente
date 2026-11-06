@@ -11,6 +11,7 @@ from app.core.database import Base
 class DeliveryStatus(StrEnum):
     PENDING = "PENDING"
     CONFIRMED = "CONFIRMED"
+    READY = "READY"  # lot 108 : restaurant, commande prête (à emporter, sur place, ou avant le livreur)
     PICKED_UP = "PICKED_UP"
     IN_TRANSIT = "IN_TRANSIT"
     DELIVERED = "DELIVERED"
@@ -40,6 +41,7 @@ class Delivery(Base):
     # Lot 68 — client prévenu (une seule fois par étape) : commande en route, puis livrée.
     shipped_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivered_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ready_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # lot 108
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
