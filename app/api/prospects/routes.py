@@ -40,6 +40,9 @@ PREVIEW_TEXTS = {
     "INSURANCE_BROKER": ("Bob, l'assistant WhatsApp de votre cabinet",
                          "Il qualifie le besoin, prépare la demande de cotation et propose un rendez-vous, sans jamais "
                          "donner de prix. Essayez-le en 30 secondes."),
+    "RESTAURANT": ("Bob et Naomy, l'équipe de votre restaurant",  # lot 109
+                   "Naomy publie votre plat du jour sur vos réseaux, Bob prend les commandes et réserve les tables sur "
+                   "WhatsApp, 24 h / 24. Essayez Bob en 30 secondes."),
     "REAL_ESTATE": ("Bob, l'assistant WhatsApp de votre agence immobilière",
                     "Il présente vos biens, qualifie acheteurs, locataires et propriétaires, et fixe visites et "
                     "estimations, même le soir et le week-end. Essayez-le en 30 secondes."),

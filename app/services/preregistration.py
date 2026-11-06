@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, REAL_ESTATE, normalize
+from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_STORE, REAL_ESTATE, RESTAURANT, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,13 @@ CONTENT = {
                  "Il ne demande jamais de pièce interdite au dossier locataire et vous passe la main au bon moment."],
         "products": "La liste de vos biens (Excel ou CSV) : type, vente ou location, ville, surface, pièces, prix, photo si possible.",
     },
+    RESTAURANT: {  # lot 109
+        "does": ["Il répond sur WhatsApp à chaque client, même pendant le coup de feu.",
+                 "Il présente votre carte avec les prix, les accompagnements et les allergènes que vous indiquez.",
+                 "Il prend les commandes (à emporter, en livraison, sur place) et réserve les tables.",
+                 "Avec Naomy, qui publie votre plat du jour sur vos réseaux sociaux, les clients arrivent directement chez Bob."],
+        "products": "Votre carte (Excel ou CSV, ou une photo de la carte) : plats, prix, accompagnements, photo si possible.",
+    },
 }
 GAINS = ["Plus aucun client sans réponse : Bob est là 24 h / 24, 7 jours sur 7.",
          "Du temps rendu à votre équipe : les questions répétitives sont traitées par Bob.",
@@ -160,9 +167,11 @@ def content(sector: str | None) -> dict:
         "offer": OFFER_TEXT,
         "signature": "L'équipe de Bob",
         "products_label": {ONLINE_STORE: "Fichier de vos produits", CAR_DEALERSHIP: "Liste de vos véhicules",
-                           INSURANCE_BROKER: "Liste de vos contrats", REAL_ESTATE: "Liste de vos biens"}[sector],
+                           INSURANCE_BROKER: "Liste de vos contrats", REAL_ESTATE: "Liste de vos biens",
+                           RESTAURANT: "Votre carte"}[sector],
         "size_label": {ONLINE_STORE: "Nombre de produits", CAR_DEALERSHIP: "Nombre de véhicules",
-                       INSURANCE_BROKER: "Nombre de contrats", REAL_ESTATE: "Nombre de biens"}[sector],
+                       INSURANCE_BROKER: "Nombre de contrats", REAL_ESTATE: "Nombre de biens",
+                       RESTAURANT: "Nombre de plats"}[sector],
     }
 
 
@@ -207,6 +216,30 @@ def example_home(sector: str | None, first_name: str | None, currency: str | Non
                     {"kind": "ORDER", "title": "Nouvelle commande", "detail": "Yao Kouassi · 2 articles · 28 500", "at": ago(hours=2)},
                     {"kind": "CUSTOMER", "title": "Nouveau client", "detail": "Mariam Traoré · venue d'une publicité Facebook", "at": ago(hours=3)},
                     {"kind": "ORDER", "title": "Commande relancée par Bob, puis vendue", "detail": "Koffi N'Guessan · 19 000", "at": ago(hours=6)},
+                ]}
+    if sector == RESTAURANT:  # lot 109 : même forme que l'accueil d'une boutique (commandes, ventes)
+        return {**base,
+                "kpis": {"paid": {"value": 1_865_000.0, "delta_pct": 21.0},
+                         "pending": {"value": 54_500.0, "count": 9},
+                         "conversion": {"value": 41.2, "delta_points": 5.1, "paid": 312, "terminated": 757},
+                         "conversations": {"value": 812, "delta_pct": 26.0, "bob_only": 768}},
+                "todo": [
+                    {"kind": "ORDER", "customer": "Awa Koné", "reason": "Commande à préparer", "tone": "warning",
+                     "detail": "2 poulets braisés (alloco) · livraison à Cocody · 10 000", "since": ago(minutes=6),
+                     "action": "Voir la commande"},
+                    {"kind": "CONVERSATION", "conversation_id": None, "customer": "Yao Kouassi", "reason": "Demande un humain",
+                     "tone": "danger", "detail": "Table 7 : le client appelle un serveur", "since": ago(minutes=2),
+                     "action": "Répondre", "hot": True}],
+                "funnel": [{"key": "conversations", "label": "Conversations", "value": 812},
+                           {"key": "opportunities", "label": "Clients intéressés", "value": 486},
+                           {"key": "orders", "label": "Commandes", "value": 357},
+                           {"key": "paid", "label": "Payées", "value": 312}],
+                "daily": _days(now, [round(n * 1.8) for n in _COUNTS], set(range(0, 30, 1)), {4, 5, 11, 12, 18, 19, 25, 26}),
+                "activity": [
+                    {"kind": "ORDER", "title": "Nouvelle commande", "detail": "Awa Koné · 2 plats · 10 000", "at": ago(minutes=6)},
+                    {"kind": "APPOINTMENT", "title": "Table réservée", "detail": "Mariam Traoré · 6 personnes · samedi 20 h", "at": ago(minutes=48)},
+                    {"kind": "CUSTOMER", "title": "Nouveau client", "detail": "Koffi N'Guessan · venu d'une publication de Naomy", "at": ago(hours=2)},
+                    {"kind": "PAYMENT", "title": "Commande payée", "detail": "Fatou Diallo · 7 500", "at": ago(hours=3)},
                 ]}
     if sector == CAR_DEALERSHIP:
         return {**base,

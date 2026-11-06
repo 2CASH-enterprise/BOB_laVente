@@ -714,7 +714,7 @@ def test_instant_demo_page_offers_the_cabinet():
     choose = _function("chooseSector", DEMO_HTML)
     assert 'document.getElementById("catalog-field").classList.toggle("hidden", !!sector.noCatalog);' in choose
     create = _function("createDemo", DEMO_HTML.replace("async function createDemo", "function createDemo"))
-    assert 'if (noCatalog) formData.append("insurance_structure"' in create
+    assert 'if (selectedSector === "INSURANCE_BROKER") formData.append("insurance_structure"' in create  # lot 109 : le restaurant n'a pas de statut
     assert "if (!selectedFile && !noCatalog)" in create
     assert '"J\'ai déjà une assurance, mon contrat finit dans 10 jours"' in DEMO_HTML and "bientôt" not in DEMO_HTML
 

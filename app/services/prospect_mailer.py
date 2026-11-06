@@ -41,6 +41,21 @@ STOP_WORDS = re.compile(r"\b(stop|d[ée]sinscri\w*|d[ée]sabonn\w*|ne plus (me )
 AUTO_SUBJECTS = re.compile(r"^(r[ée]ponse automatique|automatic reply|auto[- ]?reply|out of office|absent|absence)", re.I)
 
 DEFAULTS = {
+    "RESTAURANT": [  # lot 109 : l'équipe Bob + Naomy, sans prix
+        ("{entreprise} : vos clients attirés sur les réseaux, servis sur WhatsApp",
+         "{bonjour},\n\nVos clients vous découvrent sur les réseaux sociaux et vous commandent sur WhatsApp, souvent "
+         "pendant le coup de feu, quand personne n'a le temps de répondre.\n\nNous proposons une équipe de deux agents. "
+         "Naomy, notre community manager intelligente, crée et publie votre plat du jour sur vos réseaux. Bob, notre serveur "
+         "virtuel, répond aussitôt sur WhatsApp : il présente la carte, prend la commande (à emporter, livraison, sur place) "
+         "et réserve les tables.\n\nVous pouvez essayer Bob en 2 minutes avec une carte d'exemple :\n{lien}\n\nBonne journée,"),
+        ("Re : le plat du jour de {entreprise}",
+         "{bonjour},\n\nJe reviens vers vous : un client qui voit votre plat du jour à midi et n'obtient pas de réponse "
+         "commande souvent ailleurs.\n\nNaomy publie, Bob répond et prend la commande, même aux heures de pointe :\n{lien}"
+         "\n\nBonne journée,"),
+        ("Dernier message de ma part",
+         "{bonjour},\n\nC'est mon dernier message : si ce n'est pas le bon moment, aucun souci.\n\nLa démo de Bob pour "
+         "votre restaurant reste ouverte :\n{lien}\n\nBelle continuation,"),
+    ],
     "ONLINE_STORE": [
         ("{entreprise} : vos clients WhatsApp servis 24 h / 24",
          "{bonjour},\n\nVos clients vous écrivent sur WhatsApp le soir, le week-end, pendant que vous servez au comptoir… "

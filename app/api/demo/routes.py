@@ -89,6 +89,13 @@ async def create_demo(
 
         await prospection.attach(db, request, UUID(created.tenant_id), "DEMO")
         return created
+    if business_type == "RESTAURANT" and (file is None or not file.filename):
+        # Lot 109 — démo restaurant : une carte d'exemple prête (plats, accompagnements, livraison, tables).
+        created = await _create_restaurant_demo(db, company_name, currency, country)
+        from app.services import prospection
+
+        await prospection.attach(db, request, UUID(created.tenant_id), "DEMO")
+        return created
     if file is None or not file.filename:
         raise HTTPException(status_code=400, detail="Un fichier catalogue (CSV) est requis")
 
@@ -184,6 +191,18 @@ async def _create_insurance_demo(db: AsyncSession, company_name: str, currency: 
     seeded = await insurance.seed_products(db, tenant)
     db.add(TenantAppointmentSettings(tenant_id=tenant.id, online_booking=True,
                                      opening_hours=DEMO_OPENING_HOURS, slot_minutes=30, capacity=1))
+    await db.commit()
+    demo_token = create_access_token(user_id=owner.id, tenant_id=tenant.id, role=owner.role.value)
+    return DemoCreateResponse(tenant_id=str(tenant.id), demo_token=demo_token, imported=seeded, updated=0, failed=0,
+                              available=seeded, unavailable=0)
+
+
+async def _create_restaurant_demo(db: AsyncSession, company_name: str, currency: str, country: str) -> DemoCreateResponse:
+    """Lot 109 — restaurant de démo : carte d'exemple, livraison par commune, sur place, réservation midi et soir."""
+    from app.services import restaurant_demo
+
+    tenant, owner = await _demo_owner(db, company_name, currency, country, "RESTAURANT")
+    seeded = await restaurant_demo.seed(db, tenant)
     await db.commit()
     demo_token = create_access_token(user_id=owner.id, tenant_id=tenant.id, role=owner.role.value)
     return DemoCreateResponse(tenant_id=str(tenant.id), demo_token=demo_token, imported=seeded, updated=0, failed=0,

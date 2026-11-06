@@ -136,6 +136,10 @@
           <span class="t">🏠 Agence immobilière <span style="font-weight: 400; color: #8a8f98; font-size: 0.9em;">(vente, location, gestion)</span></span>
           <span class="d">Bob présente vos biens, qualifie acheteurs, locataires et propriétaires, et fixe visites et estimations.</span>
         </button>
+        <button type="button" class="sector-option" onclick="chooseSector('RESTAURANT')">
+          <span class="t">🍽️ Restaurant <span style="font-weight: 400; color: #8a8f98; font-size: 0.9em;">(maquis, fast-food, traiteur)</span></span>
+          <span class="d">Bob présente votre carte, prend les commandes (à emporter, en livraison, sur place) et réserve les tables.</span>
+        </button>
         <button type="button" class="sector-option" onclick="chooseSector('INSURANCE_BROKER')">
           <span class="t">🛡️ Courtier / agent d'assurance</span>
           <span class="d">Bob qualifie le besoin, prépare la demande de cotation et propose un appel ou un rendez-vous. Jamais de prix.</span>
@@ -194,6 +198,9 @@
     <div class="stats">
       <div><div class="stat-value" id="stat-imported">0</div><div class="stat-label" id="stat-imported-label">PRODUITS IMPORTÉS</div></div>
       <div><div class="stat-value" id="stat-available">0</div><div class="stat-label">DISPONIBLES</div></div>
+    </div>
+    <div id="naomy-team" class="hidden" style="text-align: left; margin: 18px 0 4px; padding: 14px 16px; border-radius: 12px; background: #FFF8E1; font-size: 14px; line-height: 1.5;">
+      <strong>Avec Naomy, l'équipe est complète.</strong> Naomy, notre community manager intelligente, crée et publie votre plat du jour sur vos réseaux sociaux. Vos clients touchent le lien de la publication, WhatsApp s'ouvre, et Bob prend la commande ou réserve la table.
     </div>
     <button class="cta" onclick="startChat()">Discuter avec mon agent →</button>
   </div>
@@ -308,6 +315,18 @@ Local commercial en angle,1800,Belle vitrine,1,Local,Location,Lyon 6e,85,,E,Hono
       ["📅 Visite", "Je peux visiter samedi matin ?"],
     ],
   },
+  // Lot 109 — démo restaurant : pas de fichier, une carte d'exemple (Abidjan) est créée côté serveur.
+  RESTAURANT: {
+    label: "Restaurant", status: "● Serveur IA en ligne", company: "Maquis Chez Awa", items: "PLATS À LA CARTE",
+    noCatalog: true, ready: "Votre serveur IA est prêt !", team: true,
+    scenarios: [
+      ["🍗 Commander", "Bonsoir, je voudrais un poulet braisé avec de l'alloco, en livraison à Cocody"],
+      ["📅 Réserver", "Je voudrais réserver une table pour 4 samedi soir"],
+      ["🌶️ Allergies", "Le kedjenou est pimenté ? Il y a des arachides dedans ?"],
+      ["🕒 Horaires", "Vous êtes ouverts jusqu'à quelle heure ?"],
+      ["💳 Paiement", "Je peux payer à la livraison ?"],
+    ],
+  },
   // Lot 54 — démo courtier : pas de fichier, les produits d'assurance par défaut sont créés côté serveur.
   INSURANCE_BROKER: {
     label: "Courtier / agent d'assurance", status: "● Assistant IA en ligne", company: "Assur Conseil", items: "PRODUITS D'ASSURANCE",
@@ -350,11 +369,12 @@ function chooseSector(code) {
   const sector = SECTORS[code];
   document.getElementById("sector-label").textContent = sector.label;
   document.getElementById("company-name").placeholder = code === "CAR_DEALERSHIP" ? "Ex. Auto Plus Dakar"
-    : code === "INSURANCE_BROKER" ? "Ex. Assur Conseil Abidjan" : code === "REAL_ESTATE" ? "Ex. Agence du Parc" : "Ex. Boutique ABC";
+    : code === "INSURANCE_BROKER" ? "Ex. Assur Conseil Abidjan" : code === "REAL_ESTATE" ? "Ex. Agence du Parc"
+    : code === "RESTAURANT" ? "Ex. Maquis Chez Awa" : "Ex. Boutique ABC";
   // Lot 54 — courtier : statut à la place du fichier catalogue.
   document.getElementById("catalog-field").classList.toggle("hidden", !!sector.noCatalog);
   document.getElementById("sample-link").classList.toggle("hidden", !!sector.noCatalog);
-  document.getElementById("structure-field").classList.toggle("hidden", !sector.noCatalog);
+  document.getElementById("structure-field").classList.toggle("hidden", code !== "INSURANCE_BROKER");
   document.getElementById("sector-step").classList.add("hidden");
   document.getElementById("company-step").classList.remove("hidden");
   selectedFile = null;
@@ -381,7 +401,8 @@ fetch(API_BASE + "/api/v1/preregistration/public").then((r) => r.ok ? r.json() :
 // Lot 63 — lien personnel d'un prospect (…/demo/?secteur=concession&p=CODE) : la démo s'ouvre sur son secteur.
 (function presetSector() {
   try {
-    const SLUGS = { commerce: "ONLINE_STORE", concession: "CAR_DEALERSHIP", assurance: "INSURANCE_BROKER", immobilier: "REAL_ESTATE" };
+    const SLUGS = { commerce: "ONLINE_STORE", concession: "CAR_DEALERSHIP", assurance: "INSURANCE_BROKER", immobilier: "REAL_ESTATE",
+      restaurant: "RESTAURANT" };
     const value = new URLSearchParams(window.location.search).get("secteur") || "";
     const code = SLUGS[value.toLowerCase()] || value;
     if (code && SECTORS[code]) chooseSector(code);
@@ -443,8 +464,8 @@ async function createDemo() {
   formData.append("currency", currency);
   formData.append("country", country);
   formData.append("business_type", selectedSector);
-  if (noCatalog) formData.append("insurance_structure", document.getElementById("insurance-structure").value);
-  else formData.append("file", selectedFile);
+  if (selectedSector === "INSURANCE_BROKER") formData.append("insurance_structure", document.getElementById("insurance-structure").value);
+  else if (!noCatalog) formData.append("file", selectedFile);
 
   try {
     const res = await fetch(API_BASE + "/api/v1/demo/create", { method: "POST", body: formData });
@@ -460,7 +481,9 @@ async function createDemo() {
     document.getElementById("chat-company-name").textContent = companyName;
     const sector = SECTORS[selectedSector];
     document.getElementById("stat-imported-label").textContent = sector.items;
-    document.getElementById("ready-title").textContent = sector.noCatalog || selectedSector === "REAL_ESTATE" ? "Votre assistant IA est prêt !" : "Votre vendeur IA est prêt !";
+    document.getElementById("ready-title").textContent = sector.ready
+      || (sector.noCatalog || selectedSector === "REAL_ESTATE" ? "Votre assistant IA est prêt !" : "Votre vendeur IA est prêt !");
+    document.getElementById("naomy-team").classList.toggle("hidden", !sector.team);  // lot 109 : l'équipe Bob + Naomy
     document.getElementById("chat-status").textContent = sector.status;
     document.getElementById("scenarios").innerHTML = sector.scenarios
       .map(([label, text], i) => `<button class="scenario-btn" data-i="${i}">${esc(label)}</button>`).join("");

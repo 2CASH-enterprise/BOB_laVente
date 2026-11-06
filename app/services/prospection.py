@@ -39,7 +39,8 @@ CHANNELS = {"WHATSAPP": "WhatsApp", "PHONE": "Appel", "EMAIL": "Email", "SMS": "
 STATUSES = {"ACTIVE": "En cours", "NOT_INTERESTED": "Pas intéressé", "UNSUBSCRIBED": "Ne plus contacter",
             "INVALID": "Coordonnées invalides"}
 SECTORS = {"ONLINE_STORE": "Commerce", "CAR_DEALERSHIP": "Concession auto / moto",
-           "INSURANCE_BROKER": "Courtier / agent d'assurance", "REAL_ESTATE": "Agence immobilière"}
+           "INSURANCE_BROKER": "Courtier / agent d'assurance", "REAL_ESTATE": "Agence immobilière",
+           "RESTAURANT": "Restaurant"}
 EVENT_LABELS = {"ADDED": "Ajouté", "CONTACT": "Contacté", "CLICK": "A cliqué sur son lien", "DEMO": "A essayé la démo",
                 "SIGNUP": "A créé son compte", "STATUS": "Statut", "NOTE": "Note",
                 "OPEN": "A ouvert un email (indicatif)", "REPLY": "A répondu"}
@@ -240,7 +241,8 @@ def group_funnel(prospects: list, stages: dict, key_of) -> list[dict]:
 # Lot 63 — visuels de prospection par secteur (app/static/visuels) : aperçu du lien, bannière des emails,
 # bouton « Télécharger le visuel » de la fiche.
 VISUALS = {"ONLINE_STORE": "prospection-commerce.jpg", "CAR_DEALERSHIP": "prospection-concession.jpg",
-           "INSURANCE_BROKER": "prospection-courtier.jpg", "REAL_ESTATE": "prospection-immobilier.jpg"}
+           "INSURANCE_BROKER": "prospection-courtier.jpg", "REAL_ESTATE": "prospection-immobilier.jpg",
+           "RESTAURANT": "prospection-restaurant.jpg"}
 
 
 def visual_url(sector: str | None) -> str:
@@ -251,7 +253,7 @@ def visual_url(sector: str | None) -> str:
 
 # Lot 63 — dans l'adresse, le secteur s'écrit en clair (…/demo/?secteur=concession&p=CODE).
 SECTOR_SLUGS = {"ONLINE_STORE": "commerce", "CAR_DEALERSHIP": "concession", "INSURANCE_BROKER": "assurance",
-                "REAL_ESTATE": "immobilier"}
+                "REAL_ESTATE": "immobilier", "RESTAURANT": "restaurant"}
 
 
 def sector_from_slug(value: str | None) -> str | None:
@@ -338,6 +340,13 @@ _PITCH = {
     "INSURANCE_BROKER": "répond à vos clients sur WhatsApp 24 h / 24, prépare les demandes de cotation et suit les échéances de leurs contrats",
     "REAL_ESTATE": "répond à vos acheteurs, locataires et propriétaires sur WhatsApp 24 h / 24 et vous obtient des visites et des estimations",
 }
+# Lot 109 — restaurant : l'équipe Bob + Naomy (jamais de prix dans le message : rien n'est définitif, décision du 06/11).
+_TEAM = {
+    "RESTAURANT": ("Bonjour{name}, je suis {who}. Pour {company}, nous proposons une équipe de deux agents : Naomy, notre "
+                   "community manager intelligente, crée et publie votre plat du jour sur vos réseaux sociaux ; Bob, notre "
+                   "serveur virtuel, répond sur WhatsApp 24 h / 24, prend les commandes (à emporter, livraison, sur place) et "
+                   "réserve les tables. Vous pouvez essayer Bob en 2 minutes avec une carte d'exemple."),
+}
 
 
 def offer_line(slots: dict | None) -> str | None:
@@ -371,6 +380,9 @@ def message(prospect, sender: str | None, offer: str | None = None) -> str:
         text = _FRANCE[prospect.sector].format(name=f" {first}" if first else "", who=who, city=city)
         return f"{text} {STOP_LINE}\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}"
     who = f"{sender} d'AgenC'AI" if sender else "AgenC'AI"
+    if prospect.sector in _TEAM:
+        text = _TEAM[prospect.sector].format(name=f" {first}" if first else "", who=who, company=prospect.company)
+        return f"{text}{' ' + offer if offer else ''}\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}"
     pitch = _PITCH.get(prospect.sector, _PITCH["ONLINE_STORE"])
     # Lot 63 — le lien seul sur la dernière ligne : WhatsApp en fait un aperçu (visuel du secteur) qui ouvre la démo.
     return (f"Bonjour{' ' + first if first else ''}, je suis {who}. Bob, notre vendeur virtuel, {pitch}. "
@@ -468,7 +480,9 @@ SYNONYMS = {
 }
 SECTOR_WORDS = {"CAR_DEALERSHIP": ("auto", "concession", "vehicule", "voiture", "garage", "moto"),
                 "INSURANCE_BROKER": ("assur", "courtier", "courtage", "agent general", "agence generale"),
-                "REAL_ESTATE": ("immobili", "immo", "mandataire", "transaction", "gestion locative", "syndic")}
+                "REAL_ESTATE": ("immobili", "immo", "mandataire", "transaction", "gestion locative", "syndic"),
+                "RESTAURANT": ("restaura", "maquis", "grill", "traiteur", "fast food", "fastfood", "brasserie", "pizzeria",
+                               "snack", "cafeteria", "food")}
 
 
 def _plain(text) -> str:
