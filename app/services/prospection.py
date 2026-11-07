@@ -354,7 +354,7 @@ def offer_line(slots: dict | None) -> str | None:
     if not slots or slots.get("left", 0) <= 0:
         return None
     left = slots["left"]
-    return (f"Les {slots['total']} premiers inscrits ont l'installation offerte et 3 mois à −50 % "
+    return (f"Les {slots['total']} premiers inscrits ont l'installation offerte et 2 mois à −50 % "
             f"(il reste {left} place{'s' if left > 1 else ''}).")
 
 

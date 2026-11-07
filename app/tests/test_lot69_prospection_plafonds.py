@@ -88,7 +88,7 @@ async def test_superadmin_changes_slots(client, db_session):
 
 
 def test_offer_line():
-    assert pros.offer_line({"total": 100, "left": 37}) == ("Les 100 premiers inscrits ont l'installation offerte et 3 mois "
+    assert pros.offer_line({"total": 100, "left": 37}) == ("Les 100 premiers inscrits ont l'installation offerte et 2 mois "
                                                            "à −50 % (il reste 37 places).")
     assert pros.offer_line({"total": 100, "left": 1}).endswith("(il reste 1 place).")
     assert pros.offer_line({"total": 100, "left": 0}) is None and pros.offer_line(None) is None

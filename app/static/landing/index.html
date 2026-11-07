@@ -496,7 +496,7 @@
 
       <div class="launch" id="launch">
         <div><div class="t1" id="launch-title">Offre de lancement</div>
-          <div class="t2" id="launch-sub">Installation offerte et −50 % sur tes 3 premiers mois.</div></div>
+          <div class="t2" id="launch-sub">Installation offerte et −50 % sur tes 2 premiers mois.</div></div>
         <a class="btn btn-gold" href="dashboard/?preinscription=1">Je me pré-inscris</a>
       </div>
 
@@ -643,11 +643,11 @@ fetch("api/v1/preregistration/public").then(function (r) { return r.ok ? r.json(
   var left = p.slots_left, total = p.slots_total, places = left + " place" + (left > 1 ? "s" : "") + " sur " + total;
   document.getElementById("gift-title").textContent = p.offer_open ? "Pré-inscriptions ouvertes — il reste " + places : "Pré-inscriptions ouvertes";
   document.getElementById("gift-sub").textContent = p.offer_open
-    ? "Pré-inscris ton entreprise : installation offerte, et tes 3 premiers mois d'abonnement à moitié prix (−50 %) à partir de l'ouverture de ton accès. Réservé aux " + total + " premiers."
+    ? "Pré-inscris ton entreprise : installation offerte, et tes 2 premiers mois d'abonnement à moitié prix (−50 %) à partir de l'ouverture de ton accès. Réservé aux " + total + " premiers."
     : "L'offre de lancement est complète. Pré-inscris ton entreprise pour être parmi les premiers à utiliser Bob.";
   if (p.offer_open) {
     document.getElementById("launch-title").textContent = "Offre de lancement — il reste " + places;
-    document.getElementById("launch-sub").textContent = "Installation offerte et −50 % sur tes 3 premiers mois d'abonnement, à partir de l'ouverture de ton accès.";
+    document.getElementById("launch-sub").textContent = "Installation offerte et −50 % sur tes 2 premiers mois d'abonnement, à partir de l'ouverture de ton accès.";
     document.getElementById("launch").classList.add("on");
   }
   document.querySelectorAll(".prereg-cta").forEach(function (a) { a.style.display = ""; });

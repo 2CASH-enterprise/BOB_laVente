@@ -88,7 +88,7 @@ def test_content_and_example_home_by_sector():
     assert "contrats" in pre.content(INSURANCE_BROKER)["prepare"][1] and "véhicules" in pre.content(CAR_DEALERSHIP)["prepare"][1]
     assert "quotes" in pre.example_home(INSURANCE_BROKER, None, None)["kpis"]
     assert pre.content(None)["products_label"] == "Fichier de vos produits"  # secteur non choisi = commerce
-    assert "−50\u00a0%" in pre.OFFER_TEXT and "3 premiers mois" in pre.OFFER_TEXT and "installation offerts" in pre.OFFER_TEXT
+    assert "−50\u00a0%" in pre.OFFER_TEXT and "2 premiers mois" in pre.OFFER_TEXT and "installation offerts" in pre.OFFER_TEXT
 
 
 # --- Inscription -----------------------------------------------------------------------------------------------
@@ -131,7 +131,7 @@ async def test_prereg_signup_lock_and_example_home(client, db_session, email_cod
     assert home["example"] is True and home["business_type"] == CAR_DEALERSHIP and home["first_name"] == "Awa"
     view = (await client.get("/api/v1/preregistration/me", headers=headers)).json()
     assert view["locked"] is True and view["company"] == "Auto Plus" and view["sector"] == CAR_DEALERSHIP
-    assert view["offer"] == {"setup_free": True, "discount_pct": 50, "months": 3} and view["first_name"] == "Awa"
+    assert view["offer"] == {"setup_free": True, "discount_pct": 50, "months": 2} and view["first_name"] == "Awa"
     assert view["content"]["size_label"] == "Nombre de véhicules" and view["sizes"] == pre.CATALOG_SIZES
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
 

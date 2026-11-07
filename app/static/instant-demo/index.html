@@ -393,7 +393,7 @@ fetch(API_BASE + "/api/v1/preregistration/public").then((r) => r.ok ? r.json() :
   if (!p || !p.mode) return;
   // Lot 69 — places de l'offre de lancement (compteur honnête)
   document.getElementById("promote-intro").textContent = p.offer_open
-    ? `Convaincu ? Pré-inscris ton entreprise : installation offerte, et tes 3 premiers mois d'abonnement à moitié prix (−50 %). Il reste ${p.slots_left} place${p.slots_left > 1 ? "s" : ""} sur ${p.slots_total}. Ton catalogue et tes réglages restent tels quels.`
+    ? `Convaincu ? Pré-inscris ton entreprise : installation offerte, et tes 2 premiers mois d'abonnement à moitié prix (−50 %). Il reste ${p.slots_left} place${p.slots_left > 1 ? "s" : ""} sur ${p.slots_total}. Ton catalogue et tes réglages restent tels quels.`
     : "Convaincu ? Pré-inscris ton entreprise pour être parmi les premiers à utiliser Bob. Ton catalogue et tes réglages restent tels quels.";
   document.getElementById("promote-create-btn").textContent = "Me pré-inscrire";
 }).catch(() => {});

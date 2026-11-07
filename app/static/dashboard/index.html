@@ -2494,6 +2494,11 @@ function renderPrereg() {
     <div class="prereg-body">
       <h3>Ce que fera Bob, votre vendeur sur WhatsApp</h3>
       <ul class="prereg-list">${c.does.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      ${c.naomy && /^https:\/\/wa\.me\/\d+/.test(c.naomy.link) ? `<div class="prereg-offer" style="border-style: solid;">
+        <div class="prereg-offer-title">Rencontrez Naomy</div>
+        <p>${esc(c.naomy.text)}</p>
+        <a class="action" style="display: inline-block; margin-top: 10px; text-decoration: none;" href="${esc(c.naomy.link)}" target="_blank" rel="noopener">Écrire à Naomy sur WhatsApp</a>
+      </div>` : ""}
       <h3>Ce que votre entreprise y gagne</h3>
       <ul class="prereg-list gains">${c.gains.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
       ${c.offer ? `<div class="prereg-offer">

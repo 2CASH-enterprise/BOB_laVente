@@ -93,3 +93,22 @@ async def test_the_shared_link_preview_names_the_team(client, db_session):
     title, text = PREVIEW_TEXTS["RESTAURANT"]
     assert title == "Bob et Naomy, l'équipe de votre restaurant" and "Naomy publie" in text and "FCFA" not in text
     assert (await client.get("/visuels/prospection-restaurant.jpg")).status_code == 200
+
+
+def test_preregistered_meet_naomy_and_the_offer_is_two_months(monkeypatch):
+    """07/11 : lien WhatsApp de Naomy dans la fenêtre de pré-inscription ; avantage ramené de 3 à 2 mois pour tous."""
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "naomy_whatsapp_number", "+33 7 80 84 12 69")
+    c = pre.content(RESTAURANT)
+    assert c["naomy"]["link"] == "https://wa.me/33780841269?text=Bonjour%20Naomy" and "plat du jour" in c["naomy"]["text"]
+    assert "vos produits" in pre.content("ONLINE_STORE")["naomy"]["text"]
+    monkeypatch.setattr(get_settings(), "naomy_whatsapp_number", "")
+    assert pre.content(RESTAURANT)["naomy"] is None  # sans numéro réglé : pas de bouton
+    assert pre.OFFERS[pre.OFFER_CODE]["months"] == 2 and "2 premiers mois" in pre.OFFER_TEXT and "3 premiers" not in pre.OFFER_TEXT
+    dash = (ROOT / "static" / "dashboard" / "index.html").read_text(encoding="utf-8")
+    assert "Écrire à Naomy sur WhatsApp" in dash and "c.naomy.link" in dash
+    for page in ("landing/index.html", "instant-demo/index.html"):
+        text = (ROOT / "static" / page).read_text(encoding="utf-8")
+        assert "3 premiers mois" not in text and "2 premiers mois" in text, page
+    assert "3 mois à −50" not in (ROOT / "services" / "prospection.py").read_text(encoding="utf-8")

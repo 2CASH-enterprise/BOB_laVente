@@ -7,7 +7,8 @@ Lot 65 — pré-inscription : recruter les premiers utilisateurs avant le lancem
   d'exemple de son secteur, sa fenêtre de pré-inscription (« Mes informations », fichiers à préparer) et peut se
   déconnecter. Rien d'autre ne répond, et Bob ne travaille pas pour lui.
 - L'offre de lancement est figée sur le compte à la pré-inscription (installation offerte, abonnement à −50 %
-  pendant 3 mois à partir de l'ouverture de l'accès) : elle sera appliquée sans oubli au lancement.
+  pendant 2 mois à partir de l'ouverture de l'accès ; 3 mois avant le 07/11/2026, ramené à 2 pour tous, décision de
+  Thérèse) : elle sera appliquée sans oubli au lancement.
 - Le Super Admin ouvre l'accès complet compte par compte (bêta-testeurs) ou à tous les pré-inscrits (lancement).
 """
 import logging
@@ -20,8 +21,9 @@ from app.services.business_type import CAR_DEALERSHIP, INSURANCE_BROKER, ONLINE_
 logger = logging.getLogger(__name__)
 
 OFFER_CODE = "LANCEMENT_2026"
-OFFERS = {OFFER_CODE: {"setup_free": True, "discount_pct": 50, "months": 3}}
-OFFER_TEXT = ("Frais d'installation offerts, et vos 3 premiers mois d'abonnement à moitié prix (−50\u00a0%), "
+OFFER_MONTHS = 2  # 07/11/2026 : 3 → 2 mois, pour tous les pré-inscrits (déjà inscrits compris)
+OFFERS = {OFFER_CODE: {"setup_free": True, "discount_pct": 50, "months": OFFER_MONTHS}}
+OFFER_TEXT = (f"Frais d'installation offerts, et vos {OFFER_MONTHS} premiers mois d'abonnement à moitié prix (−50\u00a0%), "
               "à partir de l'ouverture de votre accès.")
 LOCKED_MESSAGE = "Votre compte est pré-inscrit : l'accès complet à Bob ouvrira au lancement."
 
@@ -152,10 +154,25 @@ GAINS = ["Plus aucun client sans réponse : Bob est là 24 h / 24, 7 jours sur 7
          "Une vision claire chaque mois : un rapport de ce que Bob a fait pour vous."]
 
 
+def naomy_link() -> str | None:
+    """Lot 109 b — lien WhatsApp de Naomy (« Bonjour Naomy » prérempli), d'après NAOMY_WHATSAPP_NUMBER ; None sans numéro."""
+    from app.core.config import get_settings
+
+    digits = "".join(ch for ch in (get_settings().naomy_whatsapp_number or "") if ch.isdigit())
+    return f"https://wa.me/{digits}?text=Bonjour%20Naomy" if len(digits) >= 8 else None
+
+
+def naomy_text(sector: str | None) -> str:
+    what = "votre plat du jour" if normalize(sector) == RESTAURANT else "vos produits"
+    return (f"Naomy, notre community manager intelligente, crée et publie {what} sur vos réseaux sociaux, et vos "
+            "clients arrivent directement chez Bob. Écrivez-lui dès maintenant pour faire connaissance.")
+
+
 def content(sector: str | None) -> dict:
     sector = normalize(sector)
     entry = CONTENT[sector]
     return {
+        "naomy": {"text": naomy_text(sector), "link": naomy_link()} if naomy_link() else None,
         "does": entry["does"],
         "gains": GAINS,
         "prepare": [
