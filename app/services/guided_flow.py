@@ -409,6 +409,12 @@ async def _entry(db, tenant, tu, customer, conversation, entry: dict):
         from app.services import resto_flow
 
         return await resto_flow.at_table(db, tenant, tu, customer, entry["table"])
+    if entry.get("flow") and customer is not None:  # lot 114 : réponse du formulaire de réservation
+        if is_restaurant(tenant):
+            from app.services import resto_flow
+
+            return await resto_flow.flow_answer(db, tenant, tu, customer, conversation, entry["flow"])
+        return None
     if entry.get("location") and customer is not None:  # lot 113 : position partagée pour la livraison
         if is_restaurant(tenant):
             from app.services import resto_flow
@@ -476,6 +482,8 @@ def _trace(action: dict) -> str:
     extra = ""
     if action["type"] == "buttons":
         extra = "\n[Boutons : " + " · ".join(title for _, title in action["buttons"]) + "]"
+    elif action["type"] == "flow":  # lot 114
+        extra = f"\n[Formulaire : {action.get('cta') or 'Choisir'}]"
     elif action["type"] == "location":  # lot 113
         extra = "\n[Bouton : Envoyer la position]"
     elif action["type"] == "list":
@@ -500,6 +508,8 @@ def degraded(action: dict) -> dict | None:
     kind = action["type"]
     if action.get("image_id"):  # lot 112 : reçu en image refusé → la confirmation texte
         return action["original"]
+    if kind == "flow":  # lot 114 : formulaire refusé → la liste des jours du parcours à boutons
+        return action.get("fallback_action")
     if kind == "carousel":
         rows = []
         for card in action["cards"][:10]:
@@ -521,6 +531,9 @@ async def _send(wa_client, to: str, action: dict):
         return await wa_client.send_buttons(to=to, body=action["body"], buttons=action["buttons"], image_link=action.get("image"))
     if action["type"] == "list":
         return await wa_client.send_list(to=to, body=action["body"], button=action["button"], rows=action["rows"])
+    if action["type"] == "flow":  # lot 114 : formulaire WhatsApp publié
+        return await wa_client.send_flow(to=to, body=action["body"], flow_id=action["flow_id"], flow_token=action["flow_token"],
+                                         cta=action["cta"], screen=action["screen"], data=action["data"])
     if action["type"] == "location":  # lot 113 : bouton natif « Envoyer la position »
         return await wa_client.send_location_request(to=to, body=action["body"])
     if action["type"] == "carousel":

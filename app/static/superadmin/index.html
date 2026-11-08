@@ -398,6 +398,8 @@
         <div class="shop-grid" id="shop-grid"><p class="muted">Chargement…</p></div>
         <!-- Lot 68 — interrupteur des modèles WhatsApp pour toute la plateforme -->
         <section class="card wa-switch" id="wa-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
+        <!-- Lot 114 — formulaire WhatsApp « Réserver une table » (restaurants) -->
+        <section class="card wa-switch" id="flows-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
         <!-- Lot 69 — plafonds des formules et conduite au dépassement -->
         <section class="card" id="plans-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
       </div>
@@ -820,6 +822,7 @@ function initials(name) { return (name || "?").split(/\s+/).filter((w) => /^[\p{
 
 async function loadTenants() {
   loadWaSwitch();
+  loadFlowsSwitch();
   loadPlans();
   try {
     const [tenants, costs] = await Promise.all([api("/api/v1/superadmin/tenants"), api("/api/v1/superadmin/ai-costs").catch(() => ({ rows: [] }))]);
@@ -915,9 +918,11 @@ async function openShop(id) {
       </section>
     </div>
     <section class="card" id="shop-usage" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
-    <section class="card" id="shop-wa" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>`;
+    <section class="card" id="shop-wa" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
+    <section class="card hidden" id="shop-flows" style="margin-top: 18px;"></section>`;
   loadShopUsage(t.id);
   loadShopTemplates(t.id);
+  loadShopFlows(t.id);
 }
 
 async function putShop(path, body) {
@@ -1667,6 +1672,75 @@ async function loadShopUsage(id) {
   const cost = d.price ? `<p class="muted" style="margin: 10px 0 0;">Coût IA du mois : ${money(d.ai_cost_usd)} (≈ ${String(d.ai_cost_eur).replace(".", ",")} €), soit ${d.ai_share_pct} % du prix de la formule (${esc(d.price)}).${d.costly ? ' <span class="tone-danger">Cette boutique coûte cher pour sa formule.</span>' : ""}</p>`
     : `<p class="muted" style="margin: 10px 0 0;">Coût IA du mois : ${money(d.ai_cost_usd)}.</p>`;
   box.innerHTML = `<h2 style="margin-bottom: 10px;">Conversations et coût du mois</h2>${usage}${cost}`;
+}
+
+// ---- Lot 114 : formulaire WhatsApp « Réserver une table » ----
+async function loadFlowsSwitch() {
+  const box = document.getElementById("flows-switch-card");
+  if (!box) return;
+  let d;
+  try { d = await api("/api/v1/superadmin/wa-flows/settings"); } catch (e) { box.innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return; }
+  box.innerHTML = `<div class="row" style="justify-content: space-between; align-items: flex-start;">
+    <div style="flex: 1 1 320px; min-width: 0;">
+      <div class="row"><h2>Formulaire « Réserver une table »</h2><span class="badge ${d.enabled ? "active" : "muted"}">${d.enabled ? "Allumé" : "Éteint"}</span></div>
+      <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 6px 0 0;">${d.enabled
+        ? `Les restaurants reçoivent le formulaire WhatsApp (jour, heure libre, précision). ${d.published} publié${d.published > 1 ? "s" : ""} · ${d.errors} refusé${d.errors > 1 ? "s" : ""}.`
+        : `Rien n'est créé chez Meta, sauf pour les restaurants en essai (${d.trial}). Les autres gardent la réservation à boutons.`}</p>
+    </div>
+    <button class="btn ${d.enabled ? "danger" : "primary"}" onclick="toggleFlows(${d.enabled ? "false" : "true"})">${d.enabled ? "Éteindre…" : "Allumer pour tous…"}</button>
+  </div>`;
+}
+
+async function toggleFlows(on) {
+  const ok = await saConfirm(on ? "Allumer le formulaire pour tous les restaurants ?" : "Éteindre le formulaire ?",
+    on ? "Chaque restaurant avec la réservation en ligne recevra le formulaire WhatsApp. Il est créé chez Meta au premier besoin ; en cas de refus, la réservation à boutons continue."
+       : "Les restaurants reviennent à la réservation à boutons (sauf ceux mis en essai). Les formulaires déjà créés restent chez Meta.",
+    { confirmLabel: on ? "Allumer" : "Éteindre", danger: !on });
+  if (!ok) return;
+  try {
+    await api("/api/v1/superadmin/wa-flows/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: on }) });
+    toast(on ? "Formulaire allumé." : "Formulaire éteint.");
+    loadFlowsSwitch();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+const FLOW_STATUS = { PUBLISHED: ["active", "Publié chez Meta"], ERROR: ["demo", "Refusé"], NOT_CREATED: ["muted", "Pas encore créé"] };
+
+function renderShopFlows(d) {
+  const box = document.getElementById("shop-flows");
+  if (!box) return;
+  if (!d.restaurant) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const [tone, label] = FLOW_STATUS[d.status] || ["muted", d.status];
+  const option = (value, text) => `<option value="${value}" ${d.mode === value ? "selected" : ""}>${text}</option>`;
+  box.innerHTML = `<h2>Formulaire « Réserver une table »</h2>
+    <p class="muted" style="font-size: 13px; margin: 6px 0 10px;">${d.active ? "Les clients de ce restaurant reçoivent le formulaire." : "Ce restaurant garde la réservation à boutons."}</p>
+    <div class="row" style="gap: 10px; flex-wrap: wrap; align-items: center;">
+      <select id="shop-flows-mode" class="input" style="width: auto; margin: 0;" onchange="saveShopFlowsMode()">
+        ${option("AUTO", d.platform ? "Suivre la plateforme (allumé)" : "Suivre la plateforme (éteint)")}${option("ON", "Essai : allumé ici")}${option("OFF", "Éteint ici")}
+      </select>
+      <span class="badge ${tone}">${esc(label)}</span>
+      <button class="btn" onclick="syncShopFlows()">Créer / vérifier le formulaire</button>
+    </div>
+    ${d.reason ? `<p class="tone-danger" style="font-size: 13px; margin-top: 8px;">${esc(d.reason)}</p>` : ""}`;
+}
+
+async function loadShopFlows(id) {
+  try { renderShopFlows(await api(`/api/v1/superadmin/tenants/${id}/wa-flows`)); } catch (e) { /* carte masquée */ }
+}
+
+async function saveShopFlowsMode() {
+  const mode = document.getElementById("shop-flows-mode").value;
+  try { renderShopFlows(await putShop("wa-flows/mode", { mode })); toast("Réglage du formulaire enregistré."); loadFlowsSwitch(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+async function syncShopFlows() {
+  try {
+    const d = await api(`/api/v1/superadmin/tenants/${currentShop.id}/wa-flows/sync`, { method: "POST" });
+    renderShopFlows(d);
+    toast(d.status === "PUBLISHED" ? "Formulaire publié chez Meta." : "Meta a refusé le formulaire : voir le motif.", d.status === "PUBLISHED" ? "ok" : "error");
+  } catch (e) { toast(e.message, "error"); }
 }
 
 // ---- Lot 68 : modèles WhatsApp ----

@@ -273,6 +273,16 @@ class WhatsAppClient:
                    "interactive": interactive}
         return await self._post("/messages", payload)
 
+    async def send_flow(self, to: str, body: str, flow_id: str, flow_token: str, cta: str, screen: str, data: dict) -> dict:
+        """Lot 114 — un formulaire WhatsApp (Flow) publié, ouvert sur son premier écran avec ses données."""
+        payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+                   "interactive": {"type": "flow", "body": {"text": to_whatsapp(body)[:1024]},
+                                   "action": {"name": "flow", "parameters": {
+                                       "flow_message_version": "3", "flow_token": flow_token, "flow_id": flow_id,
+                                       "flow_cta": cta[:20], "flow_action": "navigate",
+                                       "flow_action_payload": {"screen": screen, "data": data}}}}}
+        return await self._post("/messages", payload)
+
     async def send_location_request(self, to: str, body: str) -> dict:
         """Lot 113 — le bouton natif « Envoyer la position » (réponse : un message de type location)."""
         payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
@@ -338,6 +348,20 @@ def _reply_id(msg: dict) -> str | None:
     return (msg.get("button") or {}).get("payload") or None
 
 
+def _flow_reply(msg: dict) -> dict | None:
+    import json
+
+    reply = ((msg.get("interactive") or {}).get("nfm_reply") or {}) if msg.get("type") == "interactive" else {}
+    raw = reply.get("response_json")
+    if not raw:
+        return None
+    try:
+        answer = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return answer if isinstance(answer, dict) else None
+
+
 def _location(msg: dict) -> dict | None:
     if msg.get("type") != "location":
         return None
@@ -377,6 +401,8 @@ def parse_whatsapp_message(payload: dict) -> dict | None:
             "referral": msg.get("referral"),
             # Lot 113 — position partagée (bouton « Envoyer la position » ou trombone) : coordonnées, nom, adresse.
             "location": _location(msg),
+            # Lot 114 — réponse d'un formulaire WhatsApp (nfm_reply) : ses champs, avec le flow_token.
+            "flow_reply": _flow_reply(msg),
         }
     except (KeyError, IndexError, TypeError):
         return None

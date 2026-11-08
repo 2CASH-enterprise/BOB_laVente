@@ -874,7 +874,51 @@ async def days(db, tenant, tu, customer, party: int):
             rows.append((f"{PREFIX}fj:{party}:{day.strftime('%Y%m%d')}", _day_label(day, today)[:24], None))
     if not rows:
         return _turn([_buttons(f"Plus de table libre pour {party} personnes dans les 7 prochains jours.", [HUMAN, (f"{PREFIX}fv", "Voir la carte")])])
-    return _turn([{"type": "list", "body": _you(tu, "Quel jour ?", "Quel jour ?"), "button": "Choisir le jour", "rows": rows[:10]}])
+    listing = {"type": "list", "body": _you(tu, "Quel jour ?", "Quel jour ?"), "button": "Choisir le jour", "rows": rows[:10]}
+    form = await _booking_form(db, tenant, tu, customer, party, listing)  # lot 114 : formulaire WhatsApp si allumé
+    return _turn([form or listing])
+
+
+async def _booking_form(db, tenant, tu, customer, party: int, listing: dict) -> dict | None:
+    """Lot 114 — le formulaire « Choisir l'heure » (jour, heure libre, précision) ; repli : la liste des jours."""
+    from app.services import wa_flows
+
+    if customer is None or not await wa_flows.active_for(db, tenant):
+        return None
+    flow_id = await wa_flows.ensure(db, tenant)
+    data = await wa_flows.screen_data(db, tenant, party) if flow_id else None
+    if not data:
+        return None
+    token = wa_flows.new_token(party)
+    cart = await _cart(db, tenant, customer, create=True)
+    _set_meta(cart, flow=token)
+    people = f"{party} personne{'s' if party > 1 else ''}"
+    body = f"Table pour {people}. " + _you(tu, "Touchez « Choisir l'heure » : le jour, l'heure et une précision si besoin.",
+                                          "Touche « Choisir l'heure » : le jour, l'heure et une précision si besoin.")
+    return {**wa_flows.flow_action(flow_id, token, body, data), "fallback_action": listing}
+
+
+async def flow_answer(db, tenant, tu, customer, conversation, answer: dict):
+    """Lot 114 — réponse du formulaire : la réservation par le même outil que les boutons, précision dans la note."""
+    from app.services import wa_flows
+
+    token = str(answer.get("flow_token") or "")
+    party = wa_flows.party_of(token)
+    if party is None:
+        return None
+    cart = await _cart(db, tenant, customer)
+    if cart is not None and _meta(cart).get("flow") == token:
+        _set_meta(cart, flow=None)
+    slot = wa_flows.chosen_slot(answer)
+    if slot is None:
+        return await days(db, tenant, tu, customer, party)
+    turn = await book(db, tenant, tu, customer, conversation, party,
+                      slot=f"{slot[:4]}-{slot[4:6]}-{slot[6:8]}T{slot[8:10]}:{slot[10:]}")  # même forme que les boutons
+    note = wa_flows.note_of(answer)
+    if note and turn.booked:
+        appointment = turn.booked[-1]
+        appointment.notes = (f"{appointment.notes}\n" if appointment.notes else "") + f"Précision du client : {note}"
+    return turn
 
 
 def _clock(minute: int) -> str:

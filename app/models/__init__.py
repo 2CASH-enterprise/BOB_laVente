@@ -81,4 +81,5 @@ from app.models.naomy import (AssistantMessage, AssistantOutbox, NaomyConnection
                               NaomyPairingRequest, NaomyReminder)
 from app.models.cart import Cart  # noqa: F401 — lot 95
 from app.models.table_qr_code import TableQrCode  # noqa: F401 — lot 108
+from app.models.whatsapp_flow import WhatsAppFlow  # noqa: F401 — lot 114
 from app.services import naomy_bridge as _naomy_bridge  # noqa: F401,E402 — lot 89 : événements Naomy détectés à chaque enregistrement

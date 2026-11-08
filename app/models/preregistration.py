@@ -20,6 +20,8 @@ class PlatformSettings(Base):
     prereg_changed_by: Mapped[str | None] = mapped_column(String(120))
     # Lot 68 — modèles WhatsApp : rien n'est créé ni envoyé chez Meta tant que le Super Admin ne l'allume pas.
     wa_templates_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Lot 114 — formulaire WhatsApp « Réserver une table » : éteint tant que le Super Admin ne l'allume pas.
+    wa_flows_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     # Lot 69 — places de l'offre de lancement (les N premiers comptes pré-inscrits).
     launch_slots: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
     # Lot 69 — plafonds de conversations par formule (vide = valeurs par défaut de plan_quota) et conduite au dépassement :

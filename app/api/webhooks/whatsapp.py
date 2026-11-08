@@ -271,6 +271,15 @@ async def receive_webhook(
         place = geo_ci.label(shared)
         incoming_text = "📍 Position partagée" + (f" : {place}" if place != "Position partagée" else "")
         entry = entry or {"location": shared}
+    # Lot 114 — réponse du formulaire « Réserver une table » : trace lisible, les champs vont au parcours.
+    answered = parsed.get("flow_reply")
+    if answered is not None and str(answered.get("flow_token") or "").startswith("bobt:"):
+        from app.services import wa_flows
+
+        stamp = wa_flows.chosen_slot(answered)
+        when = f" pour le {stamp[6:8]}/{stamp[4:6]} à {int(stamp[8:10])} h {stamp[10:12]}" if stamp else ""
+        incoming_text = f"📅 Formulaire de réservation envoyé{when}" + (f" · {wa_flows.note_of(answered)}" if wa_flows.note_of(answered) else "")
+        entry = entry or {"flow": answered}
     incoming_message = Message(
         tenant_id=tenant_id,
         conversation_id=conversation.id,
