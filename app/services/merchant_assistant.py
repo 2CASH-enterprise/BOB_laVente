@@ -61,8 +61,8 @@ PRODUCT_UPLOADS = Path(__file__).resolve().parents[1] / "static" / "uploads" / "
 # Commandes connues (liste x-commandes-bob du contrat 1.3.1), comparées sans accents ni majuscules, sur le message
 # entier ou son début (« stock robe wax »). Les plus longues d'abord.
 COMMANDS = {
-    "ventes a confirmer": "to_confirm", "nouveau produit": "add", "mes commandes": "to_confirm", "mes ventes": "sales",
-    "qui attend": "waiting", "mon stock": "stock", "aide bob": "help", "commandes": "to_confirm", "reprendre": "resume",
+    "ventes a confirmer": "to_confirm", "nouveau produit": "add", "mes commandes": "orders", "mes ventes": "sales",
+    "qui attend": "waiting", "mon stock": "stock", "aide bob": "help", "commandes": "orders", "reprendre": "resume",
     "annuler": "cancel", "ajouter": "add", "clients": "waiting", "ventes": "sales", "vendu": "sold", "stock": "stock",
     "pause": "pause", "aide": "help", "menu": "help",
 }
@@ -76,7 +76,18 @@ MENU_2 = ("Vos clients et vos produits. Pour ajouter un produit : envoyez sa pho
           "(par exemple : Sac cabas 12000).",
           [("bob:menu:qui-attend", "👥 Qui attend"), ("bob:menu:stock", "📦 Stock"), ("bob:menu:ajouter", "📸 Ajouter")])
 MENU_COMMANDS = {"ventes": "sales", "a-confirmer": "to_confirm", "vendu": "sold", "qui-attend": "waiting",
-                 "stock": "stock", "ajouter": "add"}
+                 "stock": "stock", "ajouter": "add", "commandes": "orders"}
+# Lot 117 — menu en une seule liste (contrat 1.3.3, `liste`), quand les cartes sont allumées pour la boutique.
+MENU_INTRO = "Je suis Bob, votre vendeur. Que voulez-vous voir ?"
+MENU_LIST = {"bouton": "Menu de Bob", "lignes": [
+    {"id": "bob:menu:ventes", "titre": "📈 Mes ventes", "description": "Aujourd'hui, 7 jours, 30 jours"},
+    {"id": "bob:menu:a-confirmer", "titre": "⏳ Ventes à confirmer", "description": "Les paiements à vérifier"},
+    {"id": "bob:menu:vendu", "titre": "✅ Vendu", "description": "Confirmer une vente payée"},
+    {"id": "bob:menu:commandes", "titre": "🧾 Commandes du jour", "description": "Toutes les commandes d'aujourd'hui"},
+    {"id": "bob:menu:qui-attend", "titre": "👥 Qui attend", "description": "Les clients qui vous attendent"},
+    {"id": "bob:menu:stock", "titre": "📦 Mon stock", "description": "Les ruptures en tête"},
+    {"id": "bob:menu:ajouter", "titre": "📸 Ajouter un produit", "description": "Une photo, un nom, un prix"},
+]}
 WAITING = "WAITING"
 ADD_HELP = ("Pour ajouter un produit : envoyez sa photo, puis son nom et son prix, par exemple : Sac cabas 12000.\n"
             "Vous pouvez aussi tout envoyer d'un coup, en légende de la photo.")
@@ -248,7 +259,7 @@ def _remove(name: str | None) -> None:
 
 def queue(db, connection, text: str, buttons: list[tuple[str, str]] | None = None, kind: str = "REPLY",
           ref: str | None = None, awaiting: str | None = None, fallback_subject: str | None = None,
-          now: datetime | None = None):
+          now: datetime | None = None, image: bytes | None = None, liste: dict | None = None):
     from app.models.naomy import AssistantOutbox
 
     now = now or datetime.now(timezone.utc)
@@ -257,8 +268,17 @@ def queue(db, connection, text: str, buttons: list[tuple[str, str]] | None = Non
     if len(text) > 1024:
         text = text[:1023].rstrip() + "…"
     payload = {"boutique_id": str(connection.tenant_id), "id_message_bob": message_id, "texte": text}
-    if buttons:
+    if liste:  # lot 117 (1.3.3) : jamais avec des boutons ni une image
+        payload["liste"] = {"bouton": short(liste["bouton"], 20), "lignes": [
+            {"id": line["id"][:200], "titre": short(line["titre"], 24),
+             **({"description": short(line["description"], 72)} if line.get("description") else {})}
+            for line in liste["lignes"][:10]]}
+    elif buttons:
         payload["boutons"] = [{"id": bid[:256], "titre": short(title, 20)} for bid, title in buttons[:3]]
+    if image and not liste and len(image) <= MAX_IMAGE:  # lot 117 : carte en image, déposée chez WhatsApp par Naomy
+        import base64
+
+        payload["image_png"] = base64.b64encode(image).decode()
     if awaiting:
         payload["attend_reponse"] = True
         connection.awaiting, connection.awaiting_until = awaiting[:400], now + timedelta(minutes=AWAIT_MINUTES)
@@ -374,6 +394,9 @@ async def send_outbox(db, now: datetime | None = None, sender=None, mailer=None,
         else:
             item.next_attempt_at, item.last_error = now + timedelta(minutes=RETRY_MINUTES[item.attempts - 1]), error
             report["retry"] += 1
+    for item in due:  # lot 117 : l'image d'une carte n'est pas gardée une fois le message traité
+        if item.status != "PENDING" and "image_png" in (item.payload or {}):
+            item.payload = {k: v for k, v in item.payload.items() if k != "image_png"}
     released = await _release_waiting(db, due)
     await db.commit()
     if released:  # lot 92c : 2e message du menu, envoyé dès que le 1er est accepté
@@ -542,6 +565,27 @@ async def _pending(db, tenant) -> list[dict]:
     return await to_confirm_list(db, tenant)
 
 
+async def _orders_today(db, tenant, now) -> list[dict]:
+    """Lot 117 — les commandes du jour (heure du pays), les plus récentes d'abord."""
+    from app.models.customer import Customer
+    from app.models.order import Order, OrderItem, OrderStatus
+    from app.models.product import Product
+    from app.services.simple_mode import _day_start, customer_label
+
+    labels = {OrderStatus.PENDING: "À confirmer", OrderStatus.PAID: "Vendue", OrderStatus.CANCELLED: "Annulée"}
+    rows = (await db.execute(select(Order, Customer).join(Customer, Customer.id == Order.customer_id).where(
+        Order.tenant_id == tenant.id, Order.created_at >= _day_start(tenant, now, 0)).order_by(Order.created_at.desc())
+        .limit(30))).all()
+    out = []
+    for order, customer in rows:
+        items = (await db.execute(select(OrderItem.quantity, Product.name).join(Product, Product.id == OrderItem.product_id)
+                                  .where(OrderItem.order_id == order.id))).all()
+        out.append({"customer": customer_label(customer), "items": " · ".join(f"{q} × {n}" for q, n in items),
+                    "total": amount(order.total_amount), "value": float(order.total_amount or 0), "currency": order.currency,
+                    "status": labels.get(order.status, str(order.status))})
+    return out
+
+
 def _sale_line(o: dict) -> str:
     items = f" · {short(o['items'], 60)}" if o["items"] else ""
     return f"• {o['customer']}{items} · {o['total']} {o['currency']}"
@@ -549,19 +593,41 @@ def _sale_line(o: dict) -> str:
 
 async def handle_command(db, connection, tenant, key: str, rest: str, now) -> None:
     from app.models.product import Product
+    from app.services import assistant_cards as cards
     from app.services.business_type import is_insurance
-    from app.services.simple_mode import waiting_list
+    from app.services.simple_mode import sales_summary, waiting_list
+
+    with_cards = cards.cards_on(tenant.id)  # lot 117 : la carte en image, le texte complet dessous (repli)
+
+    def card(build):
+        return cards.safe(build) if with_cards else None
 
     if key == "sales":
-        queue(db, connection, await _sales_text(db, tenant, now), now=now)
+        summary = await sales_summary(db, tenant, now=now) if with_cards else None
+        queue(db, connection, await _sales_text(db, tenant, now), now=now,
+              image=card(lambda: cards.sales_card(tenant, summary, now)))
+    elif key == "orders":  # lot 117 : les commandes du jour
+        orders = await _orders_today(db, tenant, now)
+        if not orders:
+            text = "Aucune commande aujourd'hui pour l'instant."
+        else:
+            more = f"\n… et {len(orders) - LIST_LINES} autre(s) dans Bob." if len(orders) > LIST_LINES else ""
+            text = f"Commandes du jour ({len(orders)}) :\n" + "\n".join(
+                f"• {o['customer']} · {o['status']} · {o['total']} {o['currency']}" for o in orders[:LIST_LINES]) + more
+        buttons = [("bob:menu:a-confirmer", "Ventes à confirmer")] if any(o["status"] == "À confirmer" for o in orders) else None
+        queue(db, connection, text, buttons, now=now, image=card(lambda: cards.orders_card(tenant, orders, now)))
     elif key == "to_confirm":
         items = await _pending(db, tenant)
         if not items:
-            queue(db, connection, "Aucune vente à confirmer pour l'instant.", now=now)
+            queue(db, connection, "Aucune vente à confirmer pour l'instant.", now=now,
+                  image=card(lambda: cards.pending_card(tenant, items, now)))
         else:
             more = f"\n… et {len(items) - LIST_LINES} autre(s) dans Bob." if len(items) > LIST_LINES else ""
+            buttons = [(f"bob:vendu:{items[0]['order_id']}", "Vendu"), (f"bob:annuler:{items[0]['order_id']}", "Annuler")] \
+                if with_cards and len(items) == 1 else ([("bob:menu:vendu", "Vendu")] if with_cards else None)
             queue(db, connection, f"Ventes à confirmer ({len(items)}) :\n" + "\n".join(_sale_line(o) for o in items[:LIST_LINES])
-                  + more + "\n\nÉcrivez « vendu » pour en confirmer une.", now=now)
+                  + more + "\n\nÉcrivez « vendu » pour en confirmer une.", buttons, now=now,
+                  image=card(lambda: cards.pending_card(tenant, items, now)))
     elif key in ("sold", "cancel"):
         items = await _pending(db, tenant)
         verb = "vendu" if key == "sold" else "annuler"
@@ -603,26 +669,29 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
             low = (await db.execute(select(Product.name, Product.stock_quantity).where(
                 Product.tenant_id == tenant.id, Product.active.is_(True), Product.stock_quantity.between(1, 2))
                 .order_by(Product.stock_quantity, Product.name).limit(10))).all()
+            image = card(lambda: cards.stock_card(tenant, list(out), [(n, int(q or 0)) for n, q in low], now))
             if not out and not low:
-                queue(db, connection, "Tous vos produits sont en stock.", now=now)
+                queue(db, connection, "Tous vos produits sont en stock.", now=now, image=image)
             else:
                 parts = []
                 if out:
                     parts.append("Épuisés (Bob ne les propose plus) :\n" + "\n".join(f"• {short(n, 50)}" for n in out))
                 if low:
                     parts.append("Bientôt épuisés :\n" + "\n".join(f"• {short(n, 50)} : {q}" for n, q in low))
-                queue(db, connection, "\n\n".join(parts) + "\n\nPour un produit : « stock robe ».", now=now)
+                queue(db, connection, "\n\n".join(parts) + "\n\nPour un produit : « stock robe ».", now=now, image=image)
     elif key in ("waiting", "resume"):
         items = await waiting_list(db, tenant)
         if not items:
-            queue(db, connection, "Personne ne vous attend : Bob s'occupe de tous vos clients.", now=now)
+            queue(db, connection, "Personne ne vous attend : Bob s'occupe de tous vos clients.", now=now,
+                  image=card(lambda: cards.waiting_card(tenant, items, now)))
         else:
             lines = "\n".join(f"• {w['name']} : « {short(w['last_message'], 80)} »" if w["last_message"] else f"• {w['name']}"
                               for w in items[:LIST_LINES])
             buttons = [(f"bob:continue:{w['conversation_id']}", f"Bob : {w['name']}") for w in items[:3]]
             queue(db, connection, f"Clients qui vous attendent ({len(items)}) :\n{lines}\n\n"
                   f"Répondez-leur dans Bob : {dashboard_link('?tab=conversations')}\n"
-                  "Ou laissez Bob continuer avec l'un d'eux :", buttons, now=now)
+                  "Ou laissez Bob continuer avec l'un d'eux :", buttons, now=now,
+                  image=card(lambda: cards.waiting_card(tenant, items, now)))
     elif key == "add":
         queue(db, connection, ADD_HELP, now=now)
     elif key == "pause":
@@ -633,7 +702,13 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
 
 
 def send_menu(db, connection, now) -> None:
-    """Lot 92c : les 2 messages du menu ; le 2e attend que le 1er soit accepté par Naomy (200)."""
+    """Lot 92c : les 2 messages du menu ; le 2e attend que le 1er soit accepté par Naomy (200).
+    Lot 117 : cartes allumées pour la boutique → une seule liste (contrat 1.3.3)."""
+    from app.services.assistant_cards import cards_on
+
+    if cards_on(connection.tenant_id):
+        queue(db, connection, MENU_INTRO, now=now, liste=MENU_LIST)
+        return
     first = queue(db, connection, MENU_1[0], MENU_1[1], now=now)
     second = queue(db, connection, MENU_2[0], MENU_2[1], now=now)
     second.status, second.ref = WAITING, f"after:{first.message_id}"

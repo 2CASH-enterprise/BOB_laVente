@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # Lot 92 — « Bob, votre assistant » sur le numéro AgenC'AI : interrupteur général (éteint par défaut). Chaque
     # boutique a aussi le sien, dans la carte « Naomy ». L'envoi passe par Naomy (même domaine, chemin de Naomy).
     assistant_enabled: bool = False
+    # Lot 117 — cartes en image et menu en liste (contrat 1.3.3) : vide = éteint, « on » = toutes, sinon des identifiants
+    # de boutiques séparés par des virgules (essai).
+    assistant_cards: str = ""
     # Lot 94 — parcours à boutons des boutiques : interrupteur général (allumé), en plus de celui de chaque boutique.
     guided_flow_enabled: bool = True
     debug: bool = False
