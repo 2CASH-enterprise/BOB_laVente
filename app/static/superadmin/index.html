@@ -1682,10 +1682,10 @@ async function loadFlowsSwitch() {
   try { d = await api("/api/v1/superadmin/wa-flows/settings"); } catch (e) { box.innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return; }
   box.innerHTML = `<div class="row" style="justify-content: space-between; align-items: flex-start;">
     <div style="flex: 1 1 320px; min-width: 0;">
-      <div class="row"><h2>Formulaire « Réserver une table »</h2><span class="badge ${d.enabled ? "active" : "muted"}">${d.enabled ? "Allumé" : "Éteint"}</span></div>
+      <div class="row"><h2>Formulaires WhatsApp des restaurants</h2><span class="badge ${d.enabled ? "active" : "muted"}">${d.enabled ? "Allumé" : "Éteint"}</span></div>
       <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 6px 0 0;">${d.enabled
-        ? `Les restaurants reçoivent le formulaire WhatsApp (jour, heure libre, précision). ${d.published} publié${d.published > 1 ? "s" : ""} · ${d.errors} refusé${d.errors > 1 ? "s" : ""}.`
-        : `Rien n'est créé chez Meta, sauf pour les restaurants en essai (${d.trial}). Les autres gardent la réservation à boutons.`}</p>
+        ? `Les restaurants reçoivent les formulaires WhatsApp « Réserver une table » et « Finaliser la commande ». ${d.published} publié${d.published > 1 ? "s" : ""} · ${d.errors} refusé${d.errors > 1 ? "s" : ""}.`
+        : `Rien n'est créé chez Meta, sauf pour les restaurants en essai (${d.trial}). Les autres gardent les questions à boutons.`}</p>
     </div>
     <button class="btn ${d.enabled ? "danger" : "primary"}" onclick="toggleFlows(${d.enabled ? "false" : "true"})">${d.enabled ? "Éteindre…" : "Allumer pour tous…"}</button>
   </div>`;
@@ -1712,17 +1712,22 @@ function renderShopFlows(d) {
   if (!d.restaurant) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   const [tone, label] = FLOW_STATUS[d.status] || ["muted", d.status];
+  const [orderTone, orderLabel] = FLOW_STATUS[d.order_status] || ["muted", d.order_status];  // lot 115
   const option = (value, text) => `<option value="${value}" ${d.mode === value ? "selected" : ""}>${text}</option>`;
-  box.innerHTML = `<h2>Formulaire « Réserver une table »</h2>
-    <p class="muted" style="font-size: 13px; margin: 6px 0 10px;">${d.active ? "Les clients de ce restaurant reçoivent le formulaire." : "Ce restaurant garde la réservation à boutons."}</p>
+  box.innerHTML = `<h2>Formulaires WhatsApp</h2>
+    <p class="muted" style="font-size: 13px; margin: 6px 0 10px;">${d.active ? "Les clients de ce restaurant reçoivent les formulaires (réservation, fin de commande)." : "Ce restaurant garde les questions à boutons."}</p>
     <div class="row" style="gap: 10px; flex-wrap: wrap; align-items: center;">
       <select id="shop-flows-mode" class="input" style="width: auto; margin: 0;" onchange="saveShopFlowsMode()">
         ${option("AUTO", d.platform ? "Suivre la plateforme (allumé)" : "Suivre la plateforme (éteint)")}${option("ON", "Essai : allumé ici")}${option("OFF", "Éteint ici")}
       </select>
-      <span class="badge ${tone}">${esc(label)}</span>
-      <button class="btn" onclick="syncShopFlows()">Créer / vérifier le formulaire</button>
+      <button class="btn" onclick="syncShopFlows()">Créer / vérifier les formulaires</button>
     </div>
-    ${d.reason ? `<p class="tone-danger" style="font-size: 13px; margin-top: 8px;">${esc(d.reason)}</p>` : ""}`;
+    <div class="row" style="gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 13px;">
+      <span>Réserver une table</span><span class="badge ${tone}">${esc(label)}</span>
+      <span>Finaliser la commande</span><span class="badge ${orderTone}">${esc(orderLabel)}</span>
+    </div>
+    ${d.reason ? `<p class="tone-danger" style="font-size: 13px; margin-top: 8px;">Réservation : ${esc(d.reason)}</p>` : ""}
+    ${d.order_reason ? `<p class="tone-danger" style="font-size: 13px; margin-top: 8px;">Commande : ${esc(d.order_reason)}</p>` : ""}`;
 }
 
 async function loadShopFlows(id) {
@@ -1739,7 +1744,8 @@ async function syncShopFlows() {
   try {
     const d = await api(`/api/v1/superadmin/tenants/${currentShop.id}/wa-flows/sync`, { method: "POST" });
     renderShopFlows(d);
-    toast(d.status === "PUBLISHED" ? "Formulaire publié chez Meta." : "Meta a refusé le formulaire : voir le motif.", d.status === "PUBLISHED" ? "ok" : "error");
+    const ok = d.status === "PUBLISHED" && d.order_status === "PUBLISHED";
+    toast(ok ? "Formulaires publiés chez Meta." : "Meta a refusé un formulaire : voir le motif.", ok ? "ok" : "error");
   } catch (e) { toast(e.message, "error"); }
 }
 

@@ -273,7 +273,13 @@ async def receive_webhook(
         entry = entry or {"location": shared}
     # Lot 114 — réponse du formulaire « Réserver une table » : trace lisible, les champs vont au parcours.
     answered = parsed.get("flow_reply")
-    if answered is not None and str(answered.get("flow_token") or "").startswith("bobt:"):
+    if answered is not None and str(answered.get("flow_token") or "").startswith("bobc:"):  # lot 115 : fin de commande
+        from app.services import wa_flows
+
+        labels = {"e": "à emporter", "l": "livraison", "p": "sur place"}
+        incoming_text = "🧾 Formulaire de commande envoyé · " + labels.get(str(answered.get("mode")), "mode inconnu")
+        entry = entry or {"flow": answered}
+    elif answered is not None and str(answered.get("flow_token") or "").startswith("bobt:"):
         from app.services import wa_flows
 
         stamp = wa_flows.chosen_slot(answered)

@@ -28,8 +28,8 @@ class FakeFlows:
     def __init__(self, result=None, error=None):
         self.calls, self.result, self.error = [], result or {"id": "FLOW1", "success": True}, error
 
-    async def create(self, name, flow):
-        self.calls.append((name, flow))
+    async def create(self, name, flow, category="APPOINTMENT_BOOKING"):
+        self.calls.append((name, flow, category))
         if self.error:
             raise self.error
         return self.result
@@ -228,7 +228,7 @@ async def test_superadmin_switch_trial_and_sync(client, db_session, monkeypatch)
     tenant = await _booking_resto(db_session, mode=None)
     d = (await client.get(f"/api/v1/superadmin/tenants/{tenant.id}/wa-flows", headers=headers)).json()
     assert d == {"restaurant": True, "mode": "AUTO", "platform": False, "active": False, "status": "NOT_CREATED", "reason": None,
-                 "version": None}
+                 "version": None, "order_status": "NOT_CREATED", "order_reason": None}
     d = (await client.put(f"/api/v1/superadmin/tenants/{tenant.id}/wa-flows/mode", headers=headers, json={"mode": "ON"})).json()
     assert d["mode"] == "ON" and d["active"] is True
     assert (await client.get("/api/v1/superadmin/wa-flows/settings", headers=headers)).json()["trial"] == 1
@@ -244,7 +244,7 @@ async def test_superadmin_switch_trial_and_sync(client, db_session, monkeypatch)
 
     html = (Path(__file__).resolve().parents[1] / "static" / "superadmin" / "index.html").read_text(encoding="utf-8")
     assert 'id="flows-switch-card"' in html and "loadFlowsSwitch();" in html and "Essai : allumé ici" in html
-    assert "Créer / vérifier le formulaire" in html and "loadShopFlows(t.id)" in html
+    assert "Créer / vérifier les formulaires" in html and "loadShopFlows(t.id)" in html
 
 
 @pytest.mark.asyncio

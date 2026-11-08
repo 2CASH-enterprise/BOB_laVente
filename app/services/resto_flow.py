@@ -519,11 +519,119 @@ async def order(db, tenant, tu, customer):
         return _turn([_buttons("Le restaurant ne prend pas de commande sur WhatsApp pour le moment.", [HUMAN])])
     if "DINE_IN" in modes and _seated(cart):  # lot 108 : QR de la table, ni mode ni numéro à demander
         return await choose_mode(db, tenant, tu, customer, "DINE_IN")
+    form = await _order_form(db, tenant, tu, customer, cart, items, modes)  # lot 115 : formulaire WhatsApp si allumé
+    if form is not None:
+        return _turn([form])
     if len(modes) == 1:
         return await choose_mode(db, tenant, tu, customer, modes[0])
     buttons = [(f"{PREFIX}fm:{MODE_BUTTONS[m][0]}", MODE_BUTTONS[m][1]) for m in modes]
     return _turn([_buttons(_you(tu, "Comment souhaitez-vous recevoir votre commande ?", "Comment veux-tu recevoir ta commande ?"),
                            buttons)])
+
+
+def _order_data(tenant, cart, items, modes) -> dict | None:
+    """Lot 115 — ce que montre le formulaire : panier, modes, communes et frais, heures, paiements."""
+    from app.services import restaurant
+
+    currency = _currency(tenant, items)
+    intro = "\n".join([_line_text(line, currency) for line in items] + [f"Sous-total : {_money(_subtotal(items), currency)}"])
+    zones = getattr(tenant, "delivery_areas", None) or []
+    if zones:
+        areas = [{"id": str(i), "title": f"{a['name']} · {_money(a['fee'], tenant.currency) if a['fee'] else 'livraison offerte'}"[:60]}
+                 for i, a in enumerate(zones[:100])]
+    else:
+        fee = getattr(tenant, "delivery_fee", None)
+        areas = [{"id": "-", "title": f"Livraison · {_money(fee, tenant.currency)}" if fee else "Livraison"}]
+    times = [{"id": "now", "title": "Dès que possible"}] if restaurant.kitchen_open(tenant) else []
+    chosen = _later(cart, tenant)
+    later = later_times(tenant, limit=20)
+    if chosen is not None and chosen not in later:
+        later.insert(0, chosen)
+    times += [{"id": t.strftime("%Y%m%d%H%M"), "title": _when(t)[:40].capitalize()} for t in later]
+    if chosen is not None:  # heure déjà choisie (cuisine fermée) : en premier
+        times.sort(key=lambda o: o["id"] != chosen.strftime("%Y%m%d%H%M"))
+    if not times:
+        return None
+    labels = {"d": "À la livraison", "r": "Au restaurant", "k": "Par lien de paiement"}
+    pay_l = [{"id": c, "title": labels[c]} for c in _payment_choices(tenant, "DELIVERY")]
+    pay_o = [{"id": c, "title": labels[c]} for c in _payment_choices(tenant, "PICKUP")]
+    return {"intro": intro[:4000], "modes": [{"id": MODE_BUTTONS[m][0], "title": MODE_BUTTONS[m][1]} for m in modes],
+            "areas": areas, "times": times[:40], "pay_l": pay_l, "pay_o": pay_o}
+
+
+async def _order_form(db, tenant, tu, customer, cart, items, modes) -> dict | None:
+    from app.services import wa_flows
+
+    if customer is None or cart is None or not await wa_flows.active_for(db, tenant):
+        return None
+    data = _order_data(tenant, cart, items, modes)
+    flow_id = await wa_flows.ensure(db, tenant, key=wa_flows.ORDER_KEY) if data else None
+    if not flow_id:
+        return None
+    token = wa_flows.new_order_token()
+    _set_meta(cart, order_flow=token)
+    body = _you(tu, "Touchez « Finaliser » : mode, adresse, heure et paiement sur un seul écran. Vous validerez ensuite le récapitulatif.",
+                "Touche « Finaliser » : mode, adresse, heure et paiement sur un seul écran. Tu valideras ensuite le récapitulatif.")
+    fallback = {"type": "buttons", "body": _you(tu, "Comment souhaitez-vous recevoir votre commande ?", "Comment veux-tu recevoir ta commande ?"),
+                "buttons": [(f"{PREFIX}fm:{MODE_BUTTONS[m][0]}", MODE_BUTTONS[m][1]) for m in modes][:3]}
+    return {**wa_flows.order_action(flow_id, token, body, data), "fallback_action": fallback}
+
+
+async def order_answer(db, tenant, tu, customer, answer: dict):
+    """Lot 115 — réponse du formulaire de fin de commande : tout est relu et vérifié, puis le récapitulatif habituel.
+    Ce qui manque ou ne va pas (adresse vide, heure passée…) est redemandé par l'étape habituelle."""
+    from app.services import restaurant, wa_flows
+
+    cart = await _cart(db, tenant, customer)
+    if cart is None or not cart.items:
+        return await show(db, tenant, tu, customer)
+    if _meta(cart).get("order_flow") not in (None, answer.get("flow_token")):
+        return await order(db, tenant, tu, customer)  # ancien formulaire : on repart du panier actuel
+    _set_meta(cart, order_flow=None)
+    mode = MODE_OF.get(str(answer.get("mode") or ""))
+    if mode not in restaurant.modes(tenant):
+        return await order(db, tenant, tu, customer)
+    stamp = str(answer.get("time") or "")
+    if stamp == "now":
+        _set_meta(cart, later=None)
+    else:
+        try:
+            moment = datetime.strptime(stamp, "%Y%m%d%H%M").replace(tzinfo=_zone(tenant))
+        except ValueError:
+            moment = None
+        if moment is None or moment not in later_times(tenant, limit=200):
+            _set_meta(cart, later=None)
+            return await ask_later(db, tenant, tu, customer)
+        _set_meta(cart, later=stamp)
+    if not _later(cart, tenant) and not restaurant.kitchen_open(tenant):
+        return closed(tenant, tu)
+    _touch(cart, fulfillment=mode, awaiting=None)
+    _set_meta(cart, payment=None, area=None, pos=None)
+    if mode == "DELIVERY":
+        zones = getattr(tenant, "delivery_areas", None) or []
+        raw = str(answer.get("area") or "")
+        if zones and raw.isdigit() and int(raw) < len(zones):
+            _set_meta(cart, area=zones[int(raw)]["name"])
+        address = wa_flows.clean_text(answer.get("address"), 500)
+        _touch(cart, address=address if address and len(address) >= 3 else None)
+    else:
+        _touch(cart, address=None)
+    if mode == "DINE_IN" and not _seated(cart):
+        table = wa_flows.clean_text(answer.get("table"), 8)
+        if table:
+            _set_meta(cart, table=table.upper())
+    pay = str(answer.get("pay_l" if mode == "DELIVERY" else "pay_o") or "")
+    if pay in _payment_choices(tenant, mode):
+        _set_meta(cart, payment=pay)
+    if mode == "DELIVERY" and not cart.address:  # adresse vide : même endroit, ou « Envoyer la position » (lot 113)
+        return await where(db, tenant, tu, customer)
+    if mode == "DELIVERY" and zones and not _meta(cart).get("area"):
+        return areas(tenant, tu, 0)
+    if mode == "DINE_IN" and not _meta(cart).get("table"):
+        return await choose_mode(db, tenant, tu, customer, "DINE_IN")
+    if not _meta(cart).get("payment"):
+        return await payment(db, tenant, tu, customer)
+    return await recap(db, tenant, tu, customer)
 
 
 async def choose_mode(db, tenant, tu, customer, mode: str):
@@ -602,6 +710,8 @@ async def _after_address(db, tenant, tu, customer, cart, intro: str | None = Non
     zones = getattr(tenant, "delivery_areas", None) or []
     if zones and not _meta(cart).get("area"):
         return areas(tenant, tu, 0, intro)
+    if _meta(cart).get("payment") in _payment_choices(tenant, "DELIVERY"):  # lot 115 : déjà choisi dans le formulaire
+        return await recap(db, tenant, tu, customer)
     return await payment(db, tenant, tu, customer)
 
 
@@ -616,10 +726,13 @@ async def located(db, tenant, tu, customer, location: dict):
         return None
     point = {"lat": location["lat"], "lng": location["lng"]}
     _touch(cart, address=geo_ci.label(location), awaiting=None)
-    _set_meta(cart, pos=point, area=None)
     zones = getattr(tenant, "delivery_areas", None) or []
+    if _meta(cart).get("area") and geo_ci.area_index(zones, _meta(cart)["area"]) is not None:  # lot 115 : commune du formulaire
+        _set_meta(cart, pos=point)
+        return await _after_address(db, tenant, tu, customer, cart)
+    _set_meta(cart, pos=point, area=None)
     if not zones:
-        return await payment(db, tenant, tu, customer)
+        return await _after_address(db, tenant, tu, customer, cart)
     guess = geo_ci.commune(point["lat"], point["lng"])
     index = geo_ci.area_index(zones, guess)
     if index is not None:
@@ -650,7 +763,7 @@ async def choose_area(db, tenant, tu, customer, raw: str):
         return await show(db, tenant, tu, customer)
     _set_meta(cart, area=zones[int(raw)]["name"])
     if cart.address:  # lot 113 : position ou adresse déjà données
-        return await payment(db, tenant, tu, customer)
+        return await _after_address(db, tenant, tu, customer, cart)
     return await where(db, tenant, tu, customer)
 
 
@@ -670,7 +783,8 @@ async def address_choice(db, tenant, tu, customer, which: str):
         _touch(cart, fulfillment="DELIVERY", address=(saved.get("label") or "Position partagée")[:500], awaiting=None)
         index = geo_ci.area_index(getattr(tenant, "delivery_areas", None) or [], saved.get("area"))
         zones = getattr(tenant, "delivery_areas", None) or []
-        _set_meta(cart, pos={"lat": saved["lat"], "lng": saved["lng"]}, area=zones[index]["name"] if index is not None else None)
+        _set_meta(cart, pos={"lat": saved["lat"], "lng": saved["lng"]},
+                  area=zones[index]["name"] if index is not None else _meta(cart).get("area"))  # lot 115 : commune du formulaire
         return await _after_address(db, tenant, tu, customer, cart)
     if which == "s" and customer.address:
         _touch(cart, fulfillment="DELIVERY", address=customer.address[:500], awaiting=None)

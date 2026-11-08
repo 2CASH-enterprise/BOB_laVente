@@ -413,6 +413,10 @@ async def _entry(db, tenant, tu, customer, conversation, entry: dict):
         if is_restaurant(tenant):
             from app.services import resto_flow
 
+            from app.services import wa_flows
+
+            if wa_flows.is_order_token(entry["flow"].get("flow_token")):  # lot 115 : fin de commande
+                return await resto_flow.order_answer(db, tenant, tu, customer, entry["flow"])
             return await resto_flow.flow_answer(db, tenant, tu, customer, conversation, entry["flow"])
         return None
     if entry.get("location") and customer is not None:  # lot 113 : position partagée pour la livraison

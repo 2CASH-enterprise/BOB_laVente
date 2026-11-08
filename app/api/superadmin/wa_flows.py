@@ -30,7 +30,8 @@ class Mode(BaseModel):
 
 
 async def _settings(db) -> dict:
-    counts = dict((await db.execute(select(WhatsAppFlow.status, func.count()).group_by(WhatsAppFlow.status))).all())
+    counts = dict((await db.execute(select(WhatsAppFlow.status, func.count()).where(WhatsAppFlow.key == wa_flows.KEY)
+                                    .group_by(WhatsAppFlow.status))).all())
     trial = (await db.execute(select(func.count()).select_from(Tenant).where(Tenant.wa_flows == "ON"))).scalar_one()
     return {"enabled": await wa_flows.enabled(db), "published": counts.get("PUBLISHED", 0), "errors": counts.get("ERROR", 0),
             "trial": trial}
@@ -62,9 +63,11 @@ async def _overview(db, tenant) -> dict:
     from app.services.business_type import is_restaurant
 
     row = await wa_flows._row(db, tenant.id)
+    order = await wa_flows._row(db, tenant.id, wa_flows.ORDER_KEY)  # lot 115
     return {"restaurant": is_restaurant(tenant), "mode": wa_flows.tenant_mode(tenant), "platform": await wa_flows.enabled(db),
             "active": await wa_flows.active_for(db, tenant), "status": row.status if row else "NOT_CREATED",
-            "reason": row.reason if row else None, "version": row.version if row else None}
+            "reason": row.reason if row else None, "version": row.version if row else None,
+            "order_status": order.status if order else "NOT_CREATED", "order_reason": order.reason if order else None}
 
 
 @router.get("/tenants/{tenant_id}/wa-flows")
@@ -96,5 +99,6 @@ async def sync(tenant_id: UUID, db: AsyncSession = Depends(get_db),
     if not is_restaurant(tenant):
         raise HTTPException(status_code=422, detail="Le formulaire de réservation est réservé aux restaurants.")
     await wa_flows.ensure(db, tenant, force=True)
+    await wa_flows.ensure(db, tenant, force=True, key=wa_flows.ORDER_KEY)  # lot 115
     await db.commit()
     return await _overview(db, tenant)
