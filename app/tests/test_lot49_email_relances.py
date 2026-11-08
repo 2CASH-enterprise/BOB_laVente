@@ -83,7 +83,8 @@ SEND_SITES = {
     "api/orders/routes.py": 3,          # reçu (lot 100 : à boutons) et annulation : customer_window_open (sinon email)
     "services/wa_templates.py": 1,      # lot 68 : modèle APPROUVÉ par Meta (seul envoi permis hors fenêtre), Utilitaire
     "services/property_alerts.py": 5,   # lot 80 : alerte « nouveau bien » : customer_window_open juste avant l'envoi ; lot 100 : à boutons
-    "services/guided_flow.py": 4,       # lot 94 : écrans du parcours (boutons, listes), appelés SEULEMENT par le webhook (fenêtre ouverte) ; lot 104 : un seul envoi (_send), renvoi simplifié sur compte rendu d’échec
+    "services/guided_flow.py": 5,       # lot 94 : écrans du parcours (boutons, listes), appelés SEULEMENT par le webhook (fenêtre ouverte) ; lot 104 : un seul envoi (_send), renvoi simplifié sur compte rendu d’échec ; lot 112 : reçu en image dans _send
+    "services/receipt_image.py": 1,     # lot 112 : reçu en image, appelé par le reçu de paiement (customer_window_open) et la confirmation de l'IA (conversation en cours)
 }
 
 

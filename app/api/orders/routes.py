@@ -209,7 +209,12 @@ async def mark_order_paid(
             from app.services import followups
 
             buttons = followups.receipt_buttons(tenant)  # lot 100 : « Voir le catalogue », « Suivre ma commande »
-            if buttons:
+            from app.services import receipt_image
+
+            if receipt_image.applies(tenant) and await receipt_image.send(db, wa_client, customer.whatsapp_number, order,
+                                                                  receipt_image.PAID, buttons):
+                pass  # lot 112 : le reçu en image est parti (le texte reste dans l'historique et l'e-mail)
+            elif buttons:
                 await wa_client.send_buttons(to=customer.whatsapp_number, body=receipt_text, buttons=buttons)
             else:
                 await wa_client.send_text_message(to=customer.whatsapp_number, body=receipt_text)

@@ -234,12 +234,40 @@ class WhatsAppClient:
                        for i, card in enumerate(cards[:10])]}}}
         return await self._post("/messages", payload)
 
-    async def send_buttons(self, to: str, body: str, buttons: list[tuple[str, str]], image_link: str | None = None) -> dict:
+    async def upload_media(self, content: bytes, mime_type: str = "image/png", filename: str = "recu.png") -> str:
+        """Lot 112 — dépose une image chez WhatsApp et renvoie son identifiant. Pas d'adresse publique : un reçu porte
+        le nom et l'adresse du client, il ne doit jamais être lisible par un lien."""
+        headers = {"Authorization": f"Bearer {self.token}"}
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(f"{self.base_url}/media", headers=headers,
+                                         data={"messaging_product": "whatsapp", "type": mime_type},
+                                         files={"file": (filename, content, mime_type)})
+        if response.is_error:
+            details = describe_meta_error(response)
+            logger.warning("Meta a refusé le dépôt d'une image (numéro %s, HTTP %s) : %s",
+                           self.phone_number_id, response.status_code, details)
+            raise WhatsAppSendError(response.status_code, details)
+        media_id = (response.json() or {}).get("id")
+        if not media_id:
+            raise WhatsAppSendError(response.status_code, "identifiant d'image absent")
+        return str(media_id)
+
+    async def send_image_by_id(self, to: str, media_id: str, caption: str | None = None) -> dict:
+        """Lot 112 — une image déposée (upload_media), sans adresse publique."""
+        image = {"id": media_id}
+        if caption:
+            image["caption"] = to_whatsapp(caption)[:1024]
+        return await self._post("/messages", {"messaging_product": "whatsapp", "to": to, "type": "image", "image": image})
+
+    async def send_buttons(self, to: str, body: str, buttons: list[tuple[str, str]], image_link: str | None = None,
+                           image_id: str | None = None) -> dict:
         """Lot 94 — un message avec 1 à 3 boutons de réponse (20 caractères), photo en tête si donnée."""
         interactive = {"type": "button", "body": {"text": to_whatsapp(body)[:1024]},
                        "action": {"buttons": [{"type": "reply", "reply": {"id": bid[:256], "title": title[:20]}}
                                               for bid, title in buttons[:3]]}}
-        if image_link:
+        if image_id:  # lot 112 : image déposée (reçu), sans adresse publique
+            interactive["header"] = {"type": "image", "image": {"id": image_id}}
+        elif image_link:
             interactive["header"] = {"type": "image", "image": {"link": image_link}}
         payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
                    "interactive": interactive}

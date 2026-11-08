@@ -763,10 +763,9 @@ async def validate(db, tenant, tu, customer, conversation):
     if created.fulfillment == "PICKUP" and getattr(tenant, "pickup_address", None):
         text += f"\nRetrait : {tenant.pickup_address}"
     buttons = [(f"{PREFIX}s", "Suivre ma commande"), (f"{PREFIX}fv", "Voir la carte")]
-    if len(text) > 1000:
-        return _turn([{"type": "text", "body": text, "message_type": "order_confirmation"},
-                      _buttons(_you(tu, "Et ensuite ?", "Et ensuite ?"), buttons)])
-    return _turn([_buttons(text, buttons, message_type="order_confirmation")])
+    from app.services.guided_flow import confirmation
+
+    return _turn(confirmation(text, buttons, created.id, tu))  # lot 112 : reçu en image, sinon le texte
 
 
 # --- Réserver une table ---------------------------------------------------------------------------------------------

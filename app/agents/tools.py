@@ -1251,7 +1251,13 @@ class ToolExecutor:
                 from app.integrations.whatsapp.client import WhatsAppClient
 
                 wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
-                await wa_client.send_text_message(to=customer.whatsapp_number, body=confirmation_text)
+                from app.services import followups, receipt_image
+
+                # Lot 112 : le reçu en image (restaurants et boutiques) ; sinon, ou s'il ne part pas, le texte.
+                if not (tenant is not None and receipt_image.applies(tenant) and await receipt_image.send(
+                        self.db, wa_client, customer.whatsapp_number, order, receipt_image.CONFIRMED,
+                        followups.order_buttons(tenant, order), confirmation_text)):
+                    await wa_client.send_text_message(to=customer.whatsapp_number, body=confirmation_text)
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).exception("Échec de l'envoi de la confirmation pour la commande %s", order.id)
 

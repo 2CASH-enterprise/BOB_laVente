@@ -112,4 +112,33 @@ async def kit_poster_options(current_user: CurrentUser = Depends(get_current_use
     accents = sorted(vp.ACCENTS, key=lambda c: c != "safran") if restaurant else [c for c in vp.ACCENTS if c != "safran"]
     return {"models": [{"code": m, "label": vp.MODEL_LABELS[m]} for m in models],
             "accents": [{"code": c, "label": vp.ACCENT_LABELS[c], "color": vp.ACCENTS[c][0]} for c in accents],
-            "photos": photos}
+            "photos": photos, "current": accent_for(await db.get(Tenant, current_user.tenant_id))}
+
+
+class AccentChoice(BaseModel):
+    accent: str
+
+
+@router.put("/poster-accent")
+async def save_poster_accent(payload: AccentChoice, current_user: CurrentUser = Depends(get_current_user),
+                             db: AsyncSession = Depends(get_db)) -> dict:
+    """Lot 112 — la teinte retenue pour les affiches est gardée : elle colore aussi le reçu envoyé sur WhatsApp."""
+    from app.services import vitrine_posters as vp
+
+    if payload.accent not in vp.ACCENTS:
+        raise HTTPException(status_code=422, detail="Teinte inconnue")
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    tenant.poster_accent = payload.accent
+    await db.commit()
+    return {"accent": accent_for(tenant)}
+
+
+def accent_for(tenant) -> str:
+    """La teinte gardée, sinon celle du secteur (safran pour un restaurant, or sinon)."""
+    from app.services import vitrine_posters as vp
+    from app.services.business_type import is_restaurant
+
+    chosen = getattr(tenant, "poster_accent", None)
+    if chosen in vp.ACCENTS and (chosen != "safran" or is_restaurant(tenant)):
+        return chosen
+    return "safran" if is_restaurant(tenant) else "or"

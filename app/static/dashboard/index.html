@@ -7012,7 +7012,7 @@ async function loadKit() {
           <div style="font-weight: 600; font-size: 14px; margin-bottom: 6px;">Affiche vitrine à imprimer</div>
           <div class="kit-row" style="flex-wrap: wrap; align-items: flex-end;">
             <label style="font-size: 12px; color: var(--muted);">Modèle<br><select id="kit-poster-model" class="input" onchange="kitPosterModelChanged()"></select></label>
-            <label style="font-size: 12px; color: var(--muted);">Teinte<br><select id="kit-poster-accent" class="input"></select></label>
+            <label style="font-size: 12px; color: var(--muted);" title="Cette teinte colore aussi les reçus envoyés à vos clients sur WhatsApp.">Teinte<br><select id="kit-poster-accent" class="input" onchange="savePosterAccent()"></select></label>
             <label style="font-size: 12px; color: var(--muted);" id="kit-poster-photo-row">Photo<br><select id="kit-poster-photo" class="input"></select></label>
             <button class="action" onclick="openKitPoster()">Voir l'affiche</button>
           </div>
@@ -7066,7 +7066,7 @@ async function loadKitPosterOptions() {
   const model = document.getElementById("kit-poster-model");
   if (!model) return;
   model.innerHTML = o.models.map((m) => `<option value="${esc(m.code)}">${esc(m.label)}</option>`).join("");
-  document.getElementById("kit-poster-accent").innerHTML = o.accents.map((a) => `<option value="${esc(a.code)}">${esc(a.label)}</option>`).join("");
+  document.getElementById("kit-poster-accent").innerHTML = o.accents.map((a) => `<option value="${esc(a.code)}" ${a.code === o.current ? "selected" : ""}>${esc(a.label)}</option>`).join("");
   document.getElementById("kit-poster-photo").innerHTML = `<option value="">Sans photo</option>` +
     o.photos.map((p, i) => `<option value="${esc(p.id)}" ${i === 0 ? "selected" : ""}>${esc(p.name)}</option>`).join("");
   kitPosterModelChanged();
@@ -7076,6 +7076,12 @@ function kitPosterModelChanged() {
   const model = (document.getElementById("kit-poster-model") || {}).value;
   const row = document.getElementById("kit-poster-photo-row");
   if (row) row.classList.toggle("hidden", model === "sombre");
+}
+
+// Lot 112 — la teinte choisie est gardée : elle colore aussi le reçu en image envoyé sur WhatsApp.
+async function savePosterAccent() {
+  try { await api("/api/v1/kit/poster-accent", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accent: posterAccent() }) }); }
+  catch (e) { /* l'affiche reste possible ; la teinte sera gardée au prochain choix */ }
 }
 
 function posterAccent() {

@@ -416,7 +416,35 @@ async def _entry(db, tenant, tu, customer, conversation, entry: dict):
 
 # --- Envoi et trace dans la conversation ----------------------------------------------------------------------------
 
+def confirmation(text: str, buttons: list, order_id, tu: bool) -> list[dict]:
+    """Lot 112 — la confirmation d'une commande : le reçu en image (dessiné et déposé à l'envoi) avec ses boutons ; si
+    l'image ne part pas, le texte habituel (en deux messages s'il dépasse la limite d'un message à boutons)."""
+    receipt = {"receipt": str(order_id), "receipt_buttons": buttons}
+    if len(text) > 1000:
+        return [{"type": "text", "body": text, "message_type": "order_confirmation", **receipt},
+                {"type": "buttons", "body": _you(tu, "Et ensuite ?", "Et ensuite ?"), "buttons": buttons[:3], "skip_if_receipt": True}]
+    return [{"type": "buttons", "body": text, "buttons": buttons[:3], "message_type": "order_confirmation", **receipt}]
+
+
+async def _with_receipt(db, wa_client, action: dict) -> dict:
+    """L'écran du reçu en image si l'image a pu être dessinée et déposée ; sinon l'écran texte tel quel."""
+    from app.models.order import Order
+    from app.models.tenant import Tenant
+    from app.services import receipt_image
+
+    order = await db.get(Order, uuid.UUID(action["receipt"])) if action.get("receipt") else None
+    tenant = await db.get(Tenant, order.tenant_id) if order is not None else None
+    media_id = await receipt_image.upload(db, wa_client, order) if tenant is not None and receipt_image.applies(tenant) else None
+    if media_id is None:
+        return {k: v for k, v in action.items() if k not in ("receipt", "receipt_buttons")}
+    original = {k: v for k, v in action.items() if k not in ("receipt", "receipt_buttons")}
+    return {"type": "buttons", "body": receipt_image.caption(order, receipt_image.CONFIRMED, action["body"]), "buttons": action["receipt_buttons"][:3],
+            "image_id": media_id, "original": original, "message_type": action.get("message_type")}
+
+
 def _trace(action: dict) -> str:
+    if action.get("image_id"):  # lot 112
+        return "🧾 Reçu en image envoyé\n" + _trace(action["original"])
     if action["type"] == "carousel":
         return "🛍 Cartes envoyées : " + ", ".join(c["name"] for c in action["cards"])
     extra = ""
@@ -442,6 +470,8 @@ def degraded(action: dict) -> dict | None:
     """Lot 104 — la version suivante, plus simple, d'un écran refusé : cartes → liste sans photo ; fiche avec photo →
     mêmes boutons sans photo ; liste ou boutons → texte ; texte → rien. Les boutons restent tant que possible."""
     kind = action["type"]
+    if action.get("image_id"):  # lot 112 : reçu en image refusé → la confirmation texte
+        return action["original"]
     if kind == "carousel":
         rows = []
         for card in action["cards"][:10]:
@@ -458,6 +488,8 @@ def degraded(action: dict) -> dict | None:
 
 async def _send(wa_client, to: str, action: dict):
     if action["type"] == "buttons":
+        if action.get("image_id"):  # lot 112 : reçu en image (déposé, sans adresse publique)
+            return await wa_client.send_buttons(to=to, body=action["body"], buttons=action["buttons"], image_id=action["image_id"])
         return await wa_client.send_buttons(to=to, body=action["body"], buttons=action["buttons"], image_link=action.get("image"))
     if action["type"] == "list":
         return await wa_client.send_list(to=to, body=action["body"], button=action["button"], rows=action["rows"])
@@ -486,8 +518,12 @@ async def deliver(db, tenant, conversation, wa_client, to: str, turn: GuidedTurn
     que le message n'a pas pu être livré (photo refusée…), la version simplifiée part aussitôt (resend_failed)."""
     from app.models.conversation import Message, MessageSender
 
-    sent = 0
+    sent, receipt_sent = 0, False
     for action in turn.actions:
+        if action.get("skip_if_receipt") and receipt_sent:  # lot 112 : les boutons étaient déjà sous l'image
+            continue
+        if action.get("receipt"):
+            action = await _with_receipt(db, wa_client, action)
         kind = action.get("message_type") or "guided"
         metadata = {"guided": action["type"]}
         current, response = action, None
@@ -505,6 +541,9 @@ async def deliver(db, tenant, conversation, wa_client, to: str, turn: GuidedTurn
             kind = "product_cards"
             metadata = {"product_ids": [c["product_id"] for c in current["cards"]],
                         "image_urls": [c["link"] for c in current["cards"]]}
+        if current.get("image_id"):
+            receipt_sent = True
+            metadata = {"guided": "receipt_image"}
         if action.get("after_sent"):  # lot 98 : ex. accusé de réception d'une réclamation réellement parti
             action["after_sent"]()
         if action.get("product_id") and current["type"] == "buttons" and current.get("image"):
