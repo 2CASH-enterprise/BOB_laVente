@@ -29,6 +29,7 @@ class TenantResponse(BaseModel):
     company_profile: str | None
     payment_link: str | None
     default_bob_category: str | None = None  # lot 78
+    call_phone: str | None = None  # lot 116
     active: bool
     # Lot 51 — Bob en pause pour toute la boutique, ou échéance proche : bandeau du tableau de bord.
     bob_status: dict | None = None
@@ -44,6 +45,7 @@ class TenantProfileUpdate(BaseModel):
     company_profile: str | None = None
     payment_link: str | None = None
     default_bob_category: str | None = None  # lot 78 — catégorie par défaut des nouveaux produits
+    call_phone: str | None = None  # lot 116 — numéro pour le bouton « 📞 Appeler »
 
 
 @router.get("/me", response_model=TenantResponse)
@@ -82,6 +84,13 @@ async def update_tenant_profile(
 
         if not is_category(changes["default_bob_category"]):
             raise HTTPException(status_code=422, detail="Catégorie inconnue")
+    if "call_phone" in changes:  # lot 116 : un numéro plausible, ou vide (= le numéro WhatsApp)
+        from app.services.call_button import clean_phone
+
+        raw = (changes["call_phone"] or "").strip()
+        if raw and clean_phone(raw) is None:
+            raise HTTPException(status_code=422, detail="Numéro pour les appels invalide (8 à 15 chiffres)")
+        changes["call_phone"] = raw[:32] or None
     for field, value in changes.items():
         setattr(tenant, field, value)
 

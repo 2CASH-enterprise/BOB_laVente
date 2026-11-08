@@ -75,7 +75,7 @@ async def _customer(db, tenant, email="client@example.com", consent=True, first_
 # Chaque envoi WhatsApp du code est listé ici, avec sa justification. Un nouvel envoi fait échouer ce test
 # tant qu'on n'a pas vérifié qu'il respecte la règle des 20 h.
 SEND_SITES = {
-    "api/webhooks/whatsapp.py": 5,      # réponses au message que le client vient d'envoyer (fenêtre ouverte) ; lot 57 : accusé de réception ; lot 100 : confirmation de rendez-vous à boutons
+    "api/webhooks/whatsapp.py": 6,      # réponses au message que le client vient d'envoyer (fenêtre ouverte) ; lot 57 : accusé de réception ; lot 100 : confirmation de rendez-vous à boutons ; lot 116 : texte seul si le bouton d'appel est refusé
     "services/product_cards.py": 3,     # lot 76 : cartes / carrousel / photos de repli, appelés SEULEMENT par le webhook (fenêtre ouverte)
     "agents/tools.py": 1,               # confirmation de commande pendant la conversation (idem)
     "api/messages/routes.py": 1,        # réponse humaine : ensure_reply_window_open
@@ -83,6 +83,7 @@ SEND_SITES = {
     "api/orders/routes.py": 3,          # reçu (lot 100 : à boutons) et annulation : customer_window_open (sinon email)
     "services/wa_templates.py": 1,      # lot 68 : modèle APPROUVÉ par Meta (seul envoi permis hors fenêtre), Utilitaire
     "services/property_alerts.py": 5,   # lot 80 : alerte « nouveau bien » : customer_window_open juste avant l'envoi ; lot 100 : à boutons
+    "services/call_button.py": 3,       # lot 116 : bouton « 📞 Appeler » sous le transfert, appelé par le webhook (fenêtre ouverte)
     "services/guided_flow.py": 7,       # lot 94 : écrans du parcours (boutons, listes), appelés SEULEMENT par le webhook (fenêtre ouverte) ; lot 104 : un seul envoi (_send), renvoi simplifié sur compte rendu d’échec ; lot 112 : reçu en image dans _send ; lot 113 : bouton « Envoyer la position » dans _send ; lot 114 : formulaire de réservation dans _send
     "services/receipt_image.py": 1,     # lot 112 : reçu en image, appelé par le reçu de paiement (customer_window_open) et la confirmation de l'IA (conversation en cours)
 }
@@ -95,7 +96,7 @@ def _send_calls():
         if rel.startswith(("tests/", "integrations/")):
             continue
         # Lot 100 : les messages à boutons et les listes sont comptés aussi.
-        count = len(re.findall(r"\.send_(?:(?:text|image|template|interactive|document)_message|product_card|product_carousel|buttons|list|location_request|flow)\(",
+        count = len(re.findall(r"\.send_(?:(?:text|image|template|interactive|document)_message|product_card|product_carousel|buttons|list|location_request|flow|cta_url)\(",
                                path.read_text(encoding="utf-8")))
         if count:
             found[rel] = count

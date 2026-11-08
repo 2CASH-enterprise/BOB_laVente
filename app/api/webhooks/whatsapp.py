@@ -194,6 +194,7 @@ async def receive_webhook(
 
     conversation_repo = ConversationRepository(db)
     conversation = await conversation_repo.get_or_create_active(tenant_id, customer.id)
+    waiting_before = conversation.status == ConversationStatus.WAITING_HUMAN  # lot 116 : transfert fait par CE message ?
 
     # Lot 51 — le vendeur avait répondu depuis son téléphone, puis plus rien pendant 2 h : Bob reprend.
     if coexistence.resume_due(conversation, datetime.now(timezone.utc)):
@@ -759,8 +760,21 @@ async def receive_webhook(
     # faire planter le webhook si Meta est indisponible ou si le token a expiré : on journalise
     # et on continue, la réponse reste de toute façon consultable dans le dashboard (section 27).
     wa_client = WhatsAppClient(phone_number_id=account.phone_number_id, system_user_token=account.system_user_token)
+    # Lot 116 — le client vient d'être transmis à la boutique : bouton « 📞 Appeler » (heures d'ouverture seulement).
+    call_url = None
+    if reply_text and not waiting_before and conversation.status == ConversationStatus.WAITING_HUMAN:
+        from app.services import call_button
+
+        call_url = await call_button.offer(db, tenant, conversation)
     try:
-        await wa_client.send_text_message(to=customer.whatsapp_number, body=reply_text)
+        if call_url:
+            try:
+                await call_button.send(wa_client, customer.whatsapp_number, reply_text, call_url)
+            except Exception:  # noqa: BLE001 — bouton refusé : le texte seul, comme avant
+                logging.getLogger(__name__).warning("Bouton d'appel refusé (conversation %s) : texte seul", conversation.id)
+                await wa_client.send_text_message(to=customer.whatsapp_number, body=reply_text)
+        else:
+            await wa_client.send_text_message(to=customer.whatsapp_number, body=reply_text)
     except Exception:  # noqa: BLE001
         logging.getLogger(__name__).exception(
             "Échec de l'envoi WhatsApp réel pour la conversation %s", conversation.id

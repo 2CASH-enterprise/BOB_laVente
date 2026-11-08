@@ -1492,6 +1492,8 @@
         <textarea id="knowledge-company-profile" class="input" rows="3" placeholder="Ex. Boutique de mode africaine à Dakar, spécialisée en tissus wax, fondée en 2020..." style="margin-bottom: 10px; resize: vertical;"></textarea>
         <input id="knowledge-website-url" placeholder="https://votre-site.com" class="input" style="margin-bottom: 10px;">
         <input id="knowledge-payment-link" placeholder="Lien de paiement (Wave, Orange Money...)" class="input" style="margin-bottom: 10px;">
+        <div class="label" style="margin-bottom: 4px; font-weight: 600;">Numéro pour les appels<button class="tip"></button><span class="tip-bubble" hidden>Quand Bob vous passe un client (« Parler à … »), il ajoute un bouton « 📞 Appeler » qui compose ce numéro, seulement pendant vos heures d'ouverture. Laissez vide pour utiliser votre numéro WhatsApp.</span></div>
+        <input id="knowledge-call-phone" type="tel" placeholder="Ex. +225 27 22 00 00 00 (vide = numéro WhatsApp)" class="input" style="margin-bottom: 10px;">
         <button class="action" onclick="saveCompanyProfile()">Enregistrer</button>
         <div id="company-profile-msg" style="margin-top: 8px; font-size: 13px;"></div>
       </div>
@@ -6796,6 +6798,7 @@ async function loadCompanyProfile() {
   document.getElementById("knowledge-website-url").value = tenant.website_url || "";
   document.getElementById("knowledge-company-profile").value = tenant.company_profile || "";
   document.getElementById("knowledge-payment-link").value = tenant.payment_link || "";
+  document.getElementById("knowledge-call-phone").value = tenant.call_phone || "";  // lot 116
 }
 
 async function saveCompanyProfile() {
@@ -6808,6 +6811,7 @@ async function saveCompanyProfile() {
         website_url: document.getElementById("knowledge-website-url").value.trim() || null,
         company_profile: document.getElementById("knowledge-company-profile").value.trim() || null,
         payment_link: document.getElementById("knowledge-payment-link").value.trim() || null,
+        call_phone: document.getElementById("knowledge-call-phone").value.trim() || null,
       }),
     });
     msg.style.color = "var(--success)";

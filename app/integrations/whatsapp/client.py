@@ -283,6 +283,13 @@ class WhatsAppClient:
                                        "flow_action_payload": {"screen": screen, "data": data}}}}}
         return await self._post("/messages", payload)
 
+    async def send_cta_url(self, to: str, body: str, display_text: str, url: str) -> dict:
+        """Lot 116 — un bouton-lien sous le message (20 caractères), qui ouvre une adresse https."""
+        payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+                   "interactive": {"type": "cta_url", "body": {"text": to_whatsapp(body)[:1024]},
+                                   "action": {"name": "cta_url", "parameters": {"display_text": display_text[:20], "url": url}}}}
+        return await self._post("/messages", payload)
+
     async def send_location_request(self, to: str, body: str) -> dict:
         """Lot 113 — le bouton natif « Envoyer la position » (réponse : un message de type location)."""
         payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
