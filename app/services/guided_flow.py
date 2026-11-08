@@ -409,12 +409,38 @@ async def _entry(db, tenant, tu, customer, conversation, entry: dict):
         from app.services import resto_flow
 
         return await resto_flow.at_table(db, tenant, tu, customer, entry["table"])
+    if entry.get("location") and customer is not None:  # lot 113 : position partagée pour la livraison
+        if is_restaurant(tenant):
+            from app.services import resto_flow
+
+            return await resto_flow.located(db, tenant, tu, customer, entry["location"])
+        from app.services.business_type import ONLINE_STORE
+
+        if (getattr(tenant, "business_type", None) or ONLINE_STORE) == ONLINE_STORE:
+            from app.services import shop_cart
+
+            return await shop_cart.located(db, tenant, tu, customer, entry["location"])
+        return None
     if entry.get("welcome"):
         return await handle(db, tenant, "menu", None, None, tu, customer=customer, conversation=conversation)
     return None
 
 
 # --- Envoi et trace dans la conversation ----------------------------------------------------------------------------
+
+def location_request(tu: bool, intro: str | None = None) -> dict:
+    """Lot 113 — le bouton natif « Envoyer la position » ; le client peut aussi écrire son adresse."""
+    lead = f"{intro}\n\n" if intro else ""
+    body = lead + _you(tu, "Touchez « Envoyer la position » pour que le livreur vous trouve facilement, ou écrivez votre adresse "
+                           "(quartier, rue, repère).",
+                       "Touche « Envoyer la position » pour que le livreur te trouve facilement, ou écris ton adresse "
+                       "(quartier, rue, repère).")
+    fallback = lead + _you(tu, "Écrivez l'adresse de livraison : quartier, rue, un repère. Vous pouvez aussi partager votre position "
+                               "(trombone 📎 → Position).",
+                           "Écris l'adresse de livraison : quartier, rue, un repère. Tu peux aussi partager ta position "
+                           "(trombone 📎 → Position).")
+    return {"type": "location", "body": body, "fallback": fallback}
+
 
 def confirmation(text: str, buttons: list, order_id, tu: bool) -> list[dict]:
     """Lot 112 — la confirmation d'une commande : le reçu en image (dessiné et déposé à l'envoi) avec ses boutons ; si
@@ -450,6 +476,8 @@ def _trace(action: dict) -> str:
     extra = ""
     if action["type"] == "buttons":
         extra = "\n[Boutons : " + " · ".join(title for _, title in action["buttons"]) + "]"
+    elif action["type"] == "location":  # lot 113
+        extra = "\n[Bouton : Envoyer la position]"
     elif action["type"] == "list":
         extra = "\n[Liste : " + " · ".join(title for _, title, _ in action["rows"]) + "]"
     return action["body"] + extra
@@ -481,8 +509,8 @@ def degraded(action: dict) -> dict | None:
         return {"type": "list", "body": action["body"], "button": "Voir la liste", "rows": rows}
     if kind == "buttons" and action.get("image"):
         return {**{k: v for k, v in action.items() if k != "image"}, "type": "buttons"}
-    if kind in ("buttons", "list"):
-        return {"type": "text", "body": _fallback_text(action)}
+    if kind in ("buttons", "list", "location"):  # lot 113 : sans le bouton, le client écrit son adresse
+        return {"type": "text", "body": _fallback_text(action) if kind != "location" else action.get("fallback") or action["body"]}
     return None
 
 
@@ -493,6 +521,8 @@ async def _send(wa_client, to: str, action: dict):
         return await wa_client.send_buttons(to=to, body=action["body"], buttons=action["buttons"], image_link=action.get("image"))
     if action["type"] == "list":
         return await wa_client.send_list(to=to, body=action["body"], button=action["button"], rows=action["rows"])
+    if action["type"] == "location":  # lot 113 : bouton natif « Envoyer la position »
+        return await wa_client.send_location_request(to=to, body=action["body"])
     if action["type"] == "carousel":
         return await wa_client.send_product_carousel(to=to, body=action["body"], cards=action["cards"])
     return await wa_client.send_text_message(to=to, body=action["body"])

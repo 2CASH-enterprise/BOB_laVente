@@ -258,13 +258,27 @@ async def receive_webhook(
             if contact_point is not None and contact_point.owner_email and contact_point.archived_at is None:
                 customer.referred_contact_point_id = contact_point.id
 
+    # Lot 113 — position partagée : « 📍 Position partagée » dans l'historique, le point va au parcours (livraison).
+    shared = parsed.get("location")
+    if shared is not None:
+        from app.services import geo_ci
+
+        point = geo_ci.valid(shared.get("lat"), shared.get("lng"))
+        shared = {**shared, "lat": point[0], "lng": point[1]} if point else None
+    if shared is not None:
+        from app.services import geo_ci
+
+        place = geo_ci.label(shared)
+        incoming_text = "📍 Position partagée" + (f" : {place}" if place != "Position partagée" else "")
+        entry = entry or {"location": shared}
     incoming_message = Message(
         tenant_id=tenant_id,
         conversation_id=conversation.id,
         sender=MessageSender.CUSTOMER,
         message_type=parsed["type"],
         content=incoming_text,
-        message_metadata={"wa_message_id": parsed["wa_message_id"]},
+        message_metadata={"wa_message_id": parsed["wa_message_id"],
+                          **({"location": {"lat": shared["lat"], "lng": shared["lng"]}} if shared else {})},
     )
     db.add(incoming_message)
 

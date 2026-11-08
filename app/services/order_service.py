@@ -51,6 +51,7 @@ async def create_order(
     table_number: str | None = None,
     delivery_area: str | None = None,
     scheduled_for=None,
+    delivery_location: dict | None = None,
 ) -> Order:
     """
     Lot 95 : une ligne peut porter « variant » (position dans les variantes du produit) et « label » (« Taille 42 ») :
@@ -139,6 +140,7 @@ async def create_order(
         table_number=(table_number or "").strip()[:16] or None,  # lot 106 : restaurant
         delivery_area=(delivery_area or "").strip()[:64] or None,
         scheduled_for=scheduled_for,  # lot 107 : commande pour plus tard (heure du restaurant)
+        delivery_location=_point(delivery_location),  # lot 113 : position partagée sur WhatsApp
         tenant_id=tenant_id,
         customer_id=customer_id,
         conversation_id=conversation_id,
@@ -159,7 +161,13 @@ async def create_order(
     # Section 40 — chaque commande a un suivi de livraison, même sans adresse renseignée
     # (le commerce pourra la compléter depuis le dashboard).
     db.add(Delivery(tenant_id=tenant_id, order_id=order.id, address=delivery_address))
-    if delivery_address and str(delivery_address).strip():
+    point = _point(delivery_location)
+    if point is not None:  # lot 113 : « même endroit que la dernière fois ? » à la prochaine commande
+        from datetime import datetime, timezone
+
+        customer.delivery_location = {**point, "label": (delivery_address or "Position partagée")[:300],
+                                      "area": order.delivery_area, "at": datetime.now(timezone.utc).isoformat()}
+    if delivery_address and str(delivery_address).strip() and (point is None or delivery_address != "Position partagée"):
         # Lot 86 : l'adresse de la dernière commande devient l'adresse de livraison habituelle du client.
         customer.address = " ".join(str(delivery_address).split())[:500]
 
@@ -169,6 +177,16 @@ async def create_order(
 
     await db.flush()
     return order
+
+
+def _point(location: dict | None) -> dict | None:
+    """Lot 113 — {lat, lng} vérifiés, ou None."""
+    from app.services import geo_ci
+
+    if not location:
+        return None
+    point = geo_ci.valid(location.get("lat"), location.get("lng"))
+    return {"lat": point[0], "lng": point[1]} if point else None
 
 
 def variant_label(variant: dict, index: int) -> str:

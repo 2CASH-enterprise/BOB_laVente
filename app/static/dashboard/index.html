@@ -7886,6 +7886,26 @@ async function saveOrderReminders() {
 }
 
 // Lot 107 : restaurant — commande pour plus tard (heure choisie par le client dans le parcours à boutons).
+// Lot 113 — position partagée sur WhatsApp : la carte, et un message prêt pour le livreur (WhatsApp du téléphone).
+function courierText(order) {
+  const ref = String(order.id || "").slice(0, 8).toUpperCase();
+  const lines = [`Livraison commande n° ${ref}`];
+  if (order.delivery_area) lines.push(`Commune : ${order.delivery_area}`);
+  if (order.delivery_address && order.delivery_address !== "Position partagée") lines.push(`Adresse : ${order.delivery_address}`);
+  if (order.customer_phone) lines.push(`Client : ${order.customer_phone}`);
+  lines.push(`Carte : ${order.map_link}`);
+  if (order.total_amount !== undefined && order.total_amount !== null) lines.push(`Total : ${Number(order.total_amount).toLocaleString()} ${order.currency || ""}`.trim());
+  return lines.join("\n");
+}
+
+function courierLinks(order) {
+  if (!order.map_link || !/^https:\/\/www\.google\.com\/maps\?q=-?[0-9.]+,-?[0-9.]+$/.test(order.map_link)) return "";
+  const share = "https://wa.me/?text=" + encodeURIComponent(courierText(order));
+  return `<div style="margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap;">
+    <a href="${esc(order.map_link)}" target="_blank" rel="noopener">📍 Voir sur la carte</a>
+    <a href="${esc(share)}" target="_blank" rel="noopener">Envoyer au livreur</a></div>`;
+}
+
 function scheduledText(order) {
   if (!order.scheduled_for) return "";
   const at = new Date(order.scheduled_for);
@@ -7993,8 +8013,9 @@ async function renderDeliveryPanel(orderId) {
     : order.fulfillment === "PICKUP" ? (currentBusinessType === "RESTAURANT" ? "À emporter" : "Retrait en boutique")
     : order.delivery_address ? `Livraison${order.delivery_area ? ` (${esc(order.delivery_area)})` : ""} : ${esc(order.delivery_address)}${fee}` : "";
   const later = scheduledText(order);
+  const courier = courierLinks(order);  // lot 113 : position partagée par le client
   const summary = mode || variants.length || later
-    ? `<div style="font-size: 13px; margin-bottom: 8px;">${mode}${later ? `<div><strong>${esc(later)}</strong></div>` : ""}${variants.length ? `<div style="color: var(--muted);">${currentBusinessType === "RESTAURANT" ? "Accompagnements" : "Tailles"} : ${variants.join(", ")}</div>` : ""}</div>` : "";
+    ? `<div style="font-size: 13px; margin-bottom: 8px;">${mode}${courier}${later ? `<div><strong>${esc(later)}</strong></div>` : ""}${variants.length ? `<div style="color: var(--muted);">${currentBusinessType === "RESTAURANT" ? "Accompagnements" : "Tailles"} : ${variants.join(", ")}</div>` : ""}</div>` : "";
   panel.innerHTML = `${summary}
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; max-width: 760px; margin-bottom: 8px;">
       <select id="delivery-status-${orderId}" class="input" aria-label="Étape de la livraison">${options}</select>

@@ -334,30 +334,70 @@ async def choose(db, tenant, tu, customer, mode: str):
         body = (f"La livraison est possible à partir de {_money(minimum, currency)} d'achats. "
                 + _you(tu, f"Il vous manque {_money(missing, currency)}.", f"Il te manque {_money(missing, currency)}."))
         return _turn([_buttons(body, buttons)])
-    _touch(cart, fulfillment=DELIVERY)
-    if customer.address:
+    _touch(cart, fulfillment=DELIVERY, address=None)
+    _set_pos(cart, None)
+    saved = _saved(customer)
+    if saved or customer.address:  # lot 113 : même endroit que la dernière fois (position), sinon même adresse
         _touch(cart, awaiting=None)
+        if saved:
+            body = (_you(tu, "Livraison au même endroit que la dernière fois ?", "Livraison au même endroit que la dernière fois ?")
+                    + f"\n\n📍 {saved.get('label') or 'Position partagée'}")
+            return _turn([_buttons(body, [(f"{PREFIX}ad:same", "Oui, même endroit"), (f"{PREFIX}ad:new", "Autre endroit")])])
         body = _you(tu, "Livraison à cette adresse ?", "Livraison à cette adresse ?") + f"\n\n{customer.address}"
         return _turn([_buttons(body, [(f"{PREFIX}ad:same", "Oui, cette adresse"), (f"{PREFIX}ad:new", "Autre adresse")])])
     return _ask_address(cart, tenant, tu)
 
 
+def _saved(customer) -> dict | None:
+    saved = getattr(customer, "delivery_location", None) or None
+    return saved if saved and saved.get("lat") is not None else None
+
+
+def _set_pos(cart, point: dict | None) -> None:
+    """Lot 113 — le point exact (pour le livreur) dans le panier, à côté de l'adresse."""
+    meta = dict(cart.meta or {})
+    if point is None:
+        meta.pop("pos", None)
+    else:
+        meta["pos"] = point
+    cart.meta = meta or None
+
+
 def _ask_address(cart, tenant, tu):
+    from app.services.guided_flow import location_request
+
     _touch(cart, awaiting="address")
-    zone = f" (livraison : {tenant.delivery_zone})" if tenant.delivery_zone else ""
-    return _turn([{"type": "text", "body": _you(
-        tu, f"Écrivez l'adresse de livraison{zone} : quartier, rue, un repère, et un numéro joignable si ce n'est pas celui-ci.",
-        f"Écris l'adresse de livraison{zone} : quartier, rue, un repère, et un numéro joignable si ce n'est pas celui-ci.")}])
+    zone = f"Livraison : {tenant.delivery_zone}." if tenant.delivery_zone else None
+    return _turn([location_request(tu, zone)])  # lot 113 : bouton « Envoyer la position », ou adresse écrite
+
+
+async def located(db, tenant, tu, customer, location: dict):
+    """Lot 113 — position reçue pendant la livraison : gardée pour le livreur, puis le récapitulatif."""
+    from app.services import geo_ci
+
+    cart = await get_cart(db, tenant, customer)
+    if cart is None or not cart.items or cart.fulfillment != DELIVERY or awaiting(cart) != "address":
+        return None
+    _touch(cart, address=geo_ci.label(location), awaiting=None)
+    _set_pos(cart, {"lat": location["lat"], "lng": location["lng"]})
+    return await recap(db, tenant, tu, customer)
 
 
 async def address_choice(db, tenant, tu, customer, which: str):
     cart = await get_cart(db, tenant, customer)
     if cart is None or not cart.items:
         return await _already_or_empty(db, tenant, tu, customer)
+    saved = _saved(customer)
+    if which == "same" and saved:
+        _touch(cart, fulfillment=DELIVERY, address=(saved.get("label") or "Position partagée")[:500], awaiting=None)
+        _set_pos(cart, {"lat": saved["lat"], "lng": saved["lng"]})
+        return await recap(db, tenant, tu, customer)
     if which == "same" and customer.address:
         _touch(cart, fulfillment=DELIVERY, address=customer.address[:500], awaiting=None)
+        _set_pos(cart, None)
         return await recap(db, tenant, tu, customer)
-    _touch(cart, fulfillment=DELIVERY)
+    _touch(cart, fulfillment=DELIVERY, address=None)
+    _set_pos(cart, None)
     return _ask_address(cart, tenant, tu)
 
 
@@ -412,11 +452,13 @@ async def validate(db, tenant, tu, customer, conversation):
                     "label": line["label"]} for line in items],
             delivery_address=cart.address if cart.fulfillment == DELIVERY else None,
             payment_method=None, created_by="IA", conversation_id=conversation.id if conversation else None,
-            delivery_fee=float(fee) if fee is not None else None, fulfillment=cart.fulfillment)
+            delivery_fee=float(fee) if fee is not None else None, fulfillment=cart.fulfillment,
+            delivery_location=(cart.meta or {}).get("pos") if cart.fulfillment == DELIVERY else None)
     except OrderCreationError as exc:
         return _turn([_buttons(f"{exc.message}.", [(f"{PREFIX}k", "Voir mon panier"),
                                                   HUMAN_BUTTON])])
     _touch(cart, items=[], fulfillment=None, address=None, awaiting=None)
+    _set_pos(cart, None)
     text = generate_order_confirmation_text(order, await get_order_item_lines(db, order.id, order.currency), tenant.name,
                                             tenant.payment_link, tu=tu)
     if order.fulfillment == PICKUP and tenant.pickup_address:
@@ -582,6 +624,7 @@ async def handle_text(db, tenant, tu, customer, text: str | None):
     wanted = awaiting(cart)
     if wanted == "address" and _looks_like_address(text or ""):
         _touch(cart, fulfillment=DELIVERY, address=" ".join((text or "").split())[:500], awaiting=None)
+        _set_pos(cart, None)
         return await recap(db, tenant, tu, customer)
     if wanted and wanted.startswith("qty:") and re.fullmatch(r"\s*\d{1,3}\s*", text or ""):
         _, raw_product, raw_index = wanted.split(":")

@@ -48,11 +48,30 @@ async def _build_order_detail(db: AsyncSession, order) -> OrderDetailResponse:
         table_number=order.table_number,
         delivery_area=order.delivery_area,
         scheduled_for=order.scheduled_for,
+        delivery_location=order.delivery_location,
+        map_link=_map_link(order),
+        customer_phone=await _phone_for_courier(db, order),
         items=items,
         delivery_status=delivery.status.value if delivery else None,
         tracking_number=delivery.tracking_number if delivery else None,
     )
 
+
+
+async def _phone_for_courier(db, order) -> str | None:
+    """Lot 113 — le numéro du client, pour le message « Envoyer au livreur » (seulement si un point est partagé)."""
+    if not getattr(order, "delivery_location", None):
+        return None
+    from app.models.customer import Customer
+
+    customer = await db.get(Customer, order.customer_id)
+    return f"+{customer.whatsapp_number.lstrip('+')}" if customer is not None and customer.whatsapp_number else None
+
+
+def _map_link(order) -> str | None:
+    from app.services import geo_ci
+
+    return geo_ci.map_link(getattr(order, "delivery_location", None))
 
 @router.get("", response_model=list[OrderResponse])
 async def list_orders(

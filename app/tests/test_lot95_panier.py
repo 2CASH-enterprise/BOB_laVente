@@ -209,7 +209,7 @@ async def test_delivery_only_asks_the_address_then_shows_the_recap(db_session, u
     customer, conv = await _client_of(db_session, tenant)
     await gf.handle(db_session, tenant, None, f"g:q:{items[0].id}:2:1", customer=customer, conversation=conv)
     [ask] = (await gf.handle(db_session, tenant, None, "g:ok", customer=customer, conversation=conv)).actions
-    assert ask["type"] == "text" and ask["body"].startswith("Écrivez l'adresse de livraison (livraison : Abidjan)")
+    assert ask["type"] == "location" and ask["body"].startswith("Livraison : Abidjan.\n\nTouchez « Envoyer la position »")  # lot 113
     assert await sc.expects_text(db_session, tenant, customer, "Cocody Angré, 8e tranche, près de la pharmacie")
     [recap] = (await gf.handle(db_session, tenant, "Cocody Angré, 8e tranche, près de la pharmacie", None,
                                customer=customer, conversation=conv)).actions

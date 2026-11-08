@@ -116,7 +116,10 @@ async def gather(db, order) -> dict:
         fee_row = (f"Livraison · {area}" if area else "Livraison", amount(fee) if float(fee) > 0 else "Offerte")
     place = None
     if order.fulfillment == "DELIVERY":
-        place = ("Livraison", clean(order.delivery_address) or area or "À votre adresse")
+        written = clean(order.delivery_address)
+        if getattr(order, "delivery_location", None) and written in ("", "Position partagée"):  # lot 113
+            written = " · ".join(part for part in ("Position partagée", area) if part)
+        place = ("Livraison", written or area or "À votre adresse")
     elif order.fulfillment == "PICKUP":
         place = ("Retrait", clean(getattr(tenant, "pickup_address", None)) or ("Au restaurant" if restaurant else "En boutique"))
     elif order.fulfillment == "DINE_IN":

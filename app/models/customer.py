@@ -27,6 +27,8 @@ class Customer(Base):
     email_collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     address: Mapped[str | None] = mapped_column(String(500))
+    # Lot 113 — dernière position partagée sur WhatsApp ({lat, lng, label, area, at}) : « même endroit que la dernière fois ? ».
+    delivery_location: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     city: Mapped[str | None] = mapped_column(String(255))
     country: Mapped[str | None] = mapped_column(String(2))
     language: Mapped[str] = mapped_column(String(5), default="fr")

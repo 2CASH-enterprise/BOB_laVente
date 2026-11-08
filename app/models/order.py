@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Uuid, func
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, Numeric, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -63,6 +63,8 @@ class Order(Base):
     # Lot 106 — restaurant : numéro de table (commande sur place) et commune de livraison (frais par commune).
     table_number: Mapped[str | None] = mapped_column(String(16))
     delivery_area: Mapped[str | None] = mapped_column(String(64))
+    # Lot 113 — point exact partagé par le client ({lat, lng}) ; effacé 30 jours après la livraison.
+    delivery_location: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # lot 107 : commande pour plus tard
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -273,6 +273,13 @@ class WhatsAppClient:
                    "interactive": interactive}
         return await self._post("/messages", payload)
 
+    async def send_location_request(self, to: str, body: str) -> dict:
+        """Lot 113 — le bouton natif « Envoyer la position » (réponse : un message de type location)."""
+        payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": to, "type": "interactive",
+                   "interactive": {"type": "location_request_message", "body": {"text": to_whatsapp(body)[:1024]},
+                                   "action": {"name": "send_location"}}}
+        return await self._post("/messages", payload)
+
     async def send_list(self, to: str, body: str, button: str, rows: list[tuple[str, str, str | None]],
                         section: str | None = None) -> dict:
         """Lot 94 — une liste (10 lignes au plus : titre 24, description 72 caractères) ouverte par un bouton (20)."""
@@ -331,6 +338,16 @@ def _reply_id(msg: dict) -> str | None:
     return (msg.get("button") or {}).get("payload") or None
 
 
+def _location(msg: dict) -> dict | None:
+    if msg.get("type") != "location":
+        return None
+    loc = msg.get("location") or {}
+    if loc.get("latitude") is None or loc.get("longitude") is None:
+        return None
+    return {"lat": loc["latitude"], "lng": loc["longitude"], "name": (loc.get("name") or "")[:150] or None,
+            "address": (loc.get("address") or "")[:300] or None}
+
+
 def parse_whatsapp_message(payload: dict) -> dict | None:
     """
     Extrait le premier message entrant d'un payload de webhook Meta.
@@ -358,6 +375,8 @@ def parse_whatsapp_message(payload: dict) -> dict | None:
             "timestamp": msg.get("timestamp"),
             # Lot 28 — publicité / publication Meta « clic vers WhatsApp » (brut, nettoyé plus loin).
             "referral": msg.get("referral"),
+            # Lot 113 — position partagée (bouton « Envoyer la position » ou trombone) : coordonnées, nom, adresse.
+            "location": _location(msg),
         }
     except (KeyError, IndexError, TypeError):
         return None

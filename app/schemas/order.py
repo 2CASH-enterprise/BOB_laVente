@@ -49,6 +49,9 @@ class OrderResponse(BaseModel):
     table_number: str | None = None  # lot 106 : restaurant, commande sur place
     delivery_area: str | None = None  # lot 106 : commune de livraison
     scheduled_for: datetime | None = None  # lot 107 : commande pour plus tard
+    delivery_location: dict | None = None  # lot 113 : point exact {lat, lng} partagé sur WhatsApp
+    map_link: str | None = None  # lot 113 : Google Maps
+    customer_phone: str | None = None  # lot 113 : pour le message au livreur
 
     model_config = ConfigDict(from_attributes=True)
 

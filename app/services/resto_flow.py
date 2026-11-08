@@ -533,9 +533,10 @@ async def choose_mode(db, tenant, tu, customer, mode: str):
     if cart is None or not cart.items or mode not in restaurant.modes(tenant):
         return await order(db, tenant, tu, customer)
     _touch(cart, fulfillment=mode)
-    _set_meta(cart, area=None, payment=None)
+    _set_meta(cart, area=None, payment=None, pos=None)
     if mode == "DELIVERY":
-        return areas(tenant, tu, 0)
+        _touch(cart, address=None)
+        return await where(db, tenant, tu, customer)
     if mode == "DINE_IN":
         if _meta(cart).get("table"):
             return await payment(db, tenant, tu, customer)
@@ -546,7 +547,7 @@ async def choose_mode(db, tenant, tu, customer, mode: str):
     return await payment(db, tenant, tu, customer)
 
 
-def areas(tenant, tu, page: int):
+def areas(tenant, tu, page: int, intro: str | None = None):
     zones = getattr(tenant, "delivery_areas", None) or []
     if not zones:
         return None
@@ -557,21 +558,85 @@ def areas(tenant, tu, page: int):
         rows.append((f"{PREFIX}fz:p{page + 1}", "Autres communes", None))
     else:
         rows.append((f"{PREFIX}fz:x", "Ma commune n'y est pas", None))
-    return _turn([{"type": "list", "body": _you(tu, "Dans quelle commune livrer ?", "Dans quelle commune livrer ?"),
-                   "button": "Choisir la commune", "rows": rows[:10]}])
+    body = (f"{intro}\n\n" if intro else "") + _you(tu, "Dans quelle commune livrer ?", "Dans quelle commune livrer ?")
+    return _turn([{"type": "list", "body": body, "button": "Choisir la commune", "rows": rows[:10]}])
+
+
+def _saved(customer) -> dict | None:
+    """Lot 113 — la dernière position partagée par le client (« même endroit que la dernière fois ? »)."""
+    saved = getattr(customer, "delivery_location", None) or None
+    return saved if saved and saved.get("lat") is not None else None
+
+
+async def where(db, tenant, tu, customer):
+    """Lot 113 — livraison : même endroit que la dernière fois, sinon le bouton « Envoyer la position » (ou l'adresse écrite)."""
+    from app.services.guided_flow import location_request
+
+    cart = await _cart(db, tenant, customer, create=True)
+    _touch(cart, fulfillment="DELIVERY")
+    saved = _saved(customer)
+    if saved or customer.address:
+        _touch(cart, awaiting=None)
+        place = (saved.get("label") or "Position partagée") if saved else customer.address
+        area = f" ({saved['area']})" if saved and saved.get("area") else ""
+        question = (_you(tu, "Livraison au même endroit que la dernière fois ?", "Livraison au même endroit que la dernière fois ?")
+                    if saved else _you(tu, "Livraison à cette adresse ?", "Livraison à cette adresse ?"))
+        return _turn([_buttons(f"{question}\n\n📍 {place}{area}" if saved else f"{question}\n\n{place}",
+                               [(f"{PREFIX}fy:s", "Oui, même endroit" if saved else "Oui, cette adresse"),
+                                (f"{PREFIX}fy:n", "Autre endroit" if saved else "Autre adresse")])])
+    _touch(cart, awaiting="resto:address")
+    return _turn([location_request(tu)])
 
 
 async def delivery_start(db, tenant, tu, customer):
-    turn = areas(tenant, tu, 0)
-    if turn is not None:
-        return turn
-    return await ask_address(db, tenant, tu, customer)
+    cart = await _cart(db, tenant, customer)
+    if cart is not None and cart.address:  # adresse déjà là, la commune manque
+        turn = areas(tenant, tu, 0)
+        if turn is not None:
+            return turn
+    return await where(db, tenant, tu, customer)
+
+
+async def _after_address(db, tenant, tu, customer, cart, intro: str | None = None):
+    """Adresse ou position connue : la commune (frais de livraison) si elle manque, puis le paiement."""
+    zones = getattr(tenant, "delivery_areas", None) or []
+    if zones and not _meta(cart).get("area"):
+        return areas(tenant, tu, 0, intro)
+    return await payment(db, tenant, tu, customer)
+
+
+async def located(db, tenant, tu, customer, location: dict):
+    """Lot 113 — position reçue pendant la livraison : point gardé pour le livreur, commune proposée (à confirmer)."""
+    from app.services import geo_ci
+
+    cart = await _cart(db, tenant, customer)
+    if cart is None or not cart.items or cart.fulfillment != "DELIVERY" or cart.awaiting not in ("resto:address", None):
+        return None
+    if cart.awaiting is None and cart.address:  # rien n'était demandé : on ne remplace pas une adresse déjà choisie
+        return None
+    point = {"lat": location["lat"], "lng": location["lng"]}
+    _touch(cart, address=geo_ci.label(location), awaiting=None)
+    _set_meta(cart, pos=point, area=None)
+    zones = getattr(tenant, "delivery_areas", None) or []
+    if not zones:
+        return await payment(db, tenant, tu, customer)
+    guess = geo_ci.commune(point["lat"], point["lng"])
+    index = geo_ci.area_index(zones, guess)
+    if index is not None:
+        zone = zones[index]
+        fee = f"Livraison {_money(zone['fee'], tenant.currency)}." if zone.get("fee") else "Livraison offerte."
+        return _turn([_buttons(f"📍 Position reçue. " + _you(tu, f"Vous êtes à *{zone['name']}* ?", f"Tu es à *{zone['name']}* ?")
+                               + f" {fee}", [(f"{PREFIX}fz:{index}", "Oui, c'est ça"), (f"{PREFIX}fz:l", "Autre commune")])])
+    intro = "📍 Position reçue." + (f" Nous ne livrons pas encore à {guess}." if guess else "")
+    return areas(tenant, tu, 0, intro)
 
 
 async def choose_area(db, tenant, tu, customer, raw: str):
     zones = getattr(tenant, "delivery_areas", None) or []
+    if raw == "l":  # lot 113 : la commune proposée n'est pas la bonne
+        return areas(tenant, tu, 0) or await where(db, tenant, tu, customer)
     if raw.startswith("p") and raw[1:].isdigit():
-        return areas(tenant, tu, int(raw[1:])) or await ask_address(db, tenant, tu, customer)
+        return areas(tenant, tu, int(raw[1:])) or await where(db, tenant, tu, customer)
     if raw == "x":
         from app.services import restaurant
 
@@ -584,32 +649,36 @@ async def choose_area(db, tenant, tu, customer, raw: str):
     if cart is None or not cart.items:
         return await show(db, tenant, tu, customer)
     _set_meta(cart, area=zones[int(raw)]["name"])
-    return await ask_address(db, tenant, tu, customer)
+    if cart.address:  # lot 113 : position ou adresse déjà données
+        return await payment(db, tenant, tu, customer)
+    return await where(db, tenant, tu, customer)
 
 
 async def ask_address(db, tenant, tu, customer):
-    cart = await _cart(db, tenant, customer, create=True)
-    _touch(cart, fulfillment="DELIVERY")
-    if customer.address:
-        _touch(cart, awaiting=None)
-        return _turn([_buttons(_you(tu, "Livraison à cette adresse ?", "Livraison à cette adresse ?") + f"\n\n{customer.address}",
-                               [(f"{PREFIX}fy:s", "Oui, cette adresse"), (f"{PREFIX}fy:n", "Autre adresse")])])
-    _touch(cart, awaiting="resto:address")
-    return _turn([{"type": "text", "body": _you(
-        tu, "Écrivez l'adresse de livraison : quartier, rue, un repère, et un numéro joignable si ce n'est pas celui-ci.",
-        "Écris l'adresse de livraison : quartier, rue, un repère, et un numéro joignable si ce n'est pas celui-ci.")}])
+    return await where(db, tenant, tu, customer)
 
 
 async def address_choice(db, tenant, tu, customer, which: str):
+    from app.services import geo_ci
+    from app.services.guided_flow import location_request
+
     cart = await _cart(db, tenant, customer)
     if cart is None or not cart.items:
         return await show(db, tenant, tu, customer)
+    saved = _saved(customer)
+    if which == "s" and saved:  # lot 113 : même endroit, même commune si le restaurant y livre toujours
+        _touch(cart, fulfillment="DELIVERY", address=(saved.get("label") or "Position partagée")[:500], awaiting=None)
+        index = geo_ci.area_index(getattr(tenant, "delivery_areas", None) or [], saved.get("area"))
+        zones = getattr(tenant, "delivery_areas", None) or []
+        _set_meta(cart, pos={"lat": saved["lat"], "lng": saved["lng"]}, area=zones[index]["name"] if index is not None else None)
+        return await _after_address(db, tenant, tu, customer, cart)
     if which == "s" and customer.address:
-        _touch(cart, address=customer.address[:500], awaiting=None)
-        return await payment(db, tenant, tu, customer)
-    _touch(cart, awaiting="resto:address")
-    return _turn([{"type": "text", "body": _you(tu, "Écrivez l'adresse de livraison : quartier, rue, un repère.",
-                                                "Écris l'adresse de livraison : quartier, rue, un repère.")}])
+        _touch(cart, fulfillment="DELIVERY", address=customer.address[:500], awaiting=None)
+        _set_meta(cart, pos=None)
+        return await _after_address(db, tenant, tu, customer, cart)
+    _touch(cart, fulfillment="DELIVERY", address=None, awaiting="resto:address")
+    _set_meta(cart, pos=None, area=None)
+    return _turn([location_request(tu)])
 
 
 def _payment_choices(tenant, mode: str) -> list[str]:
@@ -753,7 +822,8 @@ async def validate(db, tenant, tu, customer, conversation):
             delivery_address=terms["address"], payment_method=PAYMENTS[pay], created_by="IA",
             conversation_id=conversation.id if conversation else None, delivery_fee=terms["delivery_fee"],
             fulfillment=terms["fulfillment"], table_number=terms["table_number"], delivery_area=terms["delivery_area"],
-            scheduled_for=later.astimezone(timezone.utc) if later else None)
+            scheduled_for=later.astimezone(timezone.utc) if later else None,
+            delivery_location=_meta(cart).get("pos") if terms["fulfillment"] == "DELIVERY" else None)
     except OrderCreationError as exc:
         return _turn([_buttons(f"{exc.message}.", [(f"{PREFIX}fk", "Voir mon panier"), HUMAN])])
     _touch(cart, items=[], fulfillment=None, address=None, awaiting=None, meta=_kept(cart))
@@ -952,7 +1022,8 @@ async def handle_text(db, tenant, tu, customer, conversation, text):
             return await payment(db, tenant, tu, customer)
     if wanted == "resto:address" and 3 <= len(clean) <= 500 and "?" not in clean:
         _touch(cart, address=clean[:500], awaiting=None)
-        return await payment(db, tenant, tu, customer)
+        _set_meta(cart, pos=None)
+        return await _after_address(db, tenant, tu, customer, cart)  # lot 113 : la commune vient après l'adresse
     if wanted.startswith("resto:avail:") and auto_flow._plausible(clean):
         party = int(wanted.rsplit(":", 1)[1])
         return await book(db, tenant, tu, customer, conversation, party, availability=clean[:200])

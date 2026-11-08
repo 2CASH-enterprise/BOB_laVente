@@ -122,13 +122,14 @@ async def test_a_delivery_order_with_a_mandatory_side(db_session):
 
     modes = (await _tap(db_session, tenant, customer, conversation, "fo")).actions[0]
     assert _titles(modes) == ["À emporter", "Livraison"]
-    areas = (await _tap(db_session, tenant, customer, conversation, "fm:l")).actions[0]
+    # Lot 113 : d'abord la position (ou l'adresse écrite), puis la commune.
+    ask = (await _tap(db_session, tenant, customer, conversation, "fm:l")).actions[0]
+    assert ask["type"] == "location" and "Envoyer la position" in ask["body"] and "écrivez votre adresse" in ask["body"]
+    assert await guided_flow.expects_text(db_session, tenant, customer, "Siporex, près de la pharmacie")
+    areas = (await _say(db_session, tenant, customer, conversation, "Siporex, près de la pharmacie")).actions[0]
     assert _titles(areas) == ["Cocody", "Yopougon", "Ma commune n'y est pas"]
     assert areas["rows"][1][2] == "2 000 XOF"
-    ask = (await _tap(db_session, tenant, customer, conversation, "fz:1")).actions[0]
-    assert ask["type"] == "text" and "adresse de livraison" in ask["body"]
-    assert await guided_flow.expects_text(db_session, tenant, customer, "Siporex, près de la pharmacie")
-    recap = (await _say(db_session, tenant, customer, conversation, "Siporex, près de la pharmacie")).actions[0]
+    recap = (await _tap(db_session, tenant, customer, conversation, "fz:1")).actions[0]
     # Pas de lien de paiement : « à la livraison » seulement, sans question.
     assert "Livraison (Yopougon) : 2 000 XOF" in recap["body"] and "Adresse : Siporex, près de la pharmacie" in recap["body"]
     assert "Paiement : à la livraison" in recap["body"] and "Total : 11 000 XOF" in recap["body"]

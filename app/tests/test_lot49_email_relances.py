@@ -83,7 +83,7 @@ SEND_SITES = {
     "api/orders/routes.py": 3,          # reçu (lot 100 : à boutons) et annulation : customer_window_open (sinon email)
     "services/wa_templates.py": 1,      # lot 68 : modèle APPROUVÉ par Meta (seul envoi permis hors fenêtre), Utilitaire
     "services/property_alerts.py": 5,   # lot 80 : alerte « nouveau bien » : customer_window_open juste avant l'envoi ; lot 100 : à boutons
-    "services/guided_flow.py": 5,       # lot 94 : écrans du parcours (boutons, listes), appelés SEULEMENT par le webhook (fenêtre ouverte) ; lot 104 : un seul envoi (_send), renvoi simplifié sur compte rendu d’échec ; lot 112 : reçu en image dans _send
+    "services/guided_flow.py": 6,       # lot 94 : écrans du parcours (boutons, listes), appelés SEULEMENT par le webhook (fenêtre ouverte) ; lot 104 : un seul envoi (_send), renvoi simplifié sur compte rendu d’échec ; lot 112 : reçu en image dans _send ; lot 113 : bouton « Envoyer la position » dans _send
     "services/receipt_image.py": 1,     # lot 112 : reçu en image, appelé par le reçu de paiement (customer_window_open) et la confirmation de l'IA (conversation en cours)
 }
 
@@ -95,7 +95,7 @@ def _send_calls():
         if rel.startswith(("tests/", "integrations/")):
             continue
         # Lot 100 : les messages à boutons et les listes sont comptés aussi.
-        count = len(re.findall(r"\.send_(?:(?:text|image|template|interactive|document)_message|product_card|product_carousel|buttons|list)\(",
+        count = len(re.findall(r"\.send_(?:(?:text|image|template|interactive|document)_message|product_card|product_carousel|buttons|list|location_request)\(",
                                path.read_text(encoding="utf-8")))
         if count:
             found[rel] = count

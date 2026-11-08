@@ -37,6 +37,7 @@ TASK_MODULES = [
     "app.workers.pige",  # lot 81
     "app.workers.inbound_leads",  # lot 83
     "app.workers.demo_purge",  # lot 73
+    "app.workers.positions",  # lot 113
     "app.workers.photo_studio",  # lot 87
     "app.workers.catalog_pdf",  # lot 88
     "app.workers.naomy",  # lot 89
@@ -140,6 +141,11 @@ celery_app.conf.beat_schedule = {
     "demo-purge": {
         "task": "app.workers.demo_purge.purge_demos_task",
         "schedule": crontab(hour=4, minute=40),
+    },
+    # Lot 113 : point exact des livraisons effacé 30 jours après la livraison.
+    "positions-purge": {
+        "task": "app.workers.positions.purge_positions_task",
+        "schedule": crontab(hour=4, minute=50),
     },
     "pige-dvf": {
         "task": "app.workers.pige.refresh_dvf_task",
