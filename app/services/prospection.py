@@ -474,9 +474,9 @@ async def oppose(db, prospect, reason: str) -> None:
     """« Ne plus contacter » : l'e-mail ET le téléphone du prospect vont dans la liste d'opposition (empreintes)."""
     from app.models.prospect import ProspectSuppression
 
-    for value in (contact_hash(email=prospect.email), contact_hash(phone=prospect.phone)):
+    for kind, value in (("email", contact_hash(email=prospect.email)), ("telephone", contact_hash(phone=prospect.phone))):
         if value and (await db.execute(select(ProspectSuppression.id).where(ProspectSuppression.email_hash == value))).first() is None:
-            db.add(ProspectSuppression(email_hash=value, reason=reason))
+            db.add(ProspectSuppression(email_hash=value, reason=reason, kind=kind))
 
 
 # --- Lot 69 : vue « Aujourd'hui » (routine de prospection) ---------------------------------------------------------

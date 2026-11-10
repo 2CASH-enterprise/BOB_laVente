@@ -133,7 +133,10 @@ class ProspectSuppression(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     reason: Mapped[str] = mapped_column(String(16), nullable=False)  # UNSUBSCRIBED, BOUNCED
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Lot 123 (contrat 1.6) — empreinte d'un e-mail ou d'un téléphone (lot 122), et qui l'a reçue : Bob ou Naomy.
+    kind: Mapped[str] = mapped_column(String(10), nullable=False, default="email", server_default="email")
+    origin: Mapped[str] = mapped_column(String(10), nullable=False, default="BOB", server_default="BOB")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class ProspectionSettings(Base):

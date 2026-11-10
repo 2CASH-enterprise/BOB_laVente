@@ -128,6 +128,41 @@ async def naomy_create_account(request: Request, db: AsyncSession = Depends(get_
     return JSONResponse(await naomy_accounts.create_account(db, await _json(request), limiter), status_code=201)
 
 
+# --- Lot 123 (contrat 1.6) : opposition commune et dédoublonnage des prospects, par empreintes seulement ----------
+
+async def _platform_limited(request: Request, limiter: RateLimiter) -> None:
+    await _platform_body(request)
+    if not await limiter.is_allowed("naomy-prospection", 120, 60):
+        raise NaomyError(429, "trop_de_requetes", "Plus de 120 appels par minute.", {"Retry-After": "60"})
+
+
+@router.post(f"{API}/prospection/oppositions")
+async def naomy_add_oppositions(request: Request, db: AsyncSession = Depends(get_db),
+                                limiter: RateLimiter = Depends(get_rate_limiter)):
+    from app.services import prospection_sync
+
+    await _platform_limited(request, limiter)
+    return await prospection_sync.add_oppositions(db, await _json(request))
+
+
+@router.get(f"{API}/prospection/oppositions")
+async def naomy_list_oppositions(request: Request, depuis: str | None = None, limite: int = 1000,
+                                 db: AsyncSession = Depends(get_db), limiter: RateLimiter = Depends(get_rate_limiter)):
+    from app.services import prospection_sync
+
+    await _platform_limited(request, limiter)
+    return await prospection_sync.list_oppositions(db, depuis, limite)
+
+
+@router.post(f"{API}/prospection/verifier")
+async def naomy_verify_targets(request: Request, db: AsyncSession = Depends(get_db),
+                               limiter: RateLimiter = Depends(get_rate_limiter)):
+    from app.services import prospection_sync
+
+    await _platform_limited(request, limiter)
+    return await prospection_sync.verify(db, await _json(request))
+
+
 @router.post(f"{API}/lien-connexion")
 async def naomy_login_link(ctx: NaomyContext = Depends(naomy_context), db: AsyncSession = Depends(get_db),
                            limiter: RateLimiter = Depends(get_rate_limiter)):
