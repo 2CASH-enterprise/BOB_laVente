@@ -1213,7 +1213,10 @@ components:
       properties:
         empreinte: { type: string, pattern: "^[0-9a-f]{64}$" }
         type: { type: string, enum: [email, telephone] }
-        raison: { type: string, enum: [desinscrit, invalide, plainte] }
+        raison:
+          type: string
+          enum: [desinscrit, invalide, plainte]
+          description: "Un « stop » déclaré est rendu « desinscrit » (même effet : ne plus jamais contacter). Accepter aussi « stop » à la lecture ne gêne pas."
         origine: { type: string, enum: [bob, naomy] }
         date: { type: string, format: date-time }
     Exclusions:
