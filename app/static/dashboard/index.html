@@ -8084,9 +8084,34 @@ fetch(API_BASE + "/api/v1/preregistration/public").then((r) => r.ok ? r.json() :
   document.getElementById("signup-offer").classList.remove("hidden");
 }).catch(() => {});
 
+// Lot 118 — lien « Connecter mon WhatsApp à Bob » envoyé par Naomy (…/dashboard/?connexion=<jeton>) : usage unique,
+// échangé contre une session puis retiré de l'adresse ; ouvre directement la rubrique où l'on relie WhatsApp.
+const magicToken = new URLSearchParams(window.location.search).get("connexion");
+if (magicToken) {
+  const params = new URLSearchParams(window.location.search);
+  params.delete("connexion");
+  const qs = params.toString();
+  history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+}
+
 if (pendingResetToken) {
   document.getElementById("app").classList.add("hidden");
   showAuthScreen("reset-screen");
+} else if (magicToken) {
+  fetch(API_BASE + "/api/v1/auth/magic", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: magicToken }),
+  }).then(async (r) => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.access_token) throw new Error(data.detail || "Ce lien de connexion a expiré ou a déjà servi.");
+    token = data.access_token;
+    localStorage.setItem("bob_token", token);
+    pendingTab = "integrations";
+    enterApp();
+  }).catch((e) => {
+    if (token) { enterApp(); return; }  // déjà connecté sur cet appareil : on continue simplement
+    document.getElementById("login-screen").classList.remove("hidden");
+    document.getElementById("login-error").textContent = e.message;
+  });
 } else if (!token && wantsPrereg) {
   showSignup();  // lien « Je me pré-inscris » de la présentation ou de la démo
 } else if (token) {

@@ -92,7 +92,7 @@ def _product(tenant, sku="R1", name="Robe wax Awa", price=15000, stock=4, image=
 
 def _contract():
     yaml = pytest.importorskip("yaml")
-    return yaml.safe_load((ROOT / "docs" / "naomy" / "bob-naomy-openapi-v1.3.3.yaml").read_text(encoding="utf-8"))
+    return yaml.safe_load((ROOT / "docs" / "naomy" / "bob-naomy-openapi-v1.4.yaml").read_text(encoding="utf-8"))
 
 
 def conforms(instance, schema_name: str):
@@ -108,10 +108,11 @@ def conforms(instance, schema_name: str):
 
 def test_contract_file_is_valid_openapi_and_lists_every_route():
     doc = _contract()
-    assert doc["openapi"] == "3.1.0" and doc["info"]["version"] == "1.3.3"
+    assert doc["openapi"] == "3.1.0" and doc["info"]["version"] == "1.4.0"
     assert set(doc["paths"]) == {"/appairage", "/connexion", "/boutique", "/produits", "/produits/{produit_id}", "/stock",
                                  "/liens", "/liens/{code}", "/resultats", "/ventes", "/rappels",
-                                 "/appairage/demande", "/assistant/messages"}  # lot 92
+                                 "/appairage/demande", "/assistant/messages",  # lot 92
+                                 "/comptes", "/lien-connexion"}  # lot 118 (1.4)
     events = set(doc["components"]["schemas"]["Evenement"]["properties"]["type"]["enum"])
     assert events == nb.EVENT_TYPES
     from app.api.naomy.routes import router

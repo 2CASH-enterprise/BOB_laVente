@@ -458,6 +458,10 @@ async def open_access(db, tenant, send=None) -> bool:
     if not is_locked(tenant):
         return False
     tenant.access_opened_at = now_utc()
+    if getattr(tenant, "created_via", None) == "NAOMY" and tenant.paid_until is None:  # lot 118 : l'essai démarre ici
+        from app.services.naomy_accounts import start_trial
+
+        start_trial(tenant)
     if send is None:
         from app.services.email_service import send_email as send
     owner = await owner_of(db, tenant)

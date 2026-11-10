@@ -100,6 +100,8 @@ class Tenant(Base):
     wa_flows: Mapped[str | None] = mapped_column(String(8))
     # Lot 116 — « Numéro pour les appels » (bouton « 📞 Appeler ») ; vide = le numéro WhatsApp de la boutique.
     call_phone: Mapped[str | None] = mapped_column(String(32))
+    # Lot 118 — où le compte a été créé : vide = chez Bob, « NAOMY » = depuis l'inscription chez Naomy (« Mon équipe »).
+    created_via: Mapped[str | None] = mapped_column(String(8))
     # Lot 68 — modèles WhatsApp autorisés pour cette boutique (le Super Admin peut les couper, ex. compte d'examen Meta).
     wa_templates_allowed: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 69 — alerte de plafond de conversations déjà envoyée ce mois-là (« 2026-10 ») et à quel seuil (80 puis 100).

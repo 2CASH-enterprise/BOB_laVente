@@ -220,6 +220,30 @@ async def login(
     return LoginResponse(access_token=token)
 
 
+@router.post("/magic", response_model=LoginResponse)
+async def magic_login_exchange(request: Request, payload: dict, db: AsyncSession = Depends(get_db),
+                               rate_limiter: RateLimiter = Depends(get_rate_limiter)) -> LoginResponse:
+    """
+    Lot 118 — lien de connexion à usage unique (compte créé depuis Naomy) échangé contre une session. Jamais pour un
+    compte en double vérification ni désactivé ; un lien déjà servi ou expiré est refusé (400, même message).
+    """
+    from app.services import magic_login
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not await rate_limiter.is_allowed(f"magic:ip:{client_ip}", limit=20, window_seconds=600):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Trop de tentatives, réessayez plus tard")
+    token = payload.get("token") if isinstance(payload, dict) else None
+    user = await magic_login.consume(db, token if isinstance(token, str) else "")
+    if user is None:
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Ce lien de connexion a expiré ou a déjà servi. Demandez-en un nouveau à Naomy, "
+                                   "ou connectez-vous avec « Mot de passe oublié ».")
+    await log_audit_event(db, actor=str(user.id), action="LOGIN_MAGIC_LINK", tenant_id=user.tenant_id, ip_address=client_ip)
+    await db.commit()
+    return LoginResponse(access_token=create_access_token(user_id=user.id, tenant_id=user.tenant_id, role=user.role.value))
+
+
 async def _send_mfa_code(db: AsyncSession, user: User) -> None:
     code = generate_otp()
     user.mfa_otp_code_hash = hash_otp(code)

@@ -105,6 +105,37 @@ async def naomy_pairing_request(request: Request, db: AsyncSession = Depends(get
     return JSONResponse({"statut": "recue"}, status_code=202)  # toujours : ne dit jamais si la boutique existe
 
 
+async def _platform_body(request: Request) -> bytes:
+    from app.core.config import get_settings
+
+    secret = get_settings().naomy_platform_secret
+    if not secret:
+        raise NaomyError(503, "indisponible", "La connexion à Naomy n'est pas encore activée sur Bob.")
+    body = await request.body()
+    if not nb.platform_signature_ok(secret, request.headers.get("x-platform-timestamp"),
+                                    request.headers.get("x-platform-signature"), body):
+        raise NaomyError(401, "signature_invalide", "Signature de plateforme invalide.")
+    return body
+
+
+@router.post(f"{API}/comptes", status_code=201)
+async def naomy_create_account(request: Request, db: AsyncSession = Depends(get_db),
+                               limiter: RateLimiter = Depends(get_rate_limiter)):
+    """Lot 118 (contrat 1.4) : « Naomy + Bob » choisi chez Naomy — compte Bob créé et relié, lien de connexion."""
+    from app.services import naomy_accounts
+
+    await _platform_body(request)
+    return JSONResponse(await naomy_accounts.create_account(db, await _json(request), limiter), status_code=201)
+
+
+@router.post(f"{API}/lien-connexion")
+async def naomy_login_link(ctx: NaomyContext = Depends(naomy_context), db: AsyncSession = Depends(get_db),
+                           limiter: RateLimiter = Depends(get_rate_limiter)):
+    from app.services import naomy_accounts
+
+    return await naomy_accounts.new_link(db, ctx.tenant, limiter)
+
+
 @router.post(f"{API}/assistant/messages", status_code=202)
 async def naomy_assistant_message(request: Request, ctx: NaomyContext = Depends(naomy_context),
                                   db: AsyncSession = Depends(get_db)):

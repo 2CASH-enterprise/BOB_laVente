@@ -157,7 +157,12 @@ async def shop_view(db, tenant) -> dict:
             "pays": (tenant.country or "").upper(), "devise": (tenant.currency or "XOF").upper(),
             "tutoiement": (tenant.address_form or "VOUS") == "TU", "logo": absolute(profile_url(tenant.id)),
             "formule": plan_code(tenant),
-            "whatsapp_affiche": account.display_phone_number if account is not None else None}
+            "whatsapp_affiche": account.display_phone_number if account is not None else None,
+            # Contrat 1.4 (lot 118) : Naomy ne publie pas de lien vers Bob tant que le WhatsApp n'est pas connecté.
+            "whatsapp_connecte": account is not None,
+            "pre_inscrit": getattr(tenant, "prereg_at", None) is not None and getattr(tenant, "access_opened_at", None) is None,
+            "payee_jusqu_au": tenant.paid_until.isoformat() if getattr(tenant, "paid_until", None) else None,
+            "origine": "NAOMY" if getattr(tenant, "created_via", None) == "NAOMY" else "BOB"}
 
 
 def photos_view(product) -> dict:
