@@ -669,8 +669,8 @@ async def import_rows(db, raw: bytes, filename: str, sheet: str | None, mapping:
     country_default = (defaults.get("country") or "CI").upper()
     sector_default = defaults.get("sector") if defaults.get("sector") in SECTORS else "ONLINE_STORE"
     source_default = " ".join(str(defaults.get("source") or "").split())[:120] or None
-    report = {"created": 0, "duplicates": 0, "excluded": 0, "errors": [], "total": len(table["rows"])}
-    blocked = await blocked_contacts(db)  # lot 122 : opposés et commerçants déjà clients, jamais importés
+    report = {"created": 0, "duplicates": 0, "excluded": 0, "excluded_naomy": 0, "errors": [], "total": len(table["rows"])}
+    rows = []
     for offset, row in enumerate(table["rows"]):
         line = table["first_line"] + offset
         values = {field: row[i].strip() for i, field in enumerate(mapping) if field and row[i].strip()}
@@ -685,7 +685,20 @@ async def import_rows(db, raw: bytes, filename: str, sheet: str | None, mapping:
         except ProspectError as exc:
             report["errors"].append({"line": line, "message": str(exc)})
             continue
+        rows.append((offset, fields, group, past))
+    # Lot 124 (contrat 1.6) — avant tout ajout : les clients et les opposés de Naomy sont écartés. Naomy injoignable :
+    # l'import est refusé (jamais le risque de prospecter un client de Naomy).
+    from app.services import prospection_sync
+
+    naomy_excluded = await prospection_sync.ask_naomy(
+        [pair for _, fields, _, _ in rows for pair in ((contact_hash(email=fields.get("email")), "email"),
+                                                        (contact_hash(phone=fields.get("phone")), "telephone"))])
+    blocked = await blocked_contacts(db)  # lot 122 : opposés et commerçants déjà clients, jamais importés
+    for offset, fields, group, past in rows:
         email, phone = fields.get("email"), fields.get("phone")
+        if {contact_hash(email=email), contact_hash(phone=phone)} & naomy_excluded:
+            report["excluded_naomy"] += 1
+            continue
         if is_blocked(blocked, email, phone):
             report["excluded"] += 1
             continue

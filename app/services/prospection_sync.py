@@ -155,3 +155,55 @@ async def verify(db, payload: dict, now: datetime | None = None) -> dict:
                 reasons.setdefault(value, motive)
     return {"exclure": [{"empreinte": i["empreinte"], "motif": reasons[i["empreinte"]]}
                         for i in items if i["empreinte"] in reasons]}
+
+
+# --- Lot 124 : dans l'autre sens, Bob demande à Naomy avant d'importer ses listes (webhook prospectionVerifier) ---
+
+NAOMY_REFUSED = ("La vérification chez Naomy (clients et oppositions de Naomy) n'a pas pu se faire : rien n'a été "
+                 "importé. Réessayez dans quelques minutes.")
+
+
+async def http_post_json(url: str, body: bytes, headers: dict) -> tuple[int, dict | None]:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+        response = await client.post(url, content=body, headers=headers)
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
+    return response.status_code, data
+
+
+async def ask_naomy(items: list[tuple[str, str]], sender=None) -> set[str]:
+    """Les empreintes que Naomy demande d'exclure (ses clients, ses opposés). Passerelle éteinte : rien à demander."""
+    import json
+
+    from app.core.config import get_settings
+    from app.services.naomy_bridge import sign
+    from app.services.prospection import ProspectError
+
+    settings = get_settings()
+    kinds = {h: kind for h, kind in items if h and HEX64.match(h) and kind in KINDS}
+    unique = sorted(kinds)
+    if not settings.naomy_platform_secret or not unique:
+        return set()
+    sender = sender or http_post_json
+    url = f"{settings.naomy_base_url.rstrip('/')}/api/bob/prospection/verifier"
+    excluded = set()
+    for start in range(0, len(unique), MAX_ITEMS):
+        chunk = unique[start:start + MAX_ITEMS]
+        body = json.dumps({"empreintes": [{"empreinte": h, "type": kinds[h]} for h in chunk]},
+                          separators=(",", ":")).encode()
+        stamp = str(int(datetime.now(timezone.utc).timestamp()))
+        headers = {"Content-Type": "application/json", "X-Platform-Timestamp": stamp, "User-Agent": "Bob-Prospection/1",
+                   "X-Platform-Signature": sign(settings.naomy_platform_secret, stamp, body)}
+        try:
+            status, data = await sender(url, body, headers)
+        except Exception:  # noqa: BLE001
+            raise ProspectError(NAOMY_REFUSED) from None
+        if status != 200 or not isinstance(data, dict) or not isinstance(data.get("exclure"), list):
+            raise ProspectError(NAOMY_REFUSED)
+        excluded |= {str(e.get("empreinte")) for e in data["exclure"] if isinstance(e, dict)} & set(chunk)
+    return excluded
+
