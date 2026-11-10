@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, CurrentUser, get_current_superadmin, get_current_user, require_role
+from app.core.security import CurrentSuperAdmin, CurrentUser, need, get_current_user, require_role
 from app.models.preregistration import PreregistrationFile
 from app.models.superadmin_user import SuperAdminUser
 from app.models.tenant import Tenant
@@ -153,7 +153,7 @@ async def _overview(db) -> dict:
 
 
 @admin_router.get("")
-async def admin_overview(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+async def admin_overview(admin: CurrentSuperAdmin = Depends(need("prereg.view")), db: AsyncSession = Depends(get_db)) -> dict:
     await _admin(db, admin)
     data = await _overview(db)
     await db.commit()
@@ -161,7 +161,7 @@ async def admin_overview(admin: CurrentSuperAdmin = Depends(get_current_superadm
 
 
 @admin_router.put("/settings")
-async def admin_mode(payload: ModeIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def admin_mode(payload: ModeIn, admin: CurrentSuperAdmin = Depends(need("prereg.edit")),
                      db: AsyncSession = Depends(get_db)) -> dict:
     me = await _admin(db, admin)
     row = await pre.settings_row(db)
@@ -179,7 +179,7 @@ class SlotsIn(BaseModel):
 
 
 @admin_router.put("/slots")
-async def admin_slots(payload: SlotsIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def admin_slots(payload: SlotsIn, admin: CurrentSuperAdmin = Depends(need("prereg.edit")),
                       db: AsyncSession = Depends(get_db)) -> dict:
     """Lot 69 — nombre de places de l'offre de lancement (100 par défaut)."""
     me = await _admin(db, admin)
@@ -200,7 +200,7 @@ async def _prereg_tenant(db, tenant_id: UUID) -> Tenant:
 
 
 @admin_router.post("/tenants/{tenant_id}/open")
-async def admin_open(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def admin_open(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(need("prereg.edit")),
                      db: AsyncSession = Depends(get_db)) -> dict:
     me = await _admin(db, admin)
     tenant = await _prereg_tenant(db, tenant_id)
@@ -211,7 +211,7 @@ async def admin_open(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(get_cur
 
 
 @admin_router.post("/tenants/{tenant_id}/relock")
-async def admin_relock(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def admin_relock(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(need("prereg.edit")),
                        db: AsyncSession = Depends(get_db)) -> dict:
     """Remet un compte en pré-inscription (bêta arrêtée) : il ne voit plus que l'accueil d'exemple."""
     me = await _admin(db, admin)
@@ -224,7 +224,7 @@ async def admin_relock(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(get_c
 
 
 @admin_router.post("/open-all")
-async def admin_open_all(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+async def admin_open_all(admin: CurrentSuperAdmin = Depends(need("prereg.edit")), db: AsyncSession = Depends(get_db)) -> dict:
     """Jour du lancement : l'accès complet pour tous les pré-inscrits (un email chacun)."""
     me = await _admin(db, admin)
     tenants = (await db.execute(select(Tenant).where(Tenant.prereg_at.is_not(None),
@@ -239,7 +239,7 @@ async def admin_open_all(admin: CurrentSuperAdmin = Depends(get_current_superadm
 
 
 @admin_router.get("/files/{file_id}")
-async def admin_file(file_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def admin_file(file_id: UUID, admin: CurrentSuperAdmin = Depends(need("prereg.view")),
                      db: AsyncSession = Depends(get_db)) -> Response:
     await _admin(db, admin)
     record = await db.get(PreregistrationFile, file_id)

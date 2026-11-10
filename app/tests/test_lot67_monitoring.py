@@ -310,8 +310,8 @@ async def test_drain_reads_the_queue(db_session):
 # ---------------------------------------------------------------- emails
 
 async def _admins(db):
-    db.add_all([SuperAdminUser(email="koffi@agencai.ci", hashed_password="x", full_name="Koffi"),
-                SuperAdminUser(email="ancien@agencai.ci", hashed_password="x", full_name="Ancien", active=False)])
+    db.add_all([SuperAdminUser(roles=["OWNER"], email="koffi@agencai.ci", hashed_password="x", full_name="Koffi"),
+                SuperAdminUser(roles=["OWNER"], email="ancien@agencai.ci", hashed_password="x", full_name="Ancien", active=False)])
     await db.commit()
 
 

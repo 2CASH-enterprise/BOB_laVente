@@ -449,7 +449,7 @@ class Mailbox:
 async def test_each_billing_email_goes_once(db_session):
     from app.workers.billing import check_billing
 
-    db_session.add(SuperAdminUser(email="admin@bob.internal", hashed_password="x", full_name="A"))
+    db_session.add(SuperAdminUser(roles=["OWNER"], email="admin@bob.internal", hashed_password="x", full_name="A"))
     end = date(2026, 10, 15)
     shop = await _shop(db_session, paid_until=end)
     mailbox = Mailbox()

@@ -29,13 +29,14 @@ class SuperAdminResendRequest(BaseModel):  # lot 70
 class TenantSummaryForAdmin(BaseModel):
     id: UUID
     name: str
-    email: str
-    plan: str
+    # Lot 119 — vides quand le rôle ne permet pas de les voir (Commercial : nom, secteur, pays, statut seulement).
+    email: str | None = None
+    plan: str | None = None
     is_demo: bool
     active: bool
-    product_count: int
-    conversation_count_this_month: int
-    commission_rate: float | None
+    product_count: int | None = None
+    conversation_count_this_month: int | None = None
+    commission_rate: float | None = None
     business_type: str = "ONLINE_STORE"  # lot 32
     created_at: datetime
     # Lot 51 — abonnement : dernier jour payé (vide = pas d'échéance) et état de Bob (pause, rappel).
@@ -49,9 +50,10 @@ class TenantSummaryForAdmin(BaseModel):
 
 class TenantDetailForAdmin(TenantSummaryForAdmin):
     currency: str
-    customer_count: int
-    order_count: int
-    total_commission_due: float
+    # Lot 119 — chiffres de la boutique : Propriétaire et Facturation seulement (vides sinon).
+    customer_count: int | None = None
+    order_count: int | None = None
+    total_commission_due: float | None = None
 
 
 class TenantPlanUpdate(BaseModel):

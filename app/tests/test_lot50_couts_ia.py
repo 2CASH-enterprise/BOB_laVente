@@ -353,7 +353,7 @@ async def test_budget_alert_is_sent_once_per_month(db_session, monkeypatch):
     monkeypatch.setattr(get_settings(), "llm_monthly_alert_usd", 1.0)
     big, _, big_conv = await _shop(db_session, "b1@l50.sn")
     small, _, small_conv = await _shop(db_session, "b2@l50.sn")
-    db_session.add(SuperAdminUser(email="admin@bob.internal", hashed_password="x", full_name="Admin"))
+    db_session.add(SuperAdminUser(roles=["OWNER"], email="admin@bob.internal", hashed_password="x", full_name="Admin"))
     await db_session.commit()
     await _usage(db_session, big.id, big_conv.id, 10_000_000, 0, 0)  # 1,50 $
     await _usage(db_session, small.id, small_conv.id, 1_000_000, 0, 0)  # 0,15 $

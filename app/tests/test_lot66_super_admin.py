@@ -108,6 +108,6 @@ def test_shell_sections_theme_and_startup():
     assert ':root[data-theme="dark"]' in HTML and "@media (prefers-color-scheme: dark)" in HTML
     assert 'localStorage.setItem("bob_sa_theme", theme)' in HTML and "family=Manrope" in HTML
     assert 'class="topbar"' in HTML and "function openMenu()" in HTML and "@media (max-width: 900px)" in HTML
-    assert HTML.rstrip().endswith("if (token) enterApp();\n</script>\n</body>\n</html>".strip())  # démarrage en dernier
+    assert HTML.rstrip().endswith("if (token && !inviteToken) enterApp();\n</script>\n</body>\n</html>".strip())  # démarrage en dernier (lot 119 : pas pendant une invitation)
     assert "function extendShop()" in HTML and "Prolonger d'un mois" in HTML and "/history`" in HTML
     assert "function bootstrapAccount()" in HTML and 'id="bootstrap-form"' in HTML

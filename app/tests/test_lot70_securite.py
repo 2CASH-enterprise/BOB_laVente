@@ -140,7 +140,7 @@ def sa_mfa(monkeypatch):
 
 
 async def _sa(db, active=True) -> SuperAdminUser:
-    admin = SuperAdminUser(email=f"sa{uuid.uuid4().hex[:6]}@agencai.ci", hashed_password=hash_password(PASSWORD),
+    admin = SuperAdminUser(roles=["OWNER"], email=f"sa{uuid.uuid4().hex[:6]}@agencai.ci", hashed_password=hash_password(PASSWORD),
                            full_name="Koffi Yao", active=active)
     db.add(admin)
     await db.commit()

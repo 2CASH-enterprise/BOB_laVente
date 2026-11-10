@@ -37,7 +37,7 @@ async def _auth(client, email):
 
 async def _admin(client, db_session):
     email = f"admin-{uuid.uuid4().hex[:6]}@bob.internal"
-    db_session.add(SuperAdminUser(email=email, hashed_password=hash_password("supersecret123"), full_name="Admin"))
+    db_session.add(SuperAdminUser(roles=["OWNER"], email=email, hashed_password=hash_password("supersecret123"), full_name="Admin"))
     await db_session.commit()
     token = (await client.post("/api/v1/superadmin/login", data={"username": email, "password": "supersecret123"})).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

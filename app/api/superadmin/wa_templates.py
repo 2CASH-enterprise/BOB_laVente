@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, get_current_superadmin
+from app.core.security import CurrentSuperAdmin, need
 from app.models.tenant import Tenant
 from app.models.whatsapp_template import WhatsAppTemplate
 from app.services import wa_templates
@@ -36,13 +36,13 @@ async def _settings(db) -> dict:
 
 
 @router.get("/wa-templates/settings")
-async def get_settings(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+async def get_settings(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(need("tech.view"))) -> dict:
     return await _settings(db)
 
 
 @router.put("/wa-templates/settings")
 async def put_settings(payload: Switch, db: AsyncSession = Depends(get_db),
-                       current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                       current: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     if payload.enabled != await wa_templates.enabled(db):
         await log_audit_event(db, actor=f"superadmin:{current.superadmin_user_id}",
                               action="WA_TEMPLATES_ON" if payload.enabled else "WA_TEMPLATES_OFF")
@@ -59,13 +59,13 @@ async def _tenant(db, tenant_id: UUID) -> Tenant:
 
 @router.get("/tenants/{tenant_id}/wa-templates")
 async def tenant_templates(tenant_id: UUID, db: AsyncSession = Depends(get_db),
-                           _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                           _: CurrentSuperAdmin = Depends(need("tech.view"))) -> dict:
     return await wa_templates.overview(db, await _tenant(db, tenant_id))
 
 
 @router.post("/tenants/{tenant_id}/wa-templates/sync")
 async def sync_templates(tenant_id: UUID, db: AsyncSession = Depends(get_db),
-                         current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                         current: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     tenant = await _tenant(db, tenant_id)
     report = await wa_templates.sync(db, tenant)
     if report["error"] is None:
@@ -77,7 +77,7 @@ async def sync_templates(tenant_id: UUID, db: AsyncSession = Depends(get_db),
 
 @router.put("/tenants/{tenant_id}/wa-templates/allowed")
 async def set_allowed(tenant_id: UUID, payload: Allowed, db: AsyncSession = Depends(get_db),
-                      current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                      current: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     tenant = await _tenant(db, tenant_id)
     if tenant.wa_templates_allowed != payload.allowed:
         tenant.wa_templates_allowed = payload.allowed

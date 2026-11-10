@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, get_current_superadmin
+from app.core.security import CurrentSuperAdmin, need
 from app.models.prospect import Prospect, ProspectEvent
 from app.models.superadmin_user import SuperAdminUser
 from app.services import prospection as pros
@@ -248,7 +248,7 @@ async def list_prospects(
     q: str | None = Query(default=None, max_length=100),
     sector: str | None = None,
     owner: str | None = None,
-    admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+    admin: CurrentSuperAdmin = Depends(need("prospects.view")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     await _me(db, admin)
@@ -296,7 +296,7 @@ async def list_prospects(
 @router.get("/funnel")
 async def prospect_funnel(
     period: str = Query(default="all", pattern="^(30|90|all)$"),
-    admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+    admin: CurrentSuperAdmin = Depends(need("prospects.view")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Entonnoir des prospects ajoutés sur la période, puis par source, par secteur et par Super Admin."""
@@ -335,7 +335,7 @@ def _today_row(p: Prospect, text: str, sender: str | None, since=None, now=None)
 
 
 @router.get("/today")
-async def prospect_today(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+async def prospect_today(admin: CurrentSuperAdmin = Depends(need("prospects.view")), db: AsyncSession = Depends(get_db)) -> dict:
     """Lot 69 — la routine du jour : WhatsApp à envoyer, relances J7, appels J14."""
     from app.services import prospect_mailer
 
@@ -358,7 +358,7 @@ class DailyLimitIn(BaseModel):
 
 
 @router.put("/today/limit")
-async def prospect_today_limit(payload: DailyLimitIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def prospect_today_limit(payload: DailyLimitIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
                                db: AsyncSession = Depends(get_db)) -> dict:
     from app.services import prospect_mailer
 
@@ -370,7 +370,7 @@ async def prospect_today_limit(payload: DailyLimitIn, admin: CurrentSuperAdmin =
 
 
 @router.post("", status_code=201)
-async def create_prospect(payload: ProspectIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def create_prospect(payload: ProspectIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
                           db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
     data = payload.model_dump(exclude_unset=True)
@@ -390,7 +390,7 @@ async def create_prospect(payload: ProspectIn, admin: CurrentSuperAdmin = Depend
 
 
 @router.get("/export.xlsx")
-async def export_prospects(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> Response:
+async def export_prospects(admin: CurrentSuperAdmin = Depends(need("prospects.edit")), db: AsyncSession = Depends(get_db)) -> Response:
     await _me(db, admin)
     prospects = (await db.execute(select(Prospect).order_by(Prospect.created_at))).scalars().all()
     stages = await _stages(db, prospects)
@@ -402,13 +402,18 @@ async def export_prospects(admin: CurrentSuperAdmin = Depends(get_current_supera
              pros.STATUSES.get(p.status, p.status), p.click_count or 0,
              p.last_contact_at.strftime("%d/%m/%Y") if p.last_contact_at else "",
              p.created_at.strftime("%d/%m/%Y") if p.created_at else "", pros.link(p.code, p.sector), p.notes or ""] for p in prospects]
+    from app.services.audit import log_audit_event
+
+    await log_audit_event(db, actor=f"superadmin:{admin.superadmin_user_id}", action="PROSPECTS_EXPORTED",
+                          details={"rows": len(rows)})  # lot 119 : les exports sont notés au journal
+    await db.commit()
     return Response(to_xlsx("Prospects", header, rows), media_type=XLSX_MEDIA,
                     headers={"Content-Disposition": 'attachment; filename="prospects.xlsx"'})
 
 
 @router.post("/import/preview")
 async def import_preview(file: UploadFile, sheet: str | None = Form(None),
-                         admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+                         admin: CurrentSuperAdmin = Depends(need("prospects.edit")), db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     raw = await file.read(MAX_BYTES + 1)
     if len(raw) > MAX_BYTES:
@@ -427,7 +432,7 @@ async def import_prospects(
     country: str = Form("CI"),
     sector: str = Form("ONLINE_STORE"),
     source: str | None = Form(None),
-    admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+    admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     me = await _me(db, admin)
@@ -447,7 +452,7 @@ async def import_prospects(
 
 
 @router.get("/{prospect_id}")
-async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(need("prospects.view")),
                           db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
     prospect = await _get(db, prospect_id)
@@ -462,11 +467,16 @@ async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(
     data["message"] = pros.message(prospect, _first(me.full_name), offer)
     data["visual_url"] = pros.visual_url(prospect.sector)  # lot 63 : à joindre au message WhatsApp
     data["whatsapp_url"] = pros.whatsapp_url(prospect, _first(me.full_name), offer) if prospect.status == "ACTIVE" else None
+    from app.services.audit import log_audit_event
+
+    await log_audit_event(db, actor=f"superadmin:{admin.superadmin_user_id}", action="PROSPECT_VIEWED",
+                          details={"prospect": prospect.company})  # lot 119 : les consultations sont notées au journal
+    await db.commit()
     return data
 
 
 @router.put("/{prospect_id}")
-async def update_prospect(prospect_id: UUID, payload: ProspectIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def update_prospect(prospect_id: UUID, payload: ProspectIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
                           db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     prospect = await _get(db, prospect_id)
@@ -494,7 +504,7 @@ async def update_prospect(prospect_id: UUID, payload: ProspectIn, admin: Current
 
 
 @router.post("/{prospect_id}/contact")
-async def log_contact(prospect_id: UUID, payload: ContactIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def log_contact(prospect_id: UUID, payload: ContactIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
                       db: AsyncSession = Depends(get_db)) -> dict:
     """Un contact fait à la main (appel, WhatsApp depuis son téléphone, visite…) ; jamais pour un prospect perdu."""
     me = await _me(db, admin)
@@ -517,7 +527,7 @@ async def log_contact(prospect_id: UUID, payload: ContactIn, admin: CurrentSuper
 
 
 @router.post("/{prospect_id}/status")
-async def change_status(prospect_id: UUID, payload: StatusIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def change_status(prospect_id: UUID, payload: StatusIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
                         db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
     prospect = await _get(db, prospect_id)
@@ -534,7 +544,7 @@ async def change_status(prospect_id: UUID, payload: StatusIn, admin: CurrentSupe
 
 
 @router.post("/{prospect_id}/note")
-async def add_note(prospect_id: UUID, payload: NoteIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def add_note(prospect_id: UUID, payload: NoteIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
                    db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
     prospect = await _get(db, prospect_id)
@@ -544,7 +554,7 @@ async def add_note(prospect_id: UUID, payload: NoteIn, admin: CurrentSuperAdmin 
 
 
 @router.delete("/{prospect_id}", status_code=204)
-async def delete_prospect(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def delete_prospect(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
                           db: AsyncSession = Depends(get_db)) -> Response:
     """Effacement à la demande du prospect (ses données et son historique)."""
     await _me(db, admin)

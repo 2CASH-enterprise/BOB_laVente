@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Uuid, func
+from sqlalchemy import JSON, Boolean, DateTime, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -25,5 +25,11 @@ class SuperAdminUser(Base):
     mfa_otp_code_hash: Mapped[str | None] = mapped_column(String(64))
     mfa_otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Lot 119 — rôles (plusieurs possibles, voir services/sa_roles) ; par défaut « Lecture seule », jamais plus.
+    roles: Mapped[list] = mapped_column(JSON, nullable=False, default=lambda: ["READONLY"])
+    # Lot 119 — invitation par e-mail : lien valable 48 h (empreinte seule), la personne choisit son mot de passe.
+    invite_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    invite_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

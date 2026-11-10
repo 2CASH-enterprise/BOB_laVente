@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.rate_limit import RateLimiter
 from app.core.rate_limit_dependency import get_rate_limiter
-from app.core.security import CurrentSuperAdmin, get_current_superadmin
+from app.core.security import CurrentSuperAdmin, need
 from app.models.monitoring import MonitorIssue, MonitorOccurrence
 from app.models.superadmin_user import SuperAdminUser
 from app.models.tenant import Tenant
@@ -133,7 +133,7 @@ async def _counts(db) -> dict:
 
 @router.get("")
 async def list_issues(filter: str = Query("todo"), source: str | None = Query(None),
-                      db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                      db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(need("tech.view"))) -> dict:
     if filter not in FILTERS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Filtre inconnu")
     try:
@@ -152,12 +152,12 @@ async def list_issues(filter: str = Query("todo"), source: str | None = Query(No
 
 
 @router.get("/status")
-async def service_status(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+async def service_status(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(need("tech.view"))) -> dict:
     return await monitoring_status.checks(db)
 
 
 @router.post("/checks/{key}/test")
-async def test_check(key: str, _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+async def test_check(key: str, _: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     if key not in ("smtp", "gmail"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test inconnu")
     return await asyncio.to_thread(monitoring_status.run_test, key)
@@ -186,7 +186,7 @@ async def _detail(db, issue: MonitorIssue) -> dict:
 
 
 @router.get("/issues/{issue_id}")
-async def get_issue(issue_id: UUID, db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+async def get_issue(issue_id: UUID, db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(need("tech.view"))) -> dict:
     return await _detail(db, await _issue_or_404(db, issue_id))
 
 
@@ -196,7 +196,7 @@ class StatusChange(BaseModel):
 
 @router.post("/issues/{issue_id}/status")
 async def change_status(issue_id: UUID, payload: StatusChange, db: AsyncSession = Depends(get_db),
-                        admin: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                        admin: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     if payload.status not in ("IN_PROGRESS", "RESOLVED", "NEW"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Statut inconnu")
     issue = await _issue_or_404(db, issue_id)

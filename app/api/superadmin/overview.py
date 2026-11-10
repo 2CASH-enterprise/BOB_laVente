@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, get_current_superadmin
+from app.core.security import CurrentSuperAdmin, need
 from app.models.audit_log import AuditLog
 from app.models.tenant import Tenant
 from app.services import bob_pause
@@ -44,6 +44,12 @@ ACTION_LABELS = {
 PROSPECT_EVENTS = {"CLICK": "a ouvert son lien personnel", "DEMO": "a essayé la démo", "SIGNUP": "a créé son compte",
                    "REPLY": "a répondu à un email"}
 PLAN_LABELS = {"FREE": "Gratuit", "INDEPENDANT": "Indépendant", "STARTER": "Starter", "PRO": "Pro", "ENTERPRISE": "Entreprise"}
+# Lot 119 — droit nécessaire pour voir chaque type de « À faire » et chaque chiffre clé.
+TODO_PERMS = {"REPLIES": "prospects.view", "FOLLOW_UP": "prospects.view", "CAMPAIGN": "campaigns.view",
+              "PREREG": "prereg.view", "BILLING": "shops.billing", "QUOTA": "shops.billing", "AI_COST": "aicosts.view",
+              "MONITORING": "tech.view"}
+KPI_PERMS = [(("prereg", "prereg_with_files"), "prereg.view"), (("follow_up", "replies"), "prospects.view"),
+             (("ai_cost", "ai_threshold", "ai_month"), "aicosts.view"), (("monitoring_new",), "tech.view")]
 STAGE_LABELS = {bob_pause.WARNING: "se termine le", bob_pause.GRACE: "est échu (jour de grâce) depuis le",
                 bob_pause.PAUSED: "est en pause : non renouvelé depuis le"}
 
@@ -95,7 +101,7 @@ async def _me(db, admin: CurrentSuperAdmin):
 
 
 @router.get("/overview")
-async def overview(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+async def overview(admin: CurrentSuperAdmin = Depends(need("overview")), db: AsyncSession = Depends(get_db)) -> dict:
     from app.core.config import get_settings
     from app.models.preregistration import PreregistrationFile
     from app.models.prospect import Prospect, ProspectCampaign, ProspectEvent
@@ -214,24 +220,35 @@ async def overview(admin: CurrentSuperAdmin = Depends(get_current_superadmin), d
                        "what": PROSPECT_EVENTS[ev.kind], "by": None})
     events.sort(key=lambda e: e["at"] or now, reverse=True)
 
+    # Lot 119 — chaque rôle ne voit que ce qui le concerne (les droits sont aussi vérifiés sur chaque rubrique).
+    todo = [item for item in todo if admin.can(TODO_PERMS[item["kind"]])]
+    kpis = {"active": len(active), "active_new": sum(1 for t in active if t.created_at and _utc(t.created_at) >= month_start),
+            "prereg": len(locked), "prereg_with_files": len(with_files),
+            "follow_up": len(follow), "replies": len(replied),
+            "ai_cost": cost, "ai_threshold": threshold, "ai_month": label, "monitoring_new": unread}
+    for keys, perm in KPI_PERMS:
+        if not admin.can(perm):
+            for key in keys:
+                kpis.pop(key)
+    if not admin.can("shops.view"):
+        events = [e for e in events if e["by"] is None and e["tone"] == "warning"]  # seulement les étapes des prospects
+    if not admin.can("prospects.view"):
+        events = [e for e in events if not (e["by"] is None and e["tone"] == "warning")]
+
     return {
         "first_name": (me.full_name or "").split()[0] if (me.full_name or "").strip() else None,
         "me_name": me.full_name or me.email,
         "prereg_mode": await preregistration.mode_on(db),
-        "kpis": {
-            "active": len(active), "active_new": sum(1 for t in active if t.created_at and _utc(t.created_at) >= month_start),
-            "prereg": len(locked), "prereg_with_files": len(with_files),
-            "follow_up": len(follow), "replies": len(replied),
-            "ai_cost": cost, "ai_threshold": threshold, "ai_month": label, "monitoring_new": unread,
-        },
+        "kpis": kpis,
         "todo": todo,
-        "funnel": pros.funnel(recent, stages) if recent else pros.funnel([], {}),
+        "funnel": (pros.funnel(recent, stages) if recent else pros.funnel([], {})) if admin.can("prospects.view") else None,
+        "roles": admin.roles,
         "activity": [{**e, "at": e["at"].isoformat() if e["at"] else None} for e in events[:ACTIVITY_LIMIT]],
     }
 
 
 @router.get("/tenants/{tenant_id}/history")
-async def tenant_history(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def tenant_history(tenant_id: UUID, admin: CurrentSuperAdmin = Depends(need("shops.view")),
                          db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     tenant = await db.get(Tenant, tenant_id)

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, CurrentUser, get_current_superadmin, get_current_user
+from app.core.security import CurrentSuperAdmin, CurrentUser, need, get_current_user
 from app.models.tenant import Tenant
 from app.services import plan_quota
 from app.services.audit import log_audit_event
@@ -34,13 +34,13 @@ async def _plans(db) -> dict:
 
 
 @router.get("/plans")
-async def get_plans(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+async def get_plans(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(need("plans.view"))) -> dict:
     return await _plans(db)
 
 
 @router.put("/plans")
 async def put_plans(payload: PlansIn, db: AsyncSession = Depends(get_db),
-                    current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                    current: CurrentSuperAdmin = Depends(need("plans.edit"))) -> dict:
     from app.services.preregistration import settings_row
 
     if payload.mode not in plan_quota.MODES:
@@ -64,7 +64,7 @@ async def put_plans(payload: PlansIn, db: AsyncSession = Depends(get_db),
 
 @router.get("/tenants/{tenant_id}/plan-usage")
 async def tenant_plan_usage(tenant_id: UUID, db: AsyncSession = Depends(get_db),
-                            _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                            _: CurrentSuperAdmin = Depends(need("shops.view"))) -> dict:
     from app.services.llm_usage_service import costs_by_tenant, month_bounds
 
     tenant = await db.get(Tenant, tenant_id)

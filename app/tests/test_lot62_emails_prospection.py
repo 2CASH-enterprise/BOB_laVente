@@ -65,7 +65,7 @@ async def _campaign(db, steps=3, **filters):
 
 async def _admin(client, db):
     email = f"sa{uuid.uuid4().hex[:6]}@agencai.ci"
-    db.add(SuperAdminUser(email=email, hashed_password=hash_password("supersecret123"), full_name="Koffi Yao"))
+    db.add(SuperAdminUser(roles=["OWNER"], email=email, hashed_password=hash_password("supersecret123"), full_name="Koffi Yao"))
     await db.commit()
     token = (await client.post("/api/v1/superadmin/login", data={"username": email, "password": "supersecret123"})).json()["access_token"]
     return {"Authorization": f"Bearer {token}"}, email

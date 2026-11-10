@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, get_current_superadmin
+from app.core.security import CurrentSuperAdmin, need
 from app.models.prospect import Prospect, ProspectCampaign, ProspectEmail
 from app.models.superadmin_user import SuperAdminUser
 from app.services import prospect_mailer as mailer
@@ -86,7 +86,7 @@ async def _view(db, campaign: ProspectCampaign) -> dict:
 
 
 @router.get("/email")
-async def email_overview(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+async def email_overview(admin: CurrentSuperAdmin = Depends(need("campaigns.view")), db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     row = await mailer.get_settings_row(db)
     await db.commit()
@@ -109,7 +109,7 @@ async def email_overview(admin: CurrentSuperAdmin = Depends(get_current_superadm
 
 
 @router.put("/email/settings")
-async def email_settings(payload: SettingsIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def email_settings(payload: SettingsIn, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                          db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     row = await mailer.get_settings_row(db)
@@ -126,7 +126,7 @@ async def email_settings(payload: SettingsIn, admin: CurrentSuperAdmin = Depends
 
 
 @router.get("/defaults")
-async def campaign_defaults(sector: str = "ONLINE_STORE", admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def campaign_defaults(sector: str = "ONLINE_STORE", admin: CurrentSuperAdmin = Depends(need("campaigns.view")),
                             db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     steps = mailer.DEFAULTS.get(sector, mailer.DEFAULTS["ONLINE_STORE"])
@@ -135,7 +135,7 @@ async def campaign_defaults(sector: str = "ONLINE_STORE", admin: CurrentSuperAdm
 
 
 @router.post("/campaigns", status_code=201)
-async def create_campaign(payload: CampaignIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def create_campaign(payload: CampaignIn, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                           db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
     campaign = ProspectCampaign(status="DRAFT", created_by=me.full_name, **_clean(payload))
@@ -145,7 +145,7 @@ async def create_campaign(payload: CampaignIn, admin: CurrentSuperAdmin = Depend
 
 
 @router.put("/campaigns/{campaign_id}")
-async def update_campaign(campaign_id: UUID, payload: CampaignIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def update_campaign(campaign_id: UUID, payload: CampaignIn, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                           db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     campaign = await _campaign(db, campaign_id)
@@ -158,7 +158,7 @@ async def update_campaign(campaign_id: UUID, payload: CampaignIn, admin: Current
 
 
 @router.delete("/campaigns/{campaign_id}", status_code=204)
-async def delete_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def delete_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                           db: AsyncSession = Depends(get_db)):
     from fastapi.responses import Response
 
@@ -180,7 +180,7 @@ async def _sample(db, campaign) -> Prospect:
 
 
 @router.post("/campaigns/{campaign_id}/preview")
-async def preview_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def preview_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(need("campaigns.view")),
                            db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     campaign = await _campaign(db, campaign_id)
@@ -194,7 +194,7 @@ async def preview_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends
 
 
 @router.post("/campaigns/{campaign_id}/test")
-async def test_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def test_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                         db: AsyncSession = Depends(get_db)) -> dict:
     """Les emails de la campagne, envoyés à soi seul par le compte de prospection (rien n'est noté)."""
     me = await _me(db, admin)
@@ -215,7 +215,7 @@ async def test_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(ge
 
 
 @router.post("/campaigns/{campaign_id}/start")
-async def start_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def start_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                          db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     campaign = await _campaign(db, campaign_id)
@@ -227,7 +227,7 @@ async def start_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(g
 
 
 @router.post("/campaigns/{campaign_id}/pause")
-async def pause_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def pause_campaign(campaign_id: UUID, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                          db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
     campaign = await _campaign(db, campaign_id)
@@ -247,7 +247,7 @@ class AdLinkIn(BaseModel):
 
 
 @router.get("/links")
-async def list_ad_links(admin: CurrentSuperAdmin = Depends(get_current_superadmin), db: AsyncSession = Depends(get_db)) -> dict:
+async def list_ad_links(admin: CurrentSuperAdmin = Depends(need("campaigns.view")), db: AsyncSession = Depends(get_db)) -> dict:
     from app.services import ad_links
 
     return {"links": await ad_links.overview(db), "channels": ad_links.CHANNELS, "sectors": pros.SECTORS,
@@ -255,7 +255,7 @@ async def list_ad_links(admin: CurrentSuperAdmin = Depends(get_current_superadmi
 
 
 @router.post("/links", status_code=201)
-async def create_ad_link(payload: AdLinkIn, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def create_ad_link(payload: AdLinkIn, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                          db: AsyncSession = Depends(get_db)) -> dict:
     from app.models.ad_link import AdLink
     from app.services import ad_links
@@ -273,7 +273,7 @@ async def create_ad_link(payload: AdLinkIn, admin: CurrentSuperAdmin = Depends(g
 
 
 @router.post("/links/{link_id}/archive")
-async def archive_ad_link(link_id: UUID, admin: CurrentSuperAdmin = Depends(get_current_superadmin),
+async def archive_ad_link(link_id: UUID, admin: CurrentSuperAdmin = Depends(need("campaigns.edit")),
                           db: AsyncSession = Depends(get_db)) -> dict:
     """Archiver (le lien ne compte plus rien et ouvre la démo comme un lien ordinaire) ou réactiver."""
     from app.models.ad_link import AdLink

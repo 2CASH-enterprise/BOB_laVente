@@ -207,6 +207,12 @@ def decode_superadmin_mfa_pending_token(token: str) -> UUID:
 
 class CurrentSuperAdmin(BaseModel):
     superadmin_user_id: UUID
+    roles: list[str] = []  # lot 119
+
+    def can(self, perm: str) -> bool:
+        from app.services.sa_roles import can
+
+        return can(self.roles, perm)
 
 
 async def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_scheme), db=Depends(get_db)) -> CurrentSuperAdmin:
@@ -224,7 +230,27 @@ async def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_s
 
     from app.models.superadmin_user import SuperAdminUser
 
-    active = (await db.execute(select(SuperAdminUser.active).where(SuperAdminUser.id == UUID(parsed.sub)))).scalar_one_or_none()
-    if not active:
+    row = (await db.execute(select(SuperAdminUser.active, SuperAdminUser.roles).where(
+        SuperAdminUser.id == UUID(parsed.sub)))).one_or_none()
+    if row is None or not row.active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Compte désactivé ou introuvable")
-    return CurrentSuperAdmin(superadmin_user_id=UUID(parsed.sub))
+    return CurrentSuperAdmin(superadmin_user_id=UUID(parsed.sub), roles=list(row.roles or []))
+
+
+def need(perm: str):
+    """
+    Lot 119 — dépendance « ce membre de l'équipe AgenC'AI a le droit `perm` » (services/sa_roles.PERMS). Les rôles sont
+    relus en base à chaque requête : un rôle retiré l'est tout de suite. 403 sinon.
+    """
+    from app.services.sa_roles import PERMS
+
+    if perm not in PERMS:
+        raise ValueError(f"Droit inconnu : {perm}")
+
+    async def dependency(current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> CurrentSuperAdmin:
+        if not current.can(perm):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Votre rôle ne permet pas cette action.")
+        return current
+
+    dependency.sa_perm = perm
+    return dependency

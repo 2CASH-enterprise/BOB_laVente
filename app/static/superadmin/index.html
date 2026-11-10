@@ -300,6 +300,16 @@
   .stat { display: inline-block; margin-right: 10px; font-size: 12.5px; white-space: nowrap; }
   .stat b { font-size: 14px; }
   .preview-frame { width: 100%; height: 420px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+  /* Lot 119 — rôles */
+  .role-list { display: grid; gap: 6px; margin-top: 6px; }
+  .role-list label { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; line-height: 1.35; cursor: pointer; }
+  .role-list label span { color: var(--muted); font-size: 12px; display: block; }
+  .role-list input { margin-top: 2px; }
+  .member { border-top: 1px solid var(--border); padding: 14px 0; display: grid; gap: 10px; }
+  .member:first-child { border-top: 0; padding-top: 0; }
+  .member-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .member-roles { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .member-roles label { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -329,6 +339,13 @@
     <button class="cta" onclick="bootstrapAccount()">Créer le compte</button>
     <div class="bootstrap-hint"><button type="button" onclick="showBootstrap(false)">← Retour à la connexion</button></div>
   </div>
+  <div id="invite-form" class="hidden">
+    <h2>Rejoindre l'équipe AgenC'AI</h2>
+    <p class="muted" style="margin: 0 0 4px; font-size: 14px;">Choisissez votre mot de passe pour le Super Admin de Bob (10 caractères au moins).</p>
+    <label for="inv-password">Mot de passe</label><input id="inv-password" type="password" class="input" autocomplete="new-password">
+    <label for="inv-password2">Confirmez le mot de passe</label><input id="inv-password2" type="password" class="input" autocomplete="new-password" onkeydown="if (event.key === 'Enter') acceptInvite()">
+    <button class="cta" onclick="acceptInvite()">Valider</button>
+  </div>
   <div id="login-error" role="alert"></div>
 </div>
 
@@ -344,11 +361,12 @@
         <div><div class="brand-word">Bob</div><div class="brand-sub">SUPER ADMIN</div></div></div>
       <nav aria-label="Super Admin">
         <button type="button" data-section="overview" onclick="showSection('overview')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Vue d'ensemble<span class="count danger hidden" id="nav-count-overview"></span></button>
-        <button type="button" data-section="shops" onclick="showSection('shops')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18v11H3zM9 20v-6h6v6"/></svg>Boutiques<span class="count plain hidden" id="nav-count-shops"></span></button>
-        <button type="button" data-section="prospects" onclick="showSection('prospects')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Prospection<span class="count danger hidden" id="nav-count-prospects"></span></button>
-        <button type="button" data-section="prereg" onclick="showSection('prereg')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Pré-inscriptions<span class="count warning hidden" id="nav-count-prereg"></span></button>
-        <button type="button" data-section="aicosts" onclick="showSection('aicosts')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Coûts IA</button>
-        <button type="button" data-section="monitoring" onclick="showSection('monitoring')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 8-6-16-3 8H2"/></svg>Monitoring<span class="count danger hidden" id="nav-count-monitoring"></span></button>
+        <button type="button" data-section="shops" data-perm="shops.basic" onclick="showSection('shops')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18v11H3zM9 20v-6h6v6"/></svg>Boutiques<span class="count plain hidden" id="nav-count-shops"></span></button>
+        <button type="button" data-section="prospects" data-perm="prospects.view" onclick="showSection('prospects')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Prospection<span class="count danger hidden" id="nav-count-prospects"></span></button>
+        <button type="button" data-section="prereg" data-perm="prereg.view" onclick="showSection('prereg')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Pré-inscriptions<span class="count warning hidden" id="nav-count-prereg"></span></button>
+        <button type="button" data-section="aicosts" data-perm="aicosts.view" onclick="showSection('aicosts')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Coûts IA</button>
+        <button type="button" data-section="monitoring" data-perm="tech.view" onclick="showSection('monitoring')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 8-6-16-3 8H2"/></svg>Monitoring<span class="count danger hidden" id="nav-count-monitoring"></span></button>
+        <button type="button" data-section="team" data-perm="team.manage" onclick="showSection('team')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>Équipe AgenC'AI</button>
       </nav>
       <div class="sidebar-foot">
         <div class="theme-switch" role="group" aria-label="Apparence">
@@ -357,7 +375,7 @@
         </div>
         <div class="account">
           <div class="avatar" id="me-avatar" aria-hidden="true">B</div>
-          <div style="min-width: 0;"><div style="font-weight: 700; font-size: 13px;" id="me-name">Super Admin</div><div class="muted" style="font-size: 11.5px;">AgenC'AI</div></div>
+          <div style="min-width: 0;"><div style="font-weight: 700; font-size: 13px;" id="me-name">Super Admin</div><div class="muted" style="font-size: 11.5px;" id="me-roles">AgenC'AI</div></div>
           <button class="icon-btn" style="margin-left: auto;" onclick="logout()" aria-label="Déconnexion" title="Déconnexion"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
         </div>
       </div>
@@ -377,7 +395,7 @@
           <div id="overview-todo"></div>
         </section>
         <div class="side-col">
-          <section class="card"><h2>Parcours des prospects</h2><p class="muted" style="margin: 4px 0 14px;">Ajoutés ces 30 derniers jours, et l'étape la plus avancée atteinte</p><div id="overview-funnel"></div></section>
+          <section class="card" data-perm="prospects.view"><h2>Parcours des prospects</h2><p class="muted" style="margin: 4px 0 14px;">Ajoutés ces 30 derniers jours, et l'étape la plus avancée atteinte</p><div id="overview-funnel"></div></section>
           <section class="card"><h2 style="margin-bottom: 12px;">Activité récente</h2><div class="activity" id="overview-activity"></div></section>
         </div>
       </div>
@@ -397,11 +415,11 @@
         </div>
         <div class="shop-grid" id="shop-grid"><p class="muted">Chargement…</p></div>
         <!-- Lot 68 — interrupteur des modèles WhatsApp pour toute la plateforme -->
-        <section class="card wa-switch" id="wa-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
+        <section class="card wa-switch" data-perm="tech.view" id="wa-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
         <!-- Lot 114 — formulaire WhatsApp « Réserver une table » (restaurants) -->
-        <section class="card wa-switch" id="flows-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
+        <section class="card wa-switch" data-perm="tech.view" id="flows-switch-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
         <!-- Lot 69 — plafonds des formules et conduite au dépassement -->
-        <section class="card" id="plans-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
+        <section class="card" data-perm="plans.view" id="plans-card" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
       </div>
       <div id="shop-detail" class="hidden"></div>
      </div>
@@ -442,6 +460,31 @@
       <section class="card mon-detail hidden" id="mon-detail" aria-live="polite"></section>
      </div>
 
+     <!-- Lot 119 — Équipe AgenC'AI : membres, rôles, invitations, journal (Propriétaire) -->
+     <div id="team-section" class="hidden">
+      <div class="page-head">
+        <div><h1>Équipe AgenC'AI</h1><p>Qui a accès au Super Admin, et pour quoi faire. Une personne peut avoir plusieurs rôles : ses droits s'additionnent.</p></div>
+      </div>
+      <div class="columns">
+        <section class="card main-col">
+          <h2 style="margin-bottom: 12px;">Membres</h2>
+          <div id="team-members"><p class="muted">Chargement…</p></div>
+        </section>
+        <div class="side-col">
+          <section class="card">
+            <h2 style="margin-bottom: 12px;">Inviter une personne</h2>
+            <label class="field-label" for="inv-name">Nom complet</label><input id="inv-name" class="input" autocomplete="off">
+            <label class="field-label" for="inv-email">E-mail</label><input id="inv-email" type="email" class="input" autocomplete="off">
+            <span class="field-label">Rôles</span>
+            <div id="inv-roles" class="role-list"></div>
+            <button type="button" class="btn primary" onclick="inviteMember()" style="margin-top: 12px;">Envoyer l'invitation</button>
+            <p class="muted" style="font-size: 12.5px; line-height: 1.5; margin: 10px 0 0;">La personne reçoit un lien valable 48 heures pour choisir son mot de passe. Ensuite, un code lui est envoyé par e-mail à chaque connexion.</p>
+          </section>
+          <section class="card"><h2 style="margin-bottom: 12px;">Journal</h2><div class="history" id="team-journal"><p class="muted">Chargement…</p></div></section>
+        </div>
+      </div>
+     </div>
+
      <!-- Lot 65 — Pré-inscriptions : interrupteur, pré-inscrits, ouverture de l'accès -->
      <div id="prereg-section" class="hidden">
       <div class="page-head"><div><h1>Pré-inscriptions</h1><p>Les entreprises inscrites avant le lancement, et l'ouverture de leur accès.</p></div></div>
@@ -449,7 +492,7 @@
       <div class="card" style="margin-top: 16px;">
         <div class="toolbar" style="margin-top: 0;">
           <h2>Pré-inscrits <span class="muted" id="prereg-counts"></span></h2>
-          <button class="btn primary" id="prereg-open-all" onclick="openAllPrereg()">Ouvrir l'accès à tous les pré-inscrits</button>
+          <button class="btn primary" id="prereg-open-all" data-perm="prereg.edit" onclick="openAllPrereg()">Ouvrir l'accès à tous les pré-inscrits</button>
         </div>
         <div id="prereg-list" style="display: grid; gap: 12px; margin-top: 12px;"></div>
       </div>
@@ -493,9 +536,9 @@
         <div class="pills" id="prospect-views"></div>
         <div class="row" style="flex: 0 1 auto;">
           <input id="prospect-search" class="input" placeholder="Rechercher (entreprise, contact, ville, source…)" oninput="searchProspects()" style="min-width: 220px;">
-          <button class="btn primary" onclick="openProspectForm()">Ajouter</button>
-          <button class="btn" onclick="openProspectImport()">Importer (Excel)</button>
-          <button class="btn" onclick="exportProspects()">Exporter (Excel)</button>
+          <button class="btn primary" data-perm="prospects.edit" onclick="openProspectForm()">Ajouter</button>
+          <button class="btn" data-perm="prospects.edit" onclick="openProspectImport()">Importer (Excel)</button>
+          <button class="btn" data-perm="prospects.edit" onclick="exportProspects()">Exporter (Excel)</button>
         </div>
       </div>
       <div class="table-wrap"><table>
@@ -590,10 +633,11 @@ function syncThemeButtons() {
 function openMenu() { document.getElementById("sidebar").classList.add("open"); document.getElementById("backdrop").classList.add("open"); }
 function closeMenu() { document.getElementById("sidebar").classList.remove("open"); document.getElementById("backdrop").classList.remove("open"); }
 
-const SECTION_TITLES = { overview: "Vue d'ensemble", shops: "Boutiques", prospects: "Prospection", prereg: "Pré-inscriptions", aicosts: "Coûts IA", monitoring: "Monitoring" };
+const SECTION_TITLES = { overview: "Vue d'ensemble", shops: "Boutiques", prospects: "Prospection", prereg: "Pré-inscriptions", aicosts: "Coûts IA", monitoring: "Monitoring", team: "Équipe AgenC'AI" };
 
 function showSection(name, opts) {
   opts = opts || {};
+  if (SECTION_PERMS[name] && !can(SECTION_PERMS[name])) name = "overview";  // lot 119 : rubrique fermée à ce rôle
   currentSection = name;
   document.querySelectorAll(".sidebar nav button").forEach((b) => {
     if (b.dataset.section === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
@@ -604,24 +648,46 @@ function showSection(name, opts) {
   window.scrollTo(0, 0);
   if (name === "overview") loadOverview();
   if (name === "shops") { if (opts.tenantId) openShop(opts.tenantId); else { closeShop(); loadTenants(); } }
-  if (name === "prospects") { if (opts.view) prospectView = opts.view; loadToday(); loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); loadEmails(); loadAdLinks(); }
+  if (name === "prospects") { if (opts.view) prospectView = opts.view; loadToday(); loadFunnel(funnelData ? funnelData.period : "all"); loadProspects(); if (can("campaigns.view")) { loadEmails(); loadAdLinks(); } }
   if (name === "prereg") loadPrereg();
   if (name === "aicosts") loadAiCosts();
   if (name === "monitoring") loadMonitoring(true);
+  if (name === "team") loadTeam();
 }
 
 // ---- Connexion ----
-function enterApp() {
+// Lot 119 — rôles : ce que le serveur permet à ce membre (GET /me). Les droits sont vérifiés par le serveur ; l'écran
+// cache seulement ce qui serait refusé (attribut data-perm, aussi sur les contenus dessinés plus tard).
+var ME = null;
+const ALL_PERMS = ["overview", "shops.basic", "shops.view", "shops.figures", "shops.billing", "shops.suspend", "shops.sector",
+  "prospects.view", "prospects.edit", "campaigns.view", "campaigns.edit", "prereg.view", "prereg.edit", "aicosts.view",
+  "tech.view", "tech.edit", "plans.view", "plans.edit", "team.manage"];
+const SECTION_PERMS = { shops: "shops.basic", prospects: "prospects.view", prereg: "prereg.view", aicosts: "aicosts.view", monitoring: "tech.view", team: "team.manage" };
+function can(perm) { return !!(ME && ME.perms.includes(perm)); }
+
+function applyPerms() {
+  let style = document.getElementById("perm-style");
+  if (!style) { style = document.createElement("style"); style.id = "perm-style"; document.head.appendChild(style); }
+  style.textContent = ALL_PERMS.filter((p) => !can(p)).map((p) => `[data-perm="${p}"]{display:none!important}`).join("\n");
+  document.getElementById("me-name").textContent = ME.full_name || ME.email;
+  document.getElementById("me-avatar").textContent = initials(ME.full_name || ME.email);
+  document.getElementById("me-roles").textContent = ME.role_labels.join(" · ") || "AgenC'AI";
+}
+
+async function enterApp() {
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   syncThemeButtons();
+  try { ME = await api("/api/v1/superadmin/me"); } catch (e) { logout(); return; }
+  applyPerms();
   // Lot 67 — lien des emails d'alerte : …/superadmin/#monitoring ouvre directement le monitoring.
-  if (location.hash === "#monitoring") { showSection("monitoring"); loadOverview(); } else showSection("overview");
+  if (location.hash === "#monitoring" && can("tech.view")) { showSection("monitoring"); loadOverview(); } else showSection("overview");
 }
 
 function logout() {
   localStorage.removeItem("bob_superadmin_token");
   token = null;
+  ME = null;
   document.getElementById("app").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
 }
@@ -743,7 +809,7 @@ async function loadOverview() {
     document.getElementById("overview-kpis").innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return;
   }
   meName = d.first_name;
-  if (d.me_name) {
+  if (d.me_name && !ME) {
     document.getElementById("me-name").textContent = d.me_name;
     document.getElementById("me-avatar").textContent = initials(d.me_name);
   }
@@ -755,10 +821,10 @@ async function loadOverview() {
   const pct = k.ai_threshold ? Math.min(100, Math.round(k.ai_cost / k.ai_threshold * 100)) : 0;
   document.getElementById("overview-kpis").innerHTML = `
     <div class="card kpi"><span class="label">Boutiques actives</span><span class="value">${k.active}</span><span class="sub ${k.active_new ? "tone-success" : ""}">${k.active_new ? `+${k.active_new} ce mois` : "aucune nouvelle ce mois"}</span></div>
-    <div class="card kpi"><span class="label">Pré-inscrits en attente</span><span class="value">${k.prereg}</span><span class="sub">${k.prereg_with_files ? `dont ${k.prereg_with_files} avec leurs fichiers` : "accès à ouvrir au lancement"}</span></div>
-    <div class="card kpi"><span class="label">Prospects à relancer</span><span class="value ${k.follow_up ? "tone-warning" : ""}">${k.follow_up}</span><span class="sub">${k.replies ? `et ${k.replies} réponse${k.replies > 1 ? "s" : ""} à lire` : "aucune réponse en attente"}</span></div>
-    <div class="card kpi"><span class="label">Coût IA du mois</span><span class="value">${money(k.ai_cost)}</span>
-      <div class="meter" role="img" aria-label="${pct} % du seuil d'alerte"><span style="width: ${pct}%; ${pct >= 100 ? "background: var(--danger);" : ""}"></span></div><span class="sub">${pct} % du seuil d'alerte (${esc(k.ai_threshold)} $ par boutique)</span></div>`;
+    ${k.prereg === undefined ? "" : `<div class="card kpi"><span class="label">Pré-inscrits en attente</span><span class="value">${k.prereg}</span><span class="sub">${k.prereg_with_files ? `dont ${k.prereg_with_files} avec leurs fichiers` : "accès à ouvrir au lancement"}</span></div>`}
+    ${k.follow_up === undefined ? "" : `<div class="card kpi"><span class="label">Prospects à relancer</span><span class="value ${k.follow_up ? "tone-warning" : ""}">${k.follow_up}</span><span class="sub">${k.replies ? `et ${k.replies} réponse${k.replies > 1 ? "s" : ""} à lire` : "aucune réponse en attente"}</span></div>`}
+    ${k.ai_cost === undefined ? "" : `<div class="card kpi"><span class="label">Coût IA du mois</span><span class="value">${money(k.ai_cost)}</span>
+      <div class="meter" role="img" aria-label="${pct} % du seuil d'alerte"><span style="width: ${pct}%; ${pct >= 100 ? "background: var(--danger);" : ""}"></span></div><span class="sub">${pct} % du seuil d'alerte (${esc(k.ai_threshold)} $ par boutique)</span></div>`}`;
   document.getElementById("overview-todo-count").textContent = d.todo.length;
   document.getElementById("overview-todo-count").classList.toggle("hidden", !d.todo.length);
   document.getElementById("nav-count-overview").textContent = d.todo.length;
@@ -775,8 +841,9 @@ async function loadOverview() {
       <div class="todo-text"><b>${esc(t.title)}</b><span>${esc(t.detail)}</span></div>
       <button class="btn ${t.primary ? "primary" : ""}" onclick="todoGo(${i})">${esc(t.action)}</button>
     </div>`).join("") : `<p class="muted" style="font-size: 14px; margin: 10px 0 0;">Tout est à jour. Les réponses de prospects, nouvelles pré-inscriptions, échéances d'abonnement et alertes de coût apparaîtront ici.</p>`;
-  const top = Math.max(d.funnel[0] ? d.funnel[0].count : 0, 1);
-  document.getElementById("overview-funnel").innerHTML = d.funnel.map((st) => `<div class="funnel-row"><span>${esc(st.label)}</span>
+  const funnel = d.funnel || [];
+  const top = Math.max(funnel[0] ? funnel[0].count : 0, 1);
+  document.getElementById("overview-funnel").innerHTML = funnel.map((st) => `<div class="funnel-row"><span>${esc(st.label)}</span>
     <div class="funnel-track"><div class="funnel-bar" style="width: ${Math.round(st.count / top * 100)}%;"></div></div>
     <span style="text-align: right;"><strong>${st.count}</strong>${st.rate_pct === null ? "" : ` <span class="muted">${st.rate_pct} %</span>`}</span></div>`).join("");
   document.getElementById("overview-activity").innerHTML = d.activity.length ? d.activity.map((a) => `<div><span class="dot ${esc(a.tone)}"></span>
@@ -821,11 +888,11 @@ function frDate(iso) { return iso ? new Date(iso + (iso.length === 10 ? "T12:00:
 function initials(name) { return (name || "?").split(/\s+/).filter((w) => /^[\p{L}\d]/u.test(w)).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "?"; }
 
 async function loadTenants() {
-  loadWaSwitch();
-  loadFlowsSwitch();
-  loadPlans();
+  if (can("tech.view")) { loadWaSwitch(); loadFlowsSwitch(); }
+  if (can("plans.view")) loadPlans();
   try {
-    const [tenants, costs] = await Promise.all([api("/api/v1/superadmin/tenants"), api("/api/v1/superadmin/ai-costs").catch(() => ({ rows: [] }))]);
+    const [tenants, costs] = await Promise.all([api("/api/v1/superadmin/tenants"),
+      can("aicosts.view") ? api("/api/v1/superadmin/ai-costs").catch(() => ({ rows: [] })) : Promise.resolve({ rows: [] })]);
     shopsData = tenants;
     aiByTenant = {};
     costs.rows.forEach((r) => { aiByTenant[r.tenant_id] = r.cost_usd; });
@@ -855,8 +922,8 @@ function renderShops() {
       <div class="shop-head"><div class="shop-logo" aria-hidden="true">${esc(initials(t.name))}</div>
         <div style="flex: 1; min-width: 0;"><div class="shop-name">${esc(t.name)}</div><div class="muted">${esc(BUSINESS_TYPES[t.business_type] || t.business_type)}${t.country ? " · " + esc(t.country) : ""}</div></div>
         ${bobStatusBadge(t)}</div>
-      <div class="shop-facts"><div><span>Plan</span><b>${esc(PLAN_LABELS[t.plan] || t.plan)}</b></div><div><span>Conversations</span><b>${t.conversation_count_this_month}</b></div><div><span>Payé jusqu'au</span><b>${esc(frDate(t.paid_until))}</b></div></div>
-      <div class="shop-foot"><span>${aiByTenant[t.id] !== undefined ? "Coût IA : " + esc(money(aiByTenant[t.id])) + " ce mois" : esc(t.email)}</span><strong>Ouvrir la fiche →</strong></div>
+      <div class="shop-facts"><div><span>Plan</span><b>${esc(PLAN_LABELS[t.plan] || t.plan || "—")}</b></div><div><span>Conversations</span><b>${t.conversation_count_this_month ?? "—"}</b></div><div><span>Payé jusqu'au</span><b>${esc(frDate(t.paid_until))}</b></div></div>
+      <div class="shop-foot"><span>${aiByTenant[t.id] !== undefined ? "Coût IA : " + esc(money(aiByTenant[t.id])) + " ce mois" : esc(t.email)}</span>${can("shops.view") ? "<strong>Ouvrir la fiche →</strong>" : ""}</div>
     </button>`).join("") || '<p class="muted" style="font-size: 14px;">Aucune boutique dans cette vue.</p>';
 }
 
@@ -867,6 +934,7 @@ function closeShop() {
 }
 
 async function openShop(id) {
+  if (!can("shops.view")) { toast("La fiche complète d'une boutique n'est pas ouverte à votre rôle."); return; }
   document.getElementById("shops-list").classList.add("hidden");
   const box = document.getElementById("shop-detail");
   box.classList.remove("hidden");
@@ -888,28 +956,28 @@ async function openShop(id) {
     </div>
     <div class="grid">
       <div class="card kpi"><span class="label">Conversations ce mois</span><span class="value">${t.conversation_count_this_month}</span></div>
-      <div class="card kpi"><span class="label">Clients</span><span class="value">${t.customer_count}</span></div>
+      <div class="card kpi"><span class="label">Clients</span><span class="value">${t.customer_count ?? "—"}</span></div>
       <div class="card kpi"><span class="label">Produits</span><span class="value">${t.product_count}</span></div>
       <div class="card kpi"><span class="label">Coût IA du mois</span><span class="value">${cost === undefined ? "—" : esc(money(cost))}</span></div>
       <div class="card kpi"><span class="label">Client depuis</span><span class="value" style="font-size: 22px;">${esc(new Date(t.created_at).toLocaleDateString("fr-FR"))}</span></div>
     </div>
     <div class="columns">
-      <section class="card main-col">
+      <section class="card main-col ${can("shops.billing") || can("shops.sector") || can("shops.suspend") ? "" : "hidden"}">
         <h2 style="margin-bottom: 14px;">Réglages du compte</h2>
         <div class="form-grid">
-          <div><label class="field-label" for="sh-plan">Plan</label><select id="sh-plan" class="input">${PLANS.map((p) => `<option value="${p}" ${p === t.plan ? "selected" : ""}>${esc(PLAN_LABELS[p])}</option>`).join("")}</select></div>
-          <div><label class="field-label" for="sh-sector">Secteur</label><select id="sh-sector" class="input">${Object.entries(BUSINESS_TYPES).map(([code, label]) => `<option value="${code}" ${code === t.business_type ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></div>
-          <div><label class="field-label" for="sh-paid">Payé jusqu'au</label><input id="sh-paid" type="date" class="input" value="${esc(t.paid_until || "")}"></div>
-          <div><label class="field-label" for="sh-commission">Commission sur les ventes (%)</label><input id="sh-commission" type="number" step="0.1" min="0" max="100" class="input" value="${t.commission_rate ?? ""}" placeholder="—"></div>
+          <div data-perm="shops.billing"><label class="field-label" for="sh-plan">Plan</label><select id="sh-plan" class="input">${PLANS.map((p) => `<option value="${p}" ${p === t.plan ? "selected" : ""}>${esc(PLAN_LABELS[p])}</option>`).join("")}</select></div>
+          <div data-perm="shops.sector"><label class="field-label" for="sh-sector">Secteur</label><select id="sh-sector" class="input">${Object.entries(BUSINESS_TYPES).map(([code, label]) => `<option value="${code}" ${code === t.business_type ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></div>
+          <div data-perm="shops.billing"><label class="field-label" for="sh-paid">Payé jusqu'au</label><input id="sh-paid" type="date" class="input" value="${esc(t.paid_until || "")}"></div>
+          <div data-perm="shops.figures"><label class="field-label" for="sh-commission">Commission sur les ventes (%)</label><input id="sh-commission" type="number" step="0.1" min="0" max="100" class="input" value="${t.commission_rate ?? ""}" placeholder="—"></div>
         </div>
         <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 0 0 14px;">Payé jusqu'au : le dernier jour payé. Le lendemain est un jour de grâce, puis Bob se met en pause. Vide : jamais de pause pour impayé. La commission ne vaut que pour les commandes à venir. Le secteur ne change qu'à la demande du client.</p>
         <div class="row">
-          <button type="button" class="btn primary" onclick="saveShop()">Enregistrer</button>
-          <button type="button" class="btn" onclick="extendShop()">Prolonger d'un mois</button>
+          <button type="button" class="btn primary ${can("shops.billing") || can("shops.sector") ? "" : "hidden"}" onclick="saveShop()">Enregistrer</button>
+          <button type="button" class="btn" data-perm="shops.billing" onclick="extendShop()">Prolonger d'un mois</button>
         </div>
-        <div class="danger-zone">
+        <div class="danger-zone" data-perm="shops.suspend">
           <div><b>${t.active ? "Suspendre la boutique" : "Réactiver la boutique"}</b><div class="muted" style="font-size: 13px;">${t.active ? "Bob s'arrête tout de suite. Les messages des clients arrivent toujours." : "Bob recommencera à répondre à ses clients."}</div></div>
-          <button type="button" class="btn ${t.active ? "danger" : "primary"}" onclick="toggleActive(${jsArg(t.id)}, ${t.active ? "false" : "true"})">${t.active ? "Suspendre…" : "Réactiver"}</button>
+          <button type="button" class="btn ${t.active ? "danger" : "primary"}" data-perm="shops.suspend" onclick="toggleActive(${jsArg(t.id)}, ${t.active ? "false" : "true"})">${t.active ? "Suspendre…" : "Réactiver"}</button>
         </div>
       </section>
       <section class="card side-col" style="display: block;">
@@ -918,11 +986,10 @@ async function openShop(id) {
       </section>
     </div>
     <section class="card" id="shop-usage" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
-    <section class="card" id="shop-wa" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
-    <section class="card hidden" id="shop-flows" style="margin-top: 18px;"></section>`;
+    <section class="card" data-perm="tech.view" id="shop-wa" style="margin-top: 18px;"><p class="muted">Chargement…</p></section>
+    <section class="card hidden" data-perm="tech.view" id="shop-flows" style="margin-top: 18px;"></section>`;
   loadShopUsage(t.id);
-  loadShopTemplates(t.id);
-  loadShopFlows(t.id);
+  if (can("tech.view")) { loadShopTemplates(t.id); loadShopFlows(t.id); }
 }
 
 async function putShop(path, body) {
@@ -945,7 +1012,7 @@ async function saveShop() {
   }
   if (plan !== t.plan) changes.push(["plan", { plan }]);
   if (paid !== (t.paid_until || null)) changes.push(["paid-until", { paid_until: paid }]);
-  if (commission !== (t.commission_rate ?? null)) changes.push(["commission-rate", { commission_rate: commission }]);
+  if (can("shops.figures") && commission !== (t.commission_rate ?? null)) changes.push(["commission-rate", { commission_rate: commission }]);
   if (!changes.length) { toast("Rien à enregistrer : aucun réglage n'a changé."); return; }
   try {
     for (const [path, body] of changes) await putShop(path, body);
@@ -1046,14 +1113,14 @@ function renderPreregAdmin() {
   document.getElementById("prereg-mode-card").innerHTML = `
     <div class="toolbar" style="margin-top: 0;">
       <h2 style="font-size: 16px; margin: 0;">Mode pré-inscription ${d.mode ? '<span class="badge active">Allumé</span>' : '<span class="badge inactive">Éteint</span>'}<span class="muted">${since}</span></h2>
-      <button class="btn ${d.mode ? "" : "primary"}" onclick="setPreregMode(${d.mode ? "false" : "true"})">${d.mode ? "Éteindre (lancement)" : "Allumer les pré-inscriptions"}</button>
+      <button class="btn ${d.mode ? "" : "primary"}" data-perm="prereg.edit" onclick="setPreregMode(${d.mode ? "false" : "true"})">${d.mode ? "Éteindre (lancement)" : "Allumer les pré-inscriptions"}</button>
     </div>
     <p class="muted" style="font-size: 13px; line-height: 1.5; margin: 8px 0 0;">Allumé : toute nouvelle inscription (inscription guidée, ou démo gardée) crée un compte <strong>pré-inscrit</strong>. Il voit seulement un accueil d'exemple de son secteur et sa fenêtre de pré-inscription ; rien d'autre ne fonctionne et Bob ne travaille pas pour lui. Les boutons publics deviennent « Je me pré-inscris ». Les comptes existants ne changent pas.<br>Offre enregistrée sur chaque pré-inscrit : ${esc(d.offer)}</p>`;
   const sl = d.slots || { total: 100, used: 0, left: 100 };
   document.getElementById("prereg-mode-card").insertAdjacentHTML("beforeend", `<div class="row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
       <span style="flex: 1 1 260px;"><strong>Offre de lancement :</strong> ${sl.left ? `il reste <strong>${sl.left}</strong> place${sl.left > 1 ? "s" : ""} sur ${sl.total}` : `<span class="tone-danger">complète</span> (${sl.used} comptes l'ont reçue)`}. Le compteur s'affiche sur la présentation, la démo et l'inscription.</span>
       <label for="prereg-slots" class="muted">Places</label><input id="prereg-slots" type="number" min="0" max="10000" class="input" style="width: 110px; margin: 0;" value="${sl.total}">
-      <button class="btn" onclick="saveSlots()">Enregistrer</button></div>`);
+      <button class="btn" data-perm="prereg.edit" onclick="saveSlots()">Enregistrer</button></div>`);
   document.getElementById("prereg-counts").textContent = `— ${d.counts.locked} en attente · ${d.counts.opened} avec l'accès ouvert`;
   document.getElementById("prereg-open-all").disabled = !d.counts.locked;
   const size = (b) => b >= 1048576 ? (b / 1048576).toFixed(1).replace(".", ",") + " Mo" : Math.max(1, Math.round(b / 1024)) + " Ko";
@@ -1072,8 +1139,8 @@ function renderPreregAdmin() {
       </div>
       ${t.prep.note ? `<p class="muted" style="margin: 6px 0 0; font-size: 13px;">Note : ${esc(t.prep.note)}</p>` : ""}
       <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
-        ${t.locked ? `<button class="btn primary" onclick="openPreregTenant(${jsArg(t.id)})">Ouvrir l'accès complet (bêta)</button>`
-          : `<button class="btn" onclick="relockPreregTenant(${jsArg(t.id)})">Remettre en pré-inscription</button>`}
+        ${t.locked ? `<button class="btn primary" data-perm="prereg.edit" onclick="openPreregTenant(${jsArg(t.id)})">Ouvrir l'accès complet (bêta)</button>`
+          : `<button class="btn" data-perm="prereg.edit" onclick="relockPreregTenant(${jsArg(t.id)})">Remettre en pré-inscription</button>`}
       </div>
     </div>`).join("") : '<p class="muted">Aucun pré-inscrit pour l\'instant.</p>';
 }
@@ -1217,7 +1284,7 @@ function openProspectForm(p) {
     <label for="pf-notes">Note</label><textarea id="pf-notes" class="input" rows="3" maxlength="2000">${esc(p.notes || "")}</textarea>
     <p id="pf-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 4px 0;"></p>
     <div class="row" style="justify-content: flex-end;"><button class="btn" onclick="${p.id ? `openProspect(${jsArg(p.id)})` : "closeProspectModal()"}">Annuler</button>
-      <button class="btn primary" onclick="saveProspect(${p.id ? `${jsArg(p.id)}` : "null"})">Enregistrer</button></div>`);
+      <button class="btn primary" data-perm="prospects.edit" onclick="saveProspect(${p.id ? `${jsArg(p.id)}` : "null"})">Enregistrer</button></div>`);
   document.getElementById("pf-company").focus();
 }
 
@@ -1262,20 +1329,20 @@ function renderProspect(p) {
       <div class="row"><select id="pd-channel" class="input" style="flex: 0 1 160px;">${options(d.channels, "PHONE")}</select>
         <input id="pd-note" class="input" maxlength="500" placeholder="Ce qui s'est dit (facultatif)"></div>
       <div class="row" style="margin-top: 8px;"><label for="pd-next" style="margin: 0;">Relancer le</label><input id="pd-next" type="date" class="input" style="flex: 0 1 170px;" value="${esc(p.next_action_on || "")}">
-        <button class="btn primary" onclick="logContact()">Noter</button></div></div>` : ""}
+        <button class="btn primary" data-perm="prospects.edit" onclick="logContact()">Noter</button></div></div>` : ""}
     <div class="box"><h4>Statut</h4>
       <div class="row"><select id="pd-status" class="input" style="flex: 0 1 200px;">${options(d.statuses, p.status)}</select>
         <input id="pd-reason" class="input" maxlength="200" placeholder="Raison (facultatif)" value="${esc(p.status_reason || "")}">
-        <button class="btn" onclick="saveStatus()">Enregistrer</button></div></div>
+        <button class="btn" data-perm="prospects.edit" onclick="saveStatus()">Enregistrer</button></div></div>
     <div class="box"><h4>Historique</h4>
-      <div class="row" style="margin-bottom: 8px;"><input id="pd-memo" class="input" maxlength="500" placeholder="Ajouter une note"><button class="btn" onclick="addMemo()">Ajouter</button></div>
+      <div class="row" style="margin-bottom: 8px;"><input id="pd-memo" class="input" maxlength="500" placeholder="Ajouter une note"><button class="btn" data-perm="prospects.edit" onclick="addMemo()">Ajouter</button></div>
       <ul class="timeline">${p.events.map((ev) => `<li><strong>${esc(ev.label)}</strong>${ev.channel ? " · " + esc(ev.channel) : ""}${ev.detail ? " — " + esc(ev.detail) : ""}
         <div class="muted">${ev.at ? new Date(ev.at).toLocaleString("fr-FR") : ""}${ev.actor ? " · " + esc(ev.actor) : ""}</div></li>`).join("")}</ul></div>
     ${p.notes ? `<div class="box"><h4>Note</h4><div style="white-space: pre-wrap; font-size: 13px;">${esc(p.notes)}</div></div>` : ""}
     <p id="pd-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 8px 0 0;"></p>
     <div class="row" style="justify-content: space-between; margin-top: 8px;">
-      <button class="btn danger" onclick="deleteProspect()">Effacer ce prospect</button>
-      <div class="row"><button class="btn" onclick="openProspectForm(currentProspect)">Modifier</button><button class="btn primary" onclick="closeProspectModal()">Fermer</button></div></div>`);
+      <button class="btn danger" data-perm="prospects.edit" onclick="deleteProspect()">Effacer ce prospect</button>
+      <div class="row"><button class="btn" data-perm="prospects.edit" onclick="openProspectForm(currentProspect)">Modifier</button><button class="btn primary" onclick="closeProspectModal()">Fermer</button></div></div>`);
 }
 
 async function copyField(id) {
@@ -1362,7 +1429,7 @@ async function previewProspectImport(sheet) {
     <p style="font-size: 13px; margin: 10px 0 0;">${p.total} ligne${p.total > 1 ? "s" : ""}. À quoi correspond chaque colonne ?</p>
     <div class="import-wrap"><table><thead><tr>${p.header.map((h, i) => `<th>${esc(h || "(sans titre)")}<br><select class="input" style="margin: 4px 0 0; padding: 4px;" onchange="prospectImport.mapping[${i}] = this.value || null">${opts(p.mapping[i])}</select></th>`).join("")}</tr></thead>
     <tbody>${p.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
-    <div class="row" style="justify-content: flex-end; margin-top: 10px;"><button class="btn primary" id="pi-run" onclick="runProspectImport()">Importer ${p.total} ligne${p.total > 1 ? "s" : ""}</button></div>`;
+    <div class="row" style="justify-content: flex-end; margin-top: 10px;"><button class="btn primary" id="pi-run" data-perm="prospects.edit" onclick="runProspectImport()">Importer ${p.total} ligne${p.total > 1 ? "s" : ""}</button></div>`;
 }
 
 async function runProspectImport() {
@@ -1402,7 +1469,7 @@ async function loadAdLinks() {
       <td><div class="row" style="flex-wrap: nowrap;"><input id="ad-link-${i}" class="input" readonly value="${esc(l.url)}" style="min-width: 180px; font-size: 12px;">
         <button class="small" onclick="copyAdLink(${i})">Copier</button></div></td>
       <td><span class="stat"><b>${l.clicks}</b> visiteurs</span><span class="stat"><b>${l.demos}</b> démos${rate(l.demos, l.clicks)}</span><span class="stat"><b>${l.signups}</b> comptes${rate(l.signups, l.demos)}</span></td>
-      <td><button class="small" onclick="archiveAdLink(${jsArg(l.id)})">${l.archived ? "Réactiver" : "Archiver"}</button></td></tr>`;
+      <td><button class="small" data-perm="campaigns.edit" onclick="archiveAdLink(${jsArg(l.id)})">${l.archived ? "Réactiver" : "Archiver"}</button></td></tr>`;
   }).join("");
   const options = (obj, empty) => (empty ? `<option value="">${esc(empty)}</option>` : "") + Object.entries(obj).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("");
   card.innerHTML = `<div class="toolbar" style="margin-top: 0;"><h2 style="font-size: 16px; margin: 0;">Liens de publication</h2></div>
@@ -1412,7 +1479,7 @@ async function loadAdLinks() {
       <input id="ad-link-name" class="input" maxlength="120" placeholder="Nom (ex. Publicité mandataires Lyon, octobre)" style="min-width: 220px;">
       <select id="ad-link-channel" class="input" style="flex: 0 1 auto; width: auto;" aria-label="Canal">${options(d.channels)}</select>
       <select id="ad-link-sector" class="input" style="flex: 0 1 auto; width: auto;" aria-label="Démo ouverte">${options(d.sectors, "Démo : tous secteurs")}</select>
-      <button class="btn primary" onclick="createAdLink()">Créer le lien</button>
+      <button class="btn primary" data-perm="campaigns.edit" onclick="createAdLink()">Créer le lien</button>
     </div>
     ${d.links.length ? `<div style="overflow-x: auto;"><table><thead><tr><th>Lien</th><th>Adresse à publier</th><th>Résultats</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
       : `<p class="muted">Aucun lien : créez-en un avant chaque publication ou publicité, puis collez l'adresse dans le texte ou le bouton de la publicité.</p>`}`;
@@ -1456,11 +1523,11 @@ async function loadEmails() {
     const st = c.stats;
     const target = [c.sector_label, c.source, c.country].filter(Boolean).map(esc).join(" · ");
     const actions = [`<button class="small" onclick="previewCampaign(${jsArg(c.id)})">Aperçu</button>`,
-      d.configured ? `<button class="small" onclick="testCampaign(${jsArg(c.id)})">Essai</button>` : "",
-      c.status === "RUNNING" ? `<button class="small" onclick="campaignAction(${jsArg(c.id)}, 'pause')">Pause</button>`
-        : `<button class="small" onclick="campaignAction(${jsArg(c.id)}, 'start')">${c.status === "PAUSED" ? "Reprendre" : "Démarrer"}</button>`,
-      c.status !== "RUNNING" ? `<button class="small" onclick="openCampaignForm(${jsArg(c.id)})">Modifier</button>` : "",
-      c.status === "DRAFT" ? `<button class="small" onclick="deleteCampaign(${jsArg(c.id)})">Effacer</button>` : ""].join(" ");
+      d.configured ? `<button class="small" data-perm="campaigns.edit" onclick="testCampaign(${jsArg(c.id)})">Essai</button>` : "",
+      c.status === "RUNNING" ? `<button class="small" data-perm="campaigns.edit" onclick="campaignAction(${jsArg(c.id)}, 'pause')">Pause</button>`
+        : `<button class="small" data-perm="campaigns.edit" onclick="campaignAction(${jsArg(c.id)}, 'start')">${c.status === "PAUSED" ? "Reprendre" : "Démarrer"}</button>`,
+      c.status !== "RUNNING" ? `<button class="small" data-perm="campaigns.edit" onclick="openCampaignForm(${jsArg(c.id)})">Modifier</button>` : "",
+      c.status === "DRAFT" ? `<button class="small" data-perm="campaigns.edit" onclick="deleteCampaign(${jsArg(c.id)})">Effacer</button>` : ""].join(" ");
     return `<tr><td><strong>${esc(c.name)}</strong><div class="muted">${target} · ${c.steps} email${c.steps > 1 ? "s" : ""}</div></td>
       <td><span class="badge ${c.status === "RUNNING" ? "active" : c.status === "PAUSED" ? "demo" : ""}">${esc(st.finished ? "Terminée" : campaignStatusLabels[c.status] || c.status)}</span>
         ${c.status !== "RUNNING" && c.eligible ? `<div class="muted">${c.eligible} prospect${c.eligible > 1 ? "s" : ""} à ajouter</div>` : ""}</td>
@@ -1469,13 +1536,13 @@ async function loadEmails() {
       <td style="white-space: nowrap;">${actions}</td></tr>`;
   }).join("");
   card.innerHTML = `<div class="toolbar" style="margin-top: 0;"><h2 style="font-size: 16px; margin: 0;">Emails de prospection</h2>
-      <button class="btn primary" onclick="openCampaignForm()">Nouvelle campagne</button></div>
+      <button class="btn primary" data-perm="campaigns.edit" onclick="openCampaignForm()">Nouvelle campagne</button></div>
     ${setup}${error}
     <div class="row" style="margin-bottom: 8px;">
       <span style="font-size: 13px;">${d.from ? `Expéditeur : <strong>${esc(d.from)}</strong> · ` : ""}${d.sent_24h} / ${d.daily_limit} emails sur 24 h</span>
       <label for="email-limit" style="margin: 0; font-size: 13px;">Plafond par jour</label>
-      <select id="email-limit" class="input" style="flex: 0 0 auto; width: auto; min-width: 0;" onchange="saveEmailSettings({ daily_limit: Number(this.value) })">${d.limits.map((n) => `<option ${n === d.daily_limit ? "selected" : ""}>${n}</option>`).join("")}</select>
-      <button class="btn" onclick="saveEmailSettings({ sending_enabled: ${!d.sending_enabled} })">${d.sending_enabled ? "Suspendre tous les envois" : "Reprendre les envois"}</button>
+      <select id="email-limit" class="input" style="flex: 0 0 auto; width: auto; min-width: 0;" data-perm="campaigns.edit" onchange="saveEmailSettings({ daily_limit: Number(this.value) })">${d.limits.map((n) => `<option ${n === d.daily_limit ? "selected" : ""}>${n}</option>`).join("")}</select>
+      <button class="btn" data-perm="campaigns.edit" onclick="saveEmailSettings({ sending_enabled: ${!d.sending_enabled} })">${d.sending_enabled ? "Suspendre tous les envois" : "Reprendre les envois"}</button>
     </div>
     <p class="muted" style="margin: 0 0 12px;">${esc(d.recommendation)} Envoi en semaine de 9 h à 17 h (heure du prospect), un email toutes les 3 minutes au plus ; 3 emails au plus par prospect (1er, 5e et 11e jour), arrêtés dès qu'il clique, crée son compte, répond ou se désinscrit.${d.copy_to ? " Les réponses vous sont copiées." : ""}</p>
     ${d.campaigns.length ? `<div style="overflow-x: auto;"><table><thead><tr><th>Campagne</th><th>État</th><th>Résultats</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -1500,14 +1567,14 @@ function openCampaignForm(id) {
     <p class="muted">Elle écrit aux prospects qui ont un email et n'ont jamais été contactés, selon vos filtres. Champs remplis pour chaque prospect : {bonjour} (« Bonjour Awa »), {prenom}, {entreprise}, {ville}, {lien} (son lien personnel, obligatoire dans le premier email). La signature, la désinscription et les mentions légales sont ajoutées automatiquement.</p>
     <div class="form-grid">
       <div><label for="cf-name">Nom de la campagne</label><input id="cf-name" class="input" maxlength="120" value="${esc(c ? c.name : "")}" placeholder="Concessions Abidjan — octobre"></div>
-      <div><label for="cf-sector">Secteur</label><select id="cf-sector" class="input" onchange="fillCampaignDefaults(false)">${options(sectors, c ? c.sector || "" : "")}</select></div>
+      <div><label for="cf-sector">Secteur</label><select id="cf-sector" class="input" data-perm="campaigns.edit" onchange="fillCampaignDefaults(false)">${options(sectors, c ? c.sector || "" : "")}</select></div>
       <div><label for="cf-source">Source (facultatif)</label><input id="cf-source" class="input" maxlength="120" value="${esc(c ? c.source || "" : "")}" placeholder="Salon auto 2026"></div>
       <div><label for="cf-country">Pays (code, facultatif)</label><input id="cf-country" class="input" maxlength="2" value="${esc(c ? c.country || "" : "")}" placeholder="CI"></div>
     </div>
     ${step(1, "Email 1 — le jour du lancement")}${step(2, "Relance — 4 jours après (laisser vide : pas de relance)")}${step(3, "Dernier email — 10 jours après (facultatif)")}
     <p id="cf-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 8px 0;"></p>
-    <div class="row" style="justify-content: space-between;"><button class="btn" onclick="fillCampaignDefaults(true)">Remettre les textes proposés</button>
-      <div class="row"><button class="btn" onclick="closeProspectModal()">Annuler</button><button class="btn primary" onclick="saveCampaign(${c ? `${jsArg(c.id)}` : "null"})">Enregistrer</button></div></div>`);
+    <div class="row" style="justify-content: space-between;"><button class="btn" data-perm="campaigns.edit" onclick="fillCampaignDefaults(true)">Remettre les textes proposés</button>
+      <div class="row"><button class="btn" onclick="closeProspectModal()">Annuler</button><button class="btn primary" data-perm="campaigns.edit" onclick="saveCampaign(${c ? `${jsArg(c.id)}` : "null"})">Enregistrer</button></div></div>`);
   if (!c) fillCampaignDefaults(true);
 }
 
@@ -1580,11 +1647,11 @@ function todayRow(p, kind) {
   let actions = "";
   if (kind === "calls") {
     actions = `${p.phone ? `<a class="btn small-btn" href="tel:${esc(p.phone)}">Appeler ${esc(p.phone)}</a>` : ""}
-      <button class="btn small-btn" onclick="callDone(${jsArg(p.id)}, 'PREREG')">Pré-inscrit</button>
-      <button class="btn small-btn" onclick="callDone(${jsArg(p.id)}, 'LATER')">À revoir dans 3 mois</button>
-      <button class="btn small-btn danger" onclick="callDone(${jsArg(p.id)}, 'NO')">Pas intéressé</button>`;
+      <button class="btn small-btn" data-perm="prospects.edit" onclick="callDone(${jsArg(p.id)}, 'PREREG')">Pré-inscrit</button>
+      <button class="btn small-btn" data-perm="prospects.edit" onclick="callDone(${jsArg(p.id)}, 'LATER')">À revoir dans 3 mois</button>
+      <button class="btn small-btn danger" data-perm="prospects.edit" onclick="callDone(${jsArg(p.id)}, 'NO')">Pas intéressé</button>`;
   } else {
-    actions = `<button class="btn small-btn primary" onclick="todayWhatsApp(${jsArg(p.id)}, ${jsArg(kind)})">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
+    actions = `<button class="btn small-btn primary" data-perm="prospects.edit" onclick="todayWhatsApp(${jsArg(p.id)}, ${jsArg(kind)})">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
   }
   return `<div class="today-row"><div style="min-width: 0; flex: 1 1 240px;"><b>${esc(p.company)}</b>${age}${mails}<div class="muted">${esc(meta)}</div></div>
     <div class="row">${actions}<button class="btn small-btn" onclick="openProspect(${jsArg(p.id)})">Fiche</button></div></div>`;
@@ -1598,7 +1665,7 @@ async function loadToday() {
     ${rows.length ? rows.map((p) => todayRow(p, kind)).join("") : `<p class="muted" style="margin: 0;">${empty}</p>`}</div>`;
   box.innerHTML = `<div class="toolbar" style="margin-top: 0;">
       <div><h2>Aujourd'hui</h2><p class="muted" style="margin: 4px 0 0;">${d.sent_today} / ${d.limit} nouveaux WhatsApp envoyés aujourd'hui${d.waiting > d.to_send.length ? ` · ${d.waiting} prospects attendent leur premier message` : ""}</p></div>
-      <div class="row"><label for="today-limit" class="muted">Par jour</label><input id="today-limit" type="number" min="1" max="100" class="input" style="width: 80px; margin: 0;" value="${d.limit}"><button class="btn small-btn" onclick="saveTodayLimit()">Enregistrer</button></div>
+      <div class="row"><label for="today-limit" class="muted">Par jour</label><input id="today-limit" type="number" min="1" max="100" class="input" style="width: 80px; margin: 0;" value="${d.limit}"><button class="btn small-btn" data-perm="prospects.edit" onclick="saveTodayLimit()">Enregistrer</button></div>
     </div>
     ${block("WhatsApp à envoyer", "Jamais contactés sur WhatsApp. Le message prêt contient leur lien de démo et l'offre de lancement.", d.to_send, "to_send", d.left_today ? "Personne à contacter pour l'instant : importez la liste de la semaine." : "Objectif du jour atteint.")}
     ${block("Relances J7", "Un seul WhatsApp il y a 7 jours ou plus, sans réaction.", d.relances, "relances", "Aucune relance à faire.")}
@@ -1647,7 +1714,7 @@ async function loadPlans() {
     </tbody></table></div>
     <div class="row" style="margin-top: 12px;"><label for="plan-mode" class="muted">Au dépassement</label>
       <select id="plan-mode" class="input" style="width: auto; margin: 0;">${d.modes.map((m) => `<option value="${esc(m.value)}" ${m.value === d.mode ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>
-      <button class="btn primary" onclick="savePlans()">Enregistrer</button></div>`;
+      <button class="btn primary" data-perm="plans.edit" onclick="savePlans()">Enregistrer</button></div>`;
 }
 
 async function savePlans() {
@@ -1687,7 +1754,7 @@ async function loadFlowsSwitch() {
         ? `Les restaurants reçoivent les formulaires WhatsApp « Réserver une table » et « Finaliser la commande ». ${d.published} publié${d.published > 1 ? "s" : ""} · ${d.errors} refusé${d.errors > 1 ? "s" : ""}.`
         : `Rien n'est créé chez Meta, sauf pour les restaurants en essai (${d.trial}). Les autres gardent les questions à boutons.`}</p>
     </div>
-    <button class="btn ${d.enabled ? "danger" : "primary"}" onclick="toggleFlows(${d.enabled ? "false" : "true"})">${d.enabled ? "Éteindre…" : "Allumer pour tous…"}</button>
+    <button class="btn ${d.enabled ? "danger" : "primary"}" data-perm="tech.edit" onclick="toggleFlows(${d.enabled ? "false" : "true"})">${d.enabled ? "Éteindre…" : "Allumer pour tous…"}</button>
   </div>`;
 }
 
@@ -1717,10 +1784,10 @@ function renderShopFlows(d) {
   box.innerHTML = `<h2>Formulaires WhatsApp</h2>
     <p class="muted" style="font-size: 13px; margin: 6px 0 10px;">${d.active ? "Les clients de ce restaurant reçoivent les formulaires (réservation, fin de commande)." : "Ce restaurant garde les questions à boutons."}</p>
     <div class="row" style="gap: 10px; flex-wrap: wrap; align-items: center;">
-      <select id="shop-flows-mode" class="input" style="width: auto; margin: 0;" onchange="saveShopFlowsMode()">
+      <select id="shop-flows-mode" class="input" style="width: auto; margin: 0;" data-perm="tech.edit" onchange="saveShopFlowsMode()">
         ${option("AUTO", d.platform ? "Suivre la plateforme (allumé)" : "Suivre la plateforme (éteint)")}${option("ON", "Essai : allumé ici")}${option("OFF", "Éteint ici")}
       </select>
-      <button class="btn" onclick="syncShopFlows()">Créer / vérifier les formulaires</button>
+      <button class="btn" data-perm="tech.edit" onclick="syncShopFlows()">Créer / vérifier les formulaires</button>
     </div>
     <div class="row" style="gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 13px;">
       <span>Réserver une table</span><span class="badge ${tone}">${esc(label)}</span>
@@ -1763,7 +1830,7 @@ async function loadWaSwitch() {
         ? `Bob crée les modèles à la connexion d'un numéro et les envoie hors de la fenêtre de 20 h. ${d.shops} boutique${d.shops > 1 ? "s" : ""} · ${d.approved} approuvé${d.approved > 1 ? "s" : ""} · ${d.pending} en attente · ${d.rejected} refusé${d.rejected > 1 ? "s" : ""} ou en erreur.`
         : "Rien n'est créé ni envoyé chez Meta. Laissez éteint pendant l'examen de Meta ; hors fenêtre de 20 h, Bob passe par l'email."}</p>
     </div>
-    <button class="btn ${d.enabled ? "danger" : "primary"}" onclick="toggleWaTemplates(${d.enabled ? "false" : "true"})">${d.enabled ? "Éteindre…" : "Allumer…"}</button>
+    <button class="btn ${d.enabled ? "danger" : "primary"}" data-perm="tech.edit" onclick="toggleWaTemplates(${d.enabled ? "false" : "true"})">${d.enabled ? "Éteindre…" : "Allumer…"}</button>
   </div>`;
 }
 
@@ -1790,8 +1857,8 @@ function renderShopTemplates(d) {
       <div style="flex: 1 1 300px; min-width: 0;"><h2>Modèles WhatsApp</h2>
         <p class="muted" style="font-size: 13px; margin: 4px 0 0;">${blocked ? esc(blocked) : `${d.approved} sur ${d.items.filter((i) => i.used).length} approuvés (forme « ${d.form === "TU" ? "tu" : "vous"} » de la boutique).`}</p></div>
       <div class="row">
-        <button class="btn" onclick="setShopTemplatesAllowed(${d.allowed ? "false" : "true"})">${d.allowed ? "Désactiver pour cette boutique" : "Autoriser pour cette boutique"}</button>
-        <button class="btn primary" ${blocked ? "disabled" : ""} onclick="syncShopTemplates(this)">Créer / vérifier les modèles</button>
+        <button class="btn" data-perm="tech.edit" onclick="setShopTemplatesAllowed(${d.allowed ? "false" : "true"})">${d.allowed ? "Désactiver pour cette boutique" : "Autoriser pour cette boutique"}</button>
+        <button class="btn primary" ${blocked ? "disabled" : ""} data-perm="tech.edit" onclick="syncShopTemplates(this)">Créer / vérifier les modèles</button>
       </div>
     </div>
     ${d.items.length ? `<div class="table-wrap"><table><thead><tr><th>Modèle</th><th>Statut chez Meta</th></tr></thead><tbody>${d.items.map((i) => `
@@ -1879,7 +1946,7 @@ async function loadServiceStatus() {
   document.getElementById("mon-checks").innerHTML = d.checks.map((c) => `
     <div class="mon-check"><span class="light is-${esc(c.status)}" role="img" aria-label="${{ ok: "Bon", warn: "À surveiller", ko: "En panne", idle: "Rien à signaler" }[c.status] || ""}"></span>
       <div><b>${esc(c.name)}</b><span class="detail">${esc(c.detail)}</span></div>
-      ${c.test ? `<button class="btn small-btn" onclick="testCheck(${jsArg(c.key)}, this)">Tester</button>` : ""}</div>`).join("");
+      ${c.test ? `<button class="btn small-btn" data-perm="tech.edit" onclick="testCheck(${jsArg(c.key)}, this)">Tester</button>` : ""}</div>`).join("");
   const late = d.tasks.filter((t) => t.status === "warn" || t.status === "ko").length;
   document.querySelector("#mon-tasks-wrap summary").textContent = `Tâches automatiques : dernier passage de chacune${late ? ` (${late} à vérifier)` : ""}`;
   document.getElementById("mon-tasks").innerHTML = `<table><thead><tr><th>Tâche</th><th>Fréquence</th><th>Dernier passage</th><th>État</th></tr></thead><tbody>${
@@ -1944,9 +2011,9 @@ async function openIssue(id, quiet) {
   const box = document.getElementById("mon-detail");
   const since = i.count + " fois depuis " + frDateTime(i.first_seen).replace("Aujourd'hui", "aujourd'hui").replace("Hier", "hier");
   const actions = [];
-  if (i.status !== "IN_PROGRESS" && i.status !== "RESOLVED") actions.push(`<button class="btn primary" onclick="setIssueStatus(${jsArg(i.id)}, 'IN_PROGRESS')">Je m'en occupe</button>`);
-  if (i.status !== "RESOLVED") actions.push(`<button class="btn" onclick="setIssueStatus(${jsArg(i.id)}, 'RESOLVED')">Marquer corrigée</button>`);
-  else actions.push(`<button class="btn" onclick="setIssueStatus(${jsArg(i.id)}, 'NEW')">Rouvrir</button>`);
+  if (i.status !== "IN_PROGRESS" && i.status !== "RESOLVED") actions.push(`<button class="btn primary" data-perm="tech.edit" onclick="setIssueStatus(${jsArg(i.id)}, 'IN_PROGRESS')">Je m'en occupe</button>`);
+  if (i.status !== "RESOLVED") actions.push(`<button class="btn" data-perm="tech.edit" onclick="setIssueStatus(${jsArg(i.id)}, 'RESOLVED')">Marquer corrigée</button>`);
+  else actions.push(`<button class="btn" data-perm="tech.edit" onclick="setIssueStatus(${jsArg(i.id)}, 'NEW')">Rouvrir</button>`);
   const state = i.status === "IN_PROGRESS" && i.assignee ? `Pris en charge par ${i.assignee}` :
     i.status === "RESOLVED" && i.resolved_by ? `Corrigée par ${i.resolved_by} · ${frDateTime(i.resolved_at)}` :
     i.status === "REOPENED" ? `Revenue après correction (${i.reopened_count} fois)` : "";
@@ -1981,8 +2048,111 @@ async function setIssueStatus(id, status) {
   } catch (e) { toast(e.message, "error"); }
 }
 
+// ---- Lot 119 : Équipe AgenC'AI ----
+const STATUS_BADGES = { ACTIVE: '<span class="badge active">Actif</span>', INVITED: '<span class="badge info">Invitation envoyée</span>', DISABLED: '<span class="badge inactive">Désactivé</span>' };
+var teamData = null;
+
+function roleBoxes(prefix, chosen, roles, compact) {
+  return roles.map((r) => `<label><input type="checkbox" data-role="${esc(r.code)}" name="${esc(prefix)}" ${chosen.includes(r.code) ? "checked" : ""}>
+    ${compact ? esc(r.label) : `<div><b>${esc(r.label)}</b><span>${esc(r.description)}</span></div>`}</label>`).join("");
+}
+
+function checkedRoles(selector) {
+  return [...document.querySelectorAll(selector + " input[data-role]:checked")].map((el) => el.dataset.role);
+}
+
+async function loadTeam() {
+  let d, j;
+  try { [d, j] = await Promise.all([api("/api/v1/superadmin/team"), api("/api/v1/superadmin/team/journal")]); }
+  catch (e) { document.getElementById("team-members").innerHTML = `<p class="tone-danger">${esc(e.message)}</p>`; return; }
+  teamData = d;
+  const inv = document.getElementById("inv-roles");
+  if (!inv.children.length) inv.innerHTML = roleBoxes("inv", [], d.roles, false);
+  document.getElementById("team-members").innerHTML = d.members.map((m) => `
+    <div class="member" id="member-${esc(m.id)}">
+      <div class="member-head"><div class="shop-logo" aria-hidden="true">${esc(initials(m.full_name))}</div>
+        <div style="flex: 1; min-width: 180px;"><b>${esc(m.full_name)}</b>${m.id === d.me ? ' <span class="muted">(vous)</span>' : ""}
+          <div class="muted" style="font-size: 13px;">${esc(m.email)}${m.last_login_at ? " · dernière connexion " + esc(frWhen(m.last_login_at)) : ""}</div></div>
+        ${STATUS_BADGES[m.status] || ""}</div>
+      <div class="member-roles" id="roles-${esc(m.id)}">${roleBoxes("r-" + m.id, m.roles, d.roles, true)}</div>
+      <div class="row">
+        <button type="button" class="btn" onclick="saveMemberRoles(${jsArg(m.id)})">Enregistrer les rôles</button>
+        ${m.status === "INVITED" ? `<button type="button" class="btn" onclick="reinviteMember(${jsArg(m.id)})">Renvoyer l'invitation</button>` : ""}
+        ${m.id === d.me ? "" : m.status === "DISABLED"
+          ? `<button type="button" class="btn primary" onclick="setMemberActive(${jsArg(m.id)}, true)">Réactiver</button>`
+          : `<button type="button" class="btn danger" onclick="setMemberActive(${jsArg(m.id)}, false)">Désactiver…</button>`}
+      </div>
+    </div>`).join("");
+  document.getElementById("team-journal").innerHTML = j.items.length ? j.items.map((h) => `<div><b>${esc(h.who)}</b> ${esc(h.what)}${h.shop ? " · " + esc(h.shop) : ""}
+    <div class="muted">${esc(frWhen(h.at))}</div></div>`).join("") : '<p class="muted">Rien pour l\'instant.</p>';
+}
+
+async function teamCall(path, method, body) {
+  return api(`/api/v1/superadmin/team${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+}
+
+async function inviteMember() {
+  const name = document.getElementById("inv-name").value.trim();
+  const email = document.getElementById("inv-email").value.trim();
+  const roles = checkedRoles("#inv-roles");
+  if (!name || !email) { toast("Nom et e-mail attendus.", "error"); return; }
+  if (!roles.length) { toast("Choisissez au moins un rôle.", "error"); return; }
+  try {
+    const r = await teamCall("/invite", "POST", { email, full_name: name, roles });
+    toast(r.email_sent ? `Invitation envoyée à ${email}.` : "Membre ajouté, mais l'e-mail n'est pas parti : renvoyez l'invitation.", r.email_sent ? undefined : "error");
+    document.getElementById("inv-name").value = ""; document.getElementById("inv-email").value = "";
+    document.querySelectorAll("#inv-roles input").forEach((el) => { el.checked = false; });
+    loadTeam();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function saveMemberRoles(id) {
+  const roles = checkedRoles("#roles-" + id);
+  if (!roles.length) { toast("Gardez au moins un rôle (ou désactivez l'accès).", "error"); return; }
+  try {
+    await teamCall("/" + id, "PUT", { roles });
+    toast("Rôles enregistrés. Ils s'appliquent tout de suite.");
+    if (id === ME.id) { ME = await api("/api/v1/superadmin/me"); applyPerms(); if (!can("team.manage")) { showSection("overview"); return; } }
+    loadTeam();
+  } catch (e) { toast(e.message, "error"); loadTeam(); }
+}
+
+async function setMemberActive(id, active) {
+  const m = teamData.members.find((x) => x.id === id);
+  if (!active && !(await saConfirm(`Désactiver l'accès de ${m.full_name} ?`, "Son accès au Super Admin s'arrête tout de suite. Vous pourrez le réactiver plus tard.", { confirmLabel: "Désactiver", danger: true }))) return;
+  try { await teamCall("/" + id, "PUT", { active }); toast(active ? "Accès réactivé." : "Accès désactivé."); loadTeam(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+async function reinviteMember(id) {
+  try { const r = await teamCall(`/${id}/reinvite`, "POST"); toast(r.email_sent ? "Invitation renvoyée (valable 48 heures)." : "L'e-mail n'est pas parti, réessayez.", r.email_sent ? undefined : "error"); loadTeam(); }
+  catch (e) { toast(e.message, "error"); }
+}
+
+// Invitation : …/superadmin/?invitation=<jeton> (lien de l'e-mail, usage unique, 48 h) → choix du mot de passe.
+const inviteToken = new URLSearchParams(location.search).get("invitation");
+if (inviteToken) {
+  history.replaceState(null, "", location.pathname + location.hash);
+  document.getElementById("login-form").classList.add("hidden");
+  document.getElementById("invite-form").classList.remove("hidden");
+}
+
+async function acceptInvite() {
+  const errorEl = document.getElementById("login-error");
+  const password = document.getElementById("inv-password").value;
+  if (password.length < 10) { errorEl.textContent = "Mot de passe de 10 caractères au moins."; return; }
+  if (password !== document.getElementById("inv-password2").value) { errorEl.textContent = "Les deux mots de passe ne sont pas identiques."; return; }
+  try {
+    const res = await fetch(API_BASE + "/api/v1/superadmin/team/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: inviteToken, password }) });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Invitation refusée."); }
+    document.getElementById("invite-form").classList.add("hidden");
+    document.getElementById("login-form").classList.remove("hidden");
+    errorEl.textContent = "Mot de passe enregistré. Connectez-vous : un code vous sera envoyé par e-mail.";
+  } catch (e) { errorEl.textContent = e.message; }
+}
+
 // Démarrage (en dernier : toutes les déclarations ci-dessus sont lues).
-if (token) enterApp();
+if (token && !inviteToken) enterApp();
 </script>
 </body>
 </html>

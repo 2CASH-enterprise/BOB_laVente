@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, get_current_superadmin
+from app.core.security import CurrentSuperAdmin, need
 from app.models.tenant import Tenant
 from app.models.whatsapp_flow import WhatsAppFlow
 from app.services import wa_flows
@@ -38,13 +38,13 @@ async def _settings(db) -> dict:
 
 
 @router.get("/wa-flows/settings")
-async def get_settings(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+async def get_settings(db: AsyncSession = Depends(get_db), _: CurrentSuperAdmin = Depends(need("tech.view"))) -> dict:
     return await _settings(db)
 
 
 @router.put("/wa-flows/settings")
 async def put_settings(payload: Switch, db: AsyncSession = Depends(get_db),
-                       current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                       current: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     if payload.enabled != await wa_flows.enabled(db):
         await log_audit_event(db, actor=f"superadmin:{current.superadmin_user_id}",
                               action="WA_FLOWS_ON" if payload.enabled else "WA_FLOWS_OFF")
@@ -72,13 +72,13 @@ async def _overview(db, tenant) -> dict:
 
 @router.get("/tenants/{tenant_id}/wa-flows")
 async def tenant_flows(tenant_id: UUID, db: AsyncSession = Depends(get_db),
-                       _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                       _: CurrentSuperAdmin = Depends(need("tech.view"))) -> dict:
     return await _overview(db, await _tenant(db, tenant_id))
 
 
 @router.put("/tenants/{tenant_id}/wa-flows/mode")
 async def set_mode(tenant_id: UUID, payload: Mode, db: AsyncSession = Depends(get_db),
-                   current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+                   current: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     tenant = await _tenant(db, tenant_id)
     value = None if payload.mode == "AUTO" else payload.mode
     if tenant.wa_flows != value:
@@ -91,7 +91,7 @@ async def set_mode(tenant_id: UUID, payload: Mode, db: AsyncSession = Depends(ge
 
 @router.post("/tenants/{tenant_id}/wa-flows/sync")
 async def sync(tenant_id: UUID, db: AsyncSession = Depends(get_db),
-               _: CurrentSuperAdmin = Depends(get_current_superadmin)) -> dict:
+               _: CurrentSuperAdmin = Depends(need("tech.edit"))) -> dict:
     """Crée et publie le formulaire chez Meta tout de suite (sans attendre une réservation), ou montre le refus."""
     from app.services.business_type import is_restaurant
 

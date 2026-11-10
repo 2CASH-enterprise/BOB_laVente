@@ -44,6 +44,7 @@ from app.api.superadmin.overview import router as superadmin_overview_router  # 
 from app.api.monitoring.routes import public_router as monitoring_public_router, router as monitoring_router  # lot 67
 from app.api.superadmin.wa_templates import router as superadmin_wa_templates_router  # lot 68
 from app.api.superadmin.wa_flows import router as superadmin_wa_flows_router  # lot 114
+from app.api.superadmin.team import router as superadmin_team_router  # lot 119
 from app.api.calls import router as calls_router  # lot 116
 from app.api.pay.routes import router as pay_router  # lot 68
 from app.api.superadmin.plans import router as superadmin_plans_router, tenant_router as plan_usage_router  # lot 69
@@ -131,6 +132,7 @@ app.include_router(monitoring_public_router)
 app.include_router(monitoring_router)
 app.include_router(superadmin_wa_templates_router)
 app.include_router(superadmin_wa_flows_router)
+app.include_router(superadmin_team_router)  # lot 119 : avant les routes à paramètres des autres routeurs
 app.include_router(calls_router)
 app.include_router(pay_router)
 app.include_router(superadmin_plans_router)

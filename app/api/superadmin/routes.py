@@ -21,7 +21,7 @@ from app.core.security import (
     create_superadmin_access_token,
     create_superadmin_mfa_pending_token,
     decode_superadmin_mfa_pending_token,
-    get_current_superadmin,
+    need,
     hash_password,
     verify_password,
 )
@@ -62,7 +62,8 @@ async def bootstrap_superadmin(payload: SuperAdminBootstrapRequest, db: AsyncSes
         raise HTTPException(status_code=403, detail="Un compte Super Admin existe déjà — utilisez /create-colleague")
 
     admin = SuperAdminUser(
-        email=payload.email.strip().lower(), hashed_password=hash_password(payload.password), full_name=payload.full_name
+        email=payload.email.strip().lower(), hashed_password=hash_password(payload.password), full_name=payload.full_name,
+        roles=["OWNER"],  # lot 119 : le tout premier compte est Propriétaire
     )
     db.add(admin)
     await db.commit()
@@ -195,7 +196,7 @@ async def resend_superadmin_code(payload: SuperAdminResendRequest, db: AsyncSess
 @router.post("/create-colleague", response_model=SuperAdminLoginResponse)
 async def create_colleague(
     payload: SuperAdminBootstrapRequest,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("team.manage")),
     db: AsyncSession = Depends(get_db),
 ):
     existing = (await db.execute(select(SuperAdminUser).where(SuperAdminUser.email == payload.email.strip().lower()))).scalar_one_or_none()
@@ -203,7 +204,8 @@ async def create_colleague(
         raise HTTPException(status_code=409, detail="Cet email est déjà utilisé")
 
     admin = SuperAdminUser(
-        email=payload.email.strip().lower(), hashed_password=hash_password(payload.password), full_name=payload.full_name
+        email=payload.email.strip().lower(), hashed_password=hash_password(payload.password), full_name=payload.full_name,
+        roles=["READONLY"],  # lot 119 : ancienne route ; l'équipe s'invite désormais par e-mail (rôles choisis)
     )
     db.add(admin)
     await db.commit()
@@ -238,58 +240,61 @@ async def _trace(db, current: CurrentSuperAdmin, tenant: Tenant, action: str, be
                           details=details)
 
 
-async def _build_summary(db: AsyncSession, tenant: Tenant) -> TenantSummaryForAdmin:
-    return TenantSummaryForAdmin(
-        id=tenant.id, name=tenant.name, email=tenant.email, plan=tenant.plan.value,
-        is_demo=tenant.is_demo, active=tenant.active,
-        product_count=await _product_count(db, tenant.id),
-        conversation_count_this_month=await _conversation_count_this_month(db, tenant.id),
-        commission_rate=float(tenant.commission_rate) if tenant.commission_rate is not None else None,
-        business_type=normalize_business_type(tenant.business_type),
-        created_at=tenant.created_at,
-        paid_until=tenant.paid_until, bob_status=bob_pause.status(tenant).as_dict(),
-        country=tenant.country, phone=tenant.phone,
+async def _build_summary(db: AsyncSession, tenant: Tenant, current: CurrentSuperAdmin | None = None) -> TenantSummaryForAdmin:
+    """Lot 119 — ce que le rôle permet de voir : Commercial = nom, secteur, pays, statut ; chiffres = Propriétaire, Facturation."""
+    full = current is None or current.can("shops.view")
+    figures = current is None or current.can("shops.figures")
+    summary = TenantSummaryForAdmin(
+        id=tenant.id, name=tenant.name, is_demo=tenant.is_demo, active=tenant.active,
+        business_type=normalize_business_type(tenant.business_type), created_at=tenant.created_at,
+        bob_status=bob_pause.status(tenant).as_dict(), country=tenant.country,
         prereg_locked=tenant.prereg_at is not None and tenant.access_opened_at is None,
     )
+    if full:
+        summary.email, summary.plan, summary.phone, summary.paid_until = tenant.email, tenant.plan.value, tenant.phone, tenant.paid_until
+        summary.product_count = await _product_count(db, tenant.id)
+        summary.conversation_count_this_month = await _conversation_count_this_month(db, tenant.id)
+    if figures:
+        summary.commission_rate = float(tenant.commission_rate) if tenant.commission_rate is not None else None
+    return summary
 
 
-async def _build_detail(db: AsyncSession, tenant: Tenant) -> TenantDetailForAdmin:
-    summary = await _build_summary(db, tenant)
-    customer_count = (await db.execute(select(func.count(Customer.id)).where(Customer.tenant_id == tenant.id))).scalar_one()
-    order_count = (await db.execute(select(func.count(Order.id)).where(Order.tenant_id == tenant.id))).scalar_one()
-    return TenantDetailForAdmin(
-        **summary.model_dump(), currency=tenant.currency,
-        customer_count=customer_count, order_count=order_count,
-        total_commission_due=await _total_commission_due(db, tenant.id),
-    )
+async def _build_detail(db: AsyncSession, tenant: Tenant, current: CurrentSuperAdmin | None = None) -> TenantDetailForAdmin:
+    summary = await _build_summary(db, tenant, current)
+    detail = TenantDetailForAdmin(**summary.model_dump(), currency=tenant.currency)
+    if current is None or current.can("shops.figures"):
+        detail.customer_count = (await db.execute(select(func.count(Customer.id)).where(Customer.tenant_id == tenant.id))).scalar_one()
+        detail.order_count = (await db.execute(select(func.count(Order.id)).where(Order.tenant_id == tenant.id))).scalar_one()
+        detail.total_commission_due = await _total_commission_due(db, tenant.id)
+    return detail
 
 
 @router.get("/tenants", response_model=list[TenantSummaryForAdmin])
 async def list_tenants(
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.basic")),
     db: AsyncSession = Depends(get_db),
 ):
     tenants = (await db.execute(select(Tenant).order_by(Tenant.created_at.desc()))).scalars().all()
-    return [await _build_summary(db, tenant) for tenant in tenants]
+    return [await _build_summary(db, tenant, current) for tenant in tenants]
 
 
 @router.get("/tenants/{tenant_id}", response_model=TenantDetailForAdmin)
 async def get_tenant_detail(
     tenant_id: UUID,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.view")),
     db: AsyncSession = Depends(get_db),
 ):
     tenant = await db.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant introuvable")
-    return await _build_detail(db, tenant)
+    return await _build_detail(db, tenant, current)
 
 
 @router.put("/tenants/{tenant_id}/plan", response_model=TenantSummaryForAdmin)
 async def update_tenant_plan(
     tenant_id: UUID,
     payload: TenantPlanUpdate,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.billing")),
     db: AsyncSession = Depends(get_db),
 ):
     tenant = await db.get(Tenant, tenant_id)
@@ -302,14 +307,14 @@ async def update_tenant_plan(
         raise HTTPException(status_code=400, detail=f"Plan invalide. Valeurs possibles : {[p.value for p in TenantPlan]}") from None
     await _trace(db, current, tenant, "PLAN_CHANGED_BY_ADMIN", previous, tenant.plan.value)
     await db.commit()
-    return await _build_summary(db, tenant)
+    return await _build_summary(db, tenant, current)
 
 
 @router.put("/tenants/{tenant_id}/active", response_model=TenantSummaryForAdmin)
 async def update_tenant_active(
     tenant_id: UUID,
     payload: TenantActiveUpdate,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.suspend")),
     db: AsyncSession = Depends(get_db),
 ):
     """Suspendre/réactiver un tenant — le champ `active` existait déjà, jamais exposé jusqu'ici."""
@@ -320,14 +325,14 @@ async def update_tenant_active(
         await _trace(db, current, tenant, "TENANT_REACTIVATED_BY_ADMIN" if payload.active else "TENANT_SUSPENDED_BY_ADMIN")
     tenant.active = payload.active
     await db.commit()
-    return await _build_summary(db, tenant)
+    return await _build_summary(db, tenant, current)
 
 
 @router.put("/tenants/{tenant_id}/paid-until", response_model=TenantSummaryForAdmin)
 async def update_tenant_paid_until(
     tenant_id: UUID,
     payload: TenantPaidUntilUpdate,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.billing")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -343,14 +348,14 @@ async def update_tenant_paid_until(
         await _trace(db, current, tenant, "PAID_UNTIL_CHANGED_BY_ADMIN", previous.isoformat() if previous else None,
                      payload.paid_until.isoformat() if payload.paid_until else None)
     await db.commit()
-    return await _build_summary(db, tenant)
+    return await _build_summary(db, tenant, current)
 
 
 @router.put("/tenants/{tenant_id}/commission-rate", response_model=TenantSummaryForAdmin)
 async def update_commission_rate(
     tenant_id: UUID,
     payload: TenantCommissionRateUpdate,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.billing")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -367,14 +372,14 @@ async def update_commission_rate(
     if previous != payload.commission_rate:
         await _trace(db, current, tenant, "COMMISSION_CHANGED_BY_ADMIN", previous, payload.commission_rate)
     await db.commit()
-    return await _build_summary(db, tenant)
+    return await _build_summary(db, tenant, current)
 
 
 @router.put("/tenants/{tenant_id}/business-type", response_model=TenantSummaryForAdmin)
 async def update_tenant_business_type(
     tenant_id: UUID,
     payload: TenantBusinessTypeUpdate,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.sector")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -406,12 +411,12 @@ async def update_tenant_business_type(
 
         await seed_products(db, tenant)  # lot 53 : seulement si la boutique n'a encore aucun produit
     await db.commit()
-    return await _build_summary(db, tenant)
+    return await _build_summary(db, tenant, current)
 
 
 @router.get("/stats", response_model=PlatformStats)
 async def platform_stats(
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("shops.figures")),
     db: AsyncSession = Depends(get_db),
 ):
     total_tenants = (await db.execute(select(func.count(Tenant.id)))).scalar_one()
@@ -438,7 +443,7 @@ async def platform_stats(
 @router.get("/ai-costs")
 async def ai_costs(
     month: str | None = None,
-    current: CurrentSuperAdmin = Depends(get_current_superadmin),
+    current: CurrentSuperAdmin = Depends(need("aicosts.view")),
     db: AsyncSession = Depends(get_db),
 ):
     """
