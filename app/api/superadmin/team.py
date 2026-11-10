@@ -22,7 +22,7 @@ from app.core.rate_limit_dependency import get_rate_limiter
 from app.core.security import CurrentSuperAdmin, hash_password, need
 from app.models.audit_log import AuditLog
 from app.models.superadmin_user import SuperAdminUser
-from app.services import sa_roles
+from app.services import console_bridge, sa_roles
 
 router = APIRouter(prefix="/api/v1/superadmin", tags=["superadmin"])
 
@@ -39,6 +39,8 @@ TEAM_LABELS = {
     "PROSPECT_VIEWED": "a ouvert la fiche du prospect",
     "PROSPECTS_EXPORTED": "a exporté la liste des prospects",
     "SUPERADMIN_LOGIN_SUCCESS": "s'est connecté",
+    "CONSOLE_SWITCH": "est passé à la console Naomy",
+    "CONSOLE_ENTRY": "est arrivé depuis la console Naomy",
 }
 
 
@@ -185,6 +187,8 @@ async def update_member(member_id: UUID, payload: MemberUpdate, current: Current
         if roles != sa_roles.clean(member.roles):
             await _log(db, current, "SA_MEMBER_ROLES_CHANGED", member, {"from": sa_roles.clean(member.roles), "to": roles})
             member.roles = roles
+            if member.invite_token_hash is None:
+                console_bridge.queue_member(db, member, "roles")
     if payload.active is not None and payload.active != member.active:
         if member.id == current.superadmin_user_id:
             raise HTTPException(status_code=409, detail="Vous ne pouvez pas désactiver votre propre accès.")
@@ -195,6 +199,7 @@ async def update_member(member_id: UUID, payload: MemberUpdate, current: Current
             member.invite_token_hash = member.invite_expires_at = None  # une invitation en cours ne sert plus
             member.mfa_otp_code_hash = member.mfa_otp_expires_at = None
         await _log(db, current, "SA_MEMBER_ENABLED" if payload.active else "SA_MEMBER_DISABLED", member)
+        console_bridge.queue_member(db, member, "reactive" if payload.active else "desactive")  # coupure tout de suite
     await db.commit()
     return _view(member)
 
@@ -220,6 +225,7 @@ async def accept(payload: AcceptIn, request: Request, db: AsyncSession = Depends
     member.invite_token_hash = member.invite_expires_at = None
     await log_audit_event(db, actor=f"superadmin:{member.id}", action="SA_INVITE_ACCEPTED", ip_address=ip,
                           details={"member": member.full_name})
+    console_bridge.queue_member(db, member, "rejoint")  # lot 120 : Naomy connaît le nouveau membre
     await db.commit()
 
 
@@ -238,7 +244,7 @@ async def journal(current: CurrentSuperAdmin = Depends(need("team.manage")), db:
     for log in logs:
         if log.action in TEAM_LABELS:
             target = (log.details or {}).get("member") or (log.details or {}).get("prospect") or ""
-            what = f"{TEAM_LABELS[log.action]} {target}".strip() if log.action not in ("SA_INVITE_ACCEPTED", "SUPERADMIN_LOGIN_SUCCESS", "PROSPECTS_EXPORTED") else TEAM_LABELS[log.action]
+            what = f"{TEAM_LABELS[log.action]} {target}".strip() if log.action not in ("SA_INVITE_ACCEPTED", "SUPERADMIN_LOGIN_SUCCESS", "PROSPECTS_EXPORTED", "CONSOLE_SWITCH", "CONSOLE_ENTRY") else TEAM_LABELS[log.action]
         else:
             what = describe(log)
         items.append({"at": _utc(log.created_at).isoformat() if log.created_at else None, "who": members.get(log.actor, "—"),

@@ -25,7 +25,8 @@ from app.services import sa_roles
 HTML = Path("app/static/superadmin/index.html").read_text(encoding="utf-8")
 PUBLIC = {("POST", "/api/v1/superadmin/bootstrap"), ("POST", "/api/v1/superadmin/login"),
           ("POST", "/api/v1/superadmin/login/verify"), ("POST", "/api/v1/superadmin/login/resend"),
-          ("POST", "/api/v1/superadmin/team/accept")}
+          ("POST", "/api/v1/superadmin/team/accept"),
+          ("POST", "/api/v1/superadmin/console/entree")}  # lot 120
 
 
 async def _member(db, *roles, name="Awa Koné", active=True):

@@ -300,6 +300,13 @@
   .stat { display: inline-block; margin-right: 10px; font-size: 12.5px; white-space: nowrap; }
   .stat b { font-size: 14px; }
   .preview-frame { width: 100%; height: 420px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+  /* Lot 120 — interrupteur des consoles */
+  .agent-switch { display: flex; gap: 4px; padding: 4px; margin: 0 4px 14px; border: 1px solid var(--border); border-radius: 12px; }
+  .agent-switch button { flex: 1; border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 700; font-size: 13px;
+    padding: 8px 6px; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .agent-switch button[aria-pressed="true"] { background: var(--surface-2, rgba(127,127,127,.12)); color: var(--text); }
+  .agent-switch button:disabled { opacity: .45; cursor: not-allowed; }
+  .agent-switch .agent-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   /* Lot 119 — rôles */
   .role-list { display: grid; gap: 6px; margin-top: 6px; }
   .role-list label { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; line-height: 1.35; cursor: pointer; }
@@ -359,6 +366,8 @@
     <aside class="sidebar" id="sidebar">
       <div class="brand"><svg width="34" height="34" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg>
         <div><div class="brand-word">Bob</div><div class="brand-sub">SUPER ADMIN</div></div></div>
+      <!-- Lot 120 — interrupteur entre les consoles des agents (Bob, Naomy, d'autres plus tard) -->
+      <div class="agent-switch hidden" id="agent-switch" role="group" aria-label="Console de l'agent"></div>
       <nav aria-label="Super Admin">
         <button type="button" data-section="overview" onclick="showSection('overview')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Vue d'ensemble<span class="count danger hidden" id="nav-count-overview"></span></button>
         <button type="button" data-section="shops" data-perm="shops.basic" onclick="showSection('shops')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18v11H3zM9 20v-6h6v6"/></svg>Boutiques<span class="count plain hidden" id="nav-count-shops"></span></button>
@@ -680,6 +689,7 @@ async function enterApp() {
   syncThemeButtons();
   try { ME = await api("/api/v1/superadmin/me"); } catch (e) { logout(); return; }
   applyPerms();
+  loadAgentSwitch();
   // Lot 67 — lien des emails d'alerte : …/superadmin/#monitoring ouvre directement le monitoring.
   if (location.hash === "#monitoring" && can("tech.view")) { showSection("monitoring"); loadOverview(); } else showSection("overview");
 }
@@ -2129,6 +2139,41 @@ async function reinviteMember(id) {
   catch (e) { toast(e.message, "error"); }
 }
 
+// ---- Lot 120 : interrupteur entre les consoles (Bob ▸ Naomy) ----
+async function loadAgentSwitch() {
+  const box = document.getElementById("agent-switch");
+  let d;
+  try { d = await api("/api/v1/superadmin/console/agents"); } catch (e) { return; }
+  const others = d.agents.filter((a) => !a.actuel && a.disponible);
+  if (!others.length) { box.classList.add("hidden"); return; }
+  box.innerHTML = d.agents.map((a) => `<button type="button" aria-pressed="${a.actuel}" ${a.disponible || a.actuel ? "" : "disabled"}
+    onclick="switchConsole(${jsArg(a.code)}, ${a.actuel ? "true" : "false"})"><span class="agent-dot" style="background: ${esc(a.couleur)};"></span>${esc(a.nom)}</button>`).join("");
+  box.classList.remove("hidden");
+}
+
+async function switchConsole(code, current) {
+  if (current) return;
+  try {
+    const r = await api("/api/v1/superadmin/console/sortie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent: code }) });
+    window.location.href = r.url;
+  } catch (e) { toast(e.message, "error"); }
+}
+
+// Arrivée depuis la console de Naomy : …/superadmin/?jeton=<jeton> (60 secondes, usage unique) → session Bob.
+const consoleToken = new URLSearchParams(location.search).get("jeton");
+if (consoleToken) {
+  history.replaceState(null, "", location.pathname + location.hash);
+  fetch(API_BASE + "/api/v1/superadmin/console/entree", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jeton: consoleToken }) })
+    .then(async (r) => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.access_token) throw new Error(d.detail || "Passage refusé.");
+      token = d.access_token;
+      localStorage.setItem("bob_superadmin_token", token);
+      enterApp();
+    })
+    .catch((e) => { if (token) { enterApp(); return; } document.getElementById("login-error").textContent = e.message; });
+}
+
 // Invitation : …/superadmin/?invitation=<jeton> (lien de l'e-mail, usage unique, 48 h) → choix du mot de passe.
 const inviteToken = new URLSearchParams(location.search).get("invitation");
 if (inviteToken) {
@@ -2152,7 +2197,7 @@ async function acceptInvite() {
 }
 
 // Démarrage (en dernier : toutes les déclarations ci-dessus sont lues).
-if (token && !inviteToken) enterApp();
+if (token && !inviteToken && !consoleToken) enterApp();
 </script>
 </body>
 </html>
