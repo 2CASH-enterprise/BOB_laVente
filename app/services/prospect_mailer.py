@@ -41,20 +41,23 @@ STOP_WORDS = re.compile(r"\b(stop|d[ée]sinscri\w*|d[ée]sabonn\w*|ne plus (me )
 AUTO_SUBJECTS = re.compile(r"^(r[ée]ponse automatique|automatic reply|auto[- ]?reply|out of office|absent|absence)", re.I)
 
 DEFAULTS = {
-    "RESTAURANT": [  # lot 109 : l'équipe Bob + Naomy, sans prix
-        ("{entreprise} : vos clients attirés sur les réseaux, servis sur WhatsApp",
-         "{bonjour},\n\nVos clients vous découvrent sur les réseaux sociaux et vous commandent sur WhatsApp, souvent "
-         "pendant le coup de feu, quand personne n'a le temps de répondre.\n\nNous proposons une équipe de deux agents. "
-         "Naomy, notre community manager intelligente, crée et publie votre plat du jour sur vos réseaux. Bob, notre serveur "
-         "virtuel, répond aussitôt sur WhatsApp : il présente la carte, prend la commande (à emporter, livraison, sur place) "
-         "et réserve les tables.\n\nVous pouvez essayer Bob en 2 minutes avec une carte d'exemple :\n{lien}\n\nBonne journée,"),
+    "RESTAURANT": [  # lot 109 ; textes plus vendeurs du lot 122 (10/11), **…** = gras dans l'e-mail
+        ("{entreprise} : plus de clients, sans perdre une commande",
+         "{bonjour},\n\nEn plein service, combien de commandes WhatsApp restent sans réponse ?\n\n"
+         "Notre équipe de 2 agents s'en charge pour {entreprise} :\n"
+         "• **Naomy**, votre community manager intelligente, publie votre plat du jour sur vos réseaux sociaux et fait "
+         "venir les clients ;\n"
+         "• **Bob**, votre serveur virtuel, leur répond aussitôt sur WhatsApp, prend les commandes (à emporter, livraison, "
+         "sur place) et réserve les tables, 24 h / 24.\n\n"
+         "Vous restez en cuisine, vos clients sont servis.\n\n"
+         "Essayez-les en 2 minutes avec une carte d'exemple :\n{lien}\n\nBonne journée,"),
         ("Re : le plat du jour de {entreprise}",
-         "{bonjour},\n\nJe reviens vers vous : un client qui voit votre plat du jour à midi et n'obtient pas de réponse "
-         "commande souvent ailleurs.\n\nNaomy publie, Bob répond et prend la commande, même aux heures de pointe :\n{lien}"
-         "\n\nBonne journée,"),
+         "{bonjour},\n\nUn client qui voit votre plat du jour à midi et n'obtient pas de réponse commande ailleurs.\n\n"
+         "Avec **Naomy** et **Bob**, votre plat du jour est publié chaque matin, et chaque message reçoit une réponse, "
+         "même en plein rush :\n{lien}\n\nBonne journée,"),
         ("Dernier message de ma part",
-         "{bonjour},\n\nC'est mon dernier message : si ce n'est pas le bon moment, aucun souci.\n\nLa démo de Bob pour "
-         "votre restaurant reste ouverte :\n{lien}\n\nBelle continuation,"),
+         "{bonjour},\n\nC'est mon dernier message : si ce n'est pas le bon moment, aucun souci.\n\nLa démo de "
+         "**Naomy** et **Bob** pour votre restaurant reste ouverte :\n{lien}\n\nBelle continuation,"),
     ],
     "ONLINE_STORE": [
         ("{entreprise} : vos clients WhatsApp servis 24 h / 24",
@@ -168,6 +171,7 @@ def steps_of(campaign) -> list[tuple[str, str]]:
     return steps
 
 
+BOLD = re.compile(r"\*\*([^*\n]{1,80})\*\*")  # lot 122
 DEMO_BUTTON = "Voir la démo"  # lot 63 : bouton des emails, mention du message WhatsApp
 
 
@@ -194,6 +198,8 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
     """(objet, texte, html) d'un email ; l'image d'ouverture n'est ajoutée que pour un vrai envoi (email_id)."""
     subject = " ".join(fill(subject, prospect).split())[:200]
     text_body = fill(body, prospect).strip()
+    bold_body = text_body  # lot 122 : **…** en gras dans le HTML, sans les astérisques dans la version texte
+    text_body = BOLD.sub(r"\1", text_body)
     sector = pros.SECTORS.get(prospect.sector, "").lower()
     legal = LEGAL.format(year=now_utc().year)
     why = (f"Vous recevez cet email car {prospect.company} exerce une activité ({sector}) que Bob peut aider. "
@@ -209,7 +215,7 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
     def paragraph(chunk: str) -> str:
         out = []
         for line in chunk.split("\n"):
-            safe = escape(line)
+            safe = BOLD.sub(lambda m: f"<strong>{m.group(1)}</strong>", escape(line))
             safe = re.sub(r"(https?://[^\s<]+)", lambda m: f'<a href="{m.group(1)}" style="color:#1B4332;font-weight:600;">{m.group(1)}</a>', safe)
             out.append(safe)
         return f'<p style="margin:0 0 14px;">{"<br>".join(out)}</p>'
@@ -225,7 +231,7 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
               f'<a href="{escape(personal)}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;'
               f'color:#ffffff;text-decoration:none;border-radius:10px;">{escape(DEMO_BUTTON)}</a></td></tr></table>')
     blocks, placed = [], False
-    chunks = re.split(r"\n\s*\n", text_body)
+    chunks = re.split(r"\n\s*\n", bold_body)
     for chunk in chunks:
         lines = [line for line in chunk.split("\n") if line.strip() != personal]
         if lines:
@@ -420,7 +426,7 @@ async def unsubscribe(db, prospect, how: str) -> None:
     if prospect.status != "UNSUBSCRIBED":
         prospect.status, prospect.status_reason, prospect.next_email_at = "UNSUBSCRIBED", how, None
         pros.add_event(db, prospect, "STATUS", detail=f"Ne plus contacter — {how}", actor="prospect")
-    await suppress(db, prospect.email, "UNSUBSCRIBED")
+    await pros.oppose(db, prospect, "UNSUBSCRIBED")  # lot 122 : l'e-mail et le téléphone
     await db.commit()
 
 

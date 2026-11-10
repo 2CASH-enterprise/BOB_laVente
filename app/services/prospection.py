@@ -341,12 +341,24 @@ _PITCH = {
     "REAL_ESTATE": "répond à vos acheteurs, locataires et propriétaires sur WhatsApp 24 h / 24 et vous obtient des visites et des estimations",
 }
 # Lot 109 — restaurant : l'équipe Bob + Naomy (jamais de prix dans le message : rien n'est définitif, décision du 06/11).
+# Lot 122 — textes plus vendeurs validés par Thérèse le 10/11 ; *…* = gras sur WhatsApp.
 _TEAM = {
-    "RESTAURANT": ("Bonjour{name}, je suis {who}. Pour {company}, nous proposons une équipe de deux agents : Naomy, notre "
-                   "community manager intelligente, crée et publie votre plat du jour sur vos réseaux sociaux ; Bob, notre "
-                   "serveur virtuel, répond sur WhatsApp 24 h / 24, prend les commandes (à emporter, livraison, sur place) et "
-                   "réserve les tables. Vous pouvez essayer Bob en 2 minutes avec une carte d'exemple."),
+    "RESTAURANT": ("Bonjour{name} 👋, je suis {who}.{past}\n\n"
+                   "En plein service, combien de commandes WhatsApp restent sans réponse chez {company} ?\n\n"
+                   "Notre équipe de 2 agents s'en charge pour vous :\n"
+                   "📣 *Naomy*, votre community manager intelligente, publie votre plat du jour sur vos réseaux sociaux et "
+                   "fait venir les clients.\n"
+                   "🍽️ *Bob*, votre serveur virtuel, leur répond tout de suite sur WhatsApp, prend vos commandes et réserve "
+                   "vos tables, 24 h / 24.\n\n"
+                   "Vous restez en cuisine, vos clients sont servis.\n"
+                   "Essayez-les en 2 minutes avec une carte d'exemple 👇"),
 }
+_TEAM_RELANCE = {
+    "RESTAURANT": ("Bonjour{name}, un dernier mot pour {company} : pendant que *Naomy* fait venir les clients avec votre plat "
+                   "du jour, *Bob* leur répond et prend leurs commandes, même en plein rush.\nL'essai prend 2 minutes 👇"),
+}
+PAST_RELATION = " Vous aviez échangé avec Naomy il y a quelques mois : elle a bien changé depuis."
+TEAM_STOP = "Répondez STOP pour ne plus être contacté."
 
 
 def offer_line(slots: dict | None) -> str | None:
@@ -381,8 +393,10 @@ def message(prospect, sender: str | None, offer: str | None = None) -> str:
         return f"{text} {STOP_LINE}\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}"
     who = f"{sender} d'AgenC'AI" if sender else "AgenC'AI"
     if prospect.sector in _TEAM:
-        text = _TEAM[prospect.sector].format(name=f" {first}" if first else "", who=who, company=prospect.company)
-        return f"{text}{' ' + offer if offer else ''}\n\n👉 Voir la démo : {link(prospect.code, prospect.sector)}"
+        past = PAST_RELATION if getattr(prospect, "past_relation", False) else ""
+        text = _TEAM[prospect.sector].format(name=f" {first}" if first else "", who=who, company=prospect.company, past=past)
+        return (f"{text}{chr(10) + offer if offer else ''}\n👉 Voir la démo : {link(prospect.code, prospect.sector)}"
+                f"\n\n{TEAM_STOP}")
     pitch = _PITCH.get(prospect.sector, _PITCH["ONLINE_STORE"])
     # Lot 63 — le lien seul sur la dernière ligne : WhatsApp en fait un aperçu (visuel du secteur) qui ouvre la démo.
     return (f"Bonjour{' ' + first if first else ''}, je suis {who}. Bob, notre vendeur virtuel, {pitch}. "
@@ -393,6 +407,10 @@ def message(prospect, sender: str | None, offer: str | None = None) -> str:
 def relance_message(prospect, offer: str | None = None) -> str:
     """Lot 69 — relance courte à J7, seulement s'il n'a pas réagi ; promet de ne plus relancer s'il le dit."""
     first = (prospect.contact_name or "").split()[0] if (prospect.contact_name or "").strip() else None
+    if prospect.sector in _TEAM_RELANCE:  # lot 122
+        text = _TEAM_RELANCE[prospect.sector].format(name=f" {first}" if first else "", company=prospect.company)
+        return (f"{text}\n👉 Voir la démo : {link(prospect.code, prospect.sector)}\n\n"
+                f"Je ne vous relancerai plus. {TEAM_STOP}")
     places = f" {offer}" if offer else ""
     return (f"Bonjour{' ' + first if first else ''}, je reviens vers vous au sujet de Bob, le vendeur WhatsApp de "
             f"{prospect.company}. La démo prend 2 minutes.{places} Si ce n'est pas le bon moment, dites-le-moi simplement : "
@@ -405,6 +423,60 @@ def whatsapp_url(prospect, sender: str | None, offer: str | None = None, text: s
     from urllib.parse import quote
 
     return f"https://wa.me/{prospect.phone}?text={quote(text or message(prospect, sender, offer))}"
+
+
+# --- Lot 122 : contacts à ne jamais prospecter -------------------------------------------------------------------
+
+def contact_hash(email: str | None = None, phone: str | None = None) -> str | None:
+    """Empreinte SHA-256 : e-mail en minuscules sans espaces, ou téléphone en chiffres seuls avec l'indicatif."""
+    import hashlib
+    import re as _re
+
+    if email and email.strip():
+        return hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    digits = _re.sub(r"\D", "", phone or "")
+    return hashlib.sha256(digits.encode()).hexdigest() if len(digits) >= 8 else None
+
+
+async def blocked_contacts(db) -> dict:
+    """Empreintes des opposés (désinscrits, « ne plus contacter », adresses mortes) et contacts des boutiques clientes."""
+    import re as _re
+
+    from app.models.prospect import ProspectSuppression
+    from app.models.tenant import Tenant
+    from app.models.user import User
+    from app.models.whatsapp_account import WhatsAppAccount
+
+    hashes = set((await db.execute(select(ProspectSuppression.email_hash))).scalars().all())
+    emails = {e.strip().lower() for e in (await db.execute(select(Tenant.email))).scalars().all() if e}
+    emails |= {e.strip().lower() for e in (await db.execute(select(User.email))).scalars().all() if e}
+    phones = {_re.sub(r"\D", "", n) for n in (await db.execute(select(Tenant.phone))).scalars().all() if n}
+    phones |= {_re.sub(r"\D", "", n) for n in (await db.execute(select(WhatsAppAccount.display_phone_number))).scalars().all() if n}
+    return {"hashes": hashes, "emails": emails, "phones": {n for n in phones if len(n) >= 8}}
+
+
+def is_blocked(blocked: dict, email: str | None, phone: str | None) -> bool:
+    import re as _re
+
+    if email and (contact_hash(email=email) in blocked["hashes"] or email.strip().lower() in blocked["emails"]):
+        return True
+    digits = _re.sub(r"\D", "", phone or "")
+    if len(digits) >= 8:
+        if contact_hash(phone=digits) in blocked["hashes"]:
+            return True
+        # Numéro local d'une boutique (« 07 01 02 03 04 ») : même fin sur 8 chiffres au moins.
+        if any(digits == n or (len(n) <= 10 and digits.endswith(n)) for n in blocked["phones"]):
+            return True
+    return False
+
+
+async def oppose(db, prospect, reason: str) -> None:
+    """« Ne plus contacter » : l'e-mail ET le téléphone du prospect vont dans la liste d'opposition (empreintes)."""
+    from app.models.prospect import ProspectSuppression
+
+    for value in (contact_hash(email=prospect.email), contact_hash(phone=prospect.phone)):
+        if value and (await db.execute(select(ProspectSuppression.id).where(ProspectSuppression.email_hash == value))).first() is None:
+            db.add(ProspectSuppression(email_hash=value, reason=reason))
 
 
 # --- Lot 69 : vue « Aujourd'hui » (routine de prospection) ---------------------------------------------------------
@@ -428,6 +500,12 @@ async def today(db, now: datetime, daily_limit: int) -> dict:
 
     prospects = (await db.execute(select(Prospect).where(Prospect.status == "ACTIVE", Prospect.tenant_id.is_(None))
                                   .order_by(Prospect.created_at))).scalars().all()
+    # Lot 122 — groupe d'abord (1, 2, 3…, puis sans groupe), puis l'ordre d'arrivée et le rang dans le fichier ;
+    # jamais un contact opposé ni un commerçant déjà client.
+    prospects = sorted(prospects, key=lambda p: (p.priority if p.priority is not None else 10 ** 6,
+                                                 aware(p.created_at) or now, p.import_rank or 0))
+    blocked = await blocked_contacts(db)
+    prospects = [p for p in prospects if not is_blocked(blocked, p.email, p.phone)]
     events = (await db.execute(select(ProspectEvent).where(ProspectEvent.kind == "CONTACT",
                                                            ProspectEvent.channel.in_(("WHATSAPP", "PHONE"))))).scalars().all()
     whatsapp, calls = {}, {}
@@ -464,7 +542,8 @@ async def today(db, now: datetime, daily_limit: int) -> dict:
 # --- Import Excel ----------------------------------------------------------------------------------------------
 
 FIELDS = {"company": "Entreprise", "contact_name": "Contact", "email": "Email", "phone": "Téléphone",
-          "city": "Ville", "country": "Pays", "sector": "Secteur", "source": "Source", "notes": "Note"}
+          "city": "Ville", "country": "Pays", "sector": "Secteur", "source": "Source", "notes": "Note",
+          "group": "Groupe", "past_relation": "Relation passée"}  # lot 122
 SYNONYMS = {
     "company": ("entreprise", "societe", "raison sociale", "nom de l entreprise", "boutique", "commerce", "company",
                 "enseigne", "concession", "cabinet", "nom commercial"),
@@ -477,7 +556,11 @@ SYNONYMS = {
     "sector": ("secteur", "activite", "type", "categorie", "secteur d activite"),
     "source": ("source", "origine", "provenance", "canal"),
     "notes": ("note", "notes", "remarque", "remarques", "commentaire", "commentaires", "observation"),
+    "group": ("groupe", "group", "priorite", "ordre", "vague"),  # lot 122
+    "past_relation": ("relation passee", "deja contacte", "relation", "ancien contact"),
 }
+YES = {"oui", "o", "yes", "y", "1", "x", "vrai", "true"}
+NO = {"non", "n", "no", "0", "faux", "false", ""}
 SECTOR_WORDS = {"CAR_DEALERSHIP": ("auto", "concession", "vehicule", "voiture", "garage", "moto"),
                 "INSURANCE_BROKER": ("assur", "courtier", "courtage", "agent general", "agence generale"),
                 "REAL_ESTATE": ("immobili", "immo", "mandataire", "transaction", "gestion locative", "syndic"),
@@ -547,6 +630,24 @@ def preview(raw: bytes, filename: str, sheet: str | None = None) -> dict:
             "fields": [{"value": k, "label": v} for k, v in FIELDS.items()], "missing_company": "company" not in mapping}
 
 
+def _group(value: str | None) -> int | None:
+    if not (value or "").strip():
+        return None
+    text = value.strip().split(".")[0]  # Excel : « 2.0 »
+    if not text.isdigit() or not 1 <= int(text) <= 99:
+        raise ProspectError(f"Groupe invalide : {value[:20]} (un nombre de 1 à 99)")
+    return int(text)
+
+
+def _yes(value: str | None) -> bool:
+    plain = _plain(value)
+    if plain in YES:
+        return True
+    if plain in NO:
+        return False
+    raise ProspectError(f"Relation passée : oui ou non attendu ({str(value)[:20]})")
+
+
 async def import_rows(db, raw: bytes, filename: str, sheet: str | None, mapping: list, defaults: dict, owner_id,
                       actor: str) -> dict:
     """Ajoute les prospects du fichier ; un prospect déjà connu (même email ou téléphone) n'est pas recréé."""
@@ -568,7 +669,8 @@ async def import_rows(db, raw: bytes, filename: str, sheet: str | None, mapping:
     country_default = (defaults.get("country") or "CI").upper()
     sector_default = defaults.get("sector") if defaults.get("sector") in SECTORS else "ONLINE_STORE"
     source_default = " ".join(str(defaults.get("source") or "").split())[:120] or None
-    report = {"created": 0, "duplicates": 0, "errors": [], "total": len(table["rows"])}
+    report = {"created": 0, "duplicates": 0, "excluded": 0, "errors": [], "total": len(table["rows"])}
+    blocked = await blocked_contacts(db)  # lot 122 : opposés et commerçants déjà clients, jamais importés
     for offset, row in enumerate(table["rows"]):
         line = table["first_line"] + offset
         values = {field: row[i].strip() for i, field in enumerate(mapping) if field and row[i].strip()}
@@ -579,14 +681,19 @@ async def import_rows(db, raw: bytes, filename: str, sheet: str | None, mapping:
                     "country": country, "sector": guess_sector(values.get("sector"), sector_default),
                     "source": values.get("source") or source_default, "notes": values.get("notes")}
             fields = clean_fields(data)
+            group, past = _group(values.get("group")), _yes(values.get("past_relation"))
         except ProspectError as exc:
             report["errors"].append({"line": line, "message": str(exc)})
             continue
         email, phone = fields.get("email"), fields.get("phone")
+        if is_blocked(blocked, email, phone):
+            report["excluded"] += 1
+            continue
         if await find_duplicate(db, email, phone) is not None:  # aussi les lignes déjà ajoutées de ce fichier
             report["duplicates"] += 1
             continue
-        prospect = Prospect(code=await new_code(db), owner_id=owner_id, status="ACTIVE", **fields)
+        prospect = Prospect(code=await new_code(db), owner_id=owner_id, status="ACTIVE", priority=group,
+                            past_relation=past, import_rank=offset + 1, **fields)
         db.add(prospect)
         await db.flush()
         add_event(db, prospect, "ADDED", detail=f"Import {filename}"[:500], actor=actor)

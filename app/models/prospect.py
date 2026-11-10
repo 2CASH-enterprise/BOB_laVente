@@ -52,6 +52,11 @@ class Prospect(Base):
     campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("prospect_campaigns.id", ondelete="SET NULL"), index=True)
     email_step: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # Lot 122 — vague importée : ordre de passage (groupe 1, 2, 3… puis les autres), rang dans le fichier, et
+    # « relation passée » (avait déjà échangé avec l'ancienne Naomy : une phrase de plus dans le message).
+    priority: Mapped[int | None] = mapped_column(Integer)
+    import_rank: Mapped[int | None] = mapped_column(Integer)
+    past_relation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     next_email_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     first_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

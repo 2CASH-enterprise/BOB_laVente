@@ -76,7 +76,8 @@ def test_prospection_presents_the_team_without_any_price():
     assert (ROOT / "static" / "visuels" / "prospection-restaurant.jpg").stat().st_size > 20000
     p = Prospect(company="Maquis <Awa>", contact_name="Awa Koné", sector="RESTAURANT", code="r109", country="CI")
     text = pros.message(p, "Thérèse")
-    assert text.startswith("Bonjour Awa, je suis Thérèse d'AgenC'AI. Pour Maquis <Awa>, nous proposons une équipe de deux agents")
+    assert text.startswith("Bonjour Awa 👋, je suis Thérèse d'AgenC'AI.")  # lot 122 : textes plus vendeurs
+    assert "Notre équipe de 2 agents" in text and "chez Maquis <Awa>" in text
     assert "Naomy" in text and "Bob" in text and "secteur=restaurant" in text
     for wording in [text] + [subject + body for subject, body in mailer.DEFAULTS["RESTAURANT"]]:
         assert "FCFA" not in wording and "15 000" not in wording and "10 000" not in wording  # rien n'est définitif

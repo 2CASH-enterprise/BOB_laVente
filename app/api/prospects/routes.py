@@ -234,6 +234,7 @@ def _view(p: Prospect, stage: str, owners: dict, today: date) -> dict:
         "email_step": p.email_step or 0, "opened": p.first_opened_at is not None, "replied": p.replied_at is not None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "tenant_id": str(p.tenant_id) if p.tenant_id else None,
+        "group": p.priority, "past_relation": bool(p.past_relation),  # lot 122
     }
 
 
@@ -537,6 +538,8 @@ async def change_status(prospect_id: UUID, payload: StatusIn, admin: CurrentSupe
     prospect.status_reason = (payload.reason or "").strip() or None
     if payload.status != "ACTIVE":
         prospect.next_action_on = None
+    if payload.status == "UNSUBSCRIBED":
+        await pros.oppose(db, prospect, "UNSUBSCRIBED")  # lot 122 : « STOP » sur WhatsApp vaut pour l'e-mail aussi
     label = pros.STATUSES[payload.status] + (f" — {prospect.status_reason}" if prospect.status_reason else "")
     pros.add_event(db, prospect, "STATUS", detail=label, actor=me.full_name)
     await db.commit()

@@ -1456,7 +1456,7 @@ async function runProspectImport() {
   try {
     const r = await api("/api/v1/superadmin/prospects/import", { method: "POST", body: form });
     msg.style.color = r.errors.length ? "var(--warning)" : "var(--success)";
-    msg.innerHTML = esc(`${r.created} prospect${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}, ${r.duplicates} déjà connu${r.duplicates > 1 ? "s" : ""}.`)
+    msg.innerHTML = esc(`${r.created} prospect${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}, ${r.duplicates} déjà connu${r.duplicates > 1 ? "s" : ""}${r.excluded ? `, ${r.excluded} écarté${r.excluded > 1 ? "s" : ""} (opposé ou déjà client)` : ""}.`)
       + (r.errors.length ? `<ul style="margin: 6px 0 0; padding-left: 18px;">${r.errors.map((e) => `<li>${esc("Ligne " + e.line + " : " + e.message)}</li>`).join("")}</ul>` : "");
     document.getElementById("pi-preview").innerHTML = "";
     loadProspects(); loadFunnel(funnelData ? funnelData.period : "all");
