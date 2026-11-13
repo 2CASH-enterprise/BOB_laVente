@@ -58,7 +58,10 @@ async def signup_options() -> dict:
     from app.services.business_type import BUSINESS_TYPES
     from app.services.countries import signup_options as options
 
-    return {**options(), "business_types": [{"code": c, **info} for c, info in BUSINESS_TYPES.items()]}
+    from app.core.config import get_settings
+
+    return {**options(), "business_types": [{"code": c, **info} for c, info in BUSINESS_TYPES.items()],
+            "team_available": bool(get_settings().naomy_platform_secret)}  # lot 121 : étape « Votre équipe »
 
 
 @router.post("/signup/send-code", status_code=status.HTTP_202_ACCEPTED)
@@ -127,6 +130,7 @@ async def register_tenant(
         phone=payload.phone,
         email=payload.owner_email,
     )
+    tenant.team_mode = payload.team  # lot 121
     if payload.business_type is not None:  # choisi à l'inscription : définitif (lot 32)
         tenant.business_type = payload.business_type
         tenant.business_type_chosen_at = datetime.now(timezone.utc)

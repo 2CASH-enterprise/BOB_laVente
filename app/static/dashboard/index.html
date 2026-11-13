@@ -329,6 +329,26 @@
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
   /* Lot 41 — inscription en étapes */
   #signup-screen { max-width: 440px; }
+  /* Lot 121 — Mon équipe */
+  .team-intro { color: var(--muted); font-size: 14px; margin: 0 0 16px; max-width: 720px; }
+  .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; max-width: 1100px; }
+  .team-agent p { font-size: 13px; color: var(--muted); line-height: 1.55; margin: 0 0 12px; }
+  .team-head { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .team-head > div { flex: 1; min-width: 140px; }
+  .team-head strong { display: block; font-size: 16px; color: var(--text); }
+  .team-head div span { font-size: 12.5px; color: var(--muted); }
+  .team-avatar { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-weight: 800; font-size: 18px; background: var(--accent-soft); color: var(--accent); flex: none; }
+  .team-avatar.is-naomy { background: rgba(201, 168, 76, .18); color: #8A6D1F; }
+  .team-avatar.is-soon { background: var(--track); color: var(--muted); }
+  .team-state { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--track); color: var(--muted); white-space: nowrap; }
+  .team-state:empty { display: none; }
+  .team-state.is-on { background: var(--success-soft, rgba(45, 106, 79, .14)); color: var(--success); }
+  .team-state.is-wait { background: var(--warning-soft); color: var(--warning); }
+  .team-soon { border-style: dashed; }
+  .team-quiet { background: none; border: none; padding: 0; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  #team-home .card { max-width: 760px; margin-bottom: 18px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  #team-home .card p { margin: 0; flex: 1; min-width: 220px; font-size: 14px; line-height: 1.5; }
+  [data-theme="dark"] .team-avatar.is-naomy { color: #E0C36A; }
   .signup-progress { display: flex; gap: 6px; margin: -6px 0 10px; }
   .signup-progress span { flex: 1; height: 4px; border-radius: 4px; background: var(--track); transition: background .2s; }
   .signup-progress span.on { background: var(--accent-light); }
@@ -864,12 +884,20 @@
   <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
   <h2 id="signup-title">Créer votre compte Bob</h2>
   <div id="signup-offer" class="prereg-offer hidden" style="margin: 0 0 14px; padding: 12px 14px;"><div class="prereg-offer-title">🎁 Pré-inscriptions ouvertes</div><p id="signup-offer-text" style="font-size: 13.5px;"></p></div>
-  <div class="signup-progress" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+  <div class="signup-progress" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
   <p class="signup-step-label" id="signup-step-label" aria-live="polite"></p>
   <div class="signup-step" data-step="1">
     <div class="segment-options signup-activity" id="signup-activity"><p class="loading-text">Chargement</p></div>
   </div>
-  <form class="signup-step hidden" data-step="2" onsubmit="signupNext(); return false;">
+  <!-- Lot 121 — « Votre équipe » : Bob seul, ou Bob + Naomy (rien de présélectionné) -->
+  <div class="signup-step hidden" data-step="2">
+    <div class="segment-options signup-activity" id="signup-team">
+      <button type="button" class="segment-option" onclick="chooseSignupTeam('SOLO')"><strong>Bob seul</strong><span>Bob répond à vos clients sur WhatsApp et prend leurs commandes, jour et nuit.</span></button>
+      <button type="button" class="segment-option" onclick="chooseSignupTeam('TEAM')"><strong>Bob + Naomy</strong><span>En plus, Naomy, votre community manager, prépare vos publications pour les réseaux sociaux et fait venir les clients. Vous la rencontrerez sur WhatsApp, juste après l'inscription.</span></button>
+    </div>
+    <p class="signup-note" style="margin-top: 12px;">Vous pourrez changer d'avis à tout moment, dans « Mon équipe ».</p>
+  </div>
+  <form class="signup-step hidden" data-step="3" onsubmit="signupNext(); return false;">
     <label for="signup-company">Nom de votre entreprise</label>
     <input id="signup-company" autocomplete="organization" maxlength="255">
     <label for="signup-country">Pays</label>
@@ -878,7 +906,7 @@
     <select id="signup-currency"></select>
     <button type="submit">Continuer</button>
   </form>
-  <form class="signup-step hidden" data-step="3" onsubmit="signupSendCode(); return false;">
+  <form class="signup-step hidden" data-step="4" onsubmit="signupSendCode(); return false;">
     <label for="signup-name">Votre nom complet</label>
     <input id="signup-name" autocomplete="name" maxlength="255">
     <label for="signup-email">Email</label>
@@ -890,13 +918,13 @@
     </div>
     <button type="submit" id="signup-send-btn">Recevoir mon code par email</button>
   </form>
-  <form class="signup-step hidden" data-step="4" onsubmit="signup(); return false;">
+  <form class="signup-step hidden" data-step="5" onsubmit="signup(); return false;">
     <p class="signup-note">Un code à 6 chiffres vient d'être envoyé à <strong id="signup-email-shown"></strong>. Il est valable 10 minutes.</p>
     <input id="signup-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Code à 6 chiffres"
            style="text-align: center; font-size: 22px; letter-spacing: 6px;">
     <button type="submit" id="signup-create-btn">Créer mon compte</button>
     <p class="signup-note" style="text-align: center;">
-      <a onclick="signupSendCode(true)">Renvoyer le code</a> · <a onclick="signupGo(3)">Modifier l'email</a>
+      <a onclick="signupSendCode(true)">Renvoyer le code</a> · <a onclick="signupGo(4)">Modifier l'email</a>
     </p>
   </form>
   <div id="signup-error" role="alert"></div>
@@ -974,6 +1002,7 @@
       <button data-tab="contracts" data-label="Contrats" id="nav-contracts" class="insurance-only" onclick="showTab('contracts')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg></span>Contrats</button>
       <button data-tab="complaints" data-label="Réclamations" id="nav-complaints" class="insurance-only" onclick="showTab('complaints')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12zM12 8v4M12 16h.01"/></svg></span>Réclamations</button>
       <button data-tab="reports" data-label="Rapports" onclick="showTab('reports')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Rapports</button>
+      <button data-tab="team" data-label="Mon équipe" onclick="showTab('team')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0M14.5 19a4 4 0 0 1 7 0"/></svg></span>Mon équipe</button>
       <button data-tab="integrations" data-label="Intégrations" onclick="showTab('integrations')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg></span>Intégrations</button>
       <button data-tab="knowledge" data-label="Base de connaissances" onclick="showTab('knowledge')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8"/></svg></span>Base de connaissances</button>
       <button data-tab="bob" data-label="Réglages de Bob" onclick="showTab('bob')"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M5 9h14a1 1 0 0 1 1 1v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a1 1 0 0 1 1-1zM9 14h.01M15 14h.01M2 13v3M22 13v3"/></svg></span>Réglages de Bob</button>
@@ -999,6 +1028,7 @@
     <div id="simple-banner" class="simple-bar hidden" role="status"><span>Nouveau : le mode simple, quatre grands boutons pensés pour le téléphone.</span><button class="action" onclick="trySimpleMode()">Essayer</button><button class="action secondary" onclick="dismissSimpleBanner()">Plus tard</button></div>
     <div class="page-head hidden"><h1 style="display: flex; align-items: center;"><span id="page-title">Accueil</span><button class="tip hidden page-tip-btn"></button><span class="tip-bubble page-tip-bubble" hidden></span></h1></div>
     <section id="tab-overview">
+      <div id="team-home"></div>
       <div id="home-root"><p class="loading-text">Chargement de l'accueil</p></div>
     </section>
 
@@ -1372,6 +1402,28 @@
       </div>
     </section>
 
+    <!-- Lot 121 — Mon équipe : les agents de la boutique (Bob, Naomy, d'autres plus tard) -->
+    <section id="tab-team" class="hidden">
+      <p class="team-intro">Vos agents travaillent ensemble pour votre boutique : chacun son métier, et ils se passent le relais.</p>
+      <div class="team-grid">
+        <div class="card team-agent">
+          <div class="team-head"><span class="team-avatar" aria-hidden="true">B</span><div><strong>Bob</strong><span>Votre vendeur sur WhatsApp</span></div><span class="team-state is-on">Dans l'équipe</span></div>
+          <p>Il répond à vos clients jour et nuit, présente vos produits, prend les commandes et vous passe la main quand il le faut.</p>
+        </div>
+        <div class="card team-agent" id="naomy-card">
+          <div class="team-head"><span class="team-avatar is-naomy" aria-hidden="true">N</span><div><strong>Naomy</strong><span>Votre community manager</span></div><span class="team-state" id="naomy-state"></span></div>
+          <p>Elle prépare vos publications pour les réseaux sociaux à partir de votre catalogue, vous les fait valider sur WhatsApp, et envoie les clients vers Bob. Elle lit vos produits, votre stock et les ventes obtenues par ses publications, jamais le nom ni le numéro de vos clients.</p>
+          <div id="naomy-body" style="font-size: 13px;">Vérification…</div>
+          <div id="naomy-pairing" style="margin-top: 10px; font-size: 13px;"></div>
+          <div id="naomy-msg" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+        <div class="card team-agent team-soon">
+          <div class="team-head"><span class="team-avatar is-soon" aria-hidden="true">+</span><div><strong>D'autres agents bientôt</strong><span>L'équipe va s'agrandir</span></div></div>
+          <p>De nouveaux agents rejoindront votre équipe. Vous choisirez ceux qui vous sont utiles, ici même.</p>
+        </div>
+      </div>
+    </section>
+
     <section id="tab-integrations" class="hidden">
       <div class="card" id="wa-card" style="max-width: 640px; margin-bottom: 20px;">
         <div class="label app-title" style="margin-bottom: 12px; font-weight: 600;"><span class="app-icon whatsapp" aria-hidden="true"><svg><use href="#ico-whatsapp"/></svg></span>Compte WhatsApp Business</div>
@@ -1478,11 +1530,10 @@
         </div>
       </div>
 
-      <div class="card" id="naomy-card" style="max-width: 640px; margin-top: 20px;">
-        <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;"><span class="app-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></span>Naomy, votre agent marketing</div>
-        <p style="font-size: 13px; color: var(--muted); margin: 0 0 12px;">Naomy prépare vos publications à partir de votre catalogue, et vous les validez sur WhatsApp. Elle lit vos produits, votre stock et les ventes obtenues par ses publications, jamais le nom ni le numéro de vos clients.</p>
-        <div id="naomy-body" style="font-size: 13px;">Vérification…</div>
-        <div id="naomy-msg" style="margin-top: 8px; font-size: 13px;"></div>
+      <div class="card" id="naomy-pointer" style="max-width: 640px; margin-top: 20px;">
+        <div class="label app-title" style="margin-bottom: 8px; font-weight: 600;">Naomy, votre community manager</div>
+        <p style="font-size: 13px; color: var(--muted); margin: 0 0 12px;">Naomy et vos autres agents se trouvent maintenant dans la rubrique « Mon équipe ».</p>
+        <button class="action secondary" onclick="showTab('team')">Ouvrir Mon équipe</button>
       </div>
     </section>
 
@@ -2208,9 +2259,11 @@ async function login() {
   }
 }
 
-// ---- Lot 41 : inscription en étapes (activité → entreprise → vous → code reçu par email) ----
-var signupState = { step: 1, businessType: null, options: null };
-const SIGNUP_STEPS = ["Votre activité", "Votre entreprise", "Vous", "Vérification de votre email"];
+// ---- Lot 41 : inscription en étapes (activité → équipe → entreprise → vous → code reçu par email) ----
+// Lot 121 — l'étape « Votre équipe » (2) n'existe que si Naomy est disponible (signup-options.team_available).
+var signupState = { step: 1, businessType: null, team: null, options: null };
+const SIGNUP_STEPS = ["Votre activité", "Votre équipe", "Votre entreprise", "Vous", "Vérification de votre email"];
+function signupSteps() { return signupState.options && signupState.options.team_available ? [1, 2, 3, 4, 5] : [1, 3, 4, 5]; }
 
 async function loadSignupOptions() {
   if (signupState.options) return;
@@ -2238,16 +2291,19 @@ function signupCountryChanged() {
 }
 
 function signupGo(step) {
-  step = Math.max(1, Math.min(4, step));
+  const steps = signupSteps();
+  step = Math.max(1, Math.min(5, step));
+  if (!steps.includes(step)) step = step > signupState.step ? 3 : 1;  // l'étape « équipe » est sautée dans les deux sens
   signupState.step = step;
+  const position = steps.indexOf(step) + 1;
   document.querySelectorAll("#signup-screen .signup-step").forEach((el) => el.classList.toggle("hidden", Number(el.dataset.step) !== step));
-  document.querySelectorAll(".signup-progress span").forEach((el, i) => el.classList.toggle("on", i < step));
-  document.getElementById("signup-step-label").textContent = `Étape ${step} sur 4 · ${SIGNUP_STEPS[step - 1]}`;
+  document.querySelectorAll(".signup-progress span").forEach((el, i) => { el.classList.toggle("hidden", i >= steps.length); el.classList.toggle("on", i < position); });
+  document.getElementById("signup-step-label").textContent = `Étape ${position} sur ${steps.length} · ${SIGNUP_STEPS[step - 1]}`;
   document.getElementById("signup-back").classList.toggle("hidden", step === 1);
   document.getElementById("signup-login-link").classList.toggle("hidden", step !== 1);
   document.getElementById("signup-error").textContent = "";
   const first = document.querySelector(`#signup-screen .signup-step[data-step="${step}"] input, #signup-screen .signup-step[data-step="${step}"] button`);
-  if (first) first.focus();
+  if (first && step !== 2) first.focus();  // lot 121 : à l'étape « Votre équipe », aucun choix ne paraît présélectionné
 }
 
 function chooseSignupActivity(code) {
@@ -2257,12 +2313,17 @@ function chooseSignupActivity(code) {
   signupGo(2);
 }
 
+function chooseSignupTeam(mode) {
+  signupState.team = mode;
+  signupGo(3);
+}
+
 function signupNext() {
   if (!document.getElementById("signup-company").value.trim()) {
     document.getElementById("signup-error").textContent = "Indiquez le nom de votre entreprise.";
     return;
   }
-  signupGo(3);
+  signupGo(4);
 }
 
 function togglePassword(id, btn) {
@@ -2295,10 +2356,10 @@ async function signupSendCode(resend = false) {
     }
     document.getElementById("signup-email-shown").textContent = email;
     document.getElementById("signup-code").value = "";
-    signupGo(4);
+    signupGo(5);
     if (resend) toast("Nouveau code envoyé.");
   } catch (e) {
-    if (signupState.step !== 3) signupGo(3);
+    if (signupState.step !== 4) signupGo(4);
     document.getElementById("signup-error").textContent = e.message;
   } finally {
     btn.disabled = false;
@@ -2318,6 +2379,7 @@ async function signup() {
     owner_email: document.getElementById("signup-email").value.trim(),
     owner_password: document.getElementById("signup-password").value,
     business_type: signupState.businessType,
+    team: signupSteps().includes(2) ? signupState.team : null,
     verification_code: code,
   };
   const btn = document.getElementById("signup-create-btn");
@@ -3154,13 +3216,14 @@ function showTab(name) {
   // Sur l'accueil, le message de bienvenue tient lieu de titre.
   document.querySelector(".page-head").classList.toggle("hidden", name === "overview");
   closeSidebar();
-  ["overview", "conversations", "leads", "customers", "complaints", "products", "orders", "pige", "appointments", "quotes", "contracts", "reports", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
+  ["overview", "conversations", "leads", "customers", "complaints", "products", "orders", "pige", "appointments", "quotes", "contracts", "reports", "team", "integrations", "knowledge", "bob", "settings"].forEach((t) =>
     document.getElementById("tab-" + t).classList.toggle("hidden", t !== name)
   );
   if (name === "overview") loadOverview();
   if (name === "conversations") loadConversations();
   if (name === "customers") { loadCustomers(); loadCampaignEligibleCount(); loadKit(); initCustomersDrop(); }  // lot 59 : kit et import Excel
   if (name === "reports") loadReports();  // lot 60
+  if (name === "team") loadTeam();  // lot 121
   if (name === "products") loadProducts();
   if (name === "orders") loadOrders();
   if (name === "integrations") { loadWhatsAppStatus(); loadContactPoints(); loadIntegrationsStatus(); loadWaTemplates(); }
@@ -3611,7 +3674,9 @@ async function simpleShow(screen) {
   window.scrollTo(0, 0);
   try {
     if (screen === "home") {
-      root.innerHTML = renderSimpleHome(simpleHome = await api("/api/v1/simple/home"));
+      simpleHome = await api("/api/v1/simple/home");
+      try { teamState = await api("/api/v1/team"); } catch (e) { /* l'accueil s'affiche sans la carte de l'équipe */ }
+      root.innerHTML = renderSimpleHome(simpleHome);
       if (!simpleHome.setup.whatsapp) simplePreloadFacebook();
     }
     else if (screen === "where") root.innerHTML = renderSimpleWhere(simpleHome || (simpleHome = await api("/api/v1/simple/home")));
@@ -3648,8 +3713,12 @@ function renderSimpleHome(h) {
   const out = (h.out_of_stock || []).length
     ? `<div class="sm-card is-alert"><span class="sm-ico" style="width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--warning-soft); color: var(--warning);">${SM_ICONS.alert}</span><p><b>${esc(h.out_of_stock.join(", "))}</b> : plus en stock. Bob ne ${h.out_of_stock.length > 1 ? "les" : "le"} propose plus.</p></div>`
     : "";
-  return `${top}${h.setup.ready ? "" : renderSimpleSetup(h)}${today}${tiles}${out}
-    <div class="sm-foot"><button type="button" class="sm-btn is-quiet" onclick="leaveSimpleMode()">Plus de réglages</button>${simpleHelpLink(h)}<button type="button" class="sm-link" style="background: none; border: none; font: inherit; cursor: pointer;" onclick="logout()">Se déconnecter</button></div>`;
+  // Lot 121 — l'équipe : « Naomy vous attend » si elle a été choisie, et toujours un accès à « Mon équipe ».
+  const team = teamHomeNeeded(teamState)
+    ? `<div class="sm-card"><h2>Naomy vous attend</h2><p class="sm-muted">Vous avez choisi l'équipe Bob + Naomy : il reste à la rencontrer sur WhatsApp.</p>
+       <button type="button" class="sm-btn" onclick="openFullTab('team')">Rencontrer Naomy</button></div>` : "";
+  return `${top}${h.setup.ready ? "" : renderSimpleSetup(h)}${team}${today}${tiles}${out}
+    <div class="sm-foot"><button type="button" class="sm-btn is-quiet" onclick="openFullTab('team')">Mon équipe</button><button type="button" class="sm-btn is-quiet" onclick="leaveSimpleMode()">Plus de réglages</button>${simpleHelpLink(h)}<button type="button" class="sm-link" style="background: none; border: none; font: inherit; cursor: pointer;" onclick="logout()">Se déconnecter</button></div>`;
 }
 
 // Le SDK Facebook est chargé dès l'affichage de l'étape 1 : la fenêtre Meta doit s'ouvrir au clic (sinon bloquée).
@@ -3913,6 +3982,7 @@ async function saveFulfillment() {
 
 async function loadOverview() {
   loadHome();
+  loadTeamHome();  // lot 121
 }
 
 // Lot 60 — page Rapports : le rapport mensuel (aperçu), puis les analyses détaillées venues de l'accueil et de Clients.
@@ -7425,7 +7495,6 @@ async function saveStrategySettings() {
 
 // ---- Intégrations e-commerce (Shopify / Meta Commerce Catalog) ----
 async function loadIntegrationsStatus() {
-  loadNaomyCard();  // lot 89
   try {
     const s = await api("/api/v1/integrations/shopify/status");
     document.getElementById("shopify-status").textContent = `Connecté — ${s.shop_domain} (dernière sync : ${s.last_synced_at ? new Date(s.last_synced_at).toLocaleString() : "jamais"})`;
@@ -7462,29 +7531,43 @@ async function loadIntegrationsStatus() {
 
 let metaLoginConfig = null;
 
-// --- Lot 89 : carte « Naomy » (liaison avec l'agent marketing) -------------------------------------------------------
+// --- Lot 89 : carte « Naomy » ; lot 121 : elle vit dans « Mon équipe », sans code à recopier ni portée à choisir -----
+var teamState = null;
+
+async function loadTeam() {
+  await loadNaomyCard();
+}
+
+function naomyStateBadge(state) {
+  const el = document.getElementById("naomy-state");
+  if (!el) return;
+  const labels = { linked: ["Dans l'équipe", "is-on"], assistant: ["Vous prévient sur WhatsApp", "is-on"], request: ["Demande à vous rejoindre", "is-wait"], absent: ["Pas encore dans l'équipe", ""], unavailable: ["Bientôt disponible", ""] };
+  const [label, tone] = labels[state] || ["", ""];
+  el.textContent = label;
+  el.className = "team-state" + (tone ? " " + tone : "");
+}
+
 async function loadNaomyCard() {
   const body = document.getElementById("naomy-body");
   if (!body) return;
-  let s;
-  try { s = await api("/api/v1/naomy-connection"); } catch (e) { body.textContent = e.message; return; }
+  let team;
+  try { team = teamState = await api("/api/v1/team"); } catch (e) { body.textContent = e.message; return; }
+  document.getElementById("naomy-pairing").innerHTML = "";
+  const s = team.naomy;
+  naomyStateBadge(s.state);
   if (!s.connected) {
-    // Lot 92 — portée choisie ici : Naomy et l'assistant, ou l'assistant seul (toutes formules).
-    const scopes = s.assistant_available ? `<fieldset style="border: 0; padding: 0; margin: 0 0 12px; display: flex; flex-direction: column; gap: 8px;">
-        <legend style="font-weight: 600; margin-bottom: 6px;">Ce que vous reliez</legend>
-        <label style="display: flex; gap: 8px; align-items: flex-start;"><input type="radio" name="naomy-scope" value="complete" ${s.refusal ? "disabled" : "checked"}>
-          <span><b>Naomy et l'assistant</b> : vos publications, et Bob qui vous prévient sur WhatsApp.${s.refusal ? `<br><span style="color: var(--muted);">${esc(s.refusal)}</span>` : ""}</span></label>
-        <label style="display: flex; gap: 8px; align-items: flex-start;"><input type="radio" name="naomy-scope" value="assistant" ${s.refusal ? "checked" : ""} ${s.assistant_refusal ? "disabled" : ""}>
-          <span><b>L'assistant seul</b> : Bob vous prévient sur WhatsApp (vente à confirmer, client qui attend) et répond à vos questions. Toutes formules.</span></label>
-      </fieldset>` : (s.refusal ? `<p style="margin: 0 0 10px; color: var(--muted);">${esc(s.refusal)}</p>` : "");
-    const canConnect = s.assistant_available ? !(s.refusal && s.assistant_refusal) : !s.refusal;
+    if (s.state === "unavailable") { body.innerHTML = `<p style="margin: 0; color: var(--muted);">${esc(s.assistant_refusal || s.refusal || "Naomy arrive bientôt.")}</p>`; return; }
     const request = s.request ? `<div class="tone-warning" style="margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;">
-        <p style="margin: 0 0 8px;"><b>Naomy demande à relier votre boutique</b>${s.request.shop_name ? ` (« ${esc(s.request.shop_name)} » chez Naomy)` : ""}. Si vous n'êtes pas à l'origine de cette demande, refusez-la.</p>
-        <button class="action" ${canConnect ? "" : "disabled"} onclick="decideNaomyRequest(${jsArg(s.request.id)}, true)">Accepter</button>
+        <p style="margin: 0 0 8px; color: inherit;"><b>Naomy demande à rejoindre votre boutique</b>${s.request.shop_name ? ` (« ${esc(s.request.shop_name)} » chez Naomy)` : ""}. Si vous n'êtes pas à l'origine de cette demande, refusez-la.</p>
+        <button class="action" ${s.can_meet ? "" : "disabled"} onclick="meetNaomy(${jsArg(s.request.id)})">Accepter</button>
         <button class="action secondary" onclick="decideNaomyRequest(${jsArg(s.request.id)}, false)">Refuser</button></div>` : "";
-    body.innerHTML = `${request}${scopes}
-      <button class="action" id="naomy-connect-btn" ${canConnect ? "" : "disabled"} onclick="startNaomyPairing()">Connecter Naomy</button>
-      <div id="naomy-pairing" style="margin-top: 10px;"></div>`;
+    const trial = s.trial ? `<p style="margin: 0 0 10px;">Essai de l'équipe : 7 jours, à commencer quand vous voulez.</p>` : "";
+    const blocked = !s.can_meet && s.refusal ? `<p style="margin: 0 0 10px; color: var(--muted);">${esc(s.refusal)}</p>` : "";
+    const quiet = s.assistant_available && !s.assistant_refusal
+      ? `<p style="margin: 12px 0 0;"><button type="button" class="team-quiet" onclick="startNaomyPairing('assistant')">Juste être prévenu sur WhatsApp</button><br><span style="color: var(--muted);">Sans les publications : Bob vous prévient d'une vente à confirmer ou d'un client qui attend.</span></p>` : "";
+    body.innerHTML = `${request}${trial}${blocked}
+      ${s.request ? "" : `<button class="action" id="naomy-connect-btn" ${s.can_meet ? "" : "disabled"} onclick="meetNaomy()">Rencontrer Naomy</button>`}
+      ${quiet}`;
     return;
   }
   const since = s.connected_at ? new Date(s.connected_at).toLocaleDateString("fr-FR") : "";
@@ -7493,31 +7576,78 @@ async function loadNaomyCard() {
       <span><b>Bob, votre assistant sur WhatsApp</b> : il vous prévient quand une vente est à confirmer ou qu'un client vous attend, et répond à « mes ventes », « stock », « vendu »…</span></label>
     <label style="display: flex; gap: 8px; align-items: center; margin: 0 0 12px;"><input type="checkbox" id="naomy-summary" ${s.summary_enabled ? "checked" : ""} ${s.assistant_enabled ? "" : "disabled"} onchange="saveNaomyAssistant({ summary: this.checked })"> Bilan du soir par e-mail (20 h)</label>` : "";
   body.innerHTML = `
-    <p style="margin: 0 0 8px;"><b>Reliée</b> au ${esc(s.number)}${since ? ` depuis le ${esc(since)}` : ""}${s.scope === "assistant" ? " (assistant seul, sans publications)" : ""}. Ce n'est pas vous ? Déconnectez-la.</p>
+    <p style="margin: 0 0 8px;"><b>Reliée</b> au ${esc(s.number)}${since ? ` depuis le ${esc(since)}` : ""}${s.scope === "assistant" ? " (prévenu sur WhatsApp, sans publications)" : ""}. Ce n'est pas vous ? Déconnectez-la.</p>
+    ${team.trial_until && s.scope === "complete" ? `<p style="margin: 0 0 8px;">Essai de l'équipe jusqu'au ${esc(new Date(team.trial_until + "T12:00:00").toLocaleDateString("fr-FR"))}.</p>` : ""}
     ${s.suspended ? `<p class="tone-warning" style="margin: 0 0 8px; padding: 8px 10px; border-radius: 8px;">Votre formule ne comprend plus Naomy : ses publications sont suspendues jusqu'au retour à la formule Indépendant ou plus.</p>` : ""}
     ${assistant}
     ${s.scope === "complete" ? `<label style="display: flex; gap: 8px; align-items: center; margin: 0 0 12px;"><input type="checkbox" id="naomy-reminders" ${s.reminders_enabled ? "checked" : ""} onchange="saveNaomyReminders(this)"> Me prévenir par e-mail des propositions de Naomy</label>` : ""}
+    ${s.scope === "assistant" && s.can_meet ? `<button class="action" onclick="meetNaomy()">Ajouter les publications de Naomy</button> ` : ""}
     <button class="action secondary" onclick="disconnectNaomy()">Déconnecter Naomy</button>`;
 }
 
-function chosenNaomyScope() {
-  const picked = document.querySelector('input[name="naomy-scope"]:checked');
-  return picked ? picked.value : "complete";
-}
-
-function showNaomyPairingLink(url) {
-  document.getElementById("naomy-pairing").innerHTML = `<p style="margin: 0 0 8px;">Dernière étape chez Naomy : confirmez depuis votre WhatsApp. Ce lien est valable 15 minutes.</p>
+function showNaomyPairingLink(url, byWhatsApp) {
+  document.getElementById("naomy-pairing").innerHTML = byWhatsApp
+    ? `<p style="margin: 0 0 8px;">Dernière étape : envoyez à Naomy le message déjà écrit, sans le modifier. Il est valable 15 minutes.</p>
+      <a class="action" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Ouvrir WhatsApp</a>
+      <button class="action secondary" onclick="loadNaomyCard()">C'est envoyé</button>`
+    : `<p style="margin: 0 0 8px;">Dernière étape chez Naomy : confirmez depuis votre WhatsApp. Ce lien est valable 15 minutes.</p>
       <a class="action" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Ouvrir Naomy pour confirmer</a>
       <button class="action secondary" onclick="loadNaomyCard()">J'ai confirmé</button>`;
 }
 
-async function startNaomyPairing() {
+// « Rencontrer Naomy » : un clic prépare la liaison. En formule gratuite, l'essai de 7 jours est d'abord confirmé.
+async function meetNaomy(requestId, confirmed) {
+  const msg = document.getElementById("naomy-msg");
+  msg.textContent = "";
+  try {
+    const r = await api("/api/v1/team/naomy", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmer_essai: !!confirmed, request_id: requestId || null }) });
+    teamState = r.team;
+    await loadNaomyCard();
+    showNaomyPairingLink(r.url, r.by_whatsapp);
+    loadTeamHome();
+  } catch (e) {
+    if (e.message === "essai_a_confirmer") {
+      const ok = await bobConfirm("Commencer l'essai de l'équipe ?", "Naomy rejoint votre boutique pour un essai de 7 jours. Pendant l'essai, votre boutique passe à la formule Indépendant. À la fin de l'essai, il faudra choisir une formule pour continuer : sinon, Bob sera mis en pause.", { confirmLabel: "Commencer l'essai" });
+      if (ok) return meetNaomy(requestId, true);
+      return;
+    }
+    msg.style.color = "var(--danger)";
+    msg.textContent = e.message;
+  }
+}
+
+async function chooseTeam(mode) {
+  try { teamState = await api("/api/v1/team", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode }) }); }
+  catch (e) { toast(e.message, "error"); return; }
+  loadTeamHome();
+  if (mode === "SOLO") toast("C'est noté : Bob seul. Naomy reste disponible dans « Mon équipe ».");
+}
+
+// Accueil : le commerçant a choisi « Bob + Naomy » mais ne l'a pas encore rencontrée.
+function teamHomeNeeded(team) {
+  return !!team && team.mode === "TEAM" && ["absent", "request"].includes(team.naomy.state) && team.naomy.can_meet;
+}
+
+async function loadTeamHome() {
+  const box = document.getElementById("team-home");
+  if (!box) return;
+  let team;
+  try { team = teamState = await api("/api/v1/team"); } catch (e) { box.innerHTML = ""; return; }
+  if (!teamHomeNeeded(team) || document.body.classList.contains("prereg-locked")) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="card"><span class="team-avatar is-naomy" aria-hidden="true">N</span>
+    <p><b>Naomy vous attend.</b> Vous avez choisi l'équipe Bob + Naomy : il reste à la rencontrer sur WhatsApp, cela prend une minute.</p>
+    <button class="action" onclick="showTab('team')">Rencontrer Naomy</button>
+    <button type="button" class="team-quiet" onclick="chooseTeam('SOLO')">Finalement, Bob seul</button></div>`;
+}
+
+async function startNaomyPairing(scope) {
   const msg = document.getElementById("naomy-msg");
   msg.textContent = "";
   try {
     const r = await api("/api/v1/naomy-connection/pairing", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope: chosenNaomyScope() }) });
-    showNaomyPairingLink(r.url);
+      body: JSON.stringify({ scope: scope || "assistant" }) });
+    showNaomyPairingLink(r.url, false);
   } catch (e) {
     msg.style.color = "var(--danger)";
     msg.textContent = e.message;
@@ -7530,10 +7660,10 @@ async function decideNaomyRequest(id, accept) {
   msg.textContent = "";
   try {
     const r = await api(`/api/v1/naomy-connection/request/${id}`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accept, scope: chosenNaomyScope() }) });
+      body: JSON.stringify({ accept, scope: "complete" }) });
     if (accept && r.url) {
       await loadNaomyCard();
-      showNaomyPairingLink(r.url);
+      showNaomyPairingLink(r.url, false);
     } else {
       toast("Demande refusée : rien n'est relié.");
       loadNaomyCard();

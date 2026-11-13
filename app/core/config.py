@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     naomy_whatsapp_number: str = ""
     # Lot 120 — console Super Admin de Naomy (interrupteur « Bob / Naomy ») ; vide = {naomy_base_url}/superadmin/.
     naomy_console_url: str = ""
+    # Lot 121 — « Rencontrer Naomy » ouvre WhatsApp avec le code de liaison déjà écrit (à allumer quand Naomy sait le
+    # lire) ; éteint : le lien habituel vers la page de Naomy.
+    naomy_pairing_whatsapp: bool = False
     # Lot 92 — « Bob, votre assistant » sur le numéro AgenC'AI : interrupteur général (éteint par défaut). Chaque
     # boutique a aussi le sien, dans la carte « Naomy ». L'envoi passe par Naomy (même domaine, chemin de Naomy).
     assistant_enabled: bool = False

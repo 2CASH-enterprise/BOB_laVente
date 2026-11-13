@@ -102,6 +102,10 @@ class Tenant(Base):
     call_phone: Mapped[str | None] = mapped_column(String(32))
     # Lot 118 — où le compte a été créé : vide = chez Bob, « NAOMY » = depuis l'inscription chez Naomy (« Mon équipe »).
     created_via: Mapped[str | None] = mapped_column(String(8))
+    # Lot 121 — « Mon équipe » : choix du commerçant (SOLO = Bob seul, TEAM = Bob + Naomy ; vide = pas encore choisi),
+    # et date de l'essai équipe de 7 jours (une seule fois par boutique).
+    team_mode: Mapped[str | None] = mapped_column(String(8))
+    team_trial_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 68 — modèles WhatsApp autorisés pour cette boutique (le Super Admin peut les couper, ex. compte d'examen Meta).
     wa_templates_allowed: Mapped[bool] = mapped_column(default=True, server_default=sa_true(), nullable=False)
     # Lot 69 — alerte de plafond de conversations déjà envoyée ce mois-là (« 2026-10 ») et à quel seuil (80 puis 100).

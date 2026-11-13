@@ -51,6 +51,8 @@ class RegisterTenantRequest(BaseModel):
     # Lot 41 — code reçu par email (obligatoire) et activité choisie dès l'inscription.
     verification_code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
     business_type: str | None = None
+    # Lot 121 — « Votre équipe » : SOLO (Bob seul) ou TEAM (Bob + Naomy) ; absent = pas encore choisi.
+    team: str | None = Field(default=None, pattern=r"^(SOLO|TEAM)$")
 
 
 class SignupCodeRequest(BaseModel):

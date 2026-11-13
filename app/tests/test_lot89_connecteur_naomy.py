@@ -620,11 +620,11 @@ async def test_dashboard_card_and_disconnect(client, db_session, naomy_env):
 
 
 def test_dashboard_has_the_naomy_card():
-    assert 'id="naomy-card"' in DASH and "Naomy, votre agent marketing" in DASH
+    assert 'id="naomy-card"' in DASH and "Votre community manager" in DASH  # lot 121 : dans « Mon équipe »
     js = DASH[DASH.index("async function loadNaomyCard() {"):DASH.index("async function disconnectNaomy() {")]
     assert '"/api/v1/naomy-connection/pairing"' in js and 'rel="noopener noreferrer"' in js and "valable 15 minutes" in js
     assert "Me prévenir par e-mail des propositions de Naomy" in js and "jamais le nom ni le numéro de vos clients" in DASH
-    assert "loadNaomyCard();  // lot 89" in DASH
+    assert 'if (name === "team") loadTeam();' in DASH
 
 
 @pytest.mark.asyncio

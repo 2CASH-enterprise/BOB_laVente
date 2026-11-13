@@ -572,7 +572,7 @@ def test_quote_page_escapes_everything():
         assert piece in body, piece
     assert 'if (item.kind === "QUOTE") return `showTab(\'quotes\')`;' in HTML
     assert 'if (name === "quotes") loadQuotes(currentQuoteView);' in HTML
-    assert '"orders", "pige", "appointments", "quotes", "contracts", "reports", "integrations"' in _function("showTab")  # la page s'affiche vraiment
+    assert '"orders", "pige", "appointments", "quotes", "contracts", "reports", "team", "integrations"' in _function("showTab")  # la page s'affiche vraiment
 
 
 def test_outcome_words_of_the_cabinet():

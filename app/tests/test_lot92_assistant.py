@@ -226,7 +226,7 @@ async def test_pairing_request_never_reveals_a_shop_and_is_confirmed_in_bob(clie
     [request] = (await db_session.execute(select(NaomyPairingRequest))).scalars().all()
     assert request.tenant_id == tenant.id and request.shop_name == "Wax & Co"
     [mail] = assistant_env.mails.sent
-    assert mail["to"] == email and "Naomy demande à relier" in mail["subject"] and "Intégrations" in mail["body"]
+    assert mail["to"] == email and "Naomy demande à relier" in mail["subject"] and "Mon équipe" in mail["body"]  # lot 121
 
     headers = await _login(client, email)
     view = (await client.get("/api/v1/naomy-connection", headers=headers)).json()
@@ -704,9 +704,10 @@ async def test_card_switches(client, db_session, assistant_env, monkeypatch):
 
 
 def test_dashboard_card_markup():
-    for text in ("Ce que vous reliez", "L'assistant seul", "Naomy demande à relier votre boutique", "Accepter", "Refuser",
+    # Lot 121 — la carte vit dans « Mon équipe » : plus de « portée » à choisir, l'assistant seul reste en option.
+    for text in ("Juste être prévenu sur WhatsApp", "Naomy demande à rejoindre votre boutique", "Accepter", "Refuser",
                  "Bob, votre assistant sur WhatsApp", "Bilan du soir par e-mail (20 h)", "function decideNaomyRequest(",
-                 "/api/v1/naomy-connection/assistant", "scope: chosenNaomyScope()"):
+                 "/api/v1/naomy-connection/assistant", "startNaomyPairing('assistant')"):
         assert text in DASH, text
 
 

@@ -289,6 +289,12 @@ async def pair(db, payload: dict, now: datetime | None = None) -> dict:
     connection = NaomyConnection(id=uuid.uuid4(), tenant_id=tenant.id, status="ACTIVE", naomy_account=account,
                                  confirmation_number=number, events_url=url, api_key_hash=digest(key),
                                  events_secret=secret, connected_at=now, scope=scope)
+    if scope == "complete":
+        # Lot 121 — le commerçant qui a choisi l'équipe a l'assistant de Bob allumé d'office ; une boutique reliée à
+        # Naomy (publications) est toujours « en équipe ».
+        if getattr(tenant, "team_mode", None) == "TEAM" and settings.assistant_enabled:
+            connection.assistant_enabled, connection.assistant_enabled_at = True, now
+        tenant.team_mode = "TEAM"
     db.add(connection)
     add_event(db, tenant.id, "connexion.ouverte", {}, connection_id=connection.id)
     await db.commit()
@@ -731,11 +737,11 @@ async def pending_request(db, tenant, now: datetime | None = None):
 def request_email(tenant, shop_name: str | None) -> tuple[str, str]:
     from app.core.config import get_settings
 
-    link = f"{get_settings().public_base_url.rstrip('/')}/dashboard/?tab=integrations"
+    link = f"{get_settings().public_base_url.rstrip('/')}/dashboard/?tab=team"  # lot 121 : « Mon équipe »
     about = f" (« {shop_name} » chez Naomy)" if shop_name else ""
     return ("Naomy demande à relier votre boutique",
             f"Bonjour,\n\nNaomy, l'agent marketing d'AgenC'AI, demande à relier votre boutique {tenant.name}{about} à Bob.\n\n"
-            f"Pour accepter ou refuser, ouvrez Bob, onglet Intégrations, carte « Naomy » : {link}\n\n"
+            f"Pour accepter ou refuser, ouvrez Bob, rubrique « Mon équipe », carte « Naomy » : {link}\n\n"
             "Si vous n'êtes pas à l'origine de cette demande, refusez-la : rien ne sera relié.")
 
 

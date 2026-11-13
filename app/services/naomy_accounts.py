@@ -167,7 +167,7 @@ async def create_account(db, payload: dict, limiter=None, now: datetime | None =
 
     tenant = Tenant(name=data["name"], country=data["country"], currency=currency, phone=data["number"],
                     email=data["email"], business_type=data["sector"], business_type_chosen_at=now,
-                    plan=TenantPlan.INDEPENDANT, created_via=ORIGIN)
+                    plan=TenantPlan.INDEPENDANT, created_via=ORIGIN, team_mode="TEAM", team_trial_at=now)
     db.add(tenant)
     await db.flush()
     if tenant.business_type == "INSURANCE_BROKER":
