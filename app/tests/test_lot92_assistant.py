@@ -180,7 +180,7 @@ async def test_scope_is_decided_by_bob_and_free_shops_get_the_assistant_only(cli
     conforms(r.json(), "ReponseAppairage")
     view = (await client.get("/api/v1/naomy-connection", headers=headers)).json()
     assert view["scope"] == "assistant" and view["suspended"] is False and view["reminders_enabled"] is None
-    assert view["assistant_available"] is True and view["assistant_enabled"] is False  # éteint par défaut
+    assert view["assistant_available"] is True and view["assistant_enabled"] is True  # lot 125 : allumé d'office
     assert (await client.post("/api/v1/naomy-connection/pairing", json={"scope": "autre"}, headers=headers)).status_code == 403
 
 

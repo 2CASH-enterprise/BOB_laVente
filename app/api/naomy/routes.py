@@ -446,7 +446,12 @@ async def naomy_connection_assistant(payload: AssistantSetting, current_user: Cu
             raise HTTPException(status_code=403, detail="L'assistant sur WhatsApp arrive bientôt.")
         if payload.enabled and not connection.assistant_enabled:
             connection.assistant_enabled_at = datetime.now(timezone.utc)  # aucune alerte sur ce qui précède
+        changed = bool(connection.assistant_enabled) != payload.enabled
         connection.assistant_enabled = payload.enabled
+        if changed:  # lot 125 (contrat 1.7) : Naomy aligne son voyant
+            from app.services.merchant_assistant import assistant_on
+
+            nb.add_event(db, tenant.id, "assistant.modifie", {"actif": assistant_on(connection)}, connection_id=connection.id)
     if payload.summary is not None:
         connection.summary_enabled = payload.summary
     await db.commit()

@@ -172,7 +172,7 @@ async def test_choosing_and_changing_ones_mind(client, db_session, naomy_env):
 
 
 @pytest.mark.asyncio
-async def test_a_plain_complete_pairing_puts_the_shop_in_the_team_without_forcing_the_assistant(client, db_session, naomy_env, monkeypatch):
+async def test_a_plain_complete_pairing_puts_the_shop_in_the_team(client, db_session, naomy_env, monkeypatch):
     from app.tests.test_lot89_connecteur_naomy import _pair
 
     monkeypatch.setattr(naomy_env, "assistant_enabled", True)
@@ -180,7 +180,7 @@ async def test_a_plain_complete_pairing_puts_the_shop_in_the_team_without_forcin
     await _pair(client, db_session, tenant)
     await db_session.refresh(tenant)
     connection = (await db_session.execute(select(NaomyConnection).where(NaomyConnection.tenant_id == tenant.id))).scalar_one()
-    assert tenant.team_mode == "TEAM" and not connection.assistant_enabled  # l'ancien chemin ne change pas (lot 92)
+    assert tenant.team_mode == "TEAM" and connection.assistant_enabled  # lot 125 : allumé d'office pour toute liaison
 
 
 @pytest.mark.asyncio

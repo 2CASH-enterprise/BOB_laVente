@@ -42,7 +42,8 @@ SCOPES = ("complete", "assistant")  # lot 92 : l'assistant seul est ouvert à to
 REQUEST_TTL = timedelta(days=7)
 EVENT_TYPES = {"connexion.ouverte", "connexion.fermee", "boutique.formule_changee", "produit.cree",
                "produit.photo_prete", "produit.prix_baisse", "produit.prix_barre_ajoute", "produit.rupture",
-               "produit.reapprovisionne", "produit.dormant", "produit.meilleure_vente"}
+               "produit.reapprovisionne", "produit.dormant", "produit.meilleure_vente",
+               "assistant.modifie"}  # lot 125 (contrat 1.7)
 _ALNUM = string.ascii_letters + string.digits
 
 
@@ -150,7 +151,10 @@ def decode_cursor(cursor: str | None) -> str | None:
 
 async def shop_view(db, tenant) -> dict:
     from app.models.whatsapp_account import WhatsAppAccount
+    from app.services.merchant_assistant import assistant_on
     from app.services.wa_account_info import profile_url
+
+    connection = await active_connection(db, tenant.id)
 
     account = (await db.execute(select(WhatsAppAccount).where(WhatsAppAccount.tenant_id == tenant.id))).scalars().first()
     return {"id": str(tenant.id), "nom": tenant.name, "secteur": tenant.business_type or "ONLINE_STORE",
@@ -162,7 +166,10 @@ async def shop_view(db, tenant) -> dict:
             "whatsapp_connecte": account is not None,
             "pre_inscrit": getattr(tenant, "prereg_at", None) is not None and getattr(tenant, "access_opened_at", None) is None,
             "payee_jusqu_au": tenant.paid_until.isoformat() if getattr(tenant, "paid_until", None) else None,
-            "origine": "NAOMY" if getattr(tenant, "created_via", None) == "NAOMY" else "BOB"}
+            "origine": "NAOMY" if getattr(tenant, "created_via", None) == "NAOMY" else "BOB",
+            # Contrat 1.7 (lot 125) : Bob fait foi pour l'assistant ; l'état réel (interrupteur de la boutique ET
+            # interrupteur général). Naomy n'a qu'un voyant.
+            "assistant_actif": assistant_on(connection)}
 
 
 def photos_view(product) -> dict:
@@ -289,12 +296,12 @@ async def pair(db, payload: dict, now: datetime | None = None) -> dict:
     connection = NaomyConnection(id=uuid.uuid4(), tenant_id=tenant.id, status="ACTIVE", naomy_account=account,
                                  confirmation_number=number, events_url=url, api_key_hash=digest(key),
                                  events_secret=secret, connected_at=now, scope=scope)
+    # Lot 125 (contrat 1.7, décision de Thérèse du 14/11) — l'assistant de Bob est allumé d'office pour TOUTE liaison
+    # avec Naomy, quel que soit le chemin (Rencontrer Naomy, page de Naomy, demande acceptée, compte créé par Naomy) :
+    # le commerçant n'ouvre jamais le tableau de bord pour l'allumer, seulement pour l'éteindre.
+    connection.assistant_enabled, connection.assistant_enabled_at = True, now
     if scope == "complete":
-        # Lot 121 — le commerçant qui a choisi l'équipe a l'assistant de Bob allumé d'office ; une boutique reliée à
-        # Naomy (publications) est toujours « en équipe ».
-        if getattr(tenant, "team_mode", None) == "TEAM" and settings.assistant_enabled:
-            connection.assistant_enabled, connection.assistant_enabled_at = True, now
-        tenant.team_mode = "TEAM"
+        tenant.team_mode = "TEAM"  # lot 121 : une boutique reliée à Naomy (publications) est « en équipe »
     db.add(connection)
     add_event(db, tenant.id, "connexion.ouverte", {}, connection_id=connection.id)
     await db.commit()
@@ -436,7 +443,7 @@ async def dispatch(db, now: datetime | None = None, sender=None) -> dict:
             connection = connections[evt.tenant_id]
             if connection is not None and _aware(evt.created_at) < _aware(connection.connected_at):
                 connection = None  # antérieur à la liaison : Naomy relit le catalogue de toute façon
-        if connection is None or (connection.scope == "assistant" and not evt.type.startswith("connexion.")):
+        if connection is None or (connection.scope == "assistant" and not evt.type.startswith(("connexion.", "assistant."))):
             evt.status = "SKIPPED"  # lot 92 : l'assistant seul ne publie rien, Naomy n'a pas besoin du catalogue
             report["skipped"] += 1
             continue
