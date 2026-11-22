@@ -34,8 +34,8 @@ SEND_HOURS = (9, 17)
 LIMITS = [20, 40, 80, 120, 200]
 FAILURES_BEFORE_INVALID = 3
 COMPANY = "AgenC'AI"
-LEGAL = ("Bob AI est une solution développée par SAS 2 Cash Enterprise. © {year} SAS 2 Cash Enterprise (Holding) — "
-         "1 Rue Hartz Huel, 22500 Kerfot, France. Exploitation par : " + COMPANY + ".")
+LEGAL = ("Bob est un agent IA d'" + COMPANY + ". © {year} " + COMPANY + " — Rennes, France. "
+         "Mentions légales : https://agenc-ai.com/bob/legal/mentions-legales.html")  # lot 127 : plus de 2 Cash
 SIGNATURE = "Bob, le vendeur virtuel d'" + COMPANY
 STOP_WORDS = re.compile(r"\b(stop|d[ée]sinscri\w*|d[ée]sabonn\w*|ne plus (me )?(recevoir|contacter|[ée]crire)|retirez|unsubscribe)\b", re.I)
 AUTO_SUBJECTS = re.compile(r"^(r[ée]ponse automatique|automatic reply|auto[- ]?reply|out of office|absent|absence)", re.I)

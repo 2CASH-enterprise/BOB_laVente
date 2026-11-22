@@ -167,6 +167,11 @@ _legal_dir = Path(__file__).parent / "static" / "legal"
 if _legal_dir.exists():
     app.mount("/legal", FreshPages(directory=str(_legal_dir), html=True), name="legal")
 
+# Lot 127 — page d'accueil d'AgenC'AI (racine de agenc-ai.com, servie par nginx depuis /bob/agencai/).
+_agencai_dir = Path(__file__).parent / "static" / "agencai"
+if _agencai_dir.exists():
+    app.mount("/agencai", FreshPages(directory=str(_agencai_dir), html=True), name="agencai")
+
 _demo_dir = Path(__file__).parent / "static" / "instant-demo"
 if _demo_dir.exists():
     app.mount("/demo", FreshPages(directory=str(_demo_dir), html=True), name="instant-demo")

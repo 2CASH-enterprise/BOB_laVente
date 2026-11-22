@@ -29,11 +29,15 @@ def test_processors_listed_in_both_languages():
 
 
 def test_no_promise_the_code_does_not_keep():
-    """Les jetons ne sont pas chiffrés en base aujourd'hui : la page ne doit pas le prétendre."""
+    """Lot 127 : les jetons sont chiffrés au repos depuis le lot 30 (EncryptedString) ; le nom de profil
+    WhatsApp n'est pas enregistré, la page ne doit pas le prétendre."""
+    model = (Path(__file__).resolve().parents[1] / "models" / "whatsapp_account.py").read_text(encoding="utf-8")
+    assert "system_user_token: Mapped[str] = mapped_column(EncryptedString" in model
     lowered = HTML.lower()
-    for claim in ("chiffré", "encrypted", "nom de profil", "profile name"):
+    for claim in ("nom de profil", "profile name", "2cash", "2 cash"):
         assert claim not in lowered, claim
     assert "STOP" in HTML  # mot-clé réellement reconnu par consent_service
+    assert "AgenC'AI" in HTML and "contact@agenc-ai.com" in HTML
 
 
 @pytest.mark.asyncio

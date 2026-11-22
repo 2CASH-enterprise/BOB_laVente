@@ -80,7 +80,7 @@ def test_render_and_headers(gmail):
     assert subject == "Auto <Prestige> à Marcory"
     assert text.startswith("Bonjour Serge,\n\nVoici : ") and text.split("\n")[2].endswith("/demo/?secteur=concession&p=abc234") and "Merci Serge" in text
     assert "Bob, le vendeur virtuel d'AgenC'AI" in text and "/p/abc234/stop" in text
-    assert "SAS 2 Cash Enterprise (Holding) — 1 Rue Hartz Huel, 22500 Kerfot, France. Exploitation par : AgenC'AI." in text
+    assert "Bob est un agent IA d'AgenC'AI." in text and "mentions-legales.html" in text and "2 Cash" not in text
     assert "Auto &lt;Prestige&gt;" in html and "Auto <Prestige>" not in html
     assert '/p/abc234/o/e1.gif" width="1"' in html and 'href="' in html and "<script" not in html
     assert "/o/" not in mailer.render(p, "x", "y")[2]  # aperçu et essai : pas d'image d'ouverture

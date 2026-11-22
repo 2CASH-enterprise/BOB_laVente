@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="AgenC'AI : des agents IA qui travaillent pour votre commerce sur WhatsApp. Bob vend, Naomy anime vos réseaux sociaux, Fely fait grandir votre activité.">
+<meta property="og:title" content="AgenC'AI — vos agents IA sur WhatsApp">
+<meta property="og:image" content="https://agenc-ai.com/bob/img/bob.jpg">
+<title>AgenC'AI — vos agents IA sur WhatsApp</title>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Instrument+Serif:ital@0;1&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#075E54}
+a{color:#DCF8C6;text-decoration:none}a:hover{color:#ffffff}
+*{box-sizing:border-box}
+/* Téléphone d'abord : tout est pensé pour ~390 px, puis élargi. */
+.wrap{max-width:1240px;margin:0 auto;padding-left:20px;padding-right:20px}
+.topnav{display:none}
+.login{display:none}
+.burger{display:flex}
+.menu{flex-direction:column;gap:4px;padding:8px 20px 20px}
+.menu:not([hidden]){display:flex}
+.burger .ico-close{display:none}
+.burger[aria-expanded="true"] .ico-open{display:none}
+.burger[aria-expanded="true"] .ico-close{display:block}
+.hero{display:flex;flex-direction:column;gap:40px;padding-top:16px;padding-bottom:40px}
+.ctas{display:flex;flex-direction:column;gap:12px}
+.ctas a{justify-content:space-between}
+.agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.card{transform:none !important;margin-top:0 !important}
+.card img{height:132px !important}
+.chat{grid-column:1 / -1;transform:none !important}
+.foot{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px 20px}
+.foot .brand{grid-column:1 / -1}
+@media (min-width:700px){
+  .wrap{padding-left:32px;padding-right:32px}
+  .ctas{flex-direction:row;flex-wrap:wrap}
+  .ctas a{justify-content:flex-start}
+  .agents{gap:18px}
+  .card img{height:200px !important}
+  .chat{grid-column:2 / span 2;justify-self:end;max-width:320px}
+  .foot{grid-template-columns:2fr 1fr 1fr 1.3fr}
+  .foot .brand{grid-column:auto}
+}
+@media (min-width:1040px){
+  .topnav{display:flex}
+  .login{display:inline-flex}
+  .burger,.menu{display:none !important}
+  .hero{flex-direction:row;align-items:center;gap:56px;padding-top:40px;padding-bottom:56px}
+  .hero>.text{flex:1 1 0;min-width:0}
+  .hero>.agents{flex:0 0 470px}
+  .card:nth-child(1){transform:rotate(-3deg) !important;margin-top:34px !important}
+  .card:nth-child(2){transform:rotate(2deg) !important}
+  .card:nth-child(3){transform:rotate(-1.5deg) !important;margin-top:-6px !important}
+  .card img{height:200px !important}
+  .chat{grid-column:1 / -1;justify-self:center;transform:rotate(1deg) !important}
+}
+</style>
+<div style="min-height: 100vh; background: #075E54; color: #ffffff; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <header class="wrap" style="width: 100%; padding-top: 16px; padding-bottom: 16px; display: flex; align-items: center; gap: 10px">
+    <a href="/" style="display: flex; align-items: center; gap: 10px; color: #ffffff; font-weight: 800; font-size: 22px; letter-spacing: -0.02em; margin-right: auto">
+      <span style="width: 34px; height: 34px; border-radius: 11px; background: #25D366; color: #111F18; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800">A</span>
+      AgenC'AI
+    </a>
+    <nav class="topnav" aria-label="Navigation principale" style="gap: 28px; font-size: 15px; font-weight: 500; margin-right: 12px">
+      <a href="#agents">Nos agents</a>
+      <a href="/bob/">Bob</a>
+      <a href="mailto:contact@agenc-ai.com">Contact</a>
+    </nav>
+    <a class="login" href="/bob/dashboard/" style="font-size: 15px; font-weight: 600; padding: 12px 14px">Se connecter</a>
+    <a href="/bob/demo/" style="background: #25D366; color: #111F18; font-weight: 700; font-size: 15px; padding: 12px 18px; border-radius: 999px; white-space: nowrap">Essai gratuit</a>
+    <button class="burger" type="button" id="menu-btn" aria-label="Ouvrir le menu" aria-expanded="false" aria-controls="menu" style="width: 44px; height: 44px; border-radius: 12px; border: 1.5px solid rgba(255,255,255,0.35); background: transparent; color: #ffffff; align-items: center; justify-content: center; cursor: pointer; padding: 0">
+      <svg class="ico-open" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h16"></path></svg>
+      <svg class="ico-close" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg>
+    </button>
+  </header>
+
+    <nav class="menu" id="menu" aria-label="Menu" hidden style="border-top: 1px solid rgba(255,255,255,0.12); border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 17px; font-weight: 600">
+      <a href="#agents" style="padding: 12px 0">Nos agents</a>
+      <a href="/bob/" style="padding: 12px 0">Bob · Vendeur</a>
+      <a href="mailto:contact@agenc-ai.com" style="padding: 12px 0">Contact</a>
+      <a href="/bob/dashboard/" style="padding: 12px 0">Se connecter</a>
+    </nav>
+
+  <main class="wrap hero" style="width: 100%; flex: 1 1 auto">
+
+    <section class="text" style="display: flex; flex-direction: column; gap: 22px">
+      <p style="margin: 0; align-self: flex-start; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18); border-radius: 22px; padding: 6px 14px 6px 6px; font-size: 14px; line-height: 1.4; color: #E7F5ED">
+        <span style="background: #111F18; color: #ffffff; border-radius: 999px; padding: 5px 12px; font-weight: 600; display: flex; align-items: center; gap: 7px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #25D366"></span>21 h 47</span>
+        <span>Boutique fermée. <strong style="color: #ffffff; font-weight: 600">Bob répond à vos clients.</strong></span>
+      </p>
+
+      <h1 style="margin: 0; font-size: clamp(38px, 9.5vw, 76px); line-height: 1.02; font-weight: 800; letter-spacing: -0.035em">Vos clients écrivent. Vos agents IA répondent.</h1>
+      <p style="margin: -6px 0 0; font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: clamp(28px, 7vw, 44px); line-height: 1.08; color: #DCF8C6">Sur WhatsApp, même quand vous êtes occupé.</p>
+
+      <p style="margin: 0; font-size: clamp(16px, 4.2vw, 19px); line-height: 1.6; color: #E7F5ED; max-width: 560px">Vendre, animer vos réseaux sociaux, faire grandir votre commerce : trois agents IA qui travaillent pour vous, directement dans les conversations de vos clients.</p>
+
+      <div class="ctas">
+        <a href="/bob/demo/" style="display: flex; align-items: center; gap: 14px; background: #25D366; color: #111F18; font-weight: 700; font-size: 17px; padding: 8px 8px 8px 24px; border-radius: 999px; min-height: 60px">
+          Créer mon agent
+          <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #111F18; color: #25D366; display: flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg>
+          </span>
+        </a>
+        <a href="#agents" style="display: flex; align-items: center; gap: 14px; color: #ffffff; border: 1.5px solid rgba(255,255,255,0.35); font-weight: 600; font-size: 17px; padding: 8px 8px 8px 24px; border-radius: 999px; min-height: 60px">
+          Voir nos agents
+          <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #ffffff; color: #075E54; display: flex; align-items: center; justify-content: center">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg>
+          </span>
+        </a>
+      </div>
+
+      <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 10px 20px; font-size: 14px; color: #E7F5ED">
+        <li style="display: flex; align-items: center; gap: 8px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#25D366" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Essai gratuit de 7 jours</li>
+        <li style="display: flex; align-items: center; gap: 8px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#25D366" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Installé en quelques minutes</li>
+        <li style="display: flex; align-items: center; gap: 8px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#25D366" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Sur votre numéro WhatsApp</li>
+      </ul>
+    </section>
+
+    <section id="agents" class="agents" aria-label="Nos agents IA">
+      <div class="card" style="background: #ffffff; border-radius: 20px; padding: 8px 8px 12px; color: #111F18; box-shadow: 0 14px 32px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 10px; min-width: 0">
+        <img src="/bob/img/naomy.jpg" alt="Naomy, agente IA community manager" style="width: 100%; height: 200px; object-fit: cover; object-position: center top; border-radius: 14px; display: block; background: #E7F5ED">
+        <span style="padding: 0 4px; display: flex; flex-direction: column; gap: 1px; min-width: 0">
+          <span style="font-size: 16px; font-weight: 700">Naomy</span>
+          <span style="font-size: 13px; line-height: 1.3; color: #3D5A4F">Community manager</span>
+        </span>
+      </div>
+      <a class="card" href="/bob/" style="background: #ffffff; border-radius: 20px; padding: 8px 8px 12px; color: #111F18; box-shadow: 0 14px 32px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 10px; min-width: 0">
+        <img src="/bob/img/bob.jpg" alt="Bob, agent IA vendeur" style="width: 100%; height: 200px; object-fit: cover; object-position: center top; border-radius: 14px; display: block; background: #E7F5ED">
+        <span style="padding: 0 4px; display: flex; flex-direction: column; gap: 1px; min-width: 0">
+          <span style="font-size: 16px; font-weight: 700">Bob</span>
+          <span style="font-size: 13px; line-height: 1.3; color: #3D5A4F">Vendeur</span>
+        </span>
+      </a>
+      <div class="card" style="background: #ffffff; border-radius: 20px; padding: 8px 8px 12px; color: #111F18; box-shadow: 0 14px 32px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 10px; min-width: 0">
+        <img src="/bob/img/fely.jpg" alt="Fely, agente IA croissance" style="width: 100%; height: 200px; object-fit: cover; object-position: center top; border-radius: 14px; display: block; background: #E7F5ED">
+        <span style="padding: 0 4px; display: flex; flex-direction: column; gap: 1px; min-width: 0">
+          <span style="font-size: 16px; font-weight: 700">Fely</span>
+          <span style="font-size: 13px; line-height: 1.3; color: #3D5A4F">Croissance</span>
+        </span>
+      </div>
+
+      <div class="chat" role="img" aria-label="Exemple de conversation : une cliente demande une robe, Bob propose de la réserver" style="background: #E7F5ED; border-radius: 20px; padding: 14px; color: #111F18; box-shadow: 0 14px 32px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 8px; width: 100%">
+        <div style="display: flex; align-items: center; gap: 10px; padding-bottom: 4px">
+          <img src="/bob/img/bob.jpg" alt="" style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover; object-position: center top">
+          <span style="display: flex; flex-direction: column"><span style="font-weight: 700; font-size: 14px">Bob · Vendeur IA</span><span style="font-size: 12px; color: #0E6B5E">en ligne</span></span>
+        </div>
+        <p style="margin: 0; align-self: flex-start; background: #ffffff; border-radius: 4px 14px 14px 14px; padding: 9px 12px; font-size: 14px; max-width: 85%">Bonsoir, vous avez encore la robe verte en taille M ?</p>
+        <p style="margin: 0; align-self: flex-end; background: #DCF8C6; border-radius: 14px 4px 14px 14px; padding: 9px 12px; font-size: 14px; max-width: 85%">Oui, il en reste une ! Je vous la réserve jusqu'à demain midi ?<span style="display: block; text-align: right; font-size: 11px; color: #3D5A4F; margin-top: 3px">21:47 ✓✓</span></p>
+      </div>
+    </section>
+  </main>
+
+  <p class="wrap" style="width: 100%; margin: 0; padding-top: 20px; padding-bottom: 26px; text-align: center; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; line-height: 1.6; text-transform: uppercase; color: #DCF8C6; border-top: 1px solid rgba(255,255,255,0.12)">Pensé pour les commerçants qui ne peuvent pas toujours répondre</p>
+
+  <footer style="background: #111F18; color: #E7F5ED; font-size: 14px">
+    <div class="wrap foot" style="padding-top: 44px; padding-bottom: 28px">
+      <div class="brand" style="display: flex; flex-direction: column; gap: 14px">
+        <a href="/" style="display: flex; align-items: center; gap: 10px; color: #ffffff; font-weight: 800; font-size: 22px; letter-spacing: -0.02em">
+          <span style="width: 34px; height: 34px; border-radius: 11px; background: #25D366; color: #111F18; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800">A</span>
+          AgenC'AI
+        </a>
+        <p style="margin: 0; line-height: 1.6; max-width: 320px; color: #C9DDD3">Des agents IA qui travaillent pour votre commerce, directement dans les conversations WhatsApp de vos clients.</p>
+        <a href="mailto:contact@agenc-ai.com" style="color: #25D366; font-weight: 600">contact@agenc-ai.com</a>
+      </div>
+      <nav aria-label="Nos agents" style="display: flex; flex-direction: column; gap: 4px">
+        <p style="margin: 0 0 4px; color: #ffffff; font-weight: 700; font-size: 15px">Nos agents</p>
+        <span style="color: #C9DDD3; padding: 6px 0">Naomy</span>
+        <a href="/bob/" style="color: #C9DDD3; padding: 6px 0">Bob</a>
+        <span style="color: #C9DDD3; padding: 6px 0">Fely</span>
+      </nav>
+      <nav aria-label="AgenC'AI" style="display: flex; flex-direction: column; gap: 4px">
+        <p style="margin: 0 0 4px; color: #ffffff; font-weight: 700; font-size: 15px">AgenC'AI</p>
+        <a href="mailto:contact@agenc-ai.com" style="color: #C9DDD3; padding: 6px 0">Contact</a>
+        <a href="/bob/dashboard/" style="color: #C9DDD3; padding: 6px 0">Se connecter</a>
+      </nav>
+      <nav aria-label="Informations légales" style="display: flex; flex-direction: column; gap: 4px">
+        <p style="margin: 0 0 4px; color: #ffffff; font-weight: 700; font-size: 15px">Informations légales</p>
+        <a href="/bob/legal/mentions-legales.html" style="color: #C9DDD3; padding: 6px 0">Mentions légales</a>
+        <a href="/bob/legal/privacy.html" style="color: #C9DDD3; padding: 6px 0">Politique de confidentialité</a>
+      </nav>
+    </div>
+    <div class="wrap" style="padding-top: 18px; padding-bottom: 28px; border-top: 1px solid rgba(255,255,255,0.12); display: flex; flex-wrap: wrap; gap: 8px 32px; justify-content: space-between; font-size: 13px; line-height: 1.5; color: #A9C2B6">
+      <p style="margin: 0">© 2026 AgenC'AI. Tous droits réservés.</p>
+      <p style="margin: 0">WhatsApp est une marque de Meta Platforms, Inc. AgenC'AI n'est ni affilié à Meta, ni approuvé par Meta.</p>
+    </div>
+  </footer>
+</div>
+<script>
+// Lot 127 — menu du téléphone (aucun texte dans un attribut on… : lot 70).
+var menuBtn = document.getElementById("menu-btn"), menu = document.getElementById("menu");
+menuBtn.addEventListener("click", function () {
+  var open = menu.hasAttribute("hidden");
+  if (open) { menu.removeAttribute("hidden"); } else { menu.setAttribute("hidden", ""); }
+  menuBtn.setAttribute("aria-expanded", String(open));
+  menuBtn.setAttribute("aria-label", open ? "Fermer le menu" : "Ouvrir le menu");
+});
+</script>
+</body>
+</html>
