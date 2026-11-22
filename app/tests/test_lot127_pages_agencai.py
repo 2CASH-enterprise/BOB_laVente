@@ -13,7 +13,8 @@ BOB = (STATIC / "landing" / "index.html").read_text(encoding="utf-8")
 HOME = (STATIC / "agencai" / "index.html").read_text(encoding="utf-8")
 MENTIONS = (STATIC / "legal" / "mentions-legales.html").read_text(encoding="utf-8")
 PRIVACY = (STATIC / "legal" / "privacy.html").read_text(encoding="utf-8")
-PAGES = {"bob": BOB, "home": HOME, "mentions": MENTIONS, "privacy": PRIVACY}
+CGU = (STATIC / "legal" / "cgu.html").read_text(encoding="utf-8")
+PAGES = {"bob": BOB, "home": HOME, "mentions": MENTIONS, "privacy": PRIVACY, "cgu": CGU}
 
 
 @pytest.mark.parametrize("name", list(PAGES))
@@ -40,7 +41,7 @@ def test_bob_buttons_keep_their_targets_and_preregistration():
     assert 'href="dashboard/?preinscription=1"' in BOB
     assert 'fetch("api/v1/preregistration/public")' in BOB and "p.offer_open" in BOB and "2 premiers mois" in BOB
     assert 'id="header-cta"' in BOB and 'id="hero-cta"' in BOB and 'id="launch"' in BOB
-    assert 'href="legal/privacy.html"' in BOB and 'href="legal/mentions-legales.html"' in BOB
+    assert 'href="/legal/privacy.html"' in BOB and 'href="/legal/mentions-legales.html"' in BOB and 'href="/legal/cgu.html"' in BOB
     assert 'href="/bob/agencai/"' in BOB
 
 
@@ -58,7 +59,7 @@ def test_home_presents_the_three_agents_and_links_to_bob():
     for agent, role in (("Naomy", "Community manager"), ("Bob", "Vendeur"), ("Fely", "Croissance")):
         assert agent in HOME and role in HOME
     assert '<a class="card" href="/bob/"' in HOME  # Naomy et Fely : pages faites par leurs sessions, rattachées plus tard
-    assert 'href="/bob/legal/mentions-legales.html"' in HOME and 'href="/bob/legal/privacy.html"' in HOME
+    assert 'href="/legal/mentions-legales.html"' in HOME and 'href="/legal/privacy.html"' in HOME and 'href="/legal/cgu.html"' in HOME
     assert 'id="menu-btn"' in HOME and 'id="menu"' in HOME
 
 
@@ -66,7 +67,7 @@ def test_legal_notice_names_the_publisher_only_there():
     assert "Noé BAKOUBA KALJOP, entrepreneur individuel (EI)" in MENTIONS and "132 945 858" in MENTIONS
     assert "+33 7 44 17 74 30" in MENTIONS and "Hetzner Online GmbH" in MENTIONS
     assert "TVA" not in MENTIONS  # statut à confirmer avec l'expert-comptable
-    for page in (BOB, HOME, PRIVACY):
+    for page in (BOB, HOME, PRIVACY, CGU):
         assert "BAKOUBA" not in page
     for page in PAGES.values():
         assert "2 Cash" not in page and "2CASH" not in page and "bakouban2002" not in page
@@ -86,7 +87,8 @@ def test_prospecting_emails_no_longer_mention_2_cash():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("url", ["/", "/agencai/", "/legal/mentions-legales.html", "/legal/privacy.html", "/img/bob.jpg"])
+@pytest.mark.parametrize("url", ["/", "/agencai/", "/legal/mentions-legales.html", "/legal/privacy.html", "/legal/cgu.html",
+                                 "/img/bob.jpg"])
 async def test_pages_are_served(url):
     from app.main import app
 

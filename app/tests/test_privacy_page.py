@@ -20,7 +20,7 @@ def test_both_languages_and_deletion_anchors():
 @pytest.mark.parametrize("permission", ["whatsapp_business_messaging", "whatsapp_business_management",
                                         "catalog_management", "public_profile"])
 def test_every_requested_meta_permission_is_explained_in_both_languages(permission):
-    assert HTML.count(f"<code>{permission}</code>") == 2
+    assert HTML.count(f"<code>{permission}</code>") >= 2  # lot 128 : public_profile aussi dans la partie Naomy
 
 
 def test_processors_listed_in_both_languages():
