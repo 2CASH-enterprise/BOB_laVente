@@ -433,7 +433,9 @@ def later_times(tenant, now: datetime | None = None, limit: int = 9) -> list[dat
     local = (now or _now()).astimezone(zone)
     earliest = local + timedelta(minutes=LATER_STEP)
     out = []
-    for offset in range(3):
+    from app.services.restaurant import kitchen_closed_today
+
+    for offset in range(1 if kitchen_closed_today(tenant, now) else 0, 3):  # lot 129 : pas ce soir si fermée
         day = local.date() + timedelta(days=offset)
         for start_txt, end_txt in hours.get(str(day.weekday())) or []:
             minute, end = _minutes(start_txt), _minutes(end_txt)

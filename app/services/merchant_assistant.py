@@ -88,6 +88,39 @@ MENU_LIST = {"bouton": "Menu de Bob", "lignes": [
     {"id": "bob:menu:stock", "titre": "📦 Mon stock", "description": "Les ruptures en tête"},
     {"id": "bob:menu:ajouter", "titre": "📸 Ajouter un produit", "description": "Une photo, un nom, un prix"},
 ]}
+# Lot 129 — menu du restaurant (décisions de Thérèse du 23/11) : 10 lignes, sans « Ventes à confirmer » ni « Vendu ».
+RESTO_MENU_INTRO = "Je suis Bob, le serveur de votre restaurant. Que voulez-vous faire ?"
+RESTO_MENU_LIST = {"bouton": "Menu de Bob", "lignes": [
+    {"id": "bob:menu:commandes", "titre": "🧾 Commandes du jour", "description": "Toutes les commandes d'aujourd'hui"},
+    {"id": "bob:menu:reservations", "titre": "📅 Réservations du jour", "description": "Les tables réservées aujourd'hui"},
+    {"id": "bob:menu:plats", "titre": "🍽️ Plat épuisé / retour", "description": "Un plat n'est plus disponible, ou revient"},
+    {"id": "bob:menu:cuisine", "titre": "🔥 Fermer / rouvrir", "description": "La cuisine, pour aujourd'hui"},
+    {"id": "bob:menu:qui-attend", "titre": "👥 Qui attend", "description": "Les clients qui vous attendent"},
+    {"id": "bob:menu:ventes", "titre": "📈 Mes ventes", "description": "Aujourd'hui, 7 jours, 30 jours"},
+    {"id": "bob:menu:carte", "titre": "📖 Ma carte", "description": "Plats, prix et photos"},
+    {"id": "bob:menu:horaires", "titre": "🕒 Mes horaires", "description": "Cuisine et réservations"},
+    {"id": "bob:menu:affiches", "titre": "🖨️ Affiches et QR", "description": "Vitrine, plat du jour, QR de table"},
+    {"id": "bob:menu:tableau", "titre": "💻 Tableau de bord", "description": "Tout Bob, sur téléphone ou ordinateur"},
+]}
+RESTO_MENU_1 = ("Je suis Bob, le serveur de votre restaurant.",
+                [("bob:menu:commandes", "🧾 Commandes"), ("bob:menu:reservations", "📅 Réservations"),
+                 ("bob:menu:plats", "🍽️ Plat épuisé")])
+RESTO_MENU_2 = ("La cuisine et votre tableau de bord.",
+                [("bob:menu:cuisine", "🔥 Fermer / rouvrir"), ("bob:menu:qui-attend", "👥 Qui attend"),
+                 ("bob:menu:tableau", "💻 Tableau de bord")])
+# Commandes écrites des restaurants seulement (une boutique qui écrit « carte cadeau 5000 » ajoute toujours un produit).
+RESTO_COMMANDS = {
+    "reservations du jour": "bookings", "reservations": "bookings", "reservation": "bookings",
+    "plat epuise": "sold_out", "epuise": "sold_out", "epuisee": "sold_out", "de retour": "back", "disponible": "back",
+    "dispo": "back", "plats": "dishes", "fermer la cuisine": "close", "fermer": "close", "rouvrir la cuisine": "reopen",
+    "rouvrir": "reopen", "ouvrir la cuisine": "reopen", "cuisine": "kitchen", "ma carte": "page_menu", "carte": "page_menu",
+    "mes horaires": "page_hours", "horaires": "page_hours", "affiches": "page_posters", "affiche": "page_posters",
+    "qr": "page_posters", "tableau de bord": "dashboard", "tableau": "dashboard",
+}
+RESTO_KEYS = set(RESTO_COMMANDS.values())
+MENU_COMMANDS.update({"reservations": "bookings", "plats": "dishes", "cuisine": "kitchen", "carte": "page_menu",
+                      "horaires": "page_hours", "affiches": "page_posters", "tableau": "dashboard"})
+DISH_ROWS = 10
 WAITING = "WAITING"
 ADD_HELP = ("Pour ajouter un produit : envoyez sa photo, puis son nom et son prix, par exemple : Sac cabas 12000.\n"
             "Vous pouvez aussi tout envoyer d'un coup, en légende de la photo.")
@@ -114,13 +147,14 @@ def without_bob(norm: str) -> str:
     return norm[4:] if norm.startswith("bob ") else ("" if norm == "bob" else norm)
 
 
-def match_command(text: str | None) -> tuple[str | None, str]:
+def match_command(text: str | None, restaurant: bool = False) -> tuple[str | None, str]:
     norm = without_bob(normalize(text))
-    for phrase in sorted(COMMANDS, key=len, reverse=True):
+    known = {**COMMANDS, **RESTO_COMMANDS} if restaurant else COMMANDS
+    for phrase in sorted(known, key=len, reverse=True):
         if norm == phrase:
-            return COMMANDS[phrase], ""
+            return known[phrase], ""
         if norm.startswith(phrase + " "):
-            return COMMANDS[phrase], norm[len(phrase) + 1:]
+            return known[phrase], norm[len(phrase) + 1:]
     return None, norm
 
 
@@ -572,6 +606,9 @@ async def _orders_today(db, tenant, now) -> list[dict]:
     from app.models.product import Product
     from app.services.simple_mode import _day_start, customer_label
 
+    from app.services.business_type import is_restaurant
+
+    resto = is_restaurant(tenant)
     labels = {OrderStatus.PENDING: "À confirmer", OrderStatus.PAID: "Vendue", OrderStatus.CANCELLED: "Annulée"}
     rows = (await db.execute(select(Order, Customer).join(Customer, Customer.id == Order.customer_id).where(
         Order.tenant_id == tenant.id, Order.created_at >= _day_start(tenant, now, 0)).order_by(Order.created_at.desc())
@@ -582,7 +619,8 @@ async def _orders_today(db, tenant, now) -> list[dict]:
                                   .where(OrderItem.order_id == order.id))).all()
         out.append({"customer": customer_label(customer), "items": " · ".join(f"{q} × {n}" for q, n in items),
                     "total": amount(order.total_amount), "value": float(order.total_amount or 0), "currency": order.currency,
-                    "status": labels.get(order.status, str(order.status))})
+                    "status": ("Annulée" if order.status == OrderStatus.CANCELLED else resto_mode(tenant, order, now))
+                    if resto else labels.get(order.status, str(order.status))})
     return out
 
 
@@ -598,6 +636,14 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
     from app.services.simple_mode import sales_summary, waiting_list
 
     with_cards = cards.cards_on(tenant.id)  # lot 117 : la carte en image, le texte complet dessous (repli)
+    from app.services.business_type import is_restaurant
+
+    if key in RESTO_KEYS:  # lot 129 : seulement pour un restaurant
+        if is_restaurant(tenant):
+            await handle_restaurant(db, connection, tenant, key, rest, now)
+        else:
+            send_menu(db, connection, now, tenant)
+        return
 
     def card(build):
         return cards.safe(build) if with_cards else None
@@ -614,7 +660,10 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
             more = f"\n… et {len(orders) - LIST_LINES} autre(s) dans Bob." if len(orders) > LIST_LINES else ""
             text = f"Commandes du jour ({len(orders)}) :\n" + "\n".join(
                 f"• {o['customer']} · {o['status']} · {o['total']} {o['currency']}" for o in orders[:LIST_LINES]) + more
-        buttons = [("bob:menu:a-confirmer", "Ventes à confirmer")] if any(o["status"] == "À confirmer" for o in orders) else None
+        from app.services.business_type import is_restaurant
+
+        buttons = [("bob:menu:a-confirmer", "Ventes à confirmer")] \
+            if not is_restaurant(tenant) and any(o["status"] == "À confirmer" for o in orders) else None
         queue(db, connection, text, buttons, now=now, image=card(lambda: cards.orders_card(tenant, orders, now)))
     elif key == "to_confirm":
         items = await _pending(db, tenant)
@@ -698,21 +747,195 @@ async def handle_command(db, connection, tenant, key: str, rest: str, now) -> No
         queue(db, connection, "Pour arrêter Bob avec un client, répondez-lui vous-même : Bob s'arrête sur cette "
                               "conversation. Écrivez « reprendre » pour lui rendre la main.", now=now)
     else:
-        send_menu(db, connection, now)
+        send_menu(db, connection, now, tenant)
 
 
-def send_menu(db, connection, now) -> None:
+def send_menu(db, connection, now, tenant=None) -> None:
     """Lot 92c : les 2 messages du menu ; le 2e attend que le 1er soit accepté par Naomy (200).
-    Lot 117 : cartes allumées pour la boutique → une seule liste (contrat 1.3.3)."""
+    Lot 117 : cartes allumées pour la boutique → une seule liste (contrat 1.3.3). Lot 129 : menu du restaurant."""
     from app.services.assistant_cards import cards_on
+    from app.services.business_type import is_restaurant
 
+    resto = tenant is not None and is_restaurant(tenant)
     if cards_on(connection.tenant_id):
-        queue(db, connection, MENU_INTRO, now=now, liste=MENU_LIST)
+        queue(db, connection, RESTO_MENU_INTRO if resto else MENU_INTRO, now=now,
+              liste=RESTO_MENU_LIST if resto else MENU_LIST)
         return
-    first = queue(db, connection, MENU_1[0], MENU_1[1], now=now)
-    second = queue(db, connection, MENU_2[0], MENU_2[1], now=now)
+    one, two = (RESTO_MENU_1, RESTO_MENU_2) if resto else (MENU_1, MENU_2)
+    first = queue(db, connection, one[0], one[1], now=now)
+    second = queue(db, connection, two[0], two[1], now=now)
     second.status, second.ref = WAITING, f"after:{first.message_id}"
     second.created_at = first.created_at + timedelta(microseconds=1)  # ordre garanti dans la file
+
+
+# --- Lot 129 : le restaurant depuis WhatsApp ---------------------------------------------------------------------------
+
+def resto_mode(tenant, order, now) -> str:
+    """« Livraison · Cocody », « À emporter », « Table 7 », suivi de « pour 20 h 30 » si commandée pour plus tard."""
+    mode = {"DELIVERY": "Livraison" + (f" · {order.delivery_area}" if order.delivery_area else ""),
+            "PICKUP": "À emporter",
+            "DINE_IN": f"Table {order.table_number}" if order.table_number else "Sur place"}.get(order.fulfillment or "", "Commande")
+    if order.scheduled_for:
+        mode += f" · pour {_when(tenant, order.scheduled_for, now)}"
+    return mode
+
+
+def _when(tenant, moment, now) -> str:
+    """« 20 h 30 » aujourd'hui, sinon « mardi 24 novembre à 20 h 30 » (heure du restaurant)."""
+    from app.services.local_time import as_utc, format_local, tenant_zone
+
+    zone = tenant_zone(tenant)
+    local = as_utc(moment).astimezone(zone)
+    if local.date() == as_utc(now).astimezone(zone).date():
+        return f"{local.hour} h {local.minute:02d}" if local.minute else f"{local.hour} h"
+    return format_local(moment, zone)
+
+
+def _dish_off(product, tenant, now) -> bool:
+    from app.services.bob_pause import local_today
+
+    return (product.sheet or {}).get("unavailable_on") == local_today(tenant, now).isoformat()
+
+
+async def _dishes(db, tenant, now) -> list:
+    from app.models.product import Product
+
+    rows = (await db.execute(select(Product).where(Product.tenant_id == tenant.id, Product.active.is_(True))
+                             .order_by(Product.name).limit(500))).scalars().all()
+    return sorted(rows, key=lambda p: (not _dish_off(p, tenant, now), normalize(p.name)))
+
+
+async def _dish(db, tenant, raw_id):
+    from app.models.product import Product
+
+    try:
+        product_id = uuid.UUID(str(raw_id))
+    except ValueError:
+        return None
+    product = await db.get(Product, product_id)
+    return product if product is not None and product.tenant_id == tenant.id and product.active else None
+
+
+async def _find_dishes(db, tenant, words: str, now) -> list:
+    return [p for p in await _dishes(db, tenant, now) if words in normalize(p.name)][:5]
+
+
+def _toggle_dish(db, connection, tenant, product, off: bool, now) -> None:
+    from app.services.restaurant import set_unavailable_today
+
+    set_unavailable_today(product, tenant, off, now)
+    name = short(product.name, 60)
+    if off:
+        queue(db, connection, f"C'est noté : « {name} » est épuisé pour aujourd'hui. Bob ne le propose plus ; "
+                              "il revient automatiquement demain.", [(f"bob:plat-on:{product.id}", "Le remettre")], now=now)
+    else:
+        queue(db, connection, f"« {name} » est de nouveau disponible : Bob le propose à vos clients.",
+              [(f"bob:plat-off:{product.id}", "Épuisé finalement")], now=now)
+
+
+def _set_kitchen(db, connection, tenant, closed: bool, now) -> None:
+    from app.services import restaurant
+
+    restaurant.set_kitchen_closed(tenant, closed, now)
+    if closed:
+        when = restaurant.next_opening(tenant, now)
+        later = f" Bob propose à vos clients de commander pour {restaurant.opening_text(when, now)}." if when else ""
+        queue(db, connection, "C'est fait : la cuisine est fermée pour aujourd'hui, Bob ne prend plus de commande "
+                              f"pour ce soir.{later} Elle rouvre automatiquement demain ; les réservations de table restent "
+                              "ouvertes.", [("bob:cuisine-rouvrir", "Rouvrir")], now=now)
+    else:
+        hours = " dans vos horaires" if getattr(tenant, "kitchen_hours", None) else ""
+        queue(db, connection, f"La cuisine est rouverte : Bob reprend les commandes{hours}.", now=now)
+
+
+async def _bookings_today(db, tenant, now) -> list[dict]:
+    from app.models.appointment_request import STATUS_CONFIRMED, AppointmentRequest
+    from app.models.customer import Customer
+    from app.services.simple_mode import _day_start, customer_label
+
+    start = _day_start(tenant, now, 0)
+    rows = (await db.execute(select(AppointmentRequest, Customer).join(Customer, Customer.id == AppointmentRequest.customer_id)
+                             .where(AppointmentRequest.tenant_id == tenant.id, AppointmentRequest.kind == "TABLE",
+                                    AppointmentRequest.status == STATUS_CONFIRMED,
+                                    AppointmentRequest.scheduled_at >= start,
+                                    AppointmentRequest.scheduled_at < start + timedelta(days=1))
+                             .order_by(AppointmentRequest.scheduled_at).limit(60))).all()
+    return [{"time": _when(tenant, a.scheduled_at, now), "people": a.party_size or 0, "name": customer_label(c)}
+            for a, c in rows]
+
+
+async def handle_restaurant(db, connection, tenant, key: str, rest: str, now) -> None:
+    from app.services import restaurant
+
+    if key == "bookings":
+        items = await _bookings_today(db, tenant, now)
+        if not items:
+            queue(db, connection, "Aucune table réservée aujourd'hui pour l'instant.", now=now)
+            return
+        people = sum(i["people"] for i in items)
+        more = f"\n… et {len(items) - 8} autre(s) : {dashboard_link('?tab=appointments')}" if len(items) > 8 else ""
+        queue(db, connection, f"Réservations du jour ({len(items)} table{'s' if len(items) > 1 else ''}, {people} "
+                              f"personne{'s' if people > 1 else ''}) :\n"
+              + "\n".join(f"• {i['time']} · {i['people']} pers. · {i['name']}" for i in items[:8]) + more, now=now)
+    elif key in ("sold_out", "back") and rest:
+        found = await _find_dishes(db, tenant, rest, now)
+        if not found:
+            queue(db, connection, f"Aucun plat ne correspond à « {short(rest, 40)} ». Touchez « Plat épuisé / retour » "
+                                  "dans mon menu pour voir vos plats.", now=now)
+        elif len(found) == 1:
+            _toggle_dish(db, connection, tenant, found[0], key == "sold_out", now)
+        else:
+            action = "plat-off" if key == "sold_out" else "plat-on"
+            queue(db, connection, "Lequel ?", [(f"bob:{action}:{p.id}", p.name) for p in found[:3]], now=now)
+    elif key in ("dishes", "sold_out", "back"):
+        from app.services.assistant_cards import cards_on
+
+        dishes = await _dishes(db, tenant, now)
+        if not dishes:
+            queue(db, connection, "Votre carte est vide. Ajoutez un plat : envoyez sa photo, puis son nom et son prix "
+                                  "(par exemple : Poulet braisé 3500).", now=now)
+            return
+        hint = (f"\nVous avez {len(dishes)} plats : pour un autre, écrivez « épuisé » suivi de son nom "
+                "(par exemple « épuisé poulet »), ou « de retour poulet »." if len(dishes) > DISH_ROWS else "")
+        if cards_on(connection.tenant_id):
+            queue(db, connection, "Touchez un plat pour le dire épuisé aujourd'hui, ou pour le remettre." + hint, now=now,
+                  liste={"bouton": "Mes plats", "lignes": [
+                      {"id": f"bob:plat:{p.id}", "titre": p.name,
+                       "description": "Épuisé aujourd'hui · toucher pour le remettre" if _dish_off(p, tenant, now)
+                       else "Disponible · toucher s'il est épuisé"} for p in dishes[:DISH_ROWS]]})
+        else:
+            off = [p.name for p in dishes if _dish_off(p, tenant, now)]
+            queue(db, connection, (("Épuisés aujourd'hui : " + ", ".join(off) + ".\n") if off else "")
+                  + "Écrivez « épuisé » suivi du nom d'un plat (par exemple « épuisé poulet »), ou « de retour » "
+                    "pour le remettre.", now=now)
+    elif key in ("kitchen", "close"):
+        if restaurant.kitchen_closed_today(tenant, now):
+            queue(db, connection, "La cuisine est fermée pour aujourd'hui : Bob ne prend pas de commande pour ce soir. "
+                                  "La rouvrir ?", [("bob:cuisine-rouvrir", "Rouvrir"), ("bob:retour", "Retour")], now=now)
+        else:
+            state = "prend les commandes en ce moment" if restaurant.kitchen_open(tenant, now) else "est fermée en ce moment (horaires)"
+            queue(db, connection, f"La cuisine {state}. La fermer pour le reste de la journée ? Elle rouvrira "
+                                  "automatiquement demain.", [("bob:cuisine-fermer", "Fermer ce soir"), ("bob:retour", "Retour")],
+                  now=now)
+    elif key == "reopen":
+        if restaurant.kitchen_closed_today(tenant, now):
+            _set_kitchen(db, connection, tenant, False, now)
+        else:
+            queue(db, connection, "La cuisine n'est pas fermée aujourd'hui : rien n'a changé.", now=now)
+    elif key == "page_menu":
+        queue(db, connection, f"📖 Votre carte (plats, prix, photos) : {dashboard_link('?tab=products')}\n"
+                              "Pour un plat épuisé ce soir, pas besoin d'ouvrir la page : touchez « Plat épuisé / retour » "
+                              "dans mon menu.", now=now)
+    elif key == "page_hours":
+        queue(db, connection, f"🕒 Horaires de la cuisine : {dashboard_link('?tab=bob')}\n"
+                              f"Horaires et places des réservations : {dashboard_link('?tab=appointments')}\n"
+                              "Pour fermer seulement ce soir : « Fermer / rouvrir » dans mon menu.", now=now)
+    elif key == "page_posters":
+        queue(db, connection, f"🖨️ Affiches des plats et QR de table : {dashboard_link('?tab=products')}\n"
+                              f"Affiche de vitrine et lien WhatsApp : {dashboard_link('?tab=customers')}", now=now)
+    elif key == "dashboard":
+        queue(db, connection, f"💻 Votre tableau de bord complet : {dashboard_link()}\nConnectez-vous avec votre e-mail "
+                              "et votre mot de passe. Astuce : ajoutez-le à l'écran d'accueil de votre téléphone.", now=now)
 
 
 # --- Photo avec légende : nouveau produit, sans IA ---------------------------------------------------------------------
@@ -908,8 +1131,22 @@ async def handle_button(db, connection, tenant, button: str, now) -> None:
         queue(db, connection, RETURN_REPLY, now=now)
     elif action == "menu" and ref in MENU_COMMANDS:  # lot 92c : les 6 boutons du menu = les commandes écrites
         await handle_command(db, connection, tenant, MENU_COMMANDS[ref], "", now)
+    elif action in ("plat", "plat-off", "plat-on", "cuisine-fermer", "cuisine-rouvrir"):  # lot 129
+        from app.services.business_type import is_restaurant
+
+        if not is_restaurant(tenant):
+            send_menu(db, connection, now, tenant)
+        elif action.startswith("plat"):
+            product = await _dish(db, tenant, ref)
+            if product is None:
+                queue(db, connection, "Ce plat n'est plus sur votre carte : rien n'a changé.", now=now)
+            else:
+                off = {"plat-off": True, "plat-on": False}.get(action, not _dish_off(product, tenant, now))
+                _toggle_dish(db, connection, tenant, product, off, now)
+        else:
+            _set_kitchen(db, connection, tenant, action == "cuisine-fermer", now)
     else:
-        send_menu(db, connection, now)
+        send_menu(db, connection, now, tenant)
 
 
 async def process(db, message_id, now: datetime | None = None) -> str:
@@ -939,7 +1176,9 @@ async def process(db, message_id, now: datetime | None = None) -> str:
         elif message.kind == "image":
             await add_product_from_photo(db, connection, tenant, message, now)
         elif not await handle_awaited(db, connection, tenant, message.text, now):
-            key, rest = match_command(message.text)
+            from app.services.business_type import is_restaurant
+
+            key, rest = match_command(message.text, is_restaurant(tenant))
             if key or not await offer_draft(db, connection, tenant, message.text, now):
                 await handle_command(db, connection, tenant, key or "help", rest, now)
         await db.commit()
@@ -1005,7 +1244,9 @@ async def scan_alerts(db, now: datetime | None = None) -> dict:
                                    .where(Message.tenant_id == tenant.id, Message.sender == MessageSender.CUSTOMER,
                                           Message.message_type == "image", Message.created_at >= since)
                                    .order_by(Message.created_at))).all()
-        for _msg, conversation in images:
+        from app.services.business_type import is_restaurant
+
+        for _msg, conversation in ([] if is_restaurant(tenant) else images):  # lot 129 : pas de « preuve » au restaurant
             order = (await db.execute(select(Order).where(
                 Order.tenant_id == tenant.id, Order.customer_id == conversation.customer_id,
                 Order.status == OrderStatus.PENDING, Order.created_at >= now - timedelta(days=PROOF_ORDER_DAYS))
@@ -1087,6 +1328,16 @@ async def _new_order_alerts(db, connection, tenant, since, now, report) -> None:
         mode = {"PICKUP": "retrait en boutique", "DELIVERY": "livraison"}.get(order.fulfillment or "")
         name = customer_label(customer)
         link = f"\nVoir : {conversation_link(conversation)}" if conversation is not None else ""
+        from app.services.business_type import is_restaurant
+
+        if is_restaurant(tenant):  # lot 129 : le mode, la commune ou la table, l'heure ; ni « Vendu » ni preuve
+            queue(db, connection,
+                  f"🍽️ Nouvelle commande — {name} : {what or 'voir le détail'}. {resto_mode(tenant, order, now)} · "
+                  f"{amount(order.total_amount)} {order.currency}.{link}",
+                  [(f"bob:annuler:{order.id}", "Annuler")], kind="ALERT", ref=ref,
+                  fallback_subject=f"Nouvelle commande : {name}", now=now)
+            report["orders"] += 1
+            continue
         queue(db, connection,
               f"🛒 Nouvelle commande de {name} : {amount(order.total_amount)} {order.currency}"
               f"{f' ({what})' if what else ''}{f', {mode}' if mode else ''}.{link}\n\n"
@@ -1123,6 +1374,23 @@ async def _appointment_alerts(db, connection, tenant, since, now, report) -> set
         name = customer_label(customer)
         what = " — ".join(p for p in (APPOINTMENT_KINDS.get(appointment.kind, appointment.kind), appointment.vehicle_label) if p)
         link = f"\nVoir : {conversation_link(conversation)}" if conversation is not None else ""
+        if appointment.kind == "TABLE":  # lot 129 : une table, avec le nombre de personnes
+            people = appointment.party_size or 0
+            group = f"{people} personne{'s' if people > 1 else ''}" if people else "une table"
+            if booked:
+                queue(db, connection, f"📅 Table réservée par Bob : {group}, "
+                                      f"{format_local(appointment.scheduled_at, tenant_zone(tenant))}, au nom de {name}.{link}",
+                      kind="ALERT", ref=ref, fallback_subject=f"Table réservée : {name}", now=now)
+                report["booked"] += 1
+            else:
+                queue(db, connection, f"📅 Demande de table à confirmer : {group}, de la part de {name} — "
+                                      f"{short(appointment.availability or '', 120) or 'voir la conversation'}.{link}\n"
+                                      "Confirmez-lui, ou laissez Bob continuer.",
+                      [(f"bob:continue:{appointment.conversation_id}", "Bob continue")], kind="ALERT", ref=ref,
+                      fallback_subject=f"Table à confirmer : {name}", now=now)
+                detailed.add(appointment.conversation_id)
+                report["appointments"] += 1
+            continue
         if booked:
             queue(db, connection, f"📅 Rendez-vous réservé par Bob : {what}, avec {name}, le "
                                   f"{format_local(appointment.scheduled_at, tenant_zone(tenant))}.{link}",

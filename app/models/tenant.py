@@ -94,6 +94,8 @@ class Tenant(Base):
     dine_in_enabled: Mapped[bool] = mapped_column(default=False, server_default=sa_false(), nullable=False)
     delivery_areas: Mapped[list | None] = mapped_column(JSON)
     kitchen_hours: Mapped[dict | None] = mapped_column(JSON)
+    # Lot 129 — « Fermer la cuisine » depuis WhatsApp : fermée pour ce jour-là (heure du restaurant), rouverte le lendemain.
+    kitchen_closed_on: Mapped[date | None] = mapped_column(Date)
     # Lot 112 — teinte choisie pour les affiches (or, sauge, safran…) : elle colore aussi le reçu en image.
     poster_accent: Mapped[str | None] = mapped_column(String(20))
     # Lot 114 — formulaire WhatsApp de réservation : vide = suit la plateforme, ON = essai sur ce restaurant, OFF = jamais.

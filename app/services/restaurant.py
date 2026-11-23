@@ -84,8 +84,26 @@ def _ranges(hours: dict | None, day: int) -> list[tuple[int, int]]:
     return [(_minutes(a), _minutes(b)) for a, b in (hours or {}).get(str(day)) or []]
 
 
+def kitchen_closed_today(tenant, now: datetime | None = None) -> bool:
+    """Lot 129 — le restaurant a fermé la cuisine pour aujourd'hui (heure du restaurant) depuis WhatsApp."""
+    closed_on = getattr(tenant, "kitchen_closed_on", None)
+    if closed_on is None:
+        return False
+    from app.services.bob_pause import local_today
+
+    return closed_on == local_today(tenant, now)
+
+
+def set_kitchen_closed(tenant, closed: bool, now: datetime | None = None) -> None:
+    from app.services.bob_pause import local_today
+
+    tenant.kitchen_closed_on = local_today(tenant, now) if closed else None
+
+
 def kitchen_open(tenant, now: datetime | None = None) -> bool:
-    """Sans horaires de cuisine renseignés : toujours ouverte (le restaurant n'a rien limité)."""
+    """Sans horaires de cuisine renseignés : toujours ouverte (le restaurant n'a rien limité), sauf fermeture du jour."""
+    if kitchen_closed_today(tenant, now):
+        return False
     hours = getattr(tenant, "kitchen_hours", None)
     if not hours or not any(hours.values()):
         return True
@@ -105,7 +123,7 @@ def next_opening(tenant, now: datetime | None = None) -> datetime | None:
 
     zone = tenant_zone(tenant)
     local = (now or datetime.now(timezone.utc)).astimezone(zone)
-    for offset in range(8):
+    for offset in range(1 if kitchen_closed_today(tenant, now) else 0, 8):  # lot 129 : fermée aujourd'hui → demain
         day = local.date() + timedelta(days=offset)
         for low, _ in sorted(_ranges(hours, day.weekday())):
             start = datetime.combine(day, time(low // 60, low % 60), tzinfo=zone)
