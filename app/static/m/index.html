@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<link rel="icon" href="../img/bob.jpg">
 <title>Bob — votre restaurant</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;display=swap" rel="stylesheet">
@@ -47,6 +48,12 @@ textarea{min-height:70px}
 .range{display:flex;gap:6px;align-items:center}
 .range input{padding:9px 8px}
 .hidden{display:none!important}
+.poster-viewer{position:fixed;inset:0;z-index:8;background:#F6FBF8;overflow:auto;padding:12px 12px 40px}
+.poster-bar{display:flex;gap:10px;justify-content:space-between;position:sticky;top:0;z-index:1;background:#F6FBF8;padding-bottom:8px}
+.poster-tip{margin:0 0 10px}
+.poster-holder{width:100%;overflow:hidden;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(17,31,24,.12)}
+.poster-frame{width:820px;border:0;transform-origin:0 0;display:block}
+body.viewing{overflow:hidden}
 .toast{position:fixed;left:14px;right:14px;bottom:16px;z-index:9;max-width:612px;margin:0 auto}
 </style>
 </head>
@@ -297,14 +304,34 @@ async function showHours() {
 }
 
 // ---------------------------------------------------------------- Affiches et QR
+// Lot 129 d — l'affiche s'affiche DANS la page : le navigateur intégré de WhatsApp n'ouvre pas de nouvel onglet.
+const POSTER_WIDTH = 820;
 async function openPoster(path) {
-  const tab = window.open("", "_blank");
-  try {
-    const page = await api(path);
-    const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
-    if (tab) tab.location.href = url; else location.href = url;
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (e) { if (tab) tab.close(); toast(e.message, "err"); }
+  let page;
+  try { page = await api(path); } catch (e) { return toast(e.message, "err"); }
+  const frame = el("iframe", { title: "Affiche", class: "poster-frame" });
+  const holder = el("div", { class: "poster-holder" }, frame);
+  const close = () => { viewer.remove(); document.body.classList.remove("viewing"); };
+  const print = el("button", { class: "primary", text: "Imprimer ou PDF", onclick: () => {
+    try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { void e; }
+  } });
+  const viewer = el("div", { class: "poster-viewer" },
+    el("div", { class: "poster-bar" }, print, el("button", { class: "ghost", text: "Fermer", onclick: close })),
+    el("p", { class: "muted poster-tip", text: "Rien ne se passe ? Depuis WhatsApp, l'impression n'est pas toujours possible : ouvrez « Tableau de bord » dans le menu de Bob sur un ordinateur, rubrique Clients ou Produits." }),
+    holder);
+  const fit = () => {
+    const scale = Math.min(1, holder.clientWidth / POSTER_WIDTH);
+    const doc = frame.contentDocument;
+    const height = doc && doc.documentElement ? doc.documentElement.scrollHeight : 1160;
+    frame.style.transform = `scale(${scale})`;
+    frame.style.height = height + "px";
+    holder.style.height = Math.ceil(height * scale) + "px";
+  };
+  frame.addEventListener("load", fit);
+  window.addEventListener("resize", fit);
+  document.body.classList.add("viewing");
+  document.body.append(viewer);
+  frame.srcdoc = page;
 }
 async function showPosters() {
   document.getElementById("title").textContent = "Affiches et QR";
