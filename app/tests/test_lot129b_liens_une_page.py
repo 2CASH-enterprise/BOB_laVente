@@ -115,8 +115,8 @@ async def test_no_link_without_password_for_a_two_step_account(client, db_sessio
 
 @pytest.mark.asyncio
 async def test_link_buttons_follow_contract_1_7_1_and_tokens_are_not_kept(client, db_session, assistant_env, cards, monkeypatch):
-    monkeypatch.setattr(get_settings(), "assistant_link_buttons", True)
     tenant, headers, _ = await _resto(client, db_session)
+    monkeypatch.setattr(get_settings(), "assistant_link_buttons", f"autre-boutique, {tenant.id}")  # essai sur une boutique
     await _say(client, db_session, headers, _msg("affiches"))
     await _say(client, db_session, headers, _msg("tableau de bord"))
     posters, board = (await _replies(db_session, tenant))[-2:]  # _replies vérifie le schéma EnvoiAssistant 1.7.1
@@ -141,3 +141,12 @@ def test_the_page_itself():
 @pytest.mark.asyncio
 async def test_the_page_is_served(client):
     assert (await client.get("/m/?page=carte")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_link_buttons_stay_off_for_other_shops(client, db_session, assistant_env, cards, monkeypatch):
+    monkeypatch.setattr(get_settings(), "assistant_link_buttons", "0b1e7f2a-0000-4000-8000-000000000000")
+    tenant, headers, _ = await _resto(client, db_session)
+    await _say(client, db_session, headers, _msg("tableau de bord"))
+    reply = (await _replies(db_session, tenant))[-1].payload
+    assert "lien" not in reply and "/dashboard/" in reply["texte"]

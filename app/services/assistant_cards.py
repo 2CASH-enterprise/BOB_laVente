@@ -25,10 +25,11 @@ WIDTH, PAD, MAX_HEIGHT = ri.WIDTH, ri.PAD, 1920
 MAX_ROWS = 8
 
 
-def cards_on(tenant_id) -> bool:
+def cards_on(tenant_id, setting: str = "assistant_cards") -> bool:
+    """Interrupteur « vide / on / identifiants de boutiques » (ASSISTANT_CARDS, ASSISTANT_LINK_BUTTONS)."""
     from app.core.config import get_settings
 
-    value = (getattr(get_settings(), "assistant_cards", "") or "").strip().lower()
+    value = str(getattr(get_settings(), setting, "") or "").strip().lower()
     if not value or value in ("off", "false", "0"):
         return False
     if value in ("on", "true", "1", "all"):

@@ -955,9 +955,9 @@ PAGE_FALLBACK = {"carte": "?tab=products", "horaires": "?tab=bob", "affiches": "
 
 
 def _send_link(db, connection, text: str, button: str, url: str, now) -> None:
-    from app.core.config import get_settings
+    from app.services.assistant_cards import cards_on
 
-    if get_settings().assistant_link_buttons:  # contrat 1.7.1 : bouton « Ouvrir … » envoyé par Naomy
+    if cards_on(connection.tenant_id, "assistant_link_buttons"):  # contrat 1.7.1 : bouton « Ouvrir … » envoyé par Naomy
         queue(db, connection, text, now=now, lien={"titre": button, "url": url})
     else:
         queue(db, connection, f"{text}\n{url}", now=now)
