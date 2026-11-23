@@ -172,6 +172,11 @@ _agencai_dir = Path(__file__).parent / "static" / "agencai"
 if _agencai_dir.exists():
     app.mount("/agencai", FreshPages(directory=str(_agencai_dir), html=True), name="agencai")
 
+# Lot 129 b — pages « une seule page » ouvertes depuis le menu de Bob sur WhatsApp (carte, horaires, affiches).
+_mobile_dir = Path(__file__).parent / "static" / "m"
+if _mobile_dir.exists():
+    app.mount("/m", FreshPages(directory=str(_mobile_dir), html=True), name="mobile-pages")
+
 _demo_dir = Path(__file__).parent / "static" / "instant-demo"
 if _demo_dir.exists():
     app.mount("/demo", FreshPages(directory=str(_demo_dir), html=True), name="instant-demo")

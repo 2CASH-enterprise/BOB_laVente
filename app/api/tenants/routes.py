@@ -958,3 +958,36 @@ async def update_order_reminders(payload: OrderRemindersReq, current_user: Curre
                           tenant_id=tenant.id, details={"enabled": payload.enabled})
     await db.commit()
     return _order_reminders_response(tenant)
+
+
+# --- Lot 129 b : fermer la cuisine pour aujourd'hui (page « Mes horaires » ouverte depuis WhatsApp) ---------------------
+
+class KitchenClosedReq(BaseModel):
+    closed: bool
+
+
+def _kitchen_closed_response(tenant) -> dict:
+    from app.services import restaurant
+
+    when = restaurant.next_opening(tenant)
+    return {"closed_today": restaurant.kitchen_closed_today(tenant), "open_now": restaurant.kitchen_open(tenant),
+            "next_opening": restaurant.opening_text(when) if when else None}
+
+
+@router.get("/me/kitchen-closed", dependencies=[Depends(require_business(RESTAURANT))])
+async def get_kitchen_closed(current_user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    return _kitchen_closed_response(await db.get(Tenant, current_user.tenant_id))
+
+
+@router.put("/me/kitchen-closed", dependencies=[Depends(require_business(RESTAURANT)), Depends(require_role("MANAGER"))])
+async def set_kitchen_closed(payload: KitchenClosedReq, current_user: CurrentUser = Depends(get_current_user),
+                             db: AsyncSession = Depends(get_db)) -> dict:
+    from app.services import restaurant
+    from app.services.audit import log_audit_event
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    restaurant.set_kitchen_closed(tenant, payload.closed)
+    await log_audit_event(db, actor=str(current_user.user_id), action="KITCHEN_CLOSED" if payload.closed else "KITCHEN_REOPENED",
+                          tenant_id=tenant.id)
+    await db.commit()
+    return _kitchen_closed_response(tenant)

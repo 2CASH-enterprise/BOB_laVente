@@ -170,8 +170,8 @@ async def test_bookings_of_the_day(client, db_session, assistant_env, cards):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("word,expected", [("carte", "/dashboard/?tab=products"), ("horaires", "/dashboard/?tab=bob"),
-                                           ("affiches", "/dashboard/?tab=customers"), ("tableau de bord", "/dashboard/")])
+@pytest.mark.parametrize("word,expected", [("carte", "/m/?page=carte&connexion="), ("horaires", "/m/?page=horaires&connexion="),
+                                           ("affiches", "/m/?page=affiches&connexion="), ("tableau de bord", "/dashboard/")])
 async def test_links_to_the_right_page(client, db_session, assistant_env, cards, word, expected):
     tenant, headers, _ = await _resto(client, db_session)
     await _say(client, db_session, headers, _msg(word))

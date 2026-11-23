@@ -237,15 +237,21 @@ async def magic_login_exchange(request: Request, payload: dict, db: AsyncSession
     if not await rate_limiter.is_allowed(f"magic:ip:{client_ip}", limit=20, window_seconds=600):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Trop de tentatives, réessayez plus tard")
     token = payload.get("token") if isinstance(payload, dict) else None
-    user = await magic_login.consume(db, token if isinstance(token, str) else "")
+    found = await magic_login.consume_with_purpose(db, token if isinstance(token, str) else "")
+    user, purpose = found if found else (None, None)
     if user is None:
         await db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Ce lien de connexion a expiré ou a déjà servi. Demandez-en un nouveau à Naomy, "
                                    "ou connectez-vous avec « Mot de passe oublié ».")
-    await log_audit_event(db, actor=str(user.id), action="LOGIN_MAGIC_LINK", tenant_id=user.tenant_id, ip_address=client_ip)
+    from app.services import page_links
+
+    scope = page_links.scope_of(purpose)  # lot 129 b : lien « une seule page » → session limitée à cette page
+    await log_audit_event(db, actor=str(user.id), action="LOGIN_PAGE_LINK" if scope else "LOGIN_MAGIC_LINK",
+                          tenant_id=user.tenant_id, ip_address=client_ip, details={"page": scope} if scope else None)
     await db.commit()
-    return LoginResponse(access_token=create_access_token(user_id=user.id, tenant_id=user.tenant_id, role=user.role.value))
+    return LoginResponse(access_token=create_access_token(user_id=user.id, tenant_id=user.tenant_id, role=user.role.value,
+                                                          scope=scope, minutes=page_links.SESSION_MINUTES if scope else None))
 
 
 async def _send_mfa_code(db: AsyncSession, user: User) -> None:

@@ -20,8 +20,9 @@ def _digest(token: str) -> str:
 async def issued_today(db, tenant_id, now) -> int:
     from app.models.magic_login import MagicLogin
 
-    return (await db.execute(select(func.count(MagicLogin.id)).where(
-        MagicLogin.tenant_id == tenant_id, MagicLogin.created_at >= now - timedelta(hours=24)))).scalar_one()
+    return (await db.execute(select(func.count(MagicLogin.id)).where(  # lot 129 b : sans les liens « une seule page »
+        MagicLogin.tenant_id == tenant_id, MagicLogin.created_at >= now - timedelta(hours=24),
+        MagicLogin.purpose.not_like("PAGE_%")))).scalar_one()
 
 
 async def create(db, user, now: datetime | None = None, purpose: str = "WHATSAPP") -> dict:
@@ -38,6 +39,12 @@ async def create(db, user, now: datetime | None = None, purpose: str = "WHATSAPP
 
 async def consume(db, token: str, now: datetime | None = None):
     """L'utilisateur du lien (et le lien marqué utilisé), ou None."""
+    found = await consume_with_purpose(db, token, now)
+    return found[0] if found else None
+
+
+async def consume_with_purpose(db, token: str, now: datetime | None = None):
+    """Lot 129 b — (utilisateur, usage du lien) ou None."""
     from app.models.magic_login import MagicLogin
     from app.models.user import User
 
@@ -54,4 +61,4 @@ async def consume(db, token: str, now: datetime | None = None):
     if user is None or not user.active or getattr(user, "mfa_enabled", False):
         return None
     row.used_at = now
-    return user
+    return user, row.purpose

@@ -36,16 +36,20 @@ class TokenPayload(BaseModel):
     tenant_id: str
     role: str
     exp: datetime
+    scope: str | None = None  # lot 129 b : « page:carte »… session limitée à une page (lien envoyé sur WhatsApp)
 
 
-def create_access_token(user_id: UUID, tenant_id: UUID, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+def create_access_token(user_id: UUID, tenant_id: UUID, role: str, scope: str | None = None,
+                        minutes: int | None = None) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes or settings.access_token_expire_minutes)
     payload = {
         "sub": str(user_id),
         "tenant_id": str(tenant_id),
         "role": role,
         "exp": expire,
     }
+    if scope:
+        payload["scope"] = scope
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
@@ -102,6 +106,11 @@ async def get_current_user(request: Request, token: str = Depends(oauth2_scheme)
     from app.services.monitoring import current_tenant
 
     current_tenant.set(user.tenant_id)
+    if payload.scope:  # lot 129 b : une session ouverte par un lien « une seule page » ne sert qu'à cette page
+        from app.services import page_links
+
+        if not page_links.allowed(payload.scope, request.method, request.url.path):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=page_links.LOCKED_MESSAGE)
     await _check_account(request, db, user)
     return user
 

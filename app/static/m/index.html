@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Bob — votre restaurant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#F6FBF8;color:#111F18;font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:16px;line-height:1.5}
+a{color:#075E54}
+header{background:#075E54;color:#fff;padding:16px 18px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:5}
+header img{width:40px;height:40px;border-radius:50%;object-fit:cover;object-position:center top;border:2px solid #25D366}
+header div{display:flex;flex-direction:column;line-height:1.2;min-width:0}
+header strong{font-size:18px}
+header span{font-size:13px;color:#DCF8C6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+main{max-width:640px;margin:0 auto;padding:16px 14px 64px;display:flex;flex-direction:column;gap:14px}
+h2{margin:8px 2px 0;font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:#128C7E}
+.card{background:#fff;border-radius:18px;padding:14px;box-shadow:0 1px 2px rgba(17,31,24,.07);display:flex;flex-direction:column;gap:10px}
+.dish{display:flex;gap:12px;align-items:center}
+.dish img,.dish .nophoto{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:0 0 64px;background:#E7F5ED}
+.dish .nophoto{display:flex;align-items:center;justify-content:center;color:#6B8279;font-size:12px;text-align:center}
+.dish .info{flex:1 1 auto;min-width:0}
+.dish .name{font-weight:700;overflow:hidden;text-overflow:ellipsis}
+.dish .price{color:#075E54;font-weight:700;font-size:15px}
+.off .name,.off .price{color:#6B8279}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+button,.btn{font:inherit;font-weight:700;border:0;border-radius:999px;padding:12px 18px;min-height:44px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.primary{background:#25D366;color:#111F18}
+.dark{background:#111F18;color:#fff}
+.ghost{background:#E7F5ED;color:#075E54}
+.danger{background:#fff;color:#A3271B;border:1.5px solid #E7B4AE}
+.wide{width:100%}
+label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:600;color:#2D4A3F}
+input,select,textarea{font:inherit;font-size:16px;border:1.5px solid #C9DDD3;border-radius:12px;padding:11px 12px;background:#fff;color:#111F18;width:100%}
+textarea{min-height:70px}
+.switch{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:#2D4A3F;flex-direction:row}
+.switch input{width:22px;height:22px;accent-color:#25D366}
+.msg{padding:12px 14px;border-radius:14px;font-size:15px}
+.msg.ok{background:#DCF8C6;color:#075E54}
+.msg.err{background:#FDECEA;color:#8A2016}
+.muted{color:#3D5A4F;font-size:14px}
+.day{display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center}
+.day .ranges{display:flex;flex-direction:column;gap:6px}
+.range{display:flex;gap:6px;align-items:center}
+.range input{padding:9px 8px}
+.hidden{display:none!important}
+.toast{position:fixed;left:14px;right:14px;bottom:16px;z-index:9;max-width:612px;margin:0 auto}
+</style>
+</head>
+<body>
+<header>
+  <img src="../img/bob.jpg" alt="">
+  <div><strong id="title">Bob</strong><span id="shop">Votre restaurant</span></div>
+</header>
+<main id="app"><p class="muted">Ouverture…</p></main>
+<div id="toast" class="toast hidden"></div>
+<script>
+// Lot 129 b — une seule page ouverte depuis le menu de Bob sur WhatsApp. Le lien (usage unique, 15 min) est échangé
+// contre une session limitée à cette page ; le jeton reste dans l'onglet (sessionStorage), jamais dans l'adresse.
+const API = "../api/v1";
+const params = new URLSearchParams(location.search);
+const PAGE = ["carte", "horaires", "affiches"].includes(params.get("page")) ? params.get("page") : null;
+const app = document.getElementById("app");
+const KEY = "bob_page_" + PAGE;
+let token = null;
+const RUBRIQUES = [["ENTREE", "Entrées"], ["PLAT", "Plats"], ["GRILLADE", "Grillades"], ["DESSERT", "Desserts"],
+                   ["BOISSON", "Boissons"], ["MENU", "Menus et formules"]];
+const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
+function el(tag, attrs, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") node.className = v;
+    else if (k === "text") node.textContent = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined && v !== false) node.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined) node.append(kid);
+  return node;
+}
+function toast(text, kind) {
+  const box = document.getElementById("toast");
+  box.className = "toast msg " + (kind || "ok");
+  box.textContent = text;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => box.classList.add("hidden"), 3500);
+}
+function fail(text) {
+  app.replaceChildren(el("div", { class: "msg err", text }),
+    el("p", { class: "muted", text: "Redemandez la page à Bob sur WhatsApp : écrivez « menu » au numéro AgenC'AI, puis choisissez Bob." }));
+}
+async function api(path, options) {
+  const opts = Object.assign({}, options || {});
+  opts.headers = Object.assign({ Authorization: "Bearer " + token }, opts.headers || {});
+  const r = await fetch(API + path, opts);
+  if (r.status === 401 || r.status === 403) {
+    sessionStorage.removeItem(KEY);
+    throw new Error("Votre accès à cette page a expiré.");
+  }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Une erreur est survenue, réessayez.");
+  const type = r.headers.get("content-type") || "";
+  return type.includes("json") ? r.json() : r.text();
+}
+function money(value, currency) {
+  return Math.round(Number(value || 0)).toLocaleString("fr-FR").replace(/ /g, " ") + " " + (currency === "XOF" ? "FCFA" : currency || "");
+}
+
+async function start() {
+  if (!PAGE) return fail("Cette page n'existe pas.");
+  const link = params.get("connexion");
+  if (link) {
+    history.replaceState(null, "", location.pathname + "?page=" + PAGE);  // le lien ne reste pas dans l'historique
+    const r = await fetch(API + "/auth/magic", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                  body: JSON.stringify({ token: link }) });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || !body.access_token) return fail(body.detail || "Ce lien a expiré ou a déjà servi.");
+    sessionStorage.setItem(KEY, body.access_token);
+  }
+  token = sessionStorage.getItem(KEY);
+  if (!token) return fail("Ce lien a expiré ou a déjà servi.");
+  try {
+    const shop = await api("/tenants/me");
+    document.getElementById("shop").textContent = shop.name || "Votre restaurant";
+    if (PAGE === "carte") await showMenu();
+    if (PAGE === "horaires") await showHours();
+    if (PAGE === "affiches") await showPosters();
+  } catch (e) { fail(e.message); }
+}
+
+// ---------------------------------------------------------------- Ma carte
+async function showMenu() {
+  document.getElementById("title").textContent = "Ma carte";
+  const dishes = (await api("/products")).filter((p) => p.active);
+  const off = (p) => (p.sheet || {}).unavailable_on || (p.stock_quantity || 0) <= 0;
+  const add = el("button", { class: "primary wide", text: "+ Ajouter un plat", onclick: () => openForm(null) });
+  const list = [];
+  for (const [code, label] of RUBRIQUES.concat([[null, "Autres"]])) {
+    const group = dishes.filter((p) => (code ? p.bob_category === code : !RUBRIQUES.some(([c]) => c === p.bob_category)));
+    if (!group.length) continue;
+    list.push(el("h2", { text: label }));
+    for (const p of group) list.push(dishCard(p, off(p)));
+  }
+  app.replaceChildren(add, el("div", { id: "form-slot" }),
+    ...(list.length ? list : [el("p", { class: "muted", text: "Votre carte est vide : ajoutez votre premier plat." })]),
+    el("p", { class: "muted", text: "Accompagnements détaillés, allergènes, suppléments : depuis le tableau de bord complet (« Tableau de bord » dans le menu de Bob)." }));
+}
+function dishCard(p, isOff) {
+  const photo = p.image_url ? el("img", { src: p.image_url, alt: "" }) : el("span", { class: "nophoto", text: "Sans photo" });
+  const box = el("input", { type: "checkbox", checked: !isOff, "aria-label": "Disponible aujourd'hui : " + p.name });
+  box.addEventListener("change", async () => {
+    box.disabled = true;
+    try {
+      await api(`/products/${p.id}/unavailable-today`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                         body: JSON.stringify({ unavailable: !box.checked }) });
+      card.classList.toggle("off", !box.checked);
+      toast(box.checked ? `${p.name} : de nouveau disponible.` : `${p.name} : épuisé pour aujourd'hui, il revient demain.`);
+    } catch (e) { box.checked = !box.checked; toast(e.message, "err"); }
+    box.disabled = false;
+  });
+  const card = el("div", { class: "card" + (isOff ? " off" : "") },
+    el("div", { class: "dish" }, photo,
+      el("div", { class: "info" }, el("div", { class: "name", text: p.name }), el("div", { class: "price", text: money(p.price, p.currency) }))),
+    el("div", { class: "row" }, el("label", { class: "switch" }, box, "Disponible aujourd'hui"),
+      el("button", { class: "ghost", text: "Modifier", onclick: () => openForm(p) })));
+  return card;
+}
+function openForm(p) {
+  const slot = document.getElementById("form-slot");
+  const sheet = (p && p.sheet) || {};
+  const name = el("input", { value: p ? p.name : "", maxlength: "120", required: true });
+  const price = el("input", { type: "number", inputmode: "numeric", min: "1", value: p ? Math.round(p.price) : "" });
+  const rubrique = el("select", {}, RUBRIQUES.map(([c, l]) => el("option", { value: c, text: l, selected: p ? p.bob_category === c : c === "PLAT" })));
+  const composition = el("textarea", { maxlength: "300", placeholder: "Ex. poulet braisé, oignons, tomates" });
+  composition.value = sheet.composition || "";
+  const sides = el("input", { maxlength: "200", placeholder: "Ex. attiéké, alloco, riz", value: sheet.sides || "" });
+  const photo = el("input", { type: "file", accept: "image/*" });
+  const save = el("button", { class: "primary", text: p ? "Enregistrer" : "Ajouter le plat" });
+  const form = el("div", { class: "card" },
+    el("strong", { text: p ? "Modifier « " + p.name + " »" : "Nouveau plat" }),
+    el("label", {}, "Nom du plat", name), el("label", {}, "Prix", price), el("label", {}, "Rubrique", rubrique),
+    el("label", {}, "Composition (facultatif)", composition), el("label", {}, "Accompagnements au choix (facultatif)", sides),
+    el("label", {}, p ? "Changer la photo" : "Photo (conseillée)", photo),
+    el("div", { class: "row" }, save, el("button", { class: "ghost", text: "Fermer", onclick: () => slot.replaceChildren() })),
+    p ? el("button", { class: "danger", text: "Retirer de la carte", onclick: () => remove(p) }) : null);
+  save.addEventListener("click", async () => {
+    if (!name.value.trim() || !(Number(price.value) > 0)) return toast("Indiquez le nom et le prix du plat.", "err");
+    save.disabled = true;
+    const newSheet = Object.assign({}, sheet, { composition: composition.value.trim() || null, sides: sides.value.trim() || null });
+    delete newSheet.unavailable_on;
+    const body = { name: name.value.trim(), price: Number(price.value), bob_category: rubrique.value, sheet: newSheet };
+    try {
+      let saved;
+      if (p) saved = await api(`/products/${p.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      else saved = await api("/products", { method: "POST", headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify(Object.assign(body, { sku: "P" + Date.now().toString(36).toUpperCase(),
+                                                                                       currency: (p && p.currency) || "XOF", stock_quantity: 1 })) });
+      if (photo.files[0]) {
+        const data = new FormData();
+        data.append("file", photo.files[0]);
+        await api(`/products/${saved.id}/image`, { method: "POST", body: data });
+      }
+      toast(p ? "C'est enregistré." : "Le plat est sur votre carte : Bob le propose à vos clients.");
+      await showMenu();
+    } catch (e) { toast(e.message, "err"); save.disabled = false; }
+  });
+  slot.replaceChildren(form);
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+async function remove(p) {
+  if (!confirm(`Retirer « ${p.name} » de la carte ? Bob ne le proposera plus.`)) return;
+  try {
+    await api(`/products/${p.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: false }) });
+    toast(`« ${p.name} » est retiré de la carte.`);
+    await showMenu();
+  } catch (e) { toast(e.message, "err"); }
+}
+
+// ---------------------------------------------------------------- Mes horaires
+function dayRows(hours, prefix) {
+  return DAYS.map((label, i) => {
+    const ranges = (hours || {})[String(i)] || [];
+    const wrap = el("div", { class: "ranges", "data-day": String(i), "data-kind": prefix });
+    const addRange = (a, b) => {
+      const row = el("div", { class: "range" }, el("input", { type: "time", value: a || "11:00", "aria-label": label + " : début" }), "à",
+        el("input", { type: "time", value: b || "15:00", "aria-label": label + " : fin" }),
+        el("button", { class: "ghost", text: "✕", "aria-label": "Retirer cette plage", onclick: () => row.remove() }));
+      wrap.insertBefore(row, more);
+    };
+    const more = el("button", { class: "ghost", text: "+ plage", onclick: () => addRange() });
+    wrap.append(more);
+    ranges.forEach(([a, b]) => addRange(a, b));
+    return el("div", { class: "day" }, el("strong", { text: label }), wrap);
+  });
+}
+function readRows(prefix) {
+  const out = {};
+  document.querySelectorAll(`.ranges[data-kind="${prefix}"]`).forEach((wrap) => {
+    const ranges = [...wrap.querySelectorAll(".range")].map((r) => [...r.querySelectorAll("input")].map((i) => i.value)).filter(([a, b]) => a && b);
+    if (ranges.length) out[wrap.dataset.day] = ranges;
+  });
+  return out;
+}
+async function showHours() {
+  document.getElementById("title").textContent = "Mes horaires";
+  const [kitchen, fulfillment, booking] = await Promise.all([api("/tenants/me/kitchen-closed"), api("/tenants/me/fulfillment"),
+                                                             api("/appointments/settings")]);
+  const tonight = el("div", { class: "card" },
+    el("strong", { text: kitchen.closed_today ? "La cuisine est fermée pour aujourd'hui" : "Ce soir" }),
+    el("p", { class: "muted", text: kitchen.closed_today
+      ? "Bob ne prend plus de commande aujourd'hui. Elle rouvre automatiquement demain."
+      : "Un imprévu ? Fermez la cuisine pour le reste de la journée : Bob propose à vos clients de commander pour plus tard." }),
+    el("button", { class: kitchen.closed_today ? "primary" : "dark", text: kitchen.closed_today ? "Rouvrir la cuisine" : "Fermer la cuisine ce soir",
+                   onclick: async () => {
+                     if (!kitchen.closed_today && !confirm("Fermer la cuisine pour le reste de la journée ?")) return;
+                     try {
+                       await api("/tenants/me/kitchen-closed", { method: "PUT", headers: { "Content-Type": "application/json" },
+                                                                 body: JSON.stringify({ closed: !kitchen.closed_today }) });
+                       toast(kitchen.closed_today ? "La cuisine est rouverte." : "La cuisine est fermée pour aujourd'hui.");
+                       await showHours();
+                     } catch (e) { toast(e.message, "err"); }
+                   } }));
+  const saveKitchen = el("button", { class: "primary", text: "Enregistrer les horaires de la cuisine" });
+  saveKitchen.addEventListener("click", async () => {
+    saveKitchen.disabled = true;
+    try {
+      await api("/tenants/me/fulfillment", { method: "PUT", headers: { "Content-Type": "application/json" },
+                                             body: JSON.stringify(Object.assign({}, fulfillment, { kitchen_hours: readRows("kh") })) });
+      toast("Horaires de la cuisine enregistrés.");
+    } catch (e) { toast(e.message, "err"); }
+    saveKitchen.disabled = false;
+  });
+  const capacity = el("input", { type: "number", min: "1", inputmode: "numeric", value: booking.capacity || 1 });
+  const online = el("input", { type: "checkbox", checked: !!booking.online_booking });
+  const saveBooking = el("button", { class: "primary", text: "Enregistrer les réservations" });
+  saveBooking.addEventListener("click", async () => {
+    saveBooking.disabled = true;
+    try {
+      await api("/appointments/settings", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ online_booking: online.checked, opening_hours: readRows("bk"), slot_minutes: booking.slot_minutes || 60,
+                               capacity: Math.max(1, parseInt(capacity.value || "1", 10)) }) });
+      toast("Réservations enregistrées.");
+    } catch (e) { toast(e.message, "err"); }
+    saveBooking.disabled = false;
+  });
+  app.replaceChildren(tonight,
+    el("h2", { text: "Cuisine" }),
+    el("div", { class: "card" }, el("p", { class: "muted", text: "Les heures où Bob prend les commandes. Un jour sans plage = fermé." }),
+      ...dayRows(fulfillment.kitchen_hours, "kh"), saveKitchen),
+    el("h2", { text: "Réservations de table" }),
+    el("div", { class: "card" }, el("label", { class: "switch" }, online, "Bob réserve les tables"),
+      el("label", {}, "Couverts par service", capacity),
+      el("p", { class: "muted", text: "Chaque plage est un service (par exemple midi et soir)." }),
+      ...dayRows(booking.opening_hours, "bk"), saveBooking));
+}
+
+// ---------------------------------------------------------------- Affiches et QR
+async function openPoster(path) {
+  const tab = window.open("", "_blank");
+  try {
+    const page = await api(path);
+    const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
+    if (tab) tab.location.href = url; else location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { if (tab) tab.close(); toast(e.message, "err"); }
+}
+async function showPosters() {
+  document.getElementById("title").textContent = "Affiches et QR";
+  const [tables, codes] = await Promise.all([api("/table-qr-codes").catch(() => []), api("/qr-codes").catch(() => [])]);
+  const count = el("input", { type: "number", min: "1", max: "100", inputmode: "numeric", value: Math.min(100, Math.max(tables.length, 10)) });
+  const create = el("button", { class: "ghost", text: "Créer les QR de table" });
+  create.addEventListener("click", async () => {
+    create.disabled = true;
+    try {
+      await api("/table-qr-codes", { method: "POST", headers: { "Content-Type": "application/json" },
+                                     body: JSON.stringify({ first: 1, last: Math.min(100, Math.max(1, parseInt(count.value || "1", 10))) }) });
+      toast("Les QR de table sont prêts.");
+      await showPosters();
+    } catch (e) { toast(e.message, "err"); create.disabled = false; }
+  });
+  const poster = (title, text, path) => el("div", { class: "card" }, el("strong", { text: title }), el("p", { class: "muted", text }),
+    el("button", { class: "primary", text: "Ouvrir l'affiche", onclick: () => openPoster(path) }));
+  app.replaceChildren(
+    el("p", { class: "muted", text: "Chaque affiche s'ouvre dans un nouvel onglet : « Imprimer » ou « Enregistrer en PDF »." }),
+    poster("Affiche de vitrine", "« Commandez et réservez sur WhatsApp », avec votre QR code.", "/kit/poster?model=resto_vitrine&accent=safran"),
+    poster("Carte de comptoir", "Vos rubriques et votre QR code, en A5.", "/kit/poster?model=resto_comptoir&accent=safran"),
+    el("h2", { text: "Plat du jour" }),
+    ...(codes.length ? codes.map((c) => poster(c.product_name, "Affiche A4 du plat, avec son QR code.", `/qr-codes/${c.id}/poster?model=plat&banner=jour`))
+      : [el("p", { class: "muted", text: "Pour l'affiche d'un plat, créez d'abord son QR code depuis le tableau de bord complet (page Produits)." })]),
+    el("h2", { text: "QR de table" }),
+    el("div", { class: "card" },
+      el("p", { class: "muted", text: tables.length ? `${tables.length} table(s) ont leur QR code. Le client scanne et commande depuis sa table.` : "Aucune table pour l'instant." }),
+      el("label", {}, "Nombre de tables", count), create,
+      tables.length ? el("button", { class: "primary", text: "Imprimer les chevalets", onclick: () => openPoster("/table-qr-codes/sheet?accent=safran") }) : null));
+}
+
+start();
+</script>
+</body>
+</html>

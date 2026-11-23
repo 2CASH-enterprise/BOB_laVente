@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # Lot 117 — cartes en image et menu en liste (contrat 1.3.3) : vide = éteint, « on » = toutes, sinon des identifiants
     # de boutiques séparés par des virgules (essai).
     assistant_cards: str = ""
+    # Lot 129 b — liens envoyés en bouton « Ouvrir … » (contrat 1.7.1, champ `lien`) : à allumer quand Naomy l'a livré.
+    # Éteint = l'adresse dans le texte (fonctionne avec toutes les versions de Naomy).
+    assistant_link_buttons: bool = False
     # Lot 94 — parcours à boutons des boutiques : interrupteur général (allumé), en plus de celui de chaque boutique.
     guided_flow_enabled: bool = True
     debug: bool = False

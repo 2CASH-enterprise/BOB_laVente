@@ -158,6 +158,21 @@ def match_command(text: str | None, restaurant: bool = False) -> tuple[str | Non
     return None, norm
 
 
+_LINK_TOKEN = re.compile(r"(connexion=)[A-Za-z0-9_\-]+")
+
+
+def scrub_links(payload: dict | None) -> dict | None:
+    """Lot 129 b — après l'envoi, plus de jeton de connexion dans la file (seule son empreinte est gardée ailleurs)."""
+    if not payload:
+        return payload
+    out = dict(payload)
+    if isinstance(out.get("texte"), str):
+        out["texte"] = _LINK_TOKEN.sub(r"\1…", out["texte"])
+    if isinstance(out.get("lien"), dict):
+        out["lien"] = {**out["lien"], "url": _LINK_TOKEN.sub(r"\1…", out["lien"].get("url", ""))}
+    return out
+
+
 def short(text: str, limit: int) -> str:
     text = " ".join((text or "").split())
     return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
@@ -293,7 +308,7 @@ def _remove(name: str | None) -> None:
 
 def queue(db, connection, text: str, buttons: list[tuple[str, str]] | None = None, kind: str = "REPLY",
           ref: str | None = None, awaiting: str | None = None, fallback_subject: str | None = None,
-          now: datetime | None = None, image: bytes | None = None, liste: dict | None = None):
+          now: datetime | None = None, image: bytes | None = None, liste: dict | None = None, lien: dict | None = None):
     from app.models.naomy import AssistantOutbox
 
     now = now or datetime.now(timezone.utc)
@@ -302,14 +317,16 @@ def queue(db, connection, text: str, buttons: list[tuple[str, str]] | None = Non
     if len(text) > 1024:
         text = text[:1023].rstrip() + "…"
     payload = {"boutique_id": str(connection.tenant_id), "id_message_bob": message_id, "texte": text}
-    if liste:  # lot 117 (1.3.3) : jamais avec des boutons ni une image
+    if lien:  # lot 129 b (1.7.1) : un bouton « Ouvrir … » ; jamais avec des boutons, une liste ni une image
+        payload["lien"] = {"titre": short(lien["titre"], 20), "url": lien["url"][:2000]}
+    elif liste:  # lot 117 (1.3.3) : jamais avec des boutons ni une image
         payload["liste"] = {"bouton": short(liste["bouton"], 20), "lignes": [
             {"id": line["id"][:200], "titre": short(line["titre"], 24),
              **({"description": short(line["description"], 72)} if line.get("description") else {})}
             for line in liste["lignes"][:10]]}
     elif buttons:
         payload["boutons"] = [{"id": bid[:256], "titre": short(title, 20)} for bid, title in buttons[:3]]
-    if image and not liste and len(image) <= MAX_IMAGE:  # lot 117 : carte en image, déposée chez WhatsApp par Naomy
+    if image and not liste and not lien and len(image) <= MAX_IMAGE:  # lot 117 : carte en image, déposée chez WhatsApp par Naomy
         import base64
 
         payload["image_png"] = base64.b64encode(image).decode()
@@ -431,6 +448,8 @@ async def send_outbox(db, now: datetime | None = None, sender=None, mailer=None,
     for item in due:  # lot 117 : l'image d'une carte n'est pas gardée une fois le message traité
         if item.status != "PENDING" and "image_png" in (item.payload or {}):
             item.payload = {k: v for k, v in item.payload.items() if k != "image_png"}
+        if item.status != "PENDING":  # lot 129 b : le jeton d'un lien « une seule page » n'est pas gardé non plus
+            item.payload = scrub_links(item.payload)
     released = await _release_waiting(db, due)
     await db.commit()
     if released:  # lot 92c : 2e message du menu, envoyé dès que le 1er est accepté
@@ -922,20 +941,40 @@ async def handle_restaurant(db, connection, tenant, key: str, rest: str, now) ->
             _set_kitchen(db, connection, tenant, False, now)
         else:
             queue(db, connection, "La cuisine n'est pas fermée aujourd'hui : rien n'a changé.", now=now)
-    elif key == "page_menu":
-        queue(db, connection, f"📖 Votre carte (plats, prix, photos) : {dashboard_link('?tab=products')}\n"
-                              "Pour un plat épuisé ce soir, pas besoin d'ouvrir la page : touchez « Plat épuisé / retour » "
-                              "dans mon menu.", now=now)
-    elif key == "page_hours":
-        queue(db, connection, f"🕒 Horaires de la cuisine : {dashboard_link('?tab=bob')}\n"
-                              f"Horaires et places des réservations : {dashboard_link('?tab=appointments')}\n"
-                              "Pour fermer seulement ce soir : « Fermer / rouvrir » dans mon menu.", now=now)
-    elif key == "page_posters":
-        queue(db, connection, f"🖨️ Affiches des plats et QR de table : {dashboard_link('?tab=products')}\n"
-                              f"Affiche de vitrine et lien WhatsApp : {dashboard_link('?tab=customers')}", now=now)
-    elif key == "dashboard":
-        queue(db, connection, f"💻 Votre tableau de bord complet : {dashboard_link()}\nConnectez-vous avec votre e-mail "
-                              "et votre mot de passe. Astuce : ajoutez-le à l'écran d'accueil de votre téléphone.", now=now)
+    elif key in PAGE_KEYS:
+        await _send_page(db, connection, tenant, PAGE_KEYS[key], now)
+    elif key == "dashboard":  # décision de Thérèse (23/11) : juste le lien, connexion habituelle
+        text = "💻 Votre tableau de bord complet, avec votre e-mail et votre mot de passe. Astuce : ajoutez-le à l'écran " \
+               "d'accueil de votre téléphone."
+        _send_link(db, connection, text, "Tableau de bord", dashboard_link(), now)
+
+
+PAGE_KEYS = {"page_menu": "carte", "page_hours": "horaires", "page_posters": "affiches"}
+# Repli (compte en double vérification, trop de liens aujourd'hui) : la page du tableau de bord, connexion habituelle.
+PAGE_FALLBACK = {"carte": "?tab=products", "horaires": "?tab=bob", "affiches": "?tab=products"}
+
+
+def _send_link(db, connection, text: str, button: str, url: str, now) -> None:
+    from app.core.config import get_settings
+
+    if get_settings().assistant_link_buttons:  # contrat 1.7.1 : bouton « Ouvrir … » envoyé par Naomy
+        queue(db, connection, text, now=now, lien={"titre": button, "url": url})
+    else:
+        queue(db, connection, f"{text}\n{url}", now=now)
+
+
+async def _send_page(db, connection, tenant, name: str, now) -> None:
+    """Lot 129 b — le lien « une seule page » (usage unique, 15 minutes), sinon la page du tableau de bord."""
+    from app.services import page_links
+
+    spec = page_links.PAGES[name]
+    url = await page_links.create(db, tenant, name, now)
+    if url is None:
+        _send_link(db, connection, spec["text"] + " Connectez-vous avec votre e-mail et votre mot de passe.",
+                   spec["button"], dashboard_link(PAGE_FALLBACK[name]), now)
+    else:
+        _send_link(db, connection, spec["text"] + " Le lien s'ouvre sans mot de passe, une seule fois, pendant 15 minutes.",
+                   spec["button"], url, now)
 
 
 # --- Photo avec légende : nouveau produit, sans IA ---------------------------------------------------------------------
