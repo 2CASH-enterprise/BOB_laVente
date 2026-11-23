@@ -260,16 +260,17 @@ async def _none():
 @pytest.mark.asyncio
 async def test_last_five_messages_of_the_day_are_kept_for_alerts(client, db_session, assistant_env):
     _, _, _, connection = await _linked(client, db_session)
-    replies = [ma.queue(db_session, connection, f"réponse {i}", now=NOW) for i in range(26)]
+    replies = [ma.queue(db_session, connection, f"réponse {i}", now=NOW) for i in range(ma.DAILY_CAP - ma.ALERT_RESERVE + 1)]
     alert = ma.queue(db_session, connection, "alerte", kind="ALERT", now=NOW + timedelta(seconds=1))
     await db_session.commit()
     sender = Sent()
     await ma.send_outbox(db_session, NOW, sender=sender, mailer=assistant_env.mails)
     assert sender.calls[0][1]["texte"] == "alerte"  # les alertes d'abord
-    assert alert.status == "SENT" and len(sender.calls) == 25
+    assert alert.status == "SENT" and len(sender.calls) == ma.DAILY_CAP - ma.ALERT_RESERVE
     sent_replies = [r for r in replies if r.status == "SENT"]
-    assert len(sent_replies) == 24 and sent_replies[-1].payload["texte"].endswith(ma.RESERVE_NOTICE)
-    assert [r.status for r in replies[24:]] == ["SKIPPED", "SKIPPED"]
+    assert len(sent_replies) == ma.DAILY_CAP - ma.ALERT_RESERVE - 1 and sent_replies[-1].payload["texte"].endswith(ma.RESERVE_NOTICE)
+    assert [r.status for r in replies[ma.DAILY_CAP - ma.ALERT_RESERVE - 1:]] == ["SKIPPED", "SKIPPED"]
+    assert ma.DAILY_CAP - ma.ALERT_RESERVE == 50  # lot 129 e : 50 réponses par jour
     late = ma.queue(db_session, connection, "alerte tardive", kind="ALERT", now=NOW)
     await db_session.commit()
     await ma.send_outbox(db_session, NOW, sender=sender, mailer=assistant_env.mails)

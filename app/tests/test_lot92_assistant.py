@@ -585,18 +585,18 @@ async def test_retries_then_email(client, db_session, assistant_env):
 
 
 @pytest.mark.asyncio
-async def test_daily_cap_of_30(client, db_session, assistant_env):
+async def test_daily_cap(client, db_session, assistant_env):
     _, _, _, connection = await _linked(client, db_session)
     for _ in range(ma.DAILY_CAP):  # lot 99 : des alertes, pour atteindre le plafond (les réponses s'arrêtent à 25)
         ma.queue(db_session, connection, "ok", kind="ALERT", now=NOW)
     await db_session.commit()
     sender = Sent()
-    assert (await ma.send_outbox(db_session, NOW, sender=sender, mailer=assistant_env.mails))["sent"] == 30
+    assert (await ma.send_outbox(db_session, NOW, sender=sender, mailer=assistant_env.mails))["sent"] == ma.DAILY_CAP
     reply = ma.queue(db_session, connection, "une de trop", now=NOW)
     alert = ma.queue(db_session, connection, "alerte de trop", kind="ALERT", now=NOW)
     await db_session.commit()
     await ma.send_outbox(db_session, NOW, sender=sender, mailer=assistant_env.mails)
-    assert len(sender.calls) == 30 and reply.status == "SKIPPED" and alert.status == "EMAILED"
+    assert len(sender.calls) == ma.DAILY_CAP and reply.status == "SKIPPED" and alert.status == "EMAILED"
 
 
 # --- Alertes ---------------------------------------------------------------------------------------------------------
