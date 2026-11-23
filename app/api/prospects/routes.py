@@ -40,9 +40,9 @@ PREVIEW_TEXTS = {
     "INSURANCE_BROKER": ("Bob, l'assistant WhatsApp de votre cabinet",
                          "Il qualifie le besoin, prépare la demande de cotation et propose un rendez-vous, sans jamais "
                          "donner de prix. Essayez-le en 30 secondes."),
-    "RESTAURANT": ("Bob et Naomy, l'équipe de votre restaurant",  # lot 109
-                   "Naomy publie votre plat du jour sur vos réseaux, Bob prend les commandes et réserve les tables sur "
-                   "WhatsApp, 24 h / 24. Essayez Bob en 30 secondes."),
+    "RESTAURANT": ("Diagnostic gratuit de votre restaurant, en 2 minutes",  # lot 130
+                   "Naomy et Bob, votre équipe IA : le plat du jour publié sur vos réseaux, chaque client servi sur "
+                   "WhatsApp. Votre diagnostic gratuit vous attend."),
     "REAL_ESTATE": ("Bob, l'assistant WhatsApp de votre agence immobilière",
                     "Il présente vos biens, qualifie acheteurs, locataires et propriétaires, et fixe visites et "
                     "estimations, même le soir et le week-end. Essayez-le en 30 secondes."),
@@ -97,6 +97,34 @@ async def demo_page(request: Request, secteur: str | None = None, p: str | None 
     if ad_link is not None:  # lot 82 : déjà filtré (robots, lien archivé)
         response.set_cookie(ad_links.COOKIE, ad_link.code, max_age=ad_links.COOKIE_DAYS * 86400, httponly=True,
                             samesite="lax", secure=get_settings().public_base_url.startswith("https"), path="/")
+    return response
+
+
+@public_router.get("/audit/{code}", include_in_schema=False)
+async def prospect_audit_link(code: str, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+    """
+    Lot 130 — lien personnel d'un restaurant : clic noté (vrai navigateur seulement), code gardé 30 jours, aperçu
+    du visuel restaurant, puis WhatsApp chez Naomy avec « audit P-CODE » déjà écrit. Sans numéro Naomy : la démo.
+    """
+    prospect = await pros.record_click(db, code, request.headers.get("user-agent"))
+    target = pros.audit_whatsapp_url(prospect.code if prospect is not None else None)
+    if target is None:
+        return RedirectResponse(pros.demo_url("RESTAURANT", prospect.code if prospect is not None else None),
+                                status_code=302, headers={"Cache-Control": "no-store"})
+    url = pros.link(prospect.code, "RESTAURANT") if prospect is not None else target
+    page = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Diagnostic gratuit de votre restaurant</title>
+<meta http-equiv="refresh" content="0;url={escape(target)}">
+{_og_tags("RESTAURANT", url)}</head>
+<body style="margin:0;background:#075E54;color:#fff;font-family:-apple-system,Segoe UI,Roboto,sans-serif;">
+<div style="max-width:460px;margin:0 auto;padding:48px 22px;text-align:center;">
+<p style="font-size:20px;font-weight:800;margin:0 0 10px;">Votre diagnostic gratuit vous attend</p>
+<p style="color:#CFEDE2;margin:0 0 24px;">WhatsApp s'ouvre chez Naomy, d'AgenC'AI.</p>
+<a href="{escape(target)}" style="display:inline-block;background:#25D366;color:#111F18;font-weight:800;padding:14px 26px;border-radius:999px;text-decoration:none;">Ouvrir WhatsApp</a>
+</div></body></html>"""
+    response = HTMLResponse(page, headers={"Cache-Control": "no-store"})
+    if prospect is not None and not pros.is_bot(request.headers.get("user-agent")):
+        _set_cookie(response, prospect)
     return response
 
 
@@ -328,7 +356,7 @@ async def _offer(db) -> str | None:
 
 
 def _today_row(p: Prospect, text: str, sender: str | None, since=None, now=None) -> dict:
-    return {"id": str(p.id), "company": p.company, "contact_name": p.contact_name, "phone": f"+{p.phone}" if p.phone else None,
+    return {"id": str(p.id), "company": p.company, "variant": pros.variant(p) if p.sector == "RESTAURANT" else None, "contact_name": p.contact_name, "phone": f"+{p.phone}" if p.phone else None,
             "country": p.country, "country_label": COUNTRY_NAMES.get(p.country, p.country),
             "sector_label": pros.SECTORS.get(p.sector, p.sector), "source": p.source,
             "days": (now - since).days if since and now else None, "email_step": p.email_step or 0,
@@ -343,10 +371,12 @@ async def prospect_today(admin: CurrentSuperAdmin = Depends(need("prospects.view
     me = await _me(db, admin)
     now = datetime.now(timezone.utc)
     row = await prospect_mailer.get_settings_row(db)
-    lists = await pros.today(db, now, row.whatsapp_daily_limit)
+    lists = await pros.today(db, now, row.whatsapp_daily_limit, restaurants_on=row.restaurants_enabled)
+    restaurants = {"enabled": row.restaurants_enabled, "changed_at": row.restaurants_changed_at.isoformat() if row.restaurants_changed_at else None,
+                   "changed_by": row.restaurants_changed_by, "ab": await pros.ab_stats(db)}  # lot 130
     await db.commit()
     offer, sender = await _offer(db), _first(me.full_name)
-    return {
+    return {"restaurants": restaurants,
         "limit": lists["limit"], "sent_today": lists["sent_today"], "left_today": lists["left_today"], "waiting": lists["waiting"],
         "to_send": [_today_row(p, pros.message(p, sender, offer), sender) for p in lists["to_send"]],
         "relances": [_today_row(p, pros.relance_message(p, offer), sender, since, now) for p, since in lists["relances"]],
@@ -366,6 +396,24 @@ async def prospect_today_limit(payload: DailyLimitIn, admin: CurrentSuperAdmin =
     await _me(db, admin)
     row = await prospect_mailer.get_settings_row(db)
     row.whatsapp_daily_limit = payload.limit
+    await db.commit()
+    return await prospect_today(admin, db)
+
+
+class RestaurantsIn(BaseModel):
+    enabled: bool
+
+
+@router.put("/today/restaurants")
+async def prospect_today_restaurants(payload: RestaurantsIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
+                                     db: AsyncSession = Depends(get_db)) -> dict:
+    """Lot 130 — lance (ou met en pause) la prospection des restaurants : liste du jour et e-mails de campagne."""
+    from app.services import prospect_mailer
+
+    me = await _me(db, admin)
+    row = await prospect_mailer.get_settings_row(db)
+    row.restaurants_enabled = payload.enabled
+    row.restaurants_changed_at, row.restaurants_changed_by = datetime.now(timezone.utc), me.full_name or me.email
     await db.commit()
     return await prospect_today(admin, db)
 

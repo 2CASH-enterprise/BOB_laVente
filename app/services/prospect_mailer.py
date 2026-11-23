@@ -41,23 +41,19 @@ STOP_WORDS = re.compile(r"\b(stop|d[ée]sinscri\w*|d[ée]sabonn\w*|ne plus (me )
 AUTO_SUBJECTS = re.compile(r"^(r[ée]ponse automatique|automatic reply|auto[- ]?reply|out of office|absent|absence)", re.I)
 
 DEFAULTS = {
-    "RESTAURANT": [  # lot 109 ; textes plus vendeurs du lot 122 (10/11), **…** = gras dans l'e-mail
-        ("{entreprise} : plus de clients, sans perdre une commande",
-         "{bonjour},\n\nEn plein service, combien de commandes WhatsApp restent sans réponse ?\n\n"
-         "Notre équipe de 2 agents s'en charge pour {entreprise} :\n"
-         "• **Naomy**, votre community manager intelligente, publie votre plat du jour sur vos réseaux sociaux et fait "
-         "venir les clients ;\n"
-         "• **Bob**, votre serveur virtuel, leur répond aussitôt sur WhatsApp, prend les commandes (à emporter, livraison, "
-         "sur place) et réserve les tables, 24 h / 24.\n\n"
-         "Vous restez en cuisine, vos clients sont servis.\n\n"
-         "Essayez-les en 2 minutes avec une carte d'exemple :\n{lien}\n\nBonne journée,"),
-        ("Re : le plat du jour de {entreprise}",
-         "{bonjour},\n\nUn client qui voit votre plat du jour à midi et n'obtient pas de réponse commande ailleurs.\n\n"
-         "Avec **Naomy** et **Bob**, votre plat du jour est publié chaque matin, et chaque message reçoit une réponse, "
-         "même en plein rush :\n{lien}\n\nBonne journée,"),
-        ("Dernier message de ma part",
-         "{bonjour},\n\nC'est mon dernier message : si ce n'est pas le bon moment, aucun souci.\n\nLa démo de "
-         "**Naomy** et **Bob** pour votre restaurant reste ouverte :\n{lien}\n\nBelle continuation,"),
+    "RESTAURANT": [  # lot 130 (23/11) : diagnostic gratuit chez Naomy ; **…** = gras dans l'e-mail
+        ("{entreprise} : la commande que vous avez ratée hier soir",
+         "{bonjour},\n\nPendant le service, votre téléphone vibre. Un client demande le plat du jour. Le temps de "
+         "répondre, il a commandé ailleurs.\n\n**Bob** répond à sa place, tout de suite : il prend la commande, la "
+         "livraison ou la table. **Naomy** publie votre plat du jour pour faire venir ces clients. Et nous installons "
+         "tout pour vous.\n\nVotre **diagnostic gratuit** prend 2 minutes, sur WhatsApp :\n{lien}\n\nBonne journée,"),
+        ("Votre plat du jour mérite mieux",
+         "{bonjour},\n\nUn bon plat du jour que personne ne voit, ça ne se vend pas. **Naomy** le publie chaque "
+         "matin sur vos réseaux, avec un lien « Commander sur WhatsApp », et **Bob** prend les commandes.\n\n"
+         "2 minutes pour voir ce que ça donnerait chez {entreprise} :\n{lien}\n\nBonne journée,"),
+        ("Je ferme votre dossier ?",
+         "{bonjour},\n\nSans réponse de votre part, je ne vous écrirai plus. Si un jour vous voulez ne plus perdre "
+         "de commandes WhatsApp, votre diagnostic gratuit reste ouvert :\n{lien}\n\nBelle continuation,"),
     ],
     "ONLINE_STORE": [
         ("{entreprise} : vos clients WhatsApp servis 24 h / 24",
@@ -173,6 +169,12 @@ def steps_of(campaign) -> list[tuple[str, str]]:
 
 BOLD = re.compile(r"\*\*([^*\n]{1,80})\*\*")  # lot 122
 DEMO_BUTTON = "Voir la démo"  # lot 63 : bouton des emails, mention du message WhatsApp
+# Lot 130 — restaurants : le lien ouvre le diagnostic gratuit chez Naomy (bouton aux couleurs d'AgenC'AI).
+BUTTONS = {"RESTAURANT": ("Faire mon diagnostic gratuit", "#25D366", "#111F18")}
+
+
+def _button_of(sector: str | None) -> tuple[str, str, str]:
+    return BUTTONS.get(sector or "", (DEMO_BUTTON, "#1B4332", "#ffffff"))
 
 
 def fill(template: str, prospect) -> str:
@@ -205,7 +207,8 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
     why = (f"Vous recevez cet email car {prospect.company} exerce une activité ({sector}) que Bob peut aider. "
            f"Pour ne plus recevoir nos emails : {stop_url(prospect)}")
     personal_line = re.compile(r"^[ \t]*" + re.escape(pros.link(prospect.code, prospect.sector)) + r"[ \t]*$", re.M)
-    plain = personal_line.sub(f"{DEMO_BUTTON} : {pros.link(prospect.code, prospect.sector)}", text_body)
+    label, button_bg, button_fg = _button_of(prospect.sector)
+    plain = personal_line.sub(f"{label} : {pros.link(prospect.code, prospect.sector)}", text_body)
     from app.services.ad_links import facebook_page_url
 
     facebook = facebook_page_url()  # lot 82 : page Facebook de Bob sous la signature
@@ -227,9 +230,9 @@ def render(prospect, subject: str, body: str, email_id: str | None = None) -> tu
               f'<img src="{escape(pros.visual_url(prospect.sector))}" width="548" alt="Bob, vendeur IA sur WhatsApp — voir la démo" '
               f'style="display:block;width:100%;max-width:548px;height:auto;border:0;border-radius:12px;"></a></p>')
     button = ('<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 20px;"><tr>'
-              '<td style="border-radius:10px;background:#1B4332;">'
+              f'<td style="border-radius:10px;background:{button_bg};">'
               f'<a href="{escape(personal)}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:700;'
-              f'color:#ffffff;text-decoration:none;border-radius:10px;">{escape(DEMO_BUTTON)}</a></td></tr></table>')
+              f'color:{button_fg};text-decoration:none;border-radius:10px;">{escape(label)}</a></td></tr></table>')
     blocks, placed = [], False
     chunks = re.split(r"\n\s*\n", bold_body)
     for chunk in chunks:
@@ -336,11 +339,14 @@ async def next_candidate(db, now: datetime):
     running = {c.id: c for c in (await db.execute(select(ProspectCampaign).where(ProspectCampaign.status == "RUNNING"))).scalars()}
     if not running:
         return None, None
+    restaurants_on = (await get_settings_row(db)).restaurants_enabled  # lot 130
     rows = (await db.execute(select(Prospect).where(Prospect.campaign_id.in_(running.keys()), Prospect.status == "ACTIVE")
                              .order_by(Prospect.email_step.desc(), Prospect.created_at))).scalars().all()
     for p in rows:
         campaign = running[p.campaign_id]
         if stopped(p) or not p.email or p.email_step >= len(steps_of(campaign)):
+            continue
+        if p.sector == "RESTAURANT" and not restaurants_on:  # lot 130 : en attente du lancement, rien ne part
             continue
         if p.email_step > 0 and (p.next_email_at is None or pros.aware(p.next_email_at) > now):
             continue

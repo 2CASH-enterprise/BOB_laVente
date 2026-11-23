@@ -76,9 +76,9 @@ def test_prospection_presents_the_team_without_any_price():
     assert (ROOT / "static" / "visuels" / "prospection-restaurant.jpg").stat().st_size > 20000
     p = Prospect(company="Maquis <Awa>", contact_name="Awa Koné", sector="RESTAURANT", code="r109", country="CI")
     text = pros.message(p, "Thérèse")
-    assert text.startswith("Bonjour Awa 👋, je suis Thérèse d'AgenC'AI.")  # lot 122 : textes plus vendeurs
-    assert "Notre équipe de 2 agents" in text and "chez Maquis <Awa>" in text
-    assert "Naomy" in text and "Bob" in text and "secteur=restaurant" in text
+    assert text.startswith("Awa, ") and "Je suis Thérèse, d'AgenC'AI." in text  # lot 130 : diagnostic chez Naomy
+    assert "2 agents IA" in text and "*Maquis <Awa>*" in text
+    assert "Naomy" in text and "Bob" in text and "/audit/r109" in text
     for wording in [text] + [subject + body for subject, body in mailer.DEFAULTS["RESTAURANT"]]:
         assert "FCFA" not in wording and "15 000" not in wording and "10 000" not in wording  # rien n'est définitif
     assert len(mailer.DEFAULTS["RESTAURANT"]) == 3 and "{lien}" in mailer.DEFAULTS["RESTAURANT"][0][1]
@@ -92,7 +92,7 @@ async def test_the_shared_link_preview_names_the_team(client, db_session):
     from app.api.prospects.routes import PREVIEW_TEXTS
 
     title, text = PREVIEW_TEXTS["RESTAURANT"]
-    assert title == "Bob et Naomy, l'équipe de votre restaurant" and "Naomy publie" in text and "FCFA" not in text
+    assert title == "Diagnostic gratuit de votre restaurant, en 2 minutes" and "Naomy et Bob" in text and "FCFA" not in text
     assert (await client.get("/visuels/prospection-restaurant.jpg")).status_code == 200
 
 

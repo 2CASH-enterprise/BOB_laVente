@@ -31,7 +31,7 @@ TRIAL_DAYS = 7
 PER_NUMBER = 3
 PER_DAY = 200
 FIELDS = {"compte_naomy", "numero_whatsapp", "nom_boutique", "secteur", "pays", "ville", "email", "nom_contact",
-          "url_evenements"}
+          "url_evenements", "code_prospect"}  # lot 130 (1.7.3) : code_prospect facultatif
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[A-Za-z]{2,}$")
 
 
@@ -195,7 +195,9 @@ async def create_account(db, payload: dict, limiter=None, now: datetime | None =
     link = await magic_login.create(db, owner, now)
     await db.commit()
 
-    await prospection.attach(db, None, tenant.id, "SIGNUP", email=data["email"])
+    # Lot 130 (1.7.3) — « audit P-CODE » : le code du prospect, lu par Naomy, rattache l'inscription à la prospection.
+    await prospection.attach(db, None, tenant.id, "SIGNUP", email=data["email"],
+                             code=prospection.code_from_naomy(payload.get("code_prospect")))
     if prereg:
         await preregistration.send_signup_emails(db, tenant, owner)
     return {**linked, "boutique": await nb.shop_view(db, tenant), "lien_connexion": link,

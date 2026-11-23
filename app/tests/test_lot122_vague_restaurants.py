@@ -36,18 +36,18 @@ async def _import(client, headers, raw):
 
 def test_restaurant_whatsapp_texts():
     p = Prospect(company="Maquis Chez Awa", contact_name="Awa Koné", sector="RESTAURANT", code="r122", country="CI")
-    first = pros.message(p, "Noé")
-    assert first.startswith("Bonjour Awa 👋, je suis Noé d'AgenC'AI.\n\nEn plein service")
-    assert "📣 *Naomy*, votre community manager intelligente" in first and "🍽️ *Bob*, votre serveur virtuel" in first
+    first = pros.message(p, "Noé")  # lot 130 : textes du 23/11 (diagnostic chez Naomy, version A ou B)
+    assert first.startswith(("Awa, une question rapide 👋", "Awa, et si *Maquis Chez Awa* ne ratait plus"))
+    assert "Je suis Noé, d'AgenC'AI." in first and "*Naomy*" in first and "*Bob*" in first
     assert "elle a bien changé" not in first
     lines = first.split("\n")
-    assert lines[-3].startswith("👉 Voir la démo : https://") and lines[-1] == "Répondez STOP pour ne plus être contacté."
+    assert lines[-4] == "👉 Votre *diagnostic gratuit*, en 2 minutes sur WhatsApp :" and lines[-3].endswith("/audit/r122")
+    assert lines[-1] == "Répondez STOP pour ne plus être contacté."
     p.past_relation = True
     again = pros.message(p, "Noé")
-    assert again.startswith("Bonjour Awa 👋, je suis Noé d'AgenC'AI. Vous aviez échangé avec Naomy il y a quelques mois : "
-                            "elle a bien changé depuis.\n\n")
+    assert "Je suis Noé, d'AgenC'AI. Vous aviez échangé avec Naomy il y a quelques mois : elle a bien changé depuis." in again
     relance = pros.relance_message(p)
-    assert relance.startswith("Bonjour Awa, un dernier mot pour Maquis Chez Awa : pendant que *Naomy*")
+    assert relance.startswith("Awa, votre diagnostic gratuit pour *Maquis Chez Awa* est toujours prêt")
     assert relance.endswith("Je ne vous relancerai plus. Répondez STOP pour ne plus être contacté.")
     assert "FCFA" not in first + relance
     shop = Prospect(company="Boutique", sector="ONLINE_STORE", code="s122", country="CI")  # les autres secteurs ne changent pas
@@ -61,12 +61,13 @@ def test_restaurant_email_has_bold_names(monkeypatch):
     monkeypatch.setattr(mailer, "stop_url", lambda prospect: "https://x/stop")
     subject, body = mailer.DEFAULTS["RESTAURANT"][0]
     subject, text, html = mailer.render(p, subject, body)
-    assert subject == "Maquis Chez Awa : plus de clients, sans perdre une commande"
-    assert "<strong>Naomy</strong>, votre community manager intelligente" in html and "<strong>Bob</strong>" in html
-    assert "**" not in text and "• Naomy, votre community manager" in text and "**" not in html
-    assert html.count("Voir la démo") == 1 and 'prospection-restaurant.jpg' in html
-    for subject, body in mailer.DEFAULTS["RESTAURANT"][1:]:
-        assert "**Naomy** et **Bob**" in body
+    assert subject == "Maquis Chez Awa : la commande que vous avez ratée hier soir"  # lot 130
+    assert "<strong>Bob</strong> répond à sa place" in html and "<strong>Naomy</strong>" in html
+    assert "**" not in text and "**" not in html and "Faire mon diagnostic gratuit : https://" in text
+    assert html.count("Faire mon diagnostic gratuit") == 1 and "Voir la démo" not in html and 'prospection-restaurant.jpg' in html
+    assert "/audit/r122" in html and "#25D366" in html
+    for subject, body in mailer.DEFAULTS["RESTAURANT"]:
+        assert "{lien}" in body and "diagnostic" in (subject + body).lower() or "{lien}" in body
 
 
 @pytest.mark.asyncio
@@ -95,7 +96,9 @@ async def test_import_with_group_and_past_relation(client, db_session):
     db_session.add(Prospect(company="Ancien prospect", phone="2250701000099", sector="ONLINE_STORE", code="old122",
                             country="CI", status="ACTIVE", created_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
     await db_session.commit()
-    today = (await client.get(f"{API}/today", headers=headers)).json()
+    paused = (await client.get(f"{API}/today", headers=headers)).json()  # lot 130 : restaurants pas encore lancés
+    assert [r["company"] for r in paused["to_send"]] == ["Ancien prospect"] and paused["restaurants"]["enabled"] is False
+    today = (await client.put(f"{API}/today/restaurants", json={"enabled": True}, headers=headers)).json()
     assert [r["company"] for r in today["to_send"]] == ["Maquis Un", "Maquis Un bis", "Grill Douala", "Maquis Trois", "Ancien prospect"]
     assert "*Naomy*" in today["to_send"][0]["message"] and "elle a bien changé" in today["to_send"][0]["message"]
     assert "elle a bien changé" not in today["to_send"][1]["message"]
@@ -128,7 +131,7 @@ async def test_opposed_and_client_contacts_are_never_imported_nor_listed(client,
     # Un prospect déjà présent devenu client, ou opposé, sort aussi de la liste du jour.
     db_session.add(Prospect(company="Devenu client", phone="2250701000012", sector="RESTAURANT", code="cli122", country="CI", status="ACTIVE"))
     await db_session.commit()
-    today = (await client.get(f"{API}/today", headers=headers)).json()
+    today = (await client.put(f"{API}/today/restaurants", json={"enabled": True}, headers=headers)).json()  # lot 130
     assert [r["company"] for r in today["to_send"]] == ["Nouveau"]
 
 

@@ -1654,6 +1654,7 @@ function todayRow(p, kind) {
   const meta = [p.contact_name, p.country_label, p.sector_label, p.source].filter(Boolean).join(" · ");
   const age = p.days !== null && p.days !== undefined ? ` <span class="muted">· il y a ${p.days} j</span>` : "";
   const mails = p.email_step ? ` <span class="muted">· email ${Number(p.email_step)}/3</span>` : "";
+  const version = p.variant ? ` <span class="count plain" title="Version du premier message (test A / B)">${esc(p.variant)}</span>` : "";
   let actions = "";
   if (kind === "calls") {
     actions = `${p.phone ? `<a class="btn small-btn" href="tel:${esc(p.phone)}">Appeler ${esc(p.phone)}</a>` : ""}
@@ -1663,7 +1664,7 @@ function todayRow(p, kind) {
   } else {
     actions = `<button class="btn small-btn primary" data-perm="prospects.edit" onclick="todayWhatsApp(${jsArg(p.id)}, ${jsArg(kind)})">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
   }
-  return `<div class="today-row"><div style="min-width: 0; flex: 1 1 240px;"><b>${esc(p.company)}</b>${age}${mails}<div class="muted">${esc(meta)}</div></div>
+  return `<div class="today-row"><div style="min-width: 0; flex: 1 1 240px;"><b>${esc(p.company)}</b>${version}${age}${mails}<div class="muted">${esc(meta)}</div></div>
     <div class="row">${actions}<button class="btn small-btn" onclick="openProspect(${jsArg(p.id)})">Fiche</button></div></div>`;
 }
 
@@ -1677,9 +1678,31 @@ async function loadToday() {
       <div><h2>Aujourd'hui</h2><p class="muted" style="margin: 4px 0 0;">${d.sent_today} / ${d.limit} nouveaux WhatsApp envoyés aujourd'hui${d.waiting > d.to_send.length ? ` · ${d.waiting} prospects attendent leur premier message` : ""}</p></div>
       <div class="row"><label for="today-limit" class="muted">Par jour</label><input id="today-limit" type="number" min="1" max="100" class="input" style="width: 80px; margin: 0;" value="${d.limit}"><button class="btn small-btn" data-perm="prospects.edit" onclick="saveTodayLimit()">Enregistrer</button></div>
     </div>
-    ${block("WhatsApp à envoyer", "Jamais contactés sur WhatsApp. Le message prêt contient leur lien de démo et l'offre de lancement.", d.to_send, "to_send", d.left_today ? "Personne à contacter pour l'instant : importez la liste de la semaine." : "Objectif du jour atteint.")}
+    ${restaurantsCard(d.restaurants)}
+    ${block("WhatsApp à envoyer", "Jamais contactés sur WhatsApp. Le message prêt contient leur lien personnel (restaurants : diagnostic chez Naomy, version A ou B) et l'offre de lancement.", d.to_send, "to_send", d.left_today ? "Personne à contacter pour l'instant : importez la liste de la semaine." : "Objectif du jour atteint.")}
     ${block("Relances J7", "Un seul WhatsApp il y a 7 jours ou plus, sans réaction.", d.relances, "relances", "Aucune relance à faire.")}
     ${block("Appels J14", "Sans réaction depuis 14 jours : un appel, puis on classe.", d.calls, "calls", "Aucun appel à passer.")}`;
+}
+
+// Lot 130 — prospection des restaurants par Naomy : interrupteur et test A / B du premier message.
+function restaurantsCard(r) {
+  if (!r) return "";
+  const when = r.changed_at ? ` · ${r.enabled ? "lancée" : "mise en pause"} le ${new Date(r.changed_at).toLocaleDateString("fr-FR")}${r.changed_by ? " par " + esc(r.changed_by) : ""}` : "";
+  const rate = (n, d) => d ? ` <span class="muted">(${Math.round(n * 100 / d)} %)</span>` : "";
+  const ab = (r.ab || []).map((v) => `<tr><td><b>Version ${esc(v.variant)}</b></td><td>${v.contacted}</td><td>${v.clicked}${rate(v.clicked, v.contacted)}</td><td>${v.audit}${rate(v.audit, v.contacted)}</td><td>${v.signed_up}${rate(v.signed_up, v.contacted)}</td></tr>`).join("");
+  return `<div class="today-block"><h3>Prospection des restaurants <span class="count ${r.enabled ? "plain" : "warning"}">${r.enabled ? "Lancée" : "En pause"}</span></h3>
+    <p class="muted" style="margin: 0 0 8px;">${r.enabled ? "Les restaurants apparaissent dans la liste du jour ; leurs e-mails de campagne partent. Le lien ouvre le diagnostic gratuit chez Naomy." : "Aucun restaurant dans la liste du jour, aucun e-mail ne leur part, tant que vous n'avez pas lancé."}${when}</p>
+    <div class="row" style="margin-bottom: 10px;"><button class="btn small-btn ${r.enabled ? "danger" : "primary"}" data-perm="prospects.edit" onclick="toggleRestaurants(${r.enabled ? "false" : "true"})">${r.enabled ? "Mettre en pause" : "Lancer la prospection des restaurants"}</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Premier message</th><th>Contactés</th><th>Ont cliqué</th><th>Diagnostic</th><th>Comptes</th></tr></thead><tbody>${ab}</tbody></table></div></div>`;
+}
+
+async function toggleRestaurants(enabled) {
+  const ok = await saConfirm(enabled ? "Lancer la prospection des restaurants ?" : "Mettre en pause la prospection des restaurants ?",
+    enabled ? "Les restaurants entreront dans la liste du jour et les campagnes d'e-mails en cours leur écriront." : "Plus aucun restaurant dans la liste du jour, et plus aucun e-mail ne leur part.",
+    { confirmLabel: enabled ? "Lancer" : "Mettre en pause", danger: !enabled });
+  if (!ok) return;
+  try { todayData = await api("/api/v1/superadmin/prospects/today/restaurants", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }) }); loadToday(); toast(enabled ? "Prospection des restaurants lancée." : "Prospection des restaurants en pause."); }
+  catch (e) { toast(e.message, "error"); }
 }
 
 async function saveTodayLimit() {

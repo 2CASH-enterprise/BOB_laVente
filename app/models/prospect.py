@@ -152,3 +152,8 @@ class ProspectionSettings(Base):
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 69 — nouveaux contacts WhatsApp (à la main) visés par jour, pour la vue « Aujourd'hui ».
     whatsapp_daily_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=25, server_default="25")
+    # Lot 130 — prospection des restaurants (par Naomy) : éteinte tant que Thérèse n'a pas donné le feu vert ; éteinte,
+    # aucun restaurant dans la liste du jour (premiers messages, relances, appels) et aucun e-mail de campagne.
+    restaurants_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    restaurants_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    restaurants_changed_by: Mapped[str | None] = mapped_column(String(255))

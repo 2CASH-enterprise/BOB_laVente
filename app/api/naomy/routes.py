@@ -163,6 +163,20 @@ async def naomy_verify_targets(request: Request, db: AsyncSession = Depends(get_
     return await prospection_sync.verify(db, await _json(request))
 
 
+@router.post(f"{API}/prospection/parcours")
+async def naomy_prospect_step(request: Request, db: AsyncSession = Depends(get_db),
+                              limiter: RateLimiter = Depends(get_rate_limiter)):
+    """Lot 130 (contrat 1.7.3) : avancée d'un restaurant prospecté dans le diagnostic de Naomy. Code inconnu : ignoré."""
+    from app.services import prospection
+
+    await _platform_limited(request, limiter)
+    data = await _json(request)
+    if not isinstance(data, dict) or set(data) - {"code_prospect", "etape"} or data.get("etape") not in prospection.AUDIT_STEPS:
+        raise NaomyError(400, "requete_invalide", "Champs attendus : code_prospect (P-XXXXXX), etape (audit_demarre ou audit_termine).")
+    known = await prospection.naomy_step(db, prospection.code_from_naomy(data.get("code_prospect")), data["etape"])
+    return {"pris_en_compte": known}
+
+
 @router.post(f"{API}/lien-connexion")
 async def naomy_login_link(ctx: NaomyContext = Depends(naomy_context), db: AsyncSession = Depends(get_db),
                            limiter: RateLimiter = Depends(get_rate_limiter)):

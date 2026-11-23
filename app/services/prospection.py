@@ -278,8 +278,43 @@ def demo_url(sector: str | None, code: str | None = None) -> str:
 
 
 def link(code: str, sector: str | None = None) -> str:
-    """Lien personnel du prospect : la page de démo de son secteur (lot 63), qui note le clic (?p=CODE)."""
+    """
+    Lien personnel du prospect : la page de démo de son secteur (lot 63), qui note le clic (?p=CODE).
+    Lot 130 — restaurant : …/audit/CODE, qui note le clic puis ouvre WhatsApp chez Naomy (« audit P-CODE »).
+    """
+    if sector == "RESTAURANT":
+        from app.core.config import get_settings
+
+        return f"{get_settings().public_base_url.rstrip('/')}/audit/{code}"
     return demo_url(sector, code)
+
+
+def audit_whatsapp_url(code: str | None) -> str | None:
+    """Lot 130 — WhatsApp de Naomy (numéro AgenC'AI) avec « audit P-CODE » déjà écrit ; None sans numéro réglé."""
+    from urllib.parse import quote
+
+    from app.core.config import get_settings
+
+    digits = re.sub(r"\D", "", get_settings().naomy_whatsapp_number or "")
+    if not digits:
+        return None
+    text = f"audit P-{code.upper()}" if code else "audit"
+    return f"https://wa.me/{digits}?text={quote(text)}"
+
+
+def code_from_naomy(value) -> str | None:
+    """« P-K7P2QX » (contrat 1.7.3) → code de prospect « k7p2qx », sinon None (jamais d'erreur)."""
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(r"\s*P-([A-Za-z2-9]{6})\s*", value, re.I)
+    return match.group(1).lower() if match else None
+
+
+def variant(prospect) -> str:
+    """Lot 130 — test A / B du premier message aux restaurants : la moitié des codes reçoit A, l'autre B, toujours la même."""
+    import hashlib
+
+    return "A" if int(hashlib.sha256((prospect.code or "").encode()).hexdigest(), 16) % 2 == 0 else "B"
 
 
 async def record_click(db, code: str, user_agent: str | None):
@@ -300,7 +335,7 @@ async def record_click(db, code: str, user_agent: str | None):
     return prospect
 
 
-async def attach(db, request, tenant_id, kind: str, email: str | None = None) -> None:
+async def attach(db, request, tenant_id, kind: str, email: str | None = None, code: str | None = None) -> None:
     """Démo (DEMO) ou compte (SIGNUP) rattaché au prospect du lien ; ne fait jamais échouer l'inscription."""
     from app.models.prospect import Prospect
     from app.services import ad_links
@@ -308,7 +343,7 @@ async def attach(db, request, tenant_id, kind: str, email: str | None = None) ->
     await ad_links.attach(db, request, tenant_id, kind)  # lot 82 : lien de publication (Facebook…)
 
     try:
-        code = (request.cookies.get(COOKIE) or "").strip().lower() if request is not None else ""
+        code = code or ((request.cookies.get(COOKIE) or "").strip().lower() if request is not None else "")
         prospect = None
         if code:
             prospect = (await db.execute(select(Prospect).where(Prospect.code == code))).scalar_one_or_none()
@@ -341,23 +376,40 @@ _PITCH = {
     "REAL_ESTATE": "répond à vos acheteurs, locataires et propriétaires sur WhatsApp 24 h / 24 et vous obtient des visites et des estimations",
 }
 # Lot 109 — restaurant : l'équipe Bob + Naomy (jamais de prix dans le message : rien n'est définitif, décision du 06/11).
-# Lot 122 — textes plus vendeurs validés par Thérèse le 10/11 ; *…* = gras sur WhatsApp.
+# Lot 130 — textes validés par Thérèse le 23/11 : diagnostic gratuit chez Naomy, test A / B du premier message ;
+# *…* = gras sur WhatsApp ; {hello} = « Awa, » ou rien, {who} = « Je suis Thérèse, d'AgenC'AI. ».
 _TEAM = {
-    "RESTAURANT": ("Bonjour{name} 👋, je suis {who}.{past}\n\n"
-                   "En plein service, combien de commandes WhatsApp restent sans réponse chez {company} ?\n\n"
-                   "Notre équipe de 2 agents s'en charge pour vous :\n"
-                   "📣 *Naomy*, votre community manager intelligente, publie votre plat du jour sur vos réseaux sociaux et "
-                   "fait venir les clients.\n"
-                   "🍽️ *Bob*, votre serveur virtuel, leur répond tout de suite sur WhatsApp, prend vos commandes et réserve "
-                   "vos tables, 24 h / 24.\n\n"
-                   "Vous restez en cuisine, vos clients sont servis.\n"
-                   "Essayez-les en 2 minutes avec une carte d'exemple 👇"),
+    "RESTAURANT": {
+        "A": ("{Hello}une question rapide 👋\n\n"
+              "Hier soir, combien de clients ont écrit à *{company}* sur WhatsApp… sans recevoir de réponse ?\n"
+              "Chaque message sans réponse, c'est une commande qui part chez le voisin.\n\n"
+              "{who}{past} Nous avons créé 2 agents IA pour les restaurants :\n"
+              "🍽️ *Bob* répond tout de suite, prend la commande et réserve la table, même en plein rush.\n"
+              "📣 *Naomy* publie votre plat du jour sur Facebook et Instagram.\n\n"
+              "Vous restez en cuisine. Nous installons tout pour vous."),
+        "B": ("{Hello}et si *{company}* ne ratait plus aucune commande WhatsApp ? 👀\n\n"
+              "{who}{past} Nos 2 agents IA travaillent pour votre restaurant, jour et nuit :\n"
+              "🍽️ *Bob* répond à chaque client, prend la commande, réserve la table.\n"
+              "📣 *Naomy* fait connaître votre plat du jour sur Facebook et Instagram.\n\n"
+              "Vous, vous cuisinez. Nous installons tout."),
+    },
 }
+TEAM_CTA = {"RESTAURANT": "👉 Votre *diagnostic gratuit*, en 2 minutes sur WhatsApp :"}
 _TEAM_RELANCE = {
-    "RESTAURANT": ("Bonjour{name}, un dernier mot pour {company} : pendant que *Naomy* fait venir les clients avec votre plat "
-                   "du jour, *Bob* leur répond et prend leurs commandes, même en plein rush.\nL'essai prend 2 minutes 👇"),
+    "RESTAURANT": ("{Hello}votre diagnostic gratuit pour *{company}* est toujours prêt 👇\n"
+                   "2 minutes sur WhatsApp, et vous verrez ce que Naomy et Bob changeraient dans votre service."),
 }
 PAST_RELATION = " Vous aviez échangé avec Naomy il y a quelques mois : elle a bien changé depuis."
+
+
+def _hello(first: str | None) -> str:
+    """« Awa, » en tête du message, sinon rien (la phrase commence alors par une majuscule)."""
+    return f"{first}, " if first else ""
+
+
+def _team_text(template: str, first: str | None, **values) -> str:
+    text = template.replace("{Hello}", _hello(first)).format(**values)
+    return text[:1].upper() + text[1:]
 TEAM_STOP = "Répondez STOP pour ne plus être contacté."
 
 
@@ -394,9 +446,10 @@ def message(prospect, sender: str | None, offer: str | None = None) -> str:
     who = f"{sender} d'AgenC'AI" if sender else "AgenC'AI"
     if prospect.sector in _TEAM:
         past = PAST_RELATION if getattr(prospect, "past_relation", False) else ""
-        text = _TEAM[prospect.sector].format(name=f" {first}" if first else "", who=who, company=prospect.company, past=past)
-        return (f"{text}{chr(10) + offer if offer else ''}\n👉 Voir la démo : {link(prospect.code, prospect.sector)}"
-                f"\n\n{TEAM_STOP}")
+        me = f"Je suis {sender}, d'AgenC'AI." if sender else "Je vous écris de la part d'AgenC'AI."
+        text = _team_text(_TEAM[prospect.sector][variant(prospect)], first, who=me, company=prospect.company, past=past)
+        return (f"{text}\n\n{TEAM_CTA[prospect.sector]}\n{link(prospect.code, prospect.sector)}"
+                f"{chr(10) + offer if offer else ''}\n\n{TEAM_STOP}")
     pitch = _PITCH.get(prospect.sector, _PITCH["ONLINE_STORE"])
     # Lot 63 — le lien seul sur la dernière ligne : WhatsApp en fait un aperçu (visuel du secteur) qui ouvre la démo.
     return (f"Bonjour{' ' + first if first else ''}, je suis {who}. Bob, notre vendeur virtuel, {pitch}. "
@@ -408,9 +461,8 @@ def relance_message(prospect, offer: str | None = None) -> str:
     """Lot 69 — relance courte à J7, seulement s'il n'a pas réagi ; promet de ne plus relancer s'il le dit."""
     first = (prospect.contact_name or "").split()[0] if (prospect.contact_name or "").strip() else None
     if prospect.sector in _TEAM_RELANCE:  # lot 122
-        text = _TEAM_RELANCE[prospect.sector].format(name=f" {first}" if first else "", company=prospect.company)
-        return (f"{text}\n👉 Voir la démo : {link(prospect.code, prospect.sector)}\n\n"
-                f"Je ne vous relancerai plus. {TEAM_STOP}")
+        text = _team_text(_TEAM_RELANCE[prospect.sector], first, company=prospect.company)
+        return f"{text}\n{link(prospect.code, prospect.sector)}\n\nJe ne vous relancerai plus. {TEAM_STOP}"
     places = f" {offer}" if offer else ""
     return (f"Bonjour{' ' + first if first else ''}, je reviens vers vous au sujet de Bob, le vendeur WhatsApp de "
             f"{prospect.company}. La démo prend 2 minutes.{places} Si ce n'est pas le bon moment, dites-le-moi simplement : "
@@ -490,7 +542,7 @@ def reacted(prospect) -> bool:
                 or prospect.signed_up_at or prospect.tenant_id)
 
 
-async def today(db, now: datetime, daily_limit: int) -> dict:
+async def today(db, now: datetime, daily_limit: int, restaurants_on: bool = True) -> dict:
     """
     Les trois listes de la routine : WhatsApp à envoyer (jamais contactés sur WhatsApp, dans la limite du jour),
     relances J7 (un seul WhatsApp il y a 7 jours ou plus, sans réaction ni appel) et appels J14 (premier contact il y a
@@ -506,6 +558,8 @@ async def today(db, now: datetime, daily_limit: int) -> dict:
                                                  aware(p.created_at) or now, p.import_rank or 0))
     blocked = await blocked_contacts(db)
     prospects = [p for p in prospects if not is_blocked(blocked, p.email, p.phone)]
+    if not restaurants_on:  # lot 130 : prospection des restaurants pas encore lancée
+        prospects = [p for p in prospects if p.sector != "RESTAURANT"]
     events = (await db.execute(select(ProspectEvent).where(ProspectEvent.kind == "CONTACT",
                                                            ProspectEvent.channel.in_(("WHATSAPP", "PHONE"))))).scalars().all()
     whatsapp, calls = {}, {}
@@ -728,3 +782,44 @@ async def purge_stale(db, now: datetime | None = None) -> int:
         Prospect.tenant_id.is_(None)))
     await db.commit()
     return result.rowcount or 0
+
+
+# --- Lot 130 : suivi du diagnostic chez Naomy et test A / B ---------------------------------------------------------
+
+AUDIT_STEPS = {"audit_demarre": "Diagnostic Naomy commencé", "audit_termine": "Diagnostic Naomy terminé"}
+
+
+async def naomy_step(db, code: str | None, step: str, now: datetime | None = None) -> bool:
+    """Avancée dans le diagnostic de Naomy ; « terminé » = « démo essayée » dans l'entonnoir. Code inconnu : rien."""
+    from app.models.prospect import Prospect, ProspectEvent
+
+    if not code or step not in AUDIT_STEPS:
+        return False
+    prospect = (await db.execute(select(Prospect).where(Prospect.code == code))).scalar_one_or_none()
+    if prospect is None:
+        return False
+    already = (await db.execute(select(func.count(ProspectEvent.id)).where(
+        ProspectEvent.prospect_id == prospect.id, ProspectEvent.detail == AUDIT_STEPS[step]))).scalar_one()
+    if already:  # Naomy peut renvoyer le même signal
+        return True
+    now = now or now_utc()
+    if step == "audit_termine" and prospect.demo_at is None:
+        prospect.demo_at = now
+    add_event(db, prospect, "DEMO" if step == "audit_termine" else "NOTE", detail=AUDIT_STEPS[step], actor="prospect", at=now)
+    await db.commit()
+    return True
+
+
+async def ab_stats(db) -> list[dict]:
+    """Lot 130 — premier message aux restaurants : contactés, clics, diagnostics, comptes, par version (A / B)."""
+    from app.models.prospect import Prospect
+
+    rows = (await db.execute(select(Prospect).where(Prospect.sector == "RESTAURANT"))).scalars().all()
+    out = []
+    for name in ("A", "B"):
+        group = [p for p in rows if variant(p) == name and p.contacted_at is not None]
+        out.append({"variant": name, "contacted": len(group),
+                    "clicked": sum(1 for p in group if p.first_click_at is not None),
+                    "audit": sum(1 for p in group if p.demo_at is not None),
+                    "signed_up": sum(1 for p in group if p.signed_up_at is not None)})
+    return out
