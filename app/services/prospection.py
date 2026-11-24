@@ -289,13 +289,23 @@ def link(code: str, sector: str | None = None) -> str:
     return demo_url(sector, code)
 
 
-def audit_whatsapp_url(code: str | None) -> str | None:
-    """Lot 130 — WhatsApp de Naomy (numéro AgenC'AI) avec « audit P-CODE » déjà écrit ; None sans numéro réglé."""
-    from urllib.parse import quote
-
+def naomy_number_for(country: str | None) -> str:
+    """Lot 130 b — numéro AgenC'AI du pays (NAOMY_WHATSAPP_NUMBERS, ex. « CI=+225… »), sinon le numéro principal."""
     from app.core.config import get_settings
 
-    digits = re.sub(r"\D", "", get_settings().naomy_whatsapp_number or "")
+    settings = get_settings()
+    for item in (settings.naomy_whatsapp_numbers or "").split(","):
+        code, _, number = item.partition("=")
+        if country and code.strip().upper() == country.upper() and re.sub(r"\D", "", number):
+            return re.sub(r"\D", "", number)
+    return re.sub(r"\D", "", settings.naomy_whatsapp_number or "")
+
+
+def audit_whatsapp_url(code: str | None, country: str | None = None) -> str | None:
+    """Lot 130 — WhatsApp de Naomy (numéro AgenC'AI du pays) avec « audit P-CODE » déjà écrit ; None sans numéro."""
+    from urllib.parse import quote
+
+    digits = naomy_number_for(country)
     if not digits:
         return None
     text = f"audit P-{code.upper()}" if code else "audit"

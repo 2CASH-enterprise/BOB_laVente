@@ -107,7 +107,8 @@ async def prospect_audit_link(code: str, request: Request, db: AsyncSession = De
     du visuel restaurant, puis WhatsApp chez Naomy avec « audit P-CODE » déjà écrit. Sans numéro Naomy : la démo.
     """
     prospect = await pros.record_click(db, code, request.headers.get("user-agent"))
-    target = pros.audit_whatsapp_url(prospect.code if prospect is not None else None)
+    target = pros.audit_whatsapp_url(prospect.code if prospect is not None else None,
+                                     prospect.country if prospect is not None else None)  # lot 130 b : +225 en CI
     if target is None:
         return RedirectResponse(pros.demo_url("RESTAURANT", prospect.code if prospect is not None else None),
                                 status_code=302, headers={"Cache-Control": "no-store"})

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     naomy_allowed_path: str = "/naomy/api/bob/"
     naomy_base_url: str = "https://agenc-ai.com/naomy"
     naomy_whatsapp_number: str = ""
+    # Lot 130 b — numéro AgenC'AI par pays pour les liens de prospection (« PAYS=+numéro », séparés par des virgules) ;
+    # pays absent : naomy_whatsapp_number (+33). Le +225 est servi par Naomy depuis son lot 9g (24/11).
+    naomy_whatsapp_numbers: str = "CI=+2250509777333"
     # Lot 120 — console Super Admin de Naomy (interrupteur « Bob / Naomy ») ; vide = {naomy_base_url}/superadmin/.
     naomy_console_url: str = ""
     # Lot 121 — « Rencontrer Naomy » ouvre WhatsApp avec le code de liaison déjà écrit (à allumer quand Naomy sait le

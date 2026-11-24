@@ -77,6 +77,7 @@ def test_emails_and_visual():
 @pytest.mark.asyncio
 async def test_the_audit_link_counts_the_click_and_opens_naomy(client, db_session, monkeypatch):
     monkeypatch.setattr(get_settings(), "naomy_whatsapp_number", "+33 7 80 84 12 69")
+    monkeypatch.setattr(get_settings(), "naomy_whatsapp_numbers", "")  # le numéro par pays : test plus bas
     db_session.add(_resto("k7p2qx"))
     await db_session.commit()
     bot = await client.get("/audit/k7p2qx", headers={"user-agent": "WhatsApp/2.23"})
@@ -179,3 +180,17 @@ def test_super_admin_page_has_the_switch_and_the_table():
     page = (ROOT / "static" / "superadmin" / "index.html").read_text(encoding="utf-8")
     assert "Lancer la prospection des restaurants" in page and "/api/v1/superadmin/prospects/today/restaurants" in page
     assert "<th>Diagnostic</th>" in page
+
+
+@pytest.mark.asyncio
+async def test_each_country_gets_its_agencai_number(client, db_session, monkeypatch):
+    """Lot 130 b — Côte d'Ivoire : +225 (Naomy, lot 9g) ; autres pays : +33."""
+    monkeypatch.setattr(get_settings(), "naomy_whatsapp_number", "+33 7 80 84 12 69")
+    monkeypatch.setattr(get_settings(), "naomy_whatsapp_numbers", "CI=+225 05 09 77 73 33, SN=")
+    db_session.add_all([_resto("ci2345"), _resto("cm2345", country="CM"), _resto("sn2345", country="SN")])
+    await db_session.commit()
+    ci = await client.get("/audit/ci2345", headers=BROWSER)
+    assert "https://wa.me/2250509777333?text=audit%20P-CI2345" in ci.text
+    for code in ("cm2345", "sn2345"):  # Cameroun sur le +33 ; pays réglé sans numéro : le +33 aussi
+        assert "https://wa.me/33780841269?text=audit%20P-" + code.upper() in (await client.get(f"/audit/{code}", headers=BROWSER)).text
+    assert pros.naomy_number_for(None) == "33780841269" and pros.naomy_number_for("ci") == "2250509777333"
