@@ -37,7 +37,8 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bob">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none'%3E%3Cpolyline points='7,31 24,39.5 41,31' stroke='%23A8DCC3' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='7,23 24,31.5 41,23' stroke='%235DB88F' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolygon points='24,6.5 41,15 24,23.5 7,15' stroke='%23123D2B' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="../brand/bob-favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="../brand/bob-32.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -836,6 +837,7 @@
     .bob-dialog-actions button { flex: 1; min-height: 44px; }
     .bob-toasts { bottom: calc(12px + var(--safe-bottom)); }
   }
+.bob-face{border-radius:50%;object-fit:cover;flex-shrink:0;display:block}
 </style>
 </head>
 <body>
@@ -850,7 +852,7 @@
 </svg>
 
 <div id="login-screen">
-  <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
+  <div class="auth-brand"><div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="44" height="44" alt=""><span class="brand-word">Bob<sup>AI</sup></span></div></div>
   <h2>Connexion</h2>
   <input id="login-email" type="email" placeholder="Email">
   <input id="login-password" type="password" placeholder="Mot de passe">
@@ -873,7 +875,7 @@
 
 <div id="segment-screen" class="hidden" role="dialog" aria-modal="true" aria-labelledby="segment-title">
   <div class="segment-box">
-    <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
+    <div class="auth-brand"><div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="44" height="44" alt=""><span class="brand-word">Bob<sup>AI</sup></span></div></div>
     <h2 id="segment-title">Quel est votre secteur d'activité&nbsp;?</h2>
     <p class="segment-sub">Bob adapte sa façon de travailler à votre métier. Ce choix est définitif : pour le changer ensuite, il faudra contacter le support Bob.</p>
     <div class="segment-options" id="segment-options"></div>
@@ -881,7 +883,7 @@
   </div>
 </div>
 <div id="signup-screen" class="hidden">
-  <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
+  <div class="auth-brand"><div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="44" height="44" alt=""><span class="brand-word">Bob<sup>AI</sup></span></div></div>
   <h2 id="signup-title">Créer votre compte Bob</h2>
   <div id="signup-offer" class="prereg-offer hidden" style="margin: 0 0 14px; padding: 12px 14px;"><div class="prereg-offer-title">🎁 Pré-inscriptions ouvertes</div><p id="signup-offer-text" style="font-size: 13.5px;"></p></div>
   <div class="signup-progress" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
@@ -935,7 +937,7 @@
 </div>
 
 <div id="mfa-screen" class="hidden">
-  <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
+  <div class="auth-brand"><div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="44" height="44" alt=""><span class="brand-word">Bob<sup>AI</sup></span></div></div>
   <h2>Vérification en deux étapes</h2>
   <p style="font-size: 13px; color: var(--muted); margin-top: -8px;">Un code à 6 chiffres a été envoyé à votre email.</p>
   <input id="mfa-code" placeholder="Code à 6 chiffres" maxlength="6" style="text-align: center; font-size: 22px; letter-spacing: 6px;">
@@ -947,7 +949,7 @@
 </div>
 
 <div id="forgot-screen" class="hidden">
-  <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
+  <div class="auth-brand"><div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="44" height="44" alt=""><span class="brand-word">Bob<sup>AI</sup></span></div></div>
   <h2>Mot de passe oublié</h2>
   <p style="font-size: 13px; color: var(--muted); margin-top: -8px;">Indiquez l'email de votre compte : nous vous enverrons un lien pour choisir un nouveau mot de passe.</p>
   <input id="forgot-email" type="email" placeholder="Email">
@@ -960,7 +962,7 @@
 </div>
 
 <div id="reset-screen" class="hidden">
-  <div class="auth-brand"><div class="brand"><svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><span class="brand-word">Bob<sup>AI</sup></span></div></div>
+  <div class="auth-brand"><div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="44" height="44" alt=""><span class="brand-word">Bob<sup>AI</sup></span></div></div>
   <h2>Nouveau mot de passe</h2>
   <input id="reset-password" type="password" placeholder="Nouveau mot de passe (8 caractères min.)">
   <input id="reset-password-confirm" type="password" placeholder="Confirmez le mot de passe">
@@ -986,7 +988,7 @@
   <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
-      <div class="brand"><svg class="brand-mark" width="38" height="38" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg><div><div class="brand-word">Bob<sup>AI</sup></div></div></div>
+      <div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="38" height="38" alt=""><div><div class="brand-word">Bob<sup>AI</sup></div></div></div>
       <button class="sidebar-close" onclick="closeSidebar()" aria-label="Fermer le menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
     <nav>

@@ -115,8 +115,8 @@ def test_menu_uses_line_icons_not_emojis():
 
 
 def test_logo_on_sidebar_and_login_and_favicon():
-    assert HTML.count('class="brand-mark"') >= 6  # barre latérale + 5 écrans de connexion
-    assert 'rel="icon" type="image/svg+xml"' in HTML
+    assert HTML.count('class="brand-mark bob-face"') >= 6  # barre latérale + 5 écrans de connexion (lot 132 : visage de Bob)
+    assert 'rel="icon" href="../brand/bob-favicon.ico"' in HTML
 
 
 def test_no_hardcoded_colors_in_templates():

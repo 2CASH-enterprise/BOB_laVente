@@ -2,6 +2,9 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="../brand/bob-favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="../brand/bob-32.png">
+<link rel="apple-touch-icon" href="../dashboard/apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bob — Super Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -317,12 +320,13 @@
   .member-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   .member-roles { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .member-roles label { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
+.bob-face{border-radius:50%;object-fit:cover;flex-shrink:0;display:block}
 </style>
 </head>
 <body>
 
 <div id="login-screen" class="auth">
-  <div class="brand"><svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg>
+  <div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="40" height="40" alt="">
     <div><div class="brand-word">Bob</div><div class="brand-sub">SUPER ADMIN</div></div></div>
   <div id="login-form">
     <h2>Connexion</h2>
@@ -364,7 +368,7 @@
   <div class="backdrop" id="backdrop" onclick="closeMenu()"></div>
   <div class="shell">
     <aside class="sidebar" id="sidebar">
-      <div class="brand"><svg width="34" height="34" viewBox="0 0 48 48" fill="none" aria-hidden="true"><polyline points="7,31 24,39.5 41,31" stroke="var(--logo-3)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7,23 24,31.5 41,23" stroke="var(--logo-2)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><polygon points="24,6.5 41,15 24,23.5 7,15" stroke="var(--logo-1)" stroke-width="4.5" stroke-linejoin="round"/></svg>
+      <div class="brand"><img class="brand-mark bob-face" src="../brand/bob-128.png" width="34" height="34" alt="">
         <div><div class="brand-word">Bob</div><div class="brand-sub">SUPER ADMIN</div></div></div>
       <!-- Lot 120 — interrupteur entre les consoles des agents (Bob, Naomy, d'autres plus tard) -->
       <div class="agent-switch hidden" id="agent-switch" role="group" aria-label="Console de l'agent"></div>
