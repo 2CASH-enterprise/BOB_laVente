@@ -50,9 +50,10 @@ _ALNUM = string.ascii_letters + string.digits
 class NaomyError(Exception):
     """Erreur au format du contrat : {"erreur": code, "message": phrase}."""
 
-    def __init__(self, status: int, code: str, message: str, headers: dict | None = None):
+    def __init__(self, status: int, code: str, message: str, headers: dict | None = None, extra: dict | None = None):
         super().__init__(message)
         self.status, self.code, self.message, self.headers = status, code, message, headers or {}
+        self.extra = extra or {}  # lot 134 (1.7.4) : champs ajoutés à l'erreur (ex. trouve_par)
 
 
 # --- Petits outils ---------------------------------------------------------------------------------------------------
@@ -789,6 +790,58 @@ async def receive_request(db, payload: dict, limiter=None, now: datetime | None 
             await asyncio.to_thread(mailer, to=tenant.email, subject=subject, body=body)
         except Exception:  # noqa: BLE001 — la carte du tableau de bord reste
             logger.warning("E-mail de demande d'appairage Naomy non envoyé (boutique %s)", tenant.id)
+
+
+REPLY_TTL = timedelta(days=7)
+DECISIONS = {"accepter": True, "refuser": False}
+
+
+async def reply_from_whatsapp(db, payload: dict, now: datetime | None = None) -> dict:
+    """
+    Lot 134 (contrat 1.7.4) — le commerçant accepte ou refuse la demande de Naomy en lui répondant dans WhatsApp.
+    Accepté seulement si numero_whatsapp est le numéro WhatsApp relié à la boutique (vérifié par Meta), et qu'une
+    demande de ce compte Naomy attend. Sinon toujours la même réponse : « demande_introuvable ».
+    """
+    from app.models.naomy import NaomyPairingRequest
+    from app.models.tenant import Tenant
+    from app.models.whatsapp_account import WhatsAppAccount
+    from app.services.audit import log_audit_event
+
+    now = now or datetime.now(timezone.utc)
+    account, number, decision = payload.get("compte_naomy"), payload.get("numero_whatsapp"), payload.get("decision")
+    if not (set(payload) <= {"compte_naomy", "numero_whatsapp", "decision"} and isinstance(account, str)
+            and 0 < len(account) <= 64 and isinstance(number, str) and re.fullmatch(r"\+[1-9][0-9]{7,14}", number)
+            and decision in DECISIONS):
+        raise NaomyError(400, "requete_invalide", "Champs attendus : compte_naomy, numero_whatsapp (+…), "
+                                                  "decision (accepter ou refuser).")
+    missing = NaomyError(404, "demande_introuvable", "Aucune demande en attente pour ce numéro WhatsApp relié : "
+                                                     "le commerçant peut répondre dans Bob, rubrique « Mon équipe ».")
+    rows = (await db.execute(select(WhatsAppAccount.tenant_id, WhatsAppAccount.display_phone_number))).all()
+    shops = {t for t, shown in rows if re.sub(r"\D", "", shown or "") == number[1:]}
+    if len(shops) != 1:  # aucun ou ambigu : on ne devine jamais
+        raise missing
+    tenant = await db.get(Tenant, shops.pop())
+    if tenant is None or tenant.is_demo:
+        raise missing
+    requests = (await db.execute(select(NaomyPairingRequest).where(
+        NaomyPairingRequest.tenant_id == tenant.id, NaomyPairingRequest.naomy_account == account,
+        NaomyPairingRequest.status == "PENDING").order_by(NaomyPairingRequest.created_at.desc()))).scalars().all()
+    fresh = [r for r in requests
+             if (r.created_at.replace(tzinfo=r.created_at.tzinfo or timezone.utc) + REPLY_TTL) >= now]
+    if not fresh:
+        raise missing
+    if not DECISIONS[decision]:
+        await decide_request(db, tenant, str(fresh[0].id), False, now=now)
+        return {"statut": "refusee"}
+    scope = "complete" if pairing_refusal(tenant, "complete") is None else "assistant"
+    refusal = pairing_refusal(tenant, scope)
+    if refusal:
+        raise NaomyError(403, "connexion_impossible", refusal)
+    url = await decide_request(db, tenant, str(fresh[0].id), True, scope, now)
+    await log_audit_event(db, actor="OWNER", action="NAOMY_REQUEST_ACCEPTED_WHATSAPP", tenant_id=tenant.id,
+                          details={"portee": scope})
+    await db.commit()
+    return {"statut": "acceptee", "portee": scope, "code": url.rsplit("code=", 1)[1], "lien": url}
 
 
 async def decide_request(db, tenant, request_id: str, accept: bool, scope: str = "complete",

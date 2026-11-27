@@ -58,7 +58,7 @@ async def test_a_team_account_is_created_linked_and_on_trial(client, db_session,
     assert bob_pause.notice_due(tenant) is None  # pas de rapport « 7 jours avant » le jour de l'inscription
     assert bob_pause.pause_reason(tenant) is None
     owner = (await db_session.execute(select(User).where(User.tenant_id == tenant.id))).scalar_one()
-    assert owner.role == Role.OWNER and owner.email == "awa@maquis.ci" and owner.full_name == "Awa Koné"
+    assert owner.role == Role.OWNER and owner.email == "wa2250701020304@attente.invalid" and owner.full_name == "Awa Koné"
     connection = (await db_session.execute(select(NaomyConnection).where(NaomyConnection.tenant_id == tenant.id))).scalar_one()
     assert connection.scope == "complete" and connection.assistant_enabled and connection.confirmation_number == NUMBER
     shop = data["boutique"]
@@ -189,7 +189,7 @@ async def test_preregistration_same_rule_and_trial_starts_at_opening(client, db_
     conforms(data, "CompteCree")
     assert data["pre_inscrit"] is True and data["essai_jusqu_au"] is None and data["boutique"]["pre_inscrit"] is True
     tenant = (await db_session.execute(select(Tenant))).scalar_one()
-    assert tenant.paid_until is None and sent == [tenant.id]
+    assert tenant.paid_until is None and sent == []  # lot 134 : la bienvenue attend la confirmation de l'adresse
     assert bob_pause.pause_reason(tenant) == bob_pause.PREREG
     assert await preregistration.open_access(db_session, tenant, send=lambda **kw: None)
     assert tenant.paid_until == bob_pause.local_today(tenant) + timedelta(days=6)  # l'essai démarre à l'ouverture

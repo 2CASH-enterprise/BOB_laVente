@@ -129,6 +129,9 @@ def send_email(
 ) -> bool:
     settings = get_settings()
 
+    if (to or "").strip().lower().endswith(".invalid"):  # lot 134 : adresse en attente de confirmation, rien n'y part
+        logger.info("E-mail non envoyé : adresse non confirmée")
+        return False
     if not settings.smtp_host:
         logger.warning(
             "[SMTP non configuré] Email non envoyé à %s — sujet: %s — corps: %s", to, subject, body

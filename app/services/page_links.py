@@ -55,10 +55,13 @@ def allowed(scope: str, method: str, path: str) -> bool:
     return any(method.upper() == m and re.fullmatch(pattern, path) for m, pattern in _COMMON + spec["routes"])
 
 
-def page_url(name: str, token: str) -> str:
+def page_url(name: str, token: str, country: str | None = None) -> str:
     from app.core.config import get_settings
+    from app.services.prospection import naomy_number_for
 
-    return f"{get_settings().public_base_url.rstrip('/')}/m/?page={name}&connexion={token}"
+    number = naomy_number_for(country)  # lot 134 : bouton « Redemander le lien à Bob » vers le bon numéro AgenC'AI
+    return (f"{get_settings().public_base_url.rstrip('/')}/m/?page={name}&connexion={token}"
+            + (f"&wa={number}" if number else ""))
 
 
 async def create(db, tenant, name: str, now: datetime | None = None) -> str | None:
@@ -87,4 +90,4 @@ async def create(db, tenant, name: str, now: datetime | None = None) -> str | No
     token = secrets.token_urlsafe(32)
     db.add(MagicLogin(tenant_id=tenant.id, user_id=user.id, token_hash=_digest(token), purpose=spec["purpose"],
                       expires_at=now + VALID, created_at=now))
-    return page_url(name, token)
+    return page_url(name, token, getattr(tenant, "country", None))

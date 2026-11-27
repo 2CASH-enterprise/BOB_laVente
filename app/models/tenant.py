@@ -104,6 +104,11 @@ class Tenant(Base):
     call_phone: Mapped[str | None] = mapped_column(String(32))
     # Lot 118 — où le compte a été créé : vide = chez Bob, « NAOMY » = depuis l'inscription chez Naomy (« Mon équipe »).
     created_via: Mapped[str | None] = mapped_column(String(8))
+    # Lot 134 (choix B du 27/11) — compte créé par Naomy : le numéro WhatsApp est l'identité, l'e-mail est facultatif.
+    # Tant qu'il n'est pas confirmé, il attend ici ; l'adresse du compte est « …@attente.invalid » (rien n'y part).
+    email_pending: Mapped[str | None] = mapped_column(String(255))
+    email_confirm_hash: Mapped[str | None] = mapped_column(String(64))
+    email_confirm_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Lot 121 — « Mon équipe » : choix du commerçant (SOLO = Bob seul, TEAM = Bob + Naomy ; vide = pas encore choisi),
     # et date de l'essai équipe de 7 jours (une seule fois par boutique).
     team_mode: Mapped[str | None] = mapped_column(String(8))

@@ -56,6 +56,7 @@ from app.services.naomy_bridge import NaomyError  # lot 89
 from app.api.preregistration.routes import public_router as prereg_public_router, router as prereg_router  # lot 65
 from app.api.webhooks.whatsapp import router as whatsapp_webhook_router
 from app.api.whatsapp.routes import router as whatsapp_router
+from app.api.email_confirm import router as email_confirm_router  # lot 134
 from app.core.config import get_settings
 from app.core.security_headers import SecurityHeadersMiddleware
 
@@ -143,6 +144,7 @@ app.include_router(plan_usage_router)
 app.include_router(naomy_router)  # lot 89
 app.include_router(team_router)  # lot 121
 app.include_router(simple_router)  # lot 90
+app.include_router(email_confirm_router)  # lot 134
 
 class FreshPages(StaticFiles):
     """

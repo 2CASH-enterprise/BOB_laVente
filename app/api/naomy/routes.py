@@ -32,7 +32,7 @@ API = "/api/v1/naomy"
 
 
 def naomy_error_response(_request, exc: NaomyError) -> JSONResponse:
-    return JSONResponse({"erreur": exc.code, "message": exc.message}, status_code=exc.status, headers=exc.headers)
+    return JSONResponse({"erreur": exc.code, "message": exc.message, **exc.extra}, status_code=exc.status, headers=exc.headers)
 
 
 async def _json(request: Request) -> dict:
@@ -103,6 +103,17 @@ async def naomy_pairing_request(request: Request, db: AsyncSession = Depends(get
         raise NaomyError(401, "signature_invalide", "Signature de plateforme invalide.")
     await nb.receive_request(db, await _json(request), limiter)
     return JSONResponse({"statut": "recue"}, status_code=202)  # toujours : ne dit jamais si la boutique existe
+
+
+@router.post(f"{API}/appairage/reponse")
+async def naomy_pairing_reply(request: Request, db: AsyncSession = Depends(get_db),
+                              limiter: RateLimiter = Depends(get_rate_limiter)):
+    """Lot 134 (contrat 1.7.4) : réponse du commerçant dans WhatsApp, valable depuis le numéro WhatsApp relié seulement."""
+    await _platform_body(request)
+    if not await limiter.is_allowed("naomy-appairage-reponse", 60, 60):
+        raise NaomyError(429, "trop_de_requetes", "Trop de réponses en peu de temps : réessayez dans une minute.",
+                         headers={"Retry-After": "60"})
+    return await nb.reply_from_whatsapp(db, await _json(request))
 
 
 async def _platform_body(request: Request) -> bytes:

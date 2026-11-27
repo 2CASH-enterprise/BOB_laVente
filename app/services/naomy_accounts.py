@@ -46,8 +46,8 @@ def validate(payload: dict) -> dict:
     from app.services.business_type import BUSINESS_TYPES
 
     bad = NaomyError(400, "requete_invalide",
-                     "Champs attendus : compte_naomy, numero_whatsapp (+…), nom_boutique, secteur, pays, email, "
-                     "nom_contact, url_evenements (ville facultative).")
+                     "Champs attendus : compte_naomy, numero_whatsapp (+…), nom_boutique, secteur, pays, nom_contact, "
+                     "url_evenements (ville et e-mail facultatifs).")
     if not set(payload) <= FIELDS:
         raise bad
     number = payload.get("numero_whatsapp")
@@ -57,34 +57,47 @@ def validate(payload: dict) -> dict:
             "country": payload.get("pays"), "url": payload.get("url_evenements"),
             "city": _text(payload.get("ville"), 100) if payload.get("ville") is not None else None}
     if not (isinstance(number, str) and re.fullmatch(r"\+[1-9][0-9]{7,14}", number)
-            and isinstance(email, str) and len(email) <= 255 and EMAIL.match(email.strip())
+            and (email in (None, "") or (isinstance(email, str) and len(email) <= 255 and EMAIL.match(email.strip())))
             and data["account"] and data["name"] and data["contact"] and data["sector"] in BUSINESS_TYPES
             and isinstance(data["country"], str) and re.fullmatch(r"[A-Z]{2}", data["country"])
             and isinstance(data["url"], str)
             and (payload.get("ville") is None or data["city"])):
         raise bad
-    data["number"], data["digits"], data["email"] = number, number[1:], email.strip().lower()
+    data["number"], data["digits"] = number, number[1:]
+    data["email"] = email.strip().lower() if email else None  # lot 134 : facultatif, à confirmer
     return data
 
 
-async def existing_tenant(db, digits: str, email: str):
+async def existing_tenant(db, digits: str, email: str | None):
     """La boutique qui a déjà ce numéro (WhatsApp relié ou numéro de la boutique) ou cet e-mail, sinon None."""
+    found = await find_existing(db, digits, email)
+    return found[0] if found else None
+
+
+async def find_existing(db, digits: str, email: str | None):
+    """
+    Lot 134 (contrat 1.7.4) — (boutique, comment) : « whatsapp_relie » (numéro WhatsApp relié à Bob, vérifié par
+    Meta), « telephone » (numéro saisi à l'inscription, non vérifié) ou « email » ; None si rien. Une adresse en attente
+    de confirmation ne compte pas.
+    """
     from app.models.tenant import Tenant
     from app.models.user import User
     from app.models.whatsapp_account import WhatsAppAccount
 
     rows = (await db.execute(select(WhatsAppAccount.tenant_id, WhatsAppAccount.display_phone_number))).all()
-    tenant_id = next((t for t, shown in rows if re.sub(r"\D", "", shown or "") == digits), None)
+    tenant_id, how = next((t for t, shown in rows if re.sub(r"\D", "", shown or "") == digits), None), "whatsapp_relie"
     if tenant_id is None:
         phones = (await db.execute(select(Tenant.id, Tenant.phone).where(Tenant.phone.is_not(None)))).all()
-        tenant_id = next((t for t, phone in phones if _same_number(phone, digits)), None)
-    if tenant_id is None:
+        tenant_id, how = next((t for t, phone in phones if _same_number(phone, digits)), None), "telephone"
+    if tenant_id is None and email:
         from sqlalchemy import func
 
+        how = "email"
         tenant_id = (await db.execute(select(User.tenant_id).where(func.lower(User.email) == email).limit(1))).scalar_one_or_none()
         if tenant_id is None:
             tenant_id = (await db.execute(select(Tenant.id).where(func.lower(Tenant.email) == email).limit(1))).scalar_one_or_none()
-    return await db.get(Tenant, tenant_id) if tenant_id is not None else None
+    tenant = await db.get(Tenant, tenant_id) if tenant_id is not None else None
+    return (tenant, how) if tenant is not None else None
 
 
 def _same_number(phone: str | None, digits: str) -> bool:
@@ -158,15 +171,19 @@ async def create_account(db, payload: dict, limiter=None, now: datetime | None =
             raise NaomyError(429, "trop_de_requetes", "Trop de créations aujourd'hui : réessayez demain.",
                              {"Retry-After": "3600"})
 
-    found = await existing_tenant(db, data["digits"], data["email"])
+    found = await find_existing(db, data["digits"], data["email"])
     if found is not None:
-        await _ask_existing(db, found, data, now, mailer)
+        await _ask_existing(db, found[0], data, now, mailer)
+        # Lot 134 (1.7.4) : « whatsapp_relie » = Naomy peut faire accepter dans WhatsApp (POST /appairage/reponse).
         raise NaomyError(409, "boutique_existante",
                          "Ce numéro ou cet e-mail a déjà une boutique Bob : la demande de connexion lui a été envoyée "
-                         "(à accepter dans Bob).")
+                         "(à accepter dans Bob).", extra={"trouve_par": found[1]})
 
+    from app.services import email_confirm
+
+    reserved = email_confirm.placeholder(data["digits"])  # lot 134 : l'adresse donnée attend sa confirmation
     tenant = Tenant(name=data["name"], country=data["country"], currency=currency, phone=data["number"],
-                    email=data["email"], business_type=data["sector"], business_type_chosen_at=now,
+                    email=reserved, business_type=data["sector"], business_type_chosen_at=now,
                     plan=TenantPlan.INDEPENDANT, created_via=ORIGIN, team_mode="TEAM", team_trial_at=now)
     db.add(tenant)
     await db.flush()
@@ -174,7 +191,7 @@ async def create_account(db, payload: dict, limiter=None, now: datetime | None =
         from app.services.insurance import seed_products
 
         await seed_products(db, tenant)
-    owner = User(tenant_id=tenant.id, email=data["email"], full_name=data["contact"], role=Role.OWNER,
+    owner = User(tenant_id=tenant.id, email=reserved, full_name=data["contact"], role=Role.OWNER,
                  hashed_password=hash_password(secrets.token_urlsafe(32)))  # aucun mot de passe connu : lien, ou « oublié »
     db.add(owner)
     await db.flush()
@@ -198,8 +215,8 @@ async def create_account(db, payload: dict, limiter=None, now: datetime | None =
     # Lot 130 (1.7.3) — « audit P-CODE » : le code du prospect, lu par Naomy, rattache l'inscription à la prospection.
     await prospection.attach(db, None, tenant.id, "SIGNUP", email=data["email"],
                              code=prospection.code_from_naomy(payload.get("code_prospect")))
-    if prereg:
-        await preregistration.send_signup_emails(db, tenant, owner)
+    if data["email"]:  # un seul e-mail : « Confirmer mon adresse » ; la bienvenue des pré-inscrits suit la confirmation
+        await email_confirm.start(db, tenant, data["email"], now, mailer)
     return {**linked, "boutique": await nb.shop_view(db, tenant), "lien_connexion": link,
             "essai_jusqu_au": tenant.paid_until.isoformat() if tenant.paid_until else None, "pre_inscrit": prereg}
 

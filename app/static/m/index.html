@@ -74,6 +74,9 @@ const params = new URLSearchParams(location.search);
 const PAGE = ["carte", "horaires", "affiches"].includes(params.get("page")) ? params.get("page") : null;
 const app = document.getElementById("app");
 const KEY = "bob_page_" + PAGE;
+// Lot 134 : numéro AgenC'AI du pays (chiffres seulement), pour redemander le lien à Bob dans WhatsApp.
+const WA = /^[1-9][0-9]{7,14}$/.test(params.get("wa") || "") ? params.get("wa") : null;
+const OPEN = { carte: "Ouvrir ma carte", horaires: "Ouvrir mes horaires", affiches: "Ouvrir mes affiches" };
 let token = null;
 const RUBRIQUES = [["ENTREE", "Entrées"], ["PLAT", "Plats"], ["GRILLADE", "Grillades"], ["DESSERT", "Desserts"],
                    ["BOISSON", "Boissons"], ["MENU", "Menus et formules"]];
@@ -99,7 +102,10 @@ function toast(text, kind) {
 }
 function fail(text) {
   app.replaceChildren(el("div", { class: "msg err", text }),
-    el("p", { class: "muted", text: "Redemandez la page à Bob sur WhatsApp : écrivez « menu » au numéro AgenC'AI, puis choisissez Bob." }));
+    WA ? el("a", { class: "btn primary wide", id: "again", href: "https://wa.me/" + WA + "?text=" + encodeURIComponent("menu"),
+                   text: "Redemander le lien à Bob" }) : null,
+    el("p", { class: "muted", text: WA ? "WhatsApp s'ouvre avec « menu » déjà écrit : envoyez-le, puis choisissez Bob."
+                                       : "Redemandez la page à Bob sur WhatsApp : écrivez « menu » au numéro AgenC'AI, puis choisissez Bob." }));
 }
 async function api(path, options) {
   const opts = Object.assign({}, options || {});
@@ -119,14 +125,30 @@ function money(value, currency) {
 
 async function start() {
   if (!PAGE) return fail("Cette page n'existe pas.");
-  const link = params.get("connexion");
+  const fresh = params.get("connexion");
+  if (fresh) {
+    sessionStorage.setItem(KEY + "_lien", fresh);  // gardé dans l'onglet, retiré de l'adresse et de l'historique
+    history.replaceState(null, "", location.pathname + "?page=" + PAGE + (WA ? "&wa=" + WA : ""));
+  }
+  // Lot 134 : le lien n'est échangé qu'au toucher du bouton. Les aperçus de WhatsApp et les antivirus qui ouvrent
+  // la page ne l'usent donc plus.
+  const link = sessionStorage.getItem(KEY + "_lien");
   if (link) {
-    history.replaceState(null, "", location.pathname + "?page=" + PAGE);  // le lien ne reste pas dans l'historique
-    const r = await fetch(API + "/auth/magic", { method: "POST", headers: { "Content-Type": "application/json" },
-                                                  body: JSON.stringify({ token: link }) });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok || !body.access_token) return fail(body.detail || "Ce lien a expiré ou a déjà servi.");
-    sessionStorage.setItem(KEY, body.access_token);
+    const go = el("button", { class: "primary wide", id: "open", text: OPEN[PAGE] });
+    go.addEventListener("click", async () => {
+      go.disabled = true;
+      go.textContent = "Ouverture…";
+      const r = await fetch(API + "/auth/magic", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ token: link }) }).catch(() => null);
+      const body = r ? await r.json().catch(() => ({})) : {};
+      if (!r) { go.disabled = false; go.textContent = OPEN[PAGE]; return toast("Pas de connexion : réessayez.", "err"); }
+      sessionStorage.removeItem(KEY + "_lien");
+      if (!r.ok || !body.access_token) return fail(body.detail || "Ce lien a expiré ou a déjà servi.");
+      sessionStorage.setItem(KEY, body.access_token);
+      start();
+    });
+    return app.replaceChildren(el("div", { class: "card" }, el("p", { text: "Votre page est prête." }), go,
+      el("p", { class: "muted", text: "Le lien sert une seule fois et reste valable 15 minutes." })));
   }
   token = sessionStorage.getItem(KEY);
   if (!token) return fail("Ce lien a expiré ou a déjà servi.");
