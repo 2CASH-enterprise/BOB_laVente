@@ -77,7 +77,7 @@ def test_every_super_admin_route_checks_a_right():
 
 def test_the_rights_table():
     owner = set(sa_roles.perms_for(["OWNER"]))
-    assert owner == set(sa_roles.PERMS)
+    assert owner == set(sa_roles.PERMS) - {"prospects.own"}  # lot 133 : « ses prospects seulement » est propre à l'ambassadeur
     ro = set(sa_roles.perms_for(["READONLY"]))
     assert not {p for p in ro if p.endswith(".edit")} and not ro & {"shops.figures", "shops.billing", "shops.suspend", "team.manage"}
     sales = set(sa_roles.perms_for(["SALES"]))
@@ -223,7 +223,7 @@ async def test_invitation_by_email(client, db_session, monkeypatch):
     assert (await client.post("/api/v1/superadmin/team/accept", json={"token": token, "password": "un-autre-mot-de-passe"})).status_code == 400
     assert (await client.post(f"/api/v1/superadmin/team/{member.id}/reinvite", headers=_h(owner))).status_code == 409
     team = (await client.get("/api/v1/superadmin/team", headers=_h(owner))).json()
-    assert {m["email"]: m["status"] for m in team["members"]}["koffi@agencai.ci"] == "ACTIVE" and len(team["roles"]) == 7
+    assert {m["email"]: m["status"] for m in team["members"]}["koffi@agencai.ci"] == "ACTIVE" and len(team["roles"]) == 8  # lot 133 : + Ambassadeur
     journal = (await client.get("/api/v1/superadmin/team/journal", headers=_h(owner))).json()["items"]
     whats = [(i["who"], i["what"]) for i in journal]
     assert ("Thérèse", "a invité Koffi Yao") in whats and ("Koffi Yao", "a rejoint l'équipe") in whats
@@ -304,8 +304,8 @@ async def test_bootstrap_makes_an_owner_and_old_colleague_route_is_read_only(cli
 
 def test_the_console_hides_what_the_role_cannot_do():
     perms = re.search(r"const ALL_PERMS = \[(.*?)\];", HTML, re.S).group(1)
-    assert sorted(re.findall(r'"([a-z.]+)"', perms)) == sorted(sa_roles.PERMS)
-    for section, perm in (("shops", "shops.basic"), ("prospects", "prospects.view"), ("prereg", "prereg.view"),
+    assert sorted(re.findall(r'"([a-z.]+)"', perms)) == sorted(set(sa_roles.PERMS) | {"prospects.work", "prospects.act"})  # lot 133
+    for section, perm in (("shops", "shops.basic"), ("prospects", "prospects.work"), ("prereg", "prereg.view"),
                           ("aicosts", "aicosts.view"), ("monitoring", "tech.view"), ("team", "team.manage")):
         assert f'data-section="{section}" data-perm="{perm}"' in HTML
     for handler, perm in (("savePlans", "plans.edit"), ("toggleActive", "shops.suspend"), ("extendShop", "shops.billing"),

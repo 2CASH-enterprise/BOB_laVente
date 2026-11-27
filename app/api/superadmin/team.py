@@ -127,7 +127,7 @@ async def _member(db, member_id: UUID) -> SuperAdminUser:
 
 
 @router.get("/me")
-async def me(current: CurrentSuperAdmin = Depends(need("overview")), db: AsyncSession = Depends(get_db)) -> dict:
+async def me(current: CurrentSuperAdmin = Depends(need("self")), db: AsyncSession = Depends(get_db)) -> dict:
     member = await _member(db, current.superadmin_user_id)
     return {**_view(member), "perms": sa_roles.perms_for(member.roles),
             "role_labels": [sa_roles.ROLES[r][0] for r in sa_roles.clean(member.roles)]}

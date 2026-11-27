@@ -246,6 +246,23 @@ async def get_current_superadmin(token: str | None = Depends(superadmin_oauth2_s
     return CurrentSuperAdmin(superadmin_user_id=UUID(parsed.sub), roles=list(row.roles or []))
 
 
+def need_any(*perms: str):
+    """Lot 133 — au moins un de ces droits (ex. toute la prospection, ou seulement ses propres prospects)."""
+    from app.services.sa_roles import PERMS
+
+    for perm in perms:
+        if perm not in PERMS:
+            raise ValueError(f"Droit inconnu : {perm}")
+
+    async def dependency(current: CurrentSuperAdmin = Depends(get_current_superadmin)) -> CurrentSuperAdmin:
+        if not any(current.can(p) for p in perms):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Votre rôle ne permet pas cette action.")
+        return current
+
+    dependency.sa_perm = perms[0]
+    return dependency
+
+
 def need(perm: str):
     """
     Lot 119 — dépendance « ce membre de l'équipe AgenC'AI a le droit `perm` » (services/sa_roles.PERMS). Les rôles sont

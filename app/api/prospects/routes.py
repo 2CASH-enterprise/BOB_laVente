@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.core.security import CurrentSuperAdmin, need
+from app.core.security import CurrentSuperAdmin, need, need_any
 from app.models.prospect import Prospect, ProspectEvent
 from app.models.superadmin_user import SuperAdminUser
 from app.services import prospection as pros
@@ -237,11 +237,23 @@ async def _owners(db) -> dict:
     return {a.id: a.full_name for a in (await db.execute(select(SuperAdminUser))).scalars().all()}
 
 
-async def _get(db, prospect_id: UUID) -> Prospect:
+def _own(admin: CurrentSuperAdmin) -> UUID | None:
+    """Lot 133 — ambassadeur : l'identifiant auquel limiter la prospection (ses propres prospects) ; sinon None."""
+    from app.services import sa_roles
+
+    return admin.superadmin_user_id if sa_roles.only_own_prospects(admin.roles) else None
+
+
+async def _get(db, prospect_id: UUID, admin: CurrentSuperAdmin | None = None) -> Prospect:
     prospect = await db.get(Prospect, prospect_id)
-    if prospect is None:
+    own = _own(admin) if admin is not None else None
+    if prospect is None or (own is not None and prospect.owner_id != own):  # lot 133 : jamais le prospect d'un autre
         raise HTTPException(status_code=404, detail="Prospect introuvable")
     return prospect
+
+
+VIEW = need_any("prospects.view", "prospects.own")  # lot 133
+EDIT = need_any("prospects.edit", "prospects.own")
 
 
 def _first(name: str | None) -> str | None:
@@ -278,11 +290,14 @@ async def list_prospects(
     q: str | None = Query(default=None, max_length=100),
     sector: str | None = None,
     owner: str | None = None,
-    admin: CurrentSuperAdmin = Depends(need("prospects.view")),
+    admin: CurrentSuperAdmin = Depends(VIEW),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await _me(db, admin)
+    me = await _me(db, admin)
     stmt = select(Prospect).order_by(Prospect.created_at.desc())
+    own = _own(admin)
+    if own is not None:
+        stmt, owner = stmt.where(Prospect.owner_id == own), None
     if q and q.strip():
         like = f"%{q.strip().lower()}%"
         from sqlalchemy import func
@@ -299,7 +314,7 @@ async def list_prospects(
             raise HTTPException(status_code=422, detail="Super Admin inconnu") from None
     prospects = (await db.execute(stmt)).scalars().all()
     stages = await _stages(db, prospects)
-    owners = await _owners(db)
+    owners = await _owners(db) if own is None else {me.id: me.full_name or me.email}
     today = datetime.now(timezone.utc).date()
     rows = [_view(p, stages[p.id], owners, today) for p in prospects]
     counts = {"all": len(rows), "todo": sum(1 for r in rows if r["follow_up"]), "replied": sum(1 for r in rows if r["replied"]),
@@ -326,17 +341,20 @@ async def list_prospects(
 @router.get("/funnel")
 async def prospect_funnel(
     period: str = Query(default="all", pattern="^(30|90|all)$"),
-    admin: CurrentSuperAdmin = Depends(need("prospects.view")),
+    admin: CurrentSuperAdmin = Depends(VIEW),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Entonnoir des prospects ajoutés sur la période, puis par source, par secteur et par Super Admin."""
-    await _me(db, admin)
+    me = await _me(db, admin)
     stmt = select(Prospect)
+    own = _own(admin)
+    if own is not None:
+        stmt = stmt.where(Prospect.owner_id == own)
     if period != "all":
         stmt = stmt.where(Prospect.created_at >= datetime.now(timezone.utc) - timedelta(days=int(period)))
     prospects = (await db.execute(stmt)).scalars().all()
     stages = await _stages(db, prospects)
-    owners = await _owners(db)
+    owners = await _owners(db) if own is None else {me.id: me.full_name or me.email}
     return {
         "period": period, "total": len(prospects), "funnel": pros.funnel(prospects, stages),
         "by_source": pros.group_funnel(prospects, stages, lambda p: p.source),
@@ -365,16 +383,17 @@ def _today_row(p: Prospect, text: str, sender: str | None, since=None, now=None)
 
 
 @router.get("/today")
-async def prospect_today(admin: CurrentSuperAdmin = Depends(need("prospects.view")), db: AsyncSession = Depends(get_db)) -> dict:
+async def prospect_today(admin: CurrentSuperAdmin = Depends(VIEW), db: AsyncSession = Depends(get_db)) -> dict:
     """Lot 69 — la routine du jour : WhatsApp à envoyer, relances J7, appels J14."""
     from app.services import prospect_mailer
 
     me = await _me(db, admin)
     now = datetime.now(timezone.utc)
     row = await prospect_mailer.get_settings_row(db)
-    lists = await pros.today(db, now, row.whatsapp_daily_limit, restaurants_on=row.restaurants_enabled)
-    restaurants = {"enabled": row.restaurants_enabled, "changed_at": row.restaurants_changed_at.isoformat() if row.restaurants_changed_at else None,
-                   "changed_by": row.restaurants_changed_by, "ab": await pros.ab_stats(db)}  # lot 130
+    own = _own(admin)
+    lists = await pros.today(db, now, row.whatsapp_daily_limit, restaurants_on=row.restaurants_enabled, owner_id=own)
+    restaurants = None if own is not None else {"enabled": row.restaurants_enabled, "changed_at": row.restaurants_changed_at.isoformat() if row.restaurants_changed_at else None,
+                   "changed_by": row.restaurants_changed_by, "ab": await pros.ab_stats(db)}  # lot 130 (pas pour un ambassadeur)
     await db.commit()
     offer, sender = await _offer(db), _first(me.full_name)
     return {"restaurants": restaurants,
@@ -420,7 +439,7 @@ async def prospect_today_restaurants(payload: RestaurantsIn, admin: CurrentSuper
 
 
 @router.post("", status_code=201)
-async def create_prospect(payload: ProspectIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
+async def create_prospect(payload: ProspectIn, admin: CurrentSuperAdmin = Depends(EDIT),
                           db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
     data = payload.model_dump(exclude_unset=True)
@@ -429,8 +448,9 @@ async def create_prospect(payload: ProspectIn, admin: CurrentSuperAdmin = Depend
     except (pros.ProspectError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     duplicate = await pros.find_duplicate(db, fields.get("email"), fields.get("phone"))
-    if duplicate is not None:
-        raise HTTPException(status_code=409, detail=f"Ce prospect existe déjà : {duplicate.company}")
+    if duplicate is not None:  # lot 133 : un ambassadeur n'apprend rien d'un prospect qui n'est pas le sien
+        raise HTTPException(status_code=409, detail="Ce contact est déjà suivi par AgenC'AI." if _own(admin) is not None
+                            else f"Ce prospect existe déjà : {duplicate.company}")
     prospect = Prospect(code=await pros.new_code(db), owner_id=me.id, status="ACTIVE", **fields)
     db.add(prospect)
     await db.flush()
@@ -502,12 +522,13 @@ async def import_prospects(
 
 
 @router.get("/{prospect_id}")
-async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(need("prospects.view")),
+async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(VIEW),
                           db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
-    prospect = await _get(db, prospect_id)
+    prospect = await _get(db, prospect_id, admin)
     stages = await _stages(db, [prospect])
-    data = _view(prospect, stages[prospect.id], await _owners(db), datetime.now(timezone.utc).date())
+    owners = await _owners(db) if _own(admin) is None else {me.id: me.full_name or me.email}
+    data = _view(prospect, stages[prospect.id], owners, datetime.now(timezone.utc).date())
     events = (await db.execute(select(ProspectEvent).where(ProspectEvent.prospect_id == prospect.id)
                                .order_by(ProspectEvent.at.desc()))).scalars().all()
     data["events"] = [{"kind": ev.kind, "label": pros.EVENT_LABELS.get(ev.kind, ev.kind),
@@ -526,19 +547,22 @@ async def prospect_detail(prospect_id: UUID, admin: CurrentSuperAdmin = Depends(
 
 
 @router.put("/{prospect_id}")
-async def update_prospect(prospect_id: UUID, payload: ProspectIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
+async def update_prospect(prospect_id: UUID, payload: ProspectIn, admin: CurrentSuperAdmin = Depends(EDIT),
                           db: AsyncSession = Depends(get_db)) -> dict:
     await _me(db, admin)
-    prospect = await _get(db, prospect_id)
+    prospect = await _get(db, prospect_id, admin)
     data = payload.model_dump(exclude_unset=True)
     owner = data.pop("owner_id", None) if "owner_id" in data else ...
+    if _own(admin) is not None:
+        owner = ...  # lot 133 : un ambassadeur ne change pas le propriétaire
     try:
         fields = pros.clean_fields(data, current=prospect)
     except (pros.ProspectError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     duplicate = await pros.find_duplicate(db, fields.get("email"), fields.get("phone"), exclude=prospect.id)
     if duplicate is not None:
-        raise HTTPException(status_code=409, detail=f"Ce prospect existe déjà : {duplicate.company}")
+        raise HTTPException(status_code=409, detail="Ce contact est déjà suivi par AgenC'AI." if _own(admin) is not None
+                            else f"Ce prospect existe déjà : {duplicate.company}")
     for key, value in fields.items():
         setattr(prospect, key, value)
     if owner is not ...:
@@ -554,11 +578,11 @@ async def update_prospect(prospect_id: UUID, payload: ProspectIn, admin: Current
 
 
 @router.post("/{prospect_id}/contact")
-async def log_contact(prospect_id: UUID, payload: ContactIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
+async def log_contact(prospect_id: UUID, payload: ContactIn, admin: CurrentSuperAdmin = Depends(EDIT),
                       db: AsyncSession = Depends(get_db)) -> dict:
     """Un contact fait à la main (appel, WhatsApp depuis son téléphone, visite…) ; jamais pour un prospect perdu."""
     me = await _me(db, admin)
-    prospect = await _get(db, prospect_id)
+    prospect = await _get(db, prospect_id, admin)
     if payload.channel not in pros.CHANNELS:
         raise HTTPException(status_code=422, detail="Canal inconnu")
     if prospect.status in ("UNSUBSCRIBED", "INVALID"):
@@ -577,10 +601,10 @@ async def log_contact(prospect_id: UUID, payload: ContactIn, admin: CurrentSuper
 
 
 @router.post("/{prospect_id}/status")
-async def change_status(prospect_id: UUID, payload: StatusIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
+async def change_status(prospect_id: UUID, payload: StatusIn, admin: CurrentSuperAdmin = Depends(EDIT),
                         db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
-    prospect = await _get(db, prospect_id)
+    prospect = await _get(db, prospect_id, admin)
     if payload.status not in pros.STATUSES:
         raise HTTPException(status_code=422, detail="Statut inconnu")
     prospect.status = payload.status
@@ -596,10 +620,10 @@ async def change_status(prospect_id: UUID, payload: StatusIn, admin: CurrentSupe
 
 
 @router.post("/{prospect_id}/note")
-async def add_note(prospect_id: UUID, payload: NoteIn, admin: CurrentSuperAdmin = Depends(need("prospects.edit")),
+async def add_note(prospect_id: UUID, payload: NoteIn, admin: CurrentSuperAdmin = Depends(EDIT),
                    db: AsyncSession = Depends(get_db)) -> dict:
     me = await _me(db, admin)
-    prospect = await _get(db, prospect_id)
+    prospect = await _get(db, prospect_id, admin)
     pros.add_event(db, prospect, "NOTE", detail=payload.note.strip(), actor=me.full_name)
     await db.commit()
     return await prospect_detail(prospect.id, admin, db)

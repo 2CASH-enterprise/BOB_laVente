@@ -552,7 +552,7 @@ def reacted(prospect) -> bool:
                 or prospect.signed_up_at or prospect.tenant_id)
 
 
-async def today(db, now: datetime, daily_limit: int, restaurants_on: bool = True) -> dict:
+async def today(db, now: datetime, daily_limit: int, restaurants_on: bool = True, owner_id=None) -> dict:
     """
     Les trois listes de la routine : WhatsApp à envoyer (jamais contactés sur WhatsApp, dans la limite du jour),
     relances J7 (un seul WhatsApp il y a 7 jours ou plus, sans réaction ni appel) et appels J14 (premier contact il y a
@@ -560,8 +560,11 @@ async def today(db, now: datetime, daily_limit: int, restaurants_on: bool = True
     """
     from app.models.prospect import Prospect, ProspectEvent
 
-    prospects = (await db.execute(select(Prospect).where(Prospect.status == "ACTIVE", Prospect.tenant_id.is_(None))
-                                  .order_by(Prospect.created_at))).scalars().all()
+    stmt = select(Prospect).where(Prospect.status == "ACTIVE", Prospect.tenant_id.is_(None)).order_by(Prospect.created_at)
+    if owner_id is not None:  # lot 133 : l'ambassadeur ne voit que ses prospects (et ne compte que ses envois)
+        stmt = stmt.where(Prospect.owner_id == owner_id)
+    prospects = (await db.execute(stmt)).scalars().all()
+    mine = {p.id for p in prospects} if owner_id is not None else None
     # Lot 122 — groupe d'abord (1, 2, 3…, puis sans groupe), puis l'ordre d'arrivée et le rang dans le fichier ;
     # jamais un contact opposé ni un commerçant déjà client.
     prospects = sorted(prospects, key=lambda p: (p.priority if p.priority is not None else 10 ** 6,
@@ -574,6 +577,8 @@ async def today(db, now: datetime, daily_limit: int, restaurants_on: bool = True
                                                            ProspectEvent.channel.in_(("WHATSAPP", "PHONE"))))).scalars().all()
     whatsapp, calls = {}, {}
     for ev in events:
+        if mine is not None and ev.prospect_id not in mine:
+            continue
         (whatsapp if ev.channel == "WHATSAPP" else calls).setdefault(ev.prospect_id, []).append(aware(ev.at))
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     sent_today = sum(1 for dates in whatsapp.values() for at in dates if at and at >= day_start)

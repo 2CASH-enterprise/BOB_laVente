@@ -373,9 +373,9 @@
       <!-- Lot 120 — interrupteur entre les consoles des agents (Bob, Naomy, d'autres plus tard) -->
       <div class="agent-switch hidden" id="agent-switch" role="group" aria-label="Console de l'agent"></div>
       <nav aria-label="Super Admin">
-        <button type="button" data-section="overview" onclick="showSection('overview')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Vue d'ensemble<span class="count danger hidden" id="nav-count-overview"></span></button>
+        <button type="button" data-section="overview" data-perm="overview" onclick="showSection('overview')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Vue d'ensemble<span class="count danger hidden" id="nav-count-overview"></span></button>
         <button type="button" data-section="shops" data-perm="shops.basic" onclick="showSection('shops')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18v11H3zM9 20v-6h6v6"/></svg>Boutiques<span class="count plain hidden" id="nav-count-shops"></span></button>
-        <button type="button" data-section="prospects" data-perm="prospects.view" onclick="showSection('prospects')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Prospection<span class="count danger hidden" id="nav-count-prospects"></span></button>
+        <button type="button" data-section="prospects" data-perm="prospects.work" onclick="showSection('prospects')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>Prospection<span class="count danger hidden" id="nav-count-prospects"></span></button>
         <button type="button" data-section="prereg" data-perm="prereg.view" onclick="showSection('prereg')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Pré-inscriptions<span class="count warning hidden" id="nav-count-prereg"></span></button>
         <button type="button" data-section="aicosts" data-perm="aicosts.view" onclick="showSection('aicosts')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Coûts IA</button>
         <button type="button" data-section="monitoring" data-perm="tech.view" onclick="showSection('monitoring')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 8-6-16-3 8H2"/></svg>Monitoring<span class="count danger hidden" id="nav-count-monitoring"></span></button>
@@ -408,7 +408,7 @@
           <div id="overview-todo"></div>
         </section>
         <div class="side-col">
-          <section class="card" data-perm="prospects.view"><h2>Parcours des prospects</h2><p class="muted" style="margin: 4px 0 14px;">Ajoutés ces 30 derniers jours, et l'étape la plus avancée atteinte</p><div id="overview-funnel"></div></section>
+          <section class="card" data-perm="prospects.work"><h2>Parcours des prospects</h2><p class="muted" style="margin: 4px 0 14px;">Ajoutés ces 30 derniers jours, et l'étape la plus avancée atteinte</p><div id="overview-funnel"></div></section>
           <section class="card"><h2 style="margin-bottom: 12px;">Activité récente</h2><div class="activity" id="overview-activity"></div></section>
         </div>
       </div>
@@ -549,7 +549,7 @@
         <div class="pills" id="prospect-views"></div>
         <div class="row" style="flex: 0 1 auto;">
           <input id="prospect-search" class="input" placeholder="Rechercher (entreprise, contact, ville, source…)" oninput="searchProspects()" style="min-width: 220px;">
-          <button class="btn primary" data-perm="prospects.edit" onclick="openProspectForm()">Ajouter</button>
+          <button class="btn primary" data-perm="prospects.act" onclick="openProspectForm()">Ajouter</button>
           <button class="btn" data-perm="prospects.edit" onclick="openProspectImport()">Importer (Excel)</button>
           <button class="btn" data-perm="prospects.edit" onclick="exportProspects()">Exporter (Excel)</button>
         </div>
@@ -650,7 +650,7 @@ const SECTION_TITLES = { overview: "Vue d'ensemble", shops: "Boutiques", prospec
 
 function showSection(name, opts) {
   opts = opts || {};
-  if (SECTION_PERMS[name] && !can(SECTION_PERMS[name])) name = "overview";  // lot 119 : rubrique fermée à ce rôle
+  if (SECTION_PERMS[name] && !can(SECTION_PERMS[name])) name = can("overview") ? "overview" : "prospects";  // lot 119 / 133
   currentSection = name;
   document.querySelectorAll(".sidebar nav button").forEach((b) => {
     if (b.dataset.section === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
@@ -672,10 +672,10 @@ function showSection(name, opts) {
 // Lot 119 — rôles : ce que le serveur permet à ce membre (GET /me). Les droits sont vérifiés par le serveur ; l'écran
 // cache seulement ce qui serait refusé (attribut data-perm, aussi sur les contenus dessinés plus tard).
 var ME = null;
-const ALL_PERMS = ["overview", "shops.basic", "shops.view", "shops.figures", "shops.billing", "shops.suspend", "shops.sector",
+const ALL_PERMS = ["self", "prospects.own", "prospects.work", "prospects.act", "overview", "shops.basic", "shops.view", "shops.figures", "shops.billing", "shops.suspend", "shops.sector",
   "prospects.view", "prospects.edit", "campaigns.view", "campaigns.edit", "prereg.view", "prereg.edit", "aicosts.view",
   "tech.view", "tech.edit", "plans.view", "plans.edit", "team.manage"];
-const SECTION_PERMS = { shops: "shops.basic", prospects: "prospects.view", prereg: "prereg.view", aicosts: "aicosts.view", monitoring: "tech.view", team: "team.manage" };
+const SECTION_PERMS = { overview: "overview", shops: "shops.basic", prospects: "prospects.work", prereg: "prereg.view", aicosts: "aicosts.view", monitoring: "tech.view", team: "team.manage" };
 function can(perm) { return !!(ME && ME.perms.includes(perm)); }
 
 function applyPerms() {
@@ -692,10 +692,13 @@ async function enterApp() {
   document.getElementById("app").classList.remove("hidden");
   syncThemeButtons();
   try { ME = await api("/api/v1/superadmin/me"); } catch (e) { logout(); return; }
+  // Lot 133 — droits d'écran : « work » = voit la prospection (toute ou la sienne), « act » = y agit (fiches, relances).
+  if (can("prospects.view") || can("prospects.own")) ME.perms.push("prospects.work");
+  if (can("prospects.edit") || can("prospects.own")) ME.perms.push("prospects.act");
   applyPerms();
   loadAgentSwitch();
   // Lot 67 — lien des emails d'alerte : …/superadmin/#monitoring ouvre directement le monitoring.
-  if (location.hash === "#monitoring" && can("tech.view")) { showSection("monitoring"); loadOverview(); } else showSection("overview");
+  if (location.hash === "#monitoring" && can("tech.view")) { showSection("monitoring"); loadOverview(); } else showSection(can("overview") ? "overview" : "prospects");
 }
 
 function logout() {
@@ -1298,7 +1301,7 @@ function openProspectForm(p) {
     <label for="pf-notes">Note</label><textarea id="pf-notes" class="input" rows="3" maxlength="2000">${esc(p.notes || "")}</textarea>
     <p id="pf-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 4px 0;"></p>
     <div class="row" style="justify-content: flex-end;"><button class="btn" onclick="${p.id ? `openProspect(${jsArg(p.id)})` : "closeProspectModal()"}">Annuler</button>
-      <button class="btn primary" data-perm="prospects.edit" onclick="saveProspect(${p.id ? `${jsArg(p.id)}` : "null"})">Enregistrer</button></div>`);
+      <button class="btn primary" data-perm="prospects.act" onclick="saveProspect(${p.id ? `${jsArg(p.id)}` : "null"})">Enregistrer</button></div>`);
   document.getElementById("pf-company").focus();
 }
 
@@ -1343,20 +1346,20 @@ function renderProspect(p) {
       <div class="row"><select id="pd-channel" class="input" style="flex: 0 1 160px;">${options(d.channels, "PHONE")}</select>
         <input id="pd-note" class="input" maxlength="500" placeholder="Ce qui s'est dit (facultatif)"></div>
       <div class="row" style="margin-top: 8px;"><label for="pd-next" style="margin: 0;">Relancer le</label><input id="pd-next" type="date" class="input" style="flex: 0 1 170px;" value="${esc(p.next_action_on || "")}">
-        <button class="btn primary" data-perm="prospects.edit" onclick="logContact()">Noter</button></div></div>` : ""}
+        <button class="btn primary" data-perm="prospects.act" onclick="logContact()">Noter</button></div></div>` : ""}
     <div class="box"><h4>Statut</h4>
       <div class="row"><select id="pd-status" class="input" style="flex: 0 1 200px;">${options(d.statuses, p.status)}</select>
         <input id="pd-reason" class="input" maxlength="200" placeholder="Raison (facultatif)" value="${esc(p.status_reason || "")}">
-        <button class="btn" data-perm="prospects.edit" onclick="saveStatus()">Enregistrer</button></div></div>
+        <button class="btn" data-perm="prospects.act" onclick="saveStatus()">Enregistrer</button></div></div>
     <div class="box"><h4>Historique</h4>
-      <div class="row" style="margin-bottom: 8px;"><input id="pd-memo" class="input" maxlength="500" placeholder="Ajouter une note"><button class="btn" data-perm="prospects.edit" onclick="addMemo()">Ajouter</button></div>
+      <div class="row" style="margin-bottom: 8px;"><input id="pd-memo" class="input" maxlength="500" placeholder="Ajouter une note"><button class="btn" data-perm="prospects.act" onclick="addMemo()">Ajouter</button></div>
       <ul class="timeline">${p.events.map((ev) => `<li><strong>${esc(ev.label)}</strong>${ev.channel ? " · " + esc(ev.channel) : ""}${ev.detail ? " — " + esc(ev.detail) : ""}
         <div class="muted">${ev.at ? new Date(ev.at).toLocaleString("fr-FR") : ""}${ev.actor ? " · " + esc(ev.actor) : ""}</div></li>`).join("")}</ul></div>
     ${p.notes ? `<div class="box"><h4>Note</h4><div style="white-space: pre-wrap; font-size: 13px;">${esc(p.notes)}</div></div>` : ""}
     <p id="pd-error" style="color: var(--danger); font-size: 13px; min-height: 16px; margin: 8px 0 0;"></p>
     <div class="row" style="justify-content: space-between; margin-top: 8px;">
       <button class="btn danger" data-perm="prospects.edit" onclick="deleteProspect()">Effacer ce prospect</button>
-      <div class="row"><button class="btn" data-perm="prospects.edit" onclick="openProspectForm(currentProspect)">Modifier</button><button class="btn primary" onclick="closeProspectModal()">Fermer</button></div></div>`);
+      <div class="row"><button class="btn" data-perm="prospects.act" onclick="openProspectForm(currentProspect)">Modifier</button><button class="btn primary" onclick="closeProspectModal()">Fermer</button></div></div>`);
 }
 
 async function copyField(id) {
@@ -1662,11 +1665,11 @@ function todayRow(p, kind) {
   let actions = "";
   if (kind === "calls") {
     actions = `${p.phone ? `<a class="btn small-btn" href="tel:${esc(p.phone)}">Appeler ${esc(p.phone)}</a>` : ""}
-      <button class="btn small-btn" data-perm="prospects.edit" onclick="callDone(${jsArg(p.id)}, 'PREREG')">Pré-inscrit</button>
-      <button class="btn small-btn" data-perm="prospects.edit" onclick="callDone(${jsArg(p.id)}, 'LATER')">À revoir dans 3 mois</button>
-      <button class="btn small-btn danger" data-perm="prospects.edit" onclick="callDone(${jsArg(p.id)}, 'NO')">Pas intéressé</button>`;
+      <button class="btn small-btn" data-perm="prospects.act" onclick="callDone(${jsArg(p.id)}, 'PREREG')">Pré-inscrit</button>
+      <button class="btn small-btn" data-perm="prospects.act" onclick="callDone(${jsArg(p.id)}, 'LATER')">À revoir dans 3 mois</button>
+      <button class="btn small-btn danger" data-perm="prospects.act" onclick="callDone(${jsArg(p.id)}, 'NO')">Pas intéressé</button>`;
   } else {
-    actions = `<button class="btn small-btn primary" data-perm="prospects.edit" onclick="todayWhatsApp(${jsArg(p.id)}, ${jsArg(kind)})">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
+    actions = `<button class="btn small-btn primary" data-perm="prospects.act" onclick="todayWhatsApp(${jsArg(p.id)}, ${jsArg(kind)})">${kind === "relances" ? "Relancer sur WhatsApp" : "Ouvrir WhatsApp"}</button>`;
   }
   return `<div class="today-row"><div style="min-width: 0; flex: 1 1 240px;"><b>${esc(p.company)}</b>${version}${age}${mails}<div class="muted">${esc(meta)}</div></div>
     <div class="row">${actions}<button class="btn small-btn" onclick="openProspect(${jsArg(p.id)})">Fiche</button></div></div>`;
@@ -2170,6 +2173,7 @@ async function reinviteMember(id) {
 async function loadAgentSwitch() {
   const box = document.getElementById("agent-switch");
   let d;
+  if (!can("overview")) return;  // lot 133 : pas d'interrupteur des consoles pour un ambassadeur
   try { d = await api("/api/v1/superadmin/console/agents"); } catch (e) { return; }
   const others = d.agents.filter((a) => !a.actuel && a.disponible);
   if (!others.length) { box.classList.add("hidden"); return; }

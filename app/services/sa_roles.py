@@ -5,8 +5,8 @@ ce qui serait refusé. Mêmes codes de rôles chez Naomy (interrupteur entre les
 
 « Chiffres » d'une boutique = ventes, clients, commissions : seuls Propriétaire et Facturation les voient.
 """
-OWNER, SALES, MARKETING, TECH, BILLING, SUPPORT, READONLY = (
-    "OWNER", "SALES", "MARKETING", "TECH", "BILLING", "SUPPORT", "READONLY")
+OWNER, SALES, MARKETING, TECH, BILLING, SUPPORT, READONLY, AMBASSADOR = (
+    "OWNER", "SALES", "MARKETING", "TECH", "BILLING", "SUPPORT", "READONLY", "AMBASSADOR")
 
 ROLES = {
     OWNER: ("Propriétaire", "Tout, y compris l'équipe AgenC'AI."),
@@ -16,12 +16,15 @@ ROLES = {
     BILLING: ("Facturation", "Formules, échéances, commissions, suspensions, coûts IA."),
     SUPPORT: ("Support", "Fiches des boutiques sans chiffres, suspendre / réactiver, secteur."),
     READONLY: ("Lecture seule", "Voit presque tout, sans rien changer. Pas les chiffres des boutiques."),
+    # Lot 133 (25/11) — personne extérieure payée à la commission : ne voit que les prospects qu'elle a ajoutés.
+    AMBASSADOR: ("Ambassadeur", "Prospecte ses propres contacts : ajoute, relance, suit ses inscrits. Ne voit que ce qu'il a ajouté."),
 }
 
 _ALL = frozenset(ROLES)
 PERMS = {
-    "overview": _ALL,
-    "shops.basic": _ALL - {MARKETING},                       # nom, secteur, pays, statut
+    "self": _ALL,                                            # lot 133 : sa propre fiche (GET /me)
+    "overview": _ALL - {AMBASSADOR},
+    "shops.basic": _ALL - {MARKETING, AMBASSADOR},           # nom, secteur, pays, statut
     "shops.view": frozenset({OWNER, TECH, BILLING, SUPPORT, READONLY}),  # fiche complète, sans chiffres
     "shops.figures": frozenset({OWNER, BILLING}),
     "shops.billing": frozenset({OWNER, BILLING}),          # formule, payé jusqu'au, commission
@@ -29,6 +32,7 @@ PERMS = {
     "shops.sector": frozenset({OWNER, SUPPORT}),
     "prospects.view": frozenset({OWNER, SALES, MARKETING, READONLY}),
     "prospects.edit": frozenset({OWNER, SALES}),            # fiches, relances, import, export
+    "prospects.own": frozenset({AMBASSADOR}),                # lot 133 : ses prospects seulement (ajout, relances, suivi)
     "campaigns.view": frozenset({OWNER, SALES, MARKETING, READONLY}),
     "campaigns.edit": frozenset({OWNER, SALES, MARKETING}),
     "prereg.view": frozenset({OWNER, SALES, SUPPORT, READONLY}),
@@ -55,6 +59,11 @@ def perms_for(roles) -> list[str]:
 
 def can(roles, perm: str) -> bool:
     return bool(set(roles or []) & PERMS[perm])
+
+
+def only_own_prospects(roles) -> bool:
+    """Lot 133 — ambassadeur sans autre rôle qui voit la prospection : limité aux prospects qu'il a ajoutés."""
+    return can(roles, "prospects.own") and not can(roles, "prospects.view")
 
 
 def catalogue() -> list[dict]:

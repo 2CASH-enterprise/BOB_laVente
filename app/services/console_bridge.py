@@ -50,8 +50,11 @@ def _sig(secret: str, payload: str) -> str:
 def member_view(member) -> dict:
     from app.services import sa_roles
 
-    return {"id": str(member.id), "email": member.email, "nom": member.full_name, "roles": sa_roles.clean(member.roles),
-            "actif": bool(member.active and member.invite_token_hash is None)}
+    # Lot 133 — l'ambassadeur n'a rien à faire chez Naomy : rôle retiré ; s'il n'a que celui-là, il y est inactif.
+    roles = [r for r in sa_roles.clean(member.roles) if r != sa_roles.AMBASSADOR]
+    active = bool(member.active and member.invite_token_hash is None and roles)
+    return {"id": str(member.id), "email": member.email, "nom": member.full_name, "roles": roles or [sa_roles.READONLY],
+            "actif": active}
 
 
 def make_token(secret: str, member, audience: str, now: datetime | None = None, issuer: str = "bob") -> str:
