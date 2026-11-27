@@ -125,7 +125,10 @@ function money(value, currency) {
 
 async function start() {
   if (!PAGE) return fail("Cette page n'existe pas.");
+  // Lot 134 b : lu une seule fois. Après l'échange, start() est rappelé et `params` garde l'ancienne adresse :
+  // sans ce retrait, le lien déjà utilisé revenait et la page redemandait « Ouvrir ma carte » puis « expiré ».
   const fresh = params.get("connexion");
+  params.delete("connexion");
   if (fresh) {
     sessionStorage.setItem(KEY + "_lien", fresh);  // gardé dans l'onglet, retiré de l'adresse et de l'historique
     history.replaceState(null, "", location.pathname + "?page=" + PAGE + (WA ? "&wa=" + WA : ""));

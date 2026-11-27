@@ -288,3 +288,13 @@ def test_contract_174_keeps_old_calls_valid():
     assert set(reply["requestBody"]["content"]["application/json"]["schema"]["required"]) == {
         "compte_naomy", "numero_whatsapp", "decision"}
     assert "1.7.4" in doc["info"]["description"]
+
+
+def test_after_the_tap_the_used_link_never_comes_back():
+    """Lot 134 b — essai réel du 27/11 : après l'échange, start() relisait l'ancienne adresse et redemandait le toucher."""
+    html = (ROOT / "app" / "static" / "m" / "index.html").read_text(encoding="utf-8")
+    start = html[html.index("async function start()"):]
+    read, drop, store = (start.index('params.get("connexion")'), start.index('params.delete("connexion")'),
+                         start.index('sessionStorage.setItem(KEY + "_lien", fresh)'))
+    assert read < drop < store  # lu une fois, retiré aussitôt, avant d'être gardé
+    assert 'sessionStorage.removeItem(KEY + "_lien")' in start  # effacé dès la réponse
